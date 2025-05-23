@@ -1,15 +1,25 @@
 from dataclasses import dataclass
-from typing import TypeVar, cast
-
-try:
-    from typing import dataclass_transform
-except ImportError:
-    from typing_extensions import dataclass_transform
+from typing import Callable, TypeVar, cast, dataclass_transform, overload
 
 T = TypeVar("T", bound=type)
 
 
+@overload
+def widget(cls: T) -> T: ...
+
+
+@overload
+def widget() -> Callable[[T], T]: ...
+
+
 @dataclass_transform()
-def widget(cls: T) -> T:
+def widget(cls: T | None = None) -> T | Callable[[T], T]:
     """Decorator that makes a class a dataclass with Qt widget capabilities."""
-    return cast(T, dataclass(cls))
+
+    def decorator(cls: T) -> T:
+        return cast(T, dataclass(cls))
+
+    if cls is None:
+        return decorator
+    else:
+        return decorator(cls)
