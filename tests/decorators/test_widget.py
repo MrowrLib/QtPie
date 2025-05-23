@@ -96,7 +96,13 @@ class TestWidgetWithParentheses:
     ],
 )
 class TestSharedWidgetBehavior:
-    def test_sets_object_name(self, qtbot: QtBot, widget_class, args, expected_name):
+    def test_sets_object_name(
+        self,
+        qtbot: QtBot,
+        widget_class: type[QWidget],
+        args: tuple[object, ...],
+        expected_name: str,
+    ) -> None:
         widget_instance = widget_class(*args)
         assert_that(widget_instance.objectName()).is_equal_to(expected_name)
 
@@ -109,7 +115,12 @@ class TestSharedWidgetBehavior:
     ],
 )
 class TestDataclassWidgets:
-    def test_makes_dataclass(self, qtbot: QtBot, widget_class, args):
+    def test_makes_dataclass(
+        self,
+        qtbot: QtBot,
+        widget_class: type[QWidget],
+        args: tuple[object, ...],
+    ) -> None:
         widget_instance = widget_class(*args)
         assert_that(is_dataclass(widget_class)).is_true()
         assert_that(is_dataclass(widget_instance)).is_true()
@@ -123,7 +134,12 @@ class TestDataclassWidgets:
     ],
 )
 class TestPlainWidgets:
-    def test_not_dataclass(self, qtbot: QtBot, widget_class, args):
+    def test_not_dataclass(
+        self,
+        qtbot: QtBot,
+        widget_class: type[QWidget],
+        args: tuple[object, ...],
+    ) -> None:
         widget_instance = widget_class(*args)
         assert_that(is_dataclass(widget_class)).is_false()
         assert_that(is_dataclass(widget_instance)).is_false()
