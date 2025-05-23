@@ -111,6 +111,30 @@ class TestPlainWidgets:
         assert_that(is_dataclass(widget_instance)).is_false()
 
 
+# --- Custom Name Tests ---
+
+
+@widget(name="CustomDataclassWidget")
+class WidgetWithCustomName(QWidget):
+    value: int
+
+
+@widget_class(name="CustomPlainWidget")
+class PlainWidgetWithCustomName(QWidget):
+    def __init__(self, value: int):
+        self.value = value
+
+
+class TestCustomObjectNames:
+    def test_widget_custom_name(self) -> None:
+        widget = WidgetWithCustomName(42)
+        assert_that(widget.objectName()).is_equal_to("CustomDataclassWidget")
+
+    def test_widget_class_custom_name(self) -> None:
+        widget = PlainWidgetWithCustomName(42)
+        assert_that(widget.objectName()).is_equal_to("CustomPlainWidget")
+
+
 # --- Validation Tests ---
 
 
