@@ -21,7 +21,19 @@ def widget(cls: T | None = None) -> T | Callable[[T], T]:
     def decorator(cls: T) -> T:
         if not issubclass(cls, QWidget):
             raise TypeError(f"@widget can only be applied to QWidget subclasses, got {cls.__name__}")
-        return cast(T, dataclass(cls))
+
+        # Apply dataclass transformation
+        dataclass_cls = cast(T, dataclass(cls))
+
+        # Wrap __init__ to set object name
+        orig_init = dataclass_cls.__init__
+
+        def __init__(self, *args, **kwargs) -> None:
+            orig_init(self, *args, **kwargs)
+            self.setObjectName(cls.__name__)
+
+        dataclass_cls.__init__ = __init__
+        return dataclass_cls
 
     if cls is None:
         return decorator

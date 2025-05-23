@@ -30,6 +30,14 @@ class TestWidgetWithoutParentheses:
         assert_that(is_dataclass(WidgetWithoutParentheses)).is_true()
         assert_that(is_dataclass(widget_instance)).is_true()
 
+    def test_widget_sets_object_name(self) -> None:
+        """Test that @widget decorator sets the object name to the class name."""
+        # Arrange & Act
+        widget_instance = WidgetWithoutParentheses(1)
+
+        # Assert
+        assert_that(widget_instance.objectName()).is_equal_to("WidgetWithoutParentheses")
+
 
 class TestWidgetWithParentheses:
     def test_widget_makes_dataclass(self) -> None:
@@ -43,6 +51,14 @@ class TestWidgetWithParentheses:
         assert_that(widget_instance.value_y).is_equal_to(2)
         assert_that(is_dataclass(WidgetWithParentheses)).is_true()
         assert_that(is_dataclass(widget_instance)).is_true()
+
+    def test_widget_sets_object_name(self) -> None:
+        """Test that @widget() decorator sets the object name to the class name."""
+        # Arrange & Act
+        widget_instance = WidgetWithParentheses(1, 2)
+
+        # Assert
+        assert_that(widget_instance.objectName()).is_equal_to("WidgetWithParentheses")
 
 
 class TestWidgetValidation:
