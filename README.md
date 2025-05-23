@@ -1,2 +1,3 @@
-# QtPie
-Qt 🍰 (helpers for PySide6)
+# Qt Pie
+
+Tasty way to build Qt apps 🍰

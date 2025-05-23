@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+  "qasync>=0.27.1",
   "qtpy>=2.4.3",
 ]
 description = "A declarative UI framework for Qt in Python"
