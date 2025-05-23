@@ -5,7 +5,12 @@ from assertpy import assert_that
 from pytestqt.qtbot import QtBot
 from qtpy.QtWidgets import QWidget
 
-from qtpie.decorators.widget import widget
+from qtpie.decorators.widget import widget, widget_class
+
+# --- Decorated Widget Classes ---
+
+
+# @widget-decorated widgets
 
 
 @widget
@@ -17,6 +22,25 @@ class WidgetWithoutParentheses(QWidget):
 class WidgetWithParentheses(QWidget):
     value_x: int
     value_y: int
+
+
+# @widget_class-decorated widgets
+
+
+@widget_class
+class PlainWidgetWithoutParentheses(QWidget):
+    def __init__(self, value: int):
+        self.value = value
+
+
+@widget_class()
+class PlainWidgetWithParentheses(QWidget):
+    def __init__(self, value_x: int, value_y: int):
+        self.value_x = value_x
+        self.value_y = value_y
+
+
+# --- Tests ---
 
 
 class TestWidgetWithoutParentheses:
@@ -60,6 +84,49 @@ class TestWidgetWithParentheses:
 
         # Assert
         assert_that(widget_instance.objectName()).is_equal_to("WidgetWithParentheses")
+
+
+@pytest.mark.parametrize(
+    "widget_class,args,expected_name",
+    [
+        (WidgetWithoutParentheses, (1,), "WidgetWithoutParentheses"),
+        (WidgetWithParentheses, (1, 2), "WidgetWithParentheses"),
+        (PlainWidgetWithoutParentheses, (42,), "PlainWidgetWithoutParentheses"),
+        (PlainWidgetWithParentheses, (1, 2), "PlainWidgetWithParentheses"),
+    ],
+)
+class TestSharedWidgetBehavior:
+    def test_sets_object_name(self, qtbot: QtBot, widget_class, args, expected_name):
+        widget_instance = widget_class(*args)
+        assert_that(widget_instance.objectName()).is_equal_to(expected_name)
+
+
+@pytest.mark.parametrize(
+    "widget_class,args",
+    [
+        (WidgetWithoutParentheses, (1,)),
+        (WidgetWithParentheses, (1, 2)),
+    ],
+)
+class TestDataclassWidgets:
+    def test_makes_dataclass(self, qtbot: QtBot, widget_class, args):
+        widget_instance = widget_class(*args)
+        assert_that(is_dataclass(widget_class)).is_true()
+        assert_that(is_dataclass(widget_instance)).is_true()
+
+
+@pytest.mark.parametrize(
+    "widget_class,args",
+    [
+        (PlainWidgetWithoutParentheses, (42,)),
+        (PlainWidgetWithParentheses, (1, 2)),
+    ],
+)
+class TestPlainWidgets:
+    def test_not_dataclass(self, qtbot: QtBot, widget_class, args):
+        widget_instance = widget_class(*args)
+        assert_that(is_dataclass(widget_class)).is_false()
+        assert_that(is_dataclass(widget_instance)).is_false()
 
 
 class TestWidgetValidation:
