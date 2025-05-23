@@ -3,8 +3,8 @@ from dataclasses import dataclass
 
 @dataclass
 class QtPieConfiguration:
-    widget_decorator_dataclass_transformer: bool = True
     all_decorators_dataclass_transformer: bool = True
+    widget_decorator_dataclass_transformer: bool | None = None
 
 
 _qtpie_configuration = QtPieConfiguration()
