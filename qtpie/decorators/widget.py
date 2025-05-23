@@ -5,6 +5,8 @@ from qtpy.QtWidgets import QWidget
 
 T = TypeVar("T", bound=type)
 
+print("widget decorator loaded")
+
 
 @overload
 def widget(cls: T) -> T: ...
@@ -22,20 +24,16 @@ def widget(cls: T | None = None) -> T | Callable[[T], T]:
         if not issubclass(cls, QWidget):
             raise TypeError(f"@widget can only be applied to QWidget subclasses, got {cls.__name__}")
 
-        # Apply dataclass transformation
         dataclass_cls = cast(T, dataclass(cls))
 
-        # Wrap __init__ to set object name
         orig_init = dataclass_cls.__init__
 
         def __init__(self, *args, **kwargs) -> None:
             orig_init(self, *args, **kwargs)
-            self.setObjectName(cls.__name__)
+            super(type(self), self).__init__()  # ✅ important: init QWidget manually
+            self.setObjectName(type(self).__name__)  # safer than using captured `cls`
 
         dataclass_cls.__init__ = __init__
         return dataclass_cls
 
-    if cls is None:
-        return decorator
-    else:
-        return decorator(cls)
+    return decorator if cls is None else decorator(cls)

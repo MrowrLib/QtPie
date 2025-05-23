@@ -2,6 +2,7 @@ from dataclasses import is_dataclass
 
 import pytest
 from assertpy import assert_that
+from pytestqt.qtbot import QtBot
 from qtpy.QtWidgets import QWidget
 
 from qtpie.decorators.widget import widget
@@ -19,7 +20,7 @@ class WidgetWithParentheses(QWidget):
 
 
 class TestWidgetWithoutParentheses:
-    def test_widget_makes_dataclass(self) -> None:
+    def test_widget_makes_dataclass(self, qtbot: QtBot) -> None:
         """Test that @widget decorator makes the class a dataclass."""
         # Arrange & Act
         widget_instance = WidgetWithoutParentheses(1)
@@ -30,7 +31,7 @@ class TestWidgetWithoutParentheses:
         assert_that(is_dataclass(WidgetWithoutParentheses)).is_true()
         assert_that(is_dataclass(widget_instance)).is_true()
 
-    def test_widget_sets_object_name(self) -> None:
+    def test_widget_sets_object_name(self, qtbot: QtBot) -> None:
         """Test that @widget decorator sets the object name to the class name."""
         # Arrange & Act
         widget_instance = WidgetWithoutParentheses(1)
@@ -40,7 +41,7 @@ class TestWidgetWithoutParentheses:
 
 
 class TestWidgetWithParentheses:
-    def test_widget_makes_dataclass(self) -> None:
+    def test_widget_makes_dataclass(self, qtbot: QtBot) -> None:
         """Test that @widget() decorator makes the class a dataclass."""
         # Arrange & Act
         widget_instance = WidgetWithParentheses(1, 2)
@@ -52,7 +53,7 @@ class TestWidgetWithParentheses:
         assert_that(is_dataclass(WidgetWithParentheses)).is_true()
         assert_that(is_dataclass(widget_instance)).is_true()
 
-    def test_widget_sets_object_name(self) -> None:
+    def test_widget_sets_object_name(self, qtbot: QtBot) -> None:
         """Test that @widget() decorator sets the object name to the class name."""
         # Arrange & Act
         widget_instance = WidgetWithParentheses(1, 2)
