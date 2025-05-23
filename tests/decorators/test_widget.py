@@ -57,6 +57,18 @@ class TestSharedWidgetBehavior:
         assert_that(widget_instance.objectName()).is_equal_to(expected_name)
         assert_that(widget_instance.value).is_equal_to(args[0])
 
+    def test_constructor_accepts_kwarg(
+        self,
+        qtbot: QtBot,
+        widget_class: type[QWidget],
+        args: tuple[int, ...],
+        expected_name: str,
+    ) -> None:
+        """Test that all widgets accept value as a keyword argument."""
+        widget_instance = widget_class(value=args[0])
+        assert_that(widget_instance.objectName()).is_equal_to(expected_name)
+        assert_that(widget_instance.value).is_equal_to(args[0])
+
 
 # --- Decorator-Specific Tests ---
 

@@ -6,7 +6,7 @@ from qtpy.QtWidgets import QWidget
 T = TypeVar("T", bound=type)
 
 
-def _widget_impl(cls: T) -> T:
+def _widget_impl(cls: T, name: str | None = None) -> T:
     """Core widget setup logic shared by both decorators."""
     if not issubclass(cls, QWidget):
         raise TypeError(f"Widget decorator can only be applied to QWidget subclasses, got {cls.__name__}")
@@ -16,7 +16,7 @@ def _widget_impl(cls: T) -> T:
     def __init__(self, *args: object, **kwargs: object) -> None:
         orig_init(self, *args, **kwargs)
         super(type(self), self).__init__()
-        self.setObjectName(type(self).__name__)
+        self.setObjectName(name or type(self).__name__)
 
     cls.__init__ = __init__
     return cls
@@ -26,9 +26,9 @@ def _widget_impl(cls: T) -> T:
 def widget_class(cls: T) -> T: ...
 @overload
 def widget_class() -> Callable[[T], T]: ...
-def widget_class(cls: T | None = None) -> T | Callable[[T], T]:
+def widget_class(cls: T | None = None, *, name: str | None = None) -> T | Callable[[T], T]:
     def decorator(cls: T) -> T:
-        return _widget_impl(cls)
+        return _widget_impl(cls, name=name)
 
     return decorator if cls is None else decorator(cls)
 
@@ -42,7 +42,7 @@ def widget() -> Callable[[T], T]: ...
 
 
 @dataclass_transform()
-def widget(cls: T | None = None) -> T | Callable[[T], T]:
+def widget(cls: T | None = None, *, name: str | None = None) -> T | Callable[[T], T]:
     """Decorator that makes a class a dataclass with Qt widget capabilities."""
 
     def decorator(cls: T) -> T:
@@ -56,7 +56,7 @@ def widget(cls: T | None = None) -> T | Callable[[T], T]:
         def __init__(self, *args: object, **kwargs: object) -> None:
             orig_init(self, *args, **kwargs)
             super(type(self), self).__init__()  # ✅ important: init QWidget manually
-            self.setObjectName(type(self).__name__)  # safer than using captured `cls`
+            self.setObjectName(name or type(self).__name__)  # safer than using captured `cls`
 
         dataclass_cls.__init__ = __init__
         return dataclass_cls
