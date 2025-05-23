@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+  "observant>=0.1.2",
   "qasync>=0.27.1",
   "qtpy>=2.4.3",
 ]

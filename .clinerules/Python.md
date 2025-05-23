@@ -1,5 +1,10 @@
 ## 🐍 Python Style Guide for AI Assistant
 
+### Auto-removal of unused imports on save
+- The code formatter will automatically remove any unused imports when you save the file.
+- This is IMPORTANT to remember, as it will affect how you write your code.
+- You MUST use all imports in the code before saving the file.
+
 ### Imports
 - Important: I have an auto-save formatter which REMOVES all imports that are not used,
   so please make sure to use all imports in the code before you save the file.
