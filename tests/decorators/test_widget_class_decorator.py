@@ -1,5 +1,6 @@
 from dataclasses import is_dataclass
 
+from assertpy import assert_that
 from qtpy.QtWidgets import QWidget
 
 from qtpie.decorators.widget import widget_class
@@ -11,8 +12,8 @@ def test_is_not_dataclass() -> None:
         def __init__(self, value: int = 42) -> None:
             self.value = value
 
-    assert not is_dataclass(SimpleWidgetClass)
-    assert not is_dataclass(SimpleWidgetClass())
+    assert_that(is_dataclass(SimpleWidgetClass)).is_false()
+    assert_that(is_dataclass(SimpleWidgetClass())).is_false()
 
 
 def test_manual_init_preserved() -> None:
@@ -22,7 +23,7 @@ def test_manual_init_preserved() -> None:
             self.value = value
 
     widget_instance = SimpleWidgetClass(123)
-    assert widget_instance.value == 123
+    assert_that(widget_instance.value).is_equal_to(123)
 
 
 def test_accepts_kwarg() -> None:
@@ -32,7 +33,7 @@ def test_accepts_kwarg() -> None:
             self.value = value
 
     widget_instance = SimpleWidgetClass(value=99)
-    assert widget_instance.value == 99
+    assert_that(widget_instance.value).is_equal_to(99)
 
 
 def test_multi_arg_widget_class() -> None:
@@ -43,8 +44,8 @@ def test_multi_arg_widget_class() -> None:
             self.count = count
 
     widget_instance = MultiArgWidgetClass("foo", 7)
-    assert widget_instance.name == "foo"
-    assert widget_instance.count == 7
+    assert_that(widget_instance.name).is_equal_to("foo")
+    assert_that(widget_instance.count).is_equal_to(7)
 
 
 def test_layout_mode_vertical_class() -> None:
@@ -55,7 +56,7 @@ def test_layout_mode_vertical_class() -> None:
         pass
 
     widget_instance = VerticalWidgetClass()
-    assert isinstance(widget_instance.layout(), QVBoxLayout)
+    assert_that(widget_instance.layout()).is_instance_of(QVBoxLayout)
 
 
 def test_layout_mode_horizontal_class() -> None:
@@ -66,7 +67,7 @@ def test_layout_mode_horizontal_class() -> None:
         pass
 
     widget_instance = HorizontalWidgetClass()
-    assert isinstance(widget_instance.layout(), QHBoxLayout)
+    assert_that(widget_instance.layout()).is_instance_of(QHBoxLayout)
 
 
 def test_layout_mode_grid_class() -> None:
@@ -77,7 +78,7 @@ def test_layout_mode_grid_class() -> None:
         pass
 
     widget_instance = GridWidgetClass()
-    assert isinstance(widget_instance.layout(), QGridLayout)
+    assert_that(widget_instance.layout()).is_instance_of(QGridLayout)
 
 
 def test_layout_mode_form_class() -> None:
@@ -88,7 +89,7 @@ def test_layout_mode_form_class() -> None:
         pass
 
     widget_instance = FormWidgetClass()
-    assert isinstance(widget_instance.layout(), QFormLayout)
+    assert_that(widget_instance.layout()).is_instance_of(QFormLayout)
 
 
 def test_named_widget_class_name() -> None:
