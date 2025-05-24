@@ -8,8 +8,13 @@ T = TypeVar("T", covariant=True)
 P = ParamSpec("P")
 
 
+# note: could use field metadata to store options
+
+
 @dataclass(frozen=True)
 class WidgetFactoryOptions:
+    object_name: str | None = None
+    class_names: list[str] | None = None
     form_field_label: str | None = None
     grid_position: tuple[int, int] | None = None
 
@@ -36,7 +41,7 @@ def form_row(label: str, class_type: Callable[P, T], *args: P.args, **kwargs: P.
     return field(default_factory=factory_fn)
 
 
-def grid_item(row: int, column: int, class_type: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+def grid_item(position: tuple[int, int], class_type: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """
     Concise version like `make()`: no widget_options required.
     Adds 'form_field_name' to any QWidget created.
@@ -45,7 +50,7 @@ def grid_item(row: int, column: int, class_type: Callable[P, T], *args: P.args, 
     def factory_fn() -> T:
         widget = class_type(*args, **kwargs)
         if isinstance(widget, QObject):
-            widget.setProperty("_widget_factory_options", WidgetFactoryOptions(grid_position=(row, column)))
+            widget.setProperty("_widget_factory_options", WidgetFactoryOptions(grid_position=position))
         return widget
 
     return field(default_factory=factory_fn)
@@ -62,5 +67,5 @@ class SimpleDataclassWidget(QWidget):
     form_item2: QLabel = form_row("Another Form Label", QLabel, "This is another QLabel in a form row")
 
     # For QGridLayout, we can use grid_item
-    grid_item1: QLabel = grid_item(0, 0, QLabel, "This is a QLabel in a grid item")
-    grid_item2: QLabel = grid_item(1, 0, QLabel, "This is another QLabel in a grid item")
+    grid_item1: QLabel = grid_item((0, 0), QLabel, "This is a QLabel in a grid item")
+    grid_item2: QLabel = grid_item((1, 0), QLabel, "This is another QLabel in a grid item")
