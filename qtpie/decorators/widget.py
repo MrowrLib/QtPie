@@ -36,10 +36,6 @@ def _widget_impl(
         if classes is not None:
             add_classes(self, classes)
 
-        # Future: call setup() if present
-        if hasattr(self, "setup"):
-            self.setup()
-
     if is_dataclass(cls):
         orig_init = cls.__init__
 
