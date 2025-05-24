@@ -18,7 +18,6 @@ def test_widget_class_no_init_sets_up_qwidget(qtbot: QtBot) -> None:
         pass
 
     widget = NoInitWidget()
-    qtbot.addWidget(widget)
     assert_that(widget.objectName()).is_equal_to("NoInitWidget")
     assert_that(widget.layout()).is_instance_of(QVBoxLayout)
 
@@ -33,7 +32,6 @@ def test_widget_class_labelwidget_no_init_sets_text(qtbot: QtBot) -> None:
         pass
 
     widget = LabelWidgetNoInit("Hello")
-    qtbot.addWidget(widget)
     assert_that(widget.text()).is_equal_to("Hello")
 
 
@@ -46,7 +44,6 @@ def test_widget_class_custom_init_calls_super(qtbot: QtBot) -> None:
             super().__init__()
 
     widget = CustomInitWidget()
-    qtbot.addWidget(widget)
     assert_that(widget.objectName()).is_equal_to("CustomInitWidget")
     assert_that(widget.layout()).is_instance_of(QVBoxLayout)
 
@@ -62,5 +59,4 @@ def test_widget_class_labelwidget_custom_init_sets_text(qtbot: QtBot) -> None:
             super().__init__(f"The number is: {number}")
 
     widget = LabelWidgetCustomInit(42)
-    qtbot.addWidget(widget)
     assert_that(widget.text()).is_equal_to("The number is: 42")
