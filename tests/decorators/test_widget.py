@@ -3,7 +3,7 @@ from dataclasses import is_dataclass
 import pytest
 from assertpy import assert_that
 from pytestqt.qtbot import QtBot
-from qtpy.QtWidgets import QWidget
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
 
 from qtpie.decorators.widget import widget, widget_class
 
@@ -133,6 +133,54 @@ class TestCustomObjectNames:
     def test_widget_class_custom_name(self) -> None:
         widget = PlainWidgetWithCustomName(42)
         assert_that(widget.objectName()).is_equal_to("CustomPlainWidget")
+
+
+# --- Layout Parameter Tests ---
+
+
+@pytest.mark.parametrize(
+    "decorator,layout_cls,expected_layout",
+    [
+        (lambda c: widget(layout="horizontal")(c), QHBoxLayout, "horizontal"),
+        (lambda c: widget(layout="vertical")(c), QVBoxLayout, "vertical"),
+        (lambda c: widget(layout="grid")(c), QGridLayout, "grid"),
+        (lambda c: widget(layout="form")(c), QFormLayout, "form"),
+        (lambda c: widget_class(layout="horizontal")(c), QHBoxLayout, "horizontal"),
+        (lambda c: widget_class(layout="vertical")(c), QVBoxLayout, "vertical"),
+        (lambda c: widget_class(layout="grid")(c), QGridLayout, "grid"),
+        (lambda c: widget_class(layout="form")(c), QFormLayout, "form"),
+    ],
+)
+def test_layout_parameter_sets_correct_layout(qtbot: QtBot, decorator, layout_cls, expected_layout) -> None:
+    """Test that the layout parameter sets the correct layout type."""
+
+    class TestWidget(QWidget):
+        pass
+
+    Decorated = decorator(TestWidget)
+    widget_instance = Decorated()
+    qtbot.addWidget(widget_instance)
+    layout = widget_instance.layout()
+    assert_that(layout).is_instance_of(layout_cls)
+
+
+@pytest.mark.parametrize(
+    "decorator",
+    [
+        lambda c: widget(layout=None)(c),
+        lambda c: widget_class(layout=None)(c),
+    ],
+)
+def test_layout_parameter_none_sets_no_layout(qtbot: QtBot, decorator) -> None:
+    """Test that layout=None does not set a layout."""
+
+    class TestWidget(QWidget):
+        pass
+
+    Decorated = decorator(TestWidget)
+    widget_instance = Decorated()
+    qtbot.addWidget(widget_instance)
+    assert_that(widget_instance.layout()).is_none()
 
 
 # --- Validation Tests ---

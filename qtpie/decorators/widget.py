@@ -16,8 +16,11 @@ def _widget_impl(cls: T, name: str | None = None, layout: WidgetLayoutType | Non
     orig_init = cls.__init__
 
     def __init__(self: QWidget, *args: object, **kwargs: object) -> None:
-        orig_init(self, *args, **kwargs)
-        super(type(self), self).__init__()
+        if orig_init is QWidget.__init__:
+            orig_init(self, *args, **kwargs)
+        else:
+            QWidget.__init__(self)
+            orig_init(self, *args, **kwargs)
         self.setObjectName(name or type(self).__name__)
 
         # Set layout if specified
