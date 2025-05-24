@@ -138,30 +138,26 @@ class TestCustomObjectNames:
 # --- Layout Parameter Tests ---
 
 
+@pytest.mark.parametrize("decorator_func", [widget, widget_class])
 @pytest.mark.parametrize(
-    "decorator,layout_cls,expected_layout",
+    "layout_str,layout_cls",
     [
-        (lambda c: widget(layout="horizontal")(c), QHBoxLayout, "horizontal"),
-        (lambda c: widget(layout="vertical")(c), QVBoxLayout, "vertical"),
-        (lambda c: widget(layout="grid")(c), QGridLayout, "grid"),
-        (lambda c: widget(layout="form")(c), QFormLayout, "form"),
-        (lambda c: widget_class(layout="horizontal")(c), QHBoxLayout, "horizontal"),
-        (lambda c: widget_class(layout="vertical")(c), QVBoxLayout, "vertical"),
-        (lambda c: widget_class(layout="grid")(c), QGridLayout, "grid"),
-        (lambda c: widget_class(layout="form")(c), QFormLayout, "form"),
+        ("horizontal", QHBoxLayout),
+        ("vertical", QVBoxLayout),
+        ("grid", QGridLayout),
+        ("form", QFormLayout),
     ],
 )
-def test_layout_parameter_sets_correct_layout(qtbot: QtBot, decorator, layout_cls, expected_layout) -> None:
+def test_layout_parameter_sets_correct_layout(qtbot: QtBot, decorator_func, layout_str, layout_cls) -> None:
     """Test that the layout parameter sets the correct layout type."""
 
     class TestWidget(QWidget):
         pass
 
-    Decorated = decorator(TestWidget)
+    Decorated = decorator_func(layout=layout_str)(TestWidget)
     widget_instance = Decorated()
     qtbot.addWidget(widget_instance)
-    layout = widget_instance.layout()
-    assert_that(layout).is_instance_of(layout_cls)
+    assert_that(widget_instance.layout()).is_instance_of(layout_cls)
 
 
 @pytest.mark.parametrize(
