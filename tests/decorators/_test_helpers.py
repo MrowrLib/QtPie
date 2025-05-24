@@ -3,8 +3,10 @@ from typing import Callable
 from assertpy import assert_that
 from qtpy.QtWidgets import QWidget
 
+Decorator = Callable[..., type]
 
-def make_decorated(decorator: Callable[..., type], **kwargs) -> type[QWidget]:
+
+def make_decorated(decorator: Decorator, **kwargs: object) -> type[QWidget]:
     @decorator(**kwargs)
     class TestWidget(QWidget):
         value: int = 42

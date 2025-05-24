@@ -1,26 +1,39 @@
 from dataclasses import is_dataclass
 
-from qtpy.QtWidgets import QWidget
-
-from qtpie.decorators.widget import widget_class
-
-
-@widget_class
-class PlainWidget(QWidget):
-    def __init__(self, value: int = 42) -> None:
-        self.value = value
+from tests.decorators.widget_class_decorator_examples import (
+    LayoutWidgetClass,
+    MultiArgWidgetClass,
+    NamedWidgetClass,
+    SimpleWidgetClass,
+)
 
 
 def test_is_not_dataclass() -> None:
-    assert not is_dataclass(PlainWidget)
-    assert not is_dataclass(PlainWidget())
+    assert not is_dataclass(SimpleWidgetClass)
+    assert not is_dataclass(SimpleWidgetClass())
 
 
 def test_manual_init_preserved() -> None:
-    widget_instance = PlainWidget(123)
+    widget_instance = SimpleWidgetClass(123)
     assert widget_instance.value == 123
 
 
 def test_accepts_kwarg() -> None:
-    widget_instance = PlainWidget(value=99)
+    widget_instance = SimpleWidgetClass(value=99)
     assert widget_instance.value == 99
+
+
+def test_multi_arg_widget_class() -> None:
+    widget_instance = MultiArgWidgetClass("foo", 7)
+    assert widget_instance.name == "foo"
+    assert widget_instance.count == 7
+
+
+def test_layout_mode_default_class() -> None:
+    widget_instance = LayoutWidgetClass()
+    assert widget_instance.layout_mode == "vertical"
+
+
+def test_named_widget_class_name() -> None:
+    widget_instance = NamedWidgetClass()
+    assert widget_instance.name == "CustomWidgetName"
