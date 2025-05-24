@@ -3,12 +3,33 @@ from dataclasses import is_dataclass
 import pytest
 from assertpy import assert_that
 from pytestqt.qtbot import QtBot
-from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from qtpie.decorators.widget import widget, widget_class
 from qtpie.types.widget_layout_type import WidgetLayoutType
 
 # --- Decorated Widget Classes ---
+
+# --- QLabel Inheritance Tests ---
+
+
+@widget
+class LabelWidget(QLabel):
+    text_value: str
+
+    def __post_init__(self) -> None:
+        self.setText(self.text_value)
+
+
+@widget_class
+class LabelWidgetNoInit(QLabel):
+    pass
+
+
+@widget_class
+class LabelWidgetCustomInit(QLabel):
+    def __init__(self, number: int) -> None:
+        super().__init__(f"The number is: {number}")
 
 
 @widget
@@ -36,6 +57,24 @@ class PlainWidgetWithParentheses(QWidget):
 
 
 # --- Shared Tests ---
+
+
+def test_widget_labelwidget_sets_text(qtbot: QtBot) -> None:
+    widget = LabelWidget("Hello")
+    qtbot.addWidget(widget)
+    assert_that(widget.text()).is_equal_to("Hello")
+
+
+def test_widget_class_labelwidget_no_init_sets_text(qtbot: QtBot) -> None:
+    widget = LabelWidgetNoInit("Hello")
+    qtbot.addWidget(widget)
+    assert_that(widget.text()).is_equal_to("Hello")
+
+
+def test_widget_class_labelwidget_custom_init_sets_text(qtbot: QtBot) -> None:
+    widget = LabelWidgetCustomInit(42)
+    qtbot.addWidget(widget)
+    assert_that(widget.text()).is_equal_to("The number is: 42")
 
 
 @pytest.mark.parametrize(

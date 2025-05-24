@@ -44,8 +44,8 @@ def _widget_impl(
         orig_init = cls.__init__
 
         def __init__(self: QWidget, *args: object, **kwargs: object) -> None:
-            QWidget.__init__(self)
-            orig_init(self, *args, **kwargs)
+            super(type(self), self).__init__()  # Qt base initialized (NO kwargs!)
+            orig_init(self, *args, **kwargs)  # dataclass sets fields
             _finalize_widget(self)
 
         cls.__init__ = __init__
