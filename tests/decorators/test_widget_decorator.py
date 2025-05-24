@@ -6,9 +6,10 @@
 from dataclasses import is_dataclass
 
 from assertpy import assert_that
-from qtpy.QtWidgets import QWidget
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from qtpie.decorators.widget import widget
+from qtpie.styles.classes import get_classes
 
 
 def test_is_dataclass() -> None:
@@ -50,8 +51,6 @@ def test_multi_field_defaults() -> None:
 
 
 def test_layout_mode_vertical() -> None:
-    from qtpy.QtWidgets import QVBoxLayout
-
     @widget(layout="vertical")
     class VerticalWidget(QWidget):
         pass
@@ -61,8 +60,6 @@ def test_layout_mode_vertical() -> None:
 
 
 def test_layout_mode_horizontal() -> None:
-    from qtpy.QtWidgets import QHBoxLayout
-
     @widget(layout="horizontal")
     class HorizontalWidget(QWidget):
         pass
@@ -72,8 +69,6 @@ def test_layout_mode_horizontal() -> None:
 
 
 def test_layout_mode_grid() -> None:
-    from qtpy.QtWidgets import QGridLayout
-
     @widget(layout="grid")
     class GridWidget(QWidget):
         pass
@@ -83,8 +78,6 @@ def test_layout_mode_grid() -> None:
 
 
 def test_layout_mode_form() -> None:
-    from qtpy.QtWidgets import QFormLayout
-
     @widget(layout="form")
     class FormWidget(QWidget):
         pass
@@ -103,8 +96,6 @@ def test_named_widget_name() -> None:
 
 
 def test_classes_default_empty() -> None:
-    from qtpie.styles.classes import get_classes
-
     @widget
     class NoClassWidget(QWidget):
         pass
@@ -114,8 +105,6 @@ def test_classes_default_empty() -> None:
 
 
 def test_classes_explicit() -> None:
-    from qtpie.styles.classes import get_classes
-
     @widget(classes=["foo", "bar"])
     class WithClassWidget(QWidget):
         pass
@@ -126,9 +115,6 @@ def test_classes_explicit() -> None:
 
 def test_widget_labelwidget_sets_text(qtbot):
     """Test @widget with a dataclass QLabel and __post_init__."""
-    from qtpy.QtWidgets import QLabel
-
-    from qtpie.decorators.widget import widget
 
     @widget
     class LabelWidget(QLabel):
@@ -137,6 +123,6 @@ def test_widget_labelwidget_sets_text(qtbot):
         def __post_init__(self) -> None:
             self.setText(self.text_value)
 
-    widget = LabelWidget("Hello")
-    qtbot.addWidget(widget)
-    assert_that(widget.text()).is_equal_to("Hello")
+    label_widget = LabelWidget("Hello")
+    qtbot.addWidget(label_widget)
+    assert_that(label_widget.text()).is_equal_to("Hello")
