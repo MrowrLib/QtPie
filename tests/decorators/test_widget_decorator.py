@@ -94,4 +94,26 @@ def test_named_widget_name() -> None:
         name: str = "CustomWidgetName"
 
     widget_instance = NamedWidget()
-    assert widget_instance.name == "CustomWidgetName"
+    assert_that(widget_instance.name).is_equal_to("CustomWidgetName")
+
+
+def test_classes_default_empty() -> None:
+    from qtpie.styles.classes import get_classes
+
+    @widget
+    class NoClassWidget(QWidget):
+        pass
+
+    widget_instance = NoClassWidget()
+    assert_that(get_classes(widget_instance)).is_empty()
+
+
+def test_classes_explicit() -> None:
+    from qtpie.styles.classes import get_classes
+
+    @widget(classes=["foo", "bar"])
+    class WithClassWidget(QWidget):
+        pass
+
+    widget_instance = WithClassWidget()
+    assert_that(get_classes(widget_instance)).is_equal_to(["foo", "bar"])
