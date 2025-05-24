@@ -39,8 +39,20 @@ def _widget_impl(cls: T, name: str | None = None, layout: WidgetLayoutType | Non
 
 @overload
 def widget_class(cls: T) -> T: ...
+
+
+@overload
+def widget_class(
+    *,
+    name: str | None = ...,
+    layout: WidgetLayoutType | None = ...,
+) -> Callable[[T], T]: ...
+
+
 @overload
 def widget_class() -> Callable[[T], T]: ...
+
+
 def widget_class(cls: T | None = None, *, name: str | None = None, layout: WidgetLayoutType | None = None) -> T | Callable[[T], T]:
     def decorator(cls: T) -> T:
         return _widget_impl(cls, name=name, layout=layout)
@@ -50,6 +62,14 @@ def widget_class(cls: T | None = None, *, name: str | None = None, layout: Widge
 
 @overload
 def widget(cls: T) -> T: ...
+
+
+@overload
+def widget(
+    *,
+    name: str | None = ...,
+    layout: WidgetLayoutType | None = ...,
+) -> Callable[[T], T]: ...
 
 
 @overload
