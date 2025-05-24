@@ -1,3 +1,8 @@
+# IMPORTANT: If you add or change a test here, you MUST add or change a corresponding test
+# in test_widget_class_decorator.py! These two files are meant to have parallel coverage
+# for @widget and @widget_class. Do NOT add a test to only one file unless it is
+# absolutely unique to that decorator. Keep them in sync!
+
 from dataclasses import is_dataclass
 
 from assertpy import assert_that
@@ -117,3 +122,21 @@ def test_classes_explicit() -> None:
 
     widget_instance = WithClassWidget()
     assert_that(get_classes(widget_instance)).is_equal_to(["foo", "bar"])
+
+
+def test_widget_labelwidget_sets_text(qtbot):
+    """Test @widget with a dataclass QLabel and __post_init__."""
+    from qtpy.QtWidgets import QLabel
+
+    from qtpie.decorators.widget import widget
+
+    @widget
+    class LabelWidget(QLabel):
+        text_value: str
+
+        def __post_init__(self) -> None:
+            self.setText(self.text_value)
+
+    widget = LabelWidget("Hello")
+    qtbot.addWidget(widget)
+    assert_that(widget.text()).is_equal_to("Hello")
