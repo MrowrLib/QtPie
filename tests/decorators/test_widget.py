@@ -24,12 +24,14 @@ class WidgetWithParentheses(QWidget):
 @widget_class
 class PlainWidgetWithoutParentheses(QWidget):
     def __init__(self, value: int):
+        super().__init__()
         self.value = value
 
 
 @widget_class()
 class PlainWidgetWithParentheses(QWidget):
     def __init__(self, value: int):
+        super().__init__()
         self.value = value
 
 
@@ -123,6 +125,7 @@ class WidgetWithCustomName(QWidget):
 @widget_class(name="CustomPlainWidget")
 class PlainWidgetWithCustomName(QWidget):
     def __init__(self, value: int):
+        super().__init__()
         self.value = value
 
 
@@ -176,7 +179,7 @@ def test_widget_class_default_layout_is_vertical(qtbot: QtBot) -> None:
     @widget_class
     class DefaultLayoutWidget(QWidget):
         def __init__(self) -> None:
-            pass  # Do not call super().__init__(), decorator handles it
+            super().__init__()
 
     widget_instance = DefaultLayoutWidget()
     qtbot.addWidget(widget_instance)
