@@ -48,7 +48,7 @@ class TestSharedWidgetBehavior:
     def test_constructor_and_object_name(
         self,
         qtbot: QtBot,
-        widget_class: type[QWidget],
+        widget_class: type,
         args: tuple[int, ...],
         expected_name: str,
     ) -> None:
@@ -60,7 +60,7 @@ class TestSharedWidgetBehavior:
     def test_constructor_accepts_kwarg(
         self,
         qtbot: QtBot,
-        widget_class: type[QWidget],
+        widget_class: type,
         args: tuple[int, ...],
         expected_name: str,
     ) -> None:
@@ -84,7 +84,7 @@ class TestDataclassWidgets:
     def test_makes_dataclass(
         self,
         qtbot: QtBot,
-        widget_class: type[QWidget],
+        widget_class: type,
         args: tuple[int, ...],
     ) -> None:
         widget_instance = widget_class(*args)
@@ -103,7 +103,7 @@ class TestPlainWidgets:
     def test_not_dataclass(
         self,
         qtbot: QtBot,
-        widget_class: type[QWidget],
+        widget_class: type,
         args: tuple[int, ...],
     ) -> None:
         widget_instance = widget_class(*args)
