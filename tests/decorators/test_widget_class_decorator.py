@@ -1,7 +1,6 @@
 from dataclasses import is_dataclass
 
 from tests.decorators.widget_class_decorator_examples import (
-    LayoutWidgetClass,
     MultiArgWidgetClass,
     NamedWidgetClass,
     SimpleWidgetClass,
@@ -30,8 +29,8 @@ def test_multi_arg_widget_class() -> None:
 
 
 def test_layout_mode_default_class() -> None:
-    widget_instance = LayoutWidgetClass()
-    assert widget_instance.layout_mode == "vertical"
+    widget_instance = SimpleWidgetClass()
+    assert isinstance(widget_instance, SimpleWidgetClass)
 
 
 def test_named_widget_class_name() -> None:

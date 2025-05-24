@@ -15,10 +15,5 @@ class MultiFieldWidget(QWidget):
 
 
 @widget
-class LayoutWidget(QWidget):
-    layout_mode: str = "vertical"
-
-
-@widget
 class NamedWidget(QWidget):
     name: str = "CustomWidgetName"

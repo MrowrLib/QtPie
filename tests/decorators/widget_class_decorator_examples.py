@@ -17,12 +17,6 @@ class MultiArgWidgetClass(QWidget):
 
 
 @widget_class
-class LayoutWidgetClass(QWidget):
-    def __init__(self, layout_mode: str = "vertical") -> None:
-        self.layout_mode = layout_mode
-
-
-@widget_class
 class NamedWidgetClass(QWidget):
     def __init__(self, name: str = "CustomWidgetName") -> None:
         self.name = name
