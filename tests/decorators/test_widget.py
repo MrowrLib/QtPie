@@ -158,6 +158,18 @@ def test_widget_layout_sets_correct_layout(qtbot: QtBot, layout_str: WidgetLayou
     assert_that(widget_instance.layout()).is_instance_of(layout_cls)
 
 
+def test_widget_default_layout_is_vertical(qtbot: QtBot) -> None:
+    """Test that the default layout is QVBoxLayout when not specified."""
+
+    @widget
+    class DefaultLayoutWidget(QWidget):
+        pass
+
+    widget_instance = DefaultLayoutWidget()
+    qtbot.addWidget(widget_instance)
+    assert_that(widget_instance.layout()).is_instance_of(QVBoxLayout)
+
+
 @pytest.mark.parametrize(
     "layout_str,layout_cls",
     [

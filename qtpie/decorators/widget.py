@@ -70,7 +70,7 @@ def widget_class(
     cls: T | None = None,
     *,
     name: str | None = None,
-    layout: WidgetLayoutType | None = None,
+    layout: WidgetLayoutType | None = "vertical",
     classes: list[str] | None = None,
 ) -> T | Callable[[T], T]:
     def decorator(cls: T) -> T:
@@ -103,7 +103,7 @@ def widget(
     cls: T | None = None,
     *,
     name: str | None = None,
-    layout: WidgetLayoutType | None = None,
+    layout: WidgetLayoutType | None = "vertical",
     classes: list[str] | None = None,
 ) -> T | Callable[[T], T]:
     """Decorator that makes a class a dataclass with Qt widget capabilities."""
