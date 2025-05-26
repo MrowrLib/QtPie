@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class WidgetFactoryDetails:
+class WidgetFactoryProperties:
     object_name: str | None = None
     class_names: list[str] | None = None
     form_field_label: str | None = None
