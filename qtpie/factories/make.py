@@ -103,6 +103,9 @@ class ExampleThatIsNotADataClass:
     label_with_class_names: QLabel
     label_with_both: QLabel
 
+    # If we make it IWidget.make() then we can call self.make() and we could optionally have
+    # it have the ability to add to tha layout() even AFTER construction.
+
     def __init__(self):
         self.label = _make(QLabel, "Hello, World! I am a constructor argument to QLabel.")
         self.label_with_name = _make((QLabel, "the-object-name"), "Hello, World! I am a constructor argument to QLabel.")
