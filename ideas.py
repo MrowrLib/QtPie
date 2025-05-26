@@ -7,8 +7,6 @@ from qtpy.QtWidgets import QLabel, QWidget
 T = TypeVar("T", covariant=True)
 P = ParamSpec("P")
 
-# note: could use field metadata to store options
-
 
 @dataclass(frozen=True)
 class WidgetFactoryOptions:
@@ -18,11 +16,46 @@ class WidgetFactoryOptions:
     grid_position: tuple[int, int] | None = None
 
 
-def make(class_type: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+def make(widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str], list[str] | None], *args: P.args, **kwargs: P.kwargs) -> T:
+    widget_type: Callable[P, T]
+    object_name: str | None = None
+    class_names: list[str] = []
+
+    if isinstance(widget_type_info, tuple):
+        typed_tuple = cast(tuple[Callable[P, T], str | list[str], list[str] | None], widget_type_info)
+
+        widget_type = typed_tuple[0]
+
+        id_or_class_list = typed_tuple[1]
+        if isinstance(id_or_class_list, str):
+            object_name = id_or_class_list
+        else:
+            class_names.extend(id_or_class_list)
+
+        if len(typed_tuple) > 2:
+            class_names.extend(typed_tuple[2] or [])
+
+    else:
+        widget_type = widget_type_info
+
     def factory_fn() -> T:
-        return class_type(*args, **kwargs)
+        widget = widget_type(*args, **kwargs)
+        if isinstance(widget, QObject):
+            if object_name is not None:
+                widget.setObjectName(object_name)
+            if class_names:
+                widget.setProperty("classNames", class_names)
+            widget.setProperty("_widget_factory_options", WidgetFactoryOptions(object_name=object_name, class_names=class_names))
+        return widget
 
     return field(default_factory=factory_fn)
+
+
+# def make(class_type: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+#     def factory_fn() -> T:
+#         return class_type(*args, **kwargs)
+
+#     return field(default_factory=factory_fn)
 
 
 def form_row(label: str, class_type: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
@@ -89,10 +122,24 @@ def specific_meta(id: str | None = None, classes: list[str] | None = None, field
     return _with_meta_base(field_value, id=id, classes=classes, **kwargs)
 
 
+def make_widget(id: str | None = None, classes: list[str] | None = None, field: H | None = None, *args: Any, **kwargs: Any) -> H:
+    field_value: Field[H] | None = None
+    if field is not None:
+        assert isinstance(field, Field), "specific_meta() expects a dataclass field"
+        field_value = cast(Field[H], field)
+    elif len(args) == 1 and isinstance(args[0], Field):
+        if isinstance(args[0].default_factory, Callable):
+            field_value = cast(Field[H], args[0])
+
+    assert field_value is not None, "specific_meta() requires a dataclass field or a single Field argument"
+
+    return _with_meta_base(field_value, id=id, classes=classes, **kwargs)
+
+
 @dataclass
 class SimpleDataclassWidget(QWidget):
     # Regular field() factory for widgets when using QBoxLayout (QVBoxLayout, QHBoxLayout)
-    label1: QLabel = make(QLabel, "Hello, World!")
+    # label1: QLabel = make((QLabel, [".bar"]), "Hello, World!")
     label2: QLabel = make(QLabel, "This is a QLabel in a dataclass widget")
 
     # But the QFormLayout requires a different approach
