@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Callable, ParamSpec, TypeVar, cast
 
+from qtpy.QtCore import QObject
 from qtpy.QtWidgets import QLabel
 
 from qtpie.factories.widget_factory_details import WidgetFactoryDetails
@@ -46,12 +47,9 @@ def make(widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str
     )
 
 
-# Example usage:
-
-
 @dataclass
 class ExampleClassWithWidgetAttributes:
-    label: QLabel = make(QLabel, "Hello, World! I am a constructor argument to QLabel.")
+    label: QLabel = make(QLabel, text="Hello, World! I am a constructor argument to QLabel.")
 
     # Or if you wanna just make it and declare an object name:
     label_with_name: QLabel = make((QLabel, "the-object-name"), "Hello, World! I am a constructor argument to QLabel.")
@@ -61,3 +59,52 @@ class ExampleClassWithWidgetAttributes:
 
     # Or you can do both:
     label_with_both: QLabel = make((QLabel, "the-object-name", ["class1", "class2"]), "Hello, World! I am a constructor argument to QLabel.")
+
+
+def _make(widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str]] | tuple[Callable[P, T], str, list[str]], *args: P.args, **kwargs: P.kwargs) -> T:
+    widget_type: Callable[P, T]
+    object_name: str | None = None
+    class_names: list[str] = []
+
+    if isinstance(widget_type_info, tuple):
+        typed_tuple = cast(tuple[Callable[P, T], str | list[str], list[str] | None], widget_type_info)
+
+        widget_type = typed_tuple[0]
+
+        id_or_class_list = typed_tuple[1]
+        if isinstance(id_or_class_list, str):
+            object_name = id_or_class_list
+        else:
+            class_names.extend(id_or_class_list)
+
+        if len(typed_tuple) > 2:
+            class_names.extend(typed_tuple[2] or [])
+
+    else:
+        widget_type = widget_type_info
+
+    instance = widget_type(*args, **kwargs)
+
+    if isinstance(instance, QObject):
+        if object_name is not None:
+            instance.setObjectName(object_name)
+        if class_names:
+            instance.setProperty("classNames", class_names)
+
+    return instance
+
+
+# Example usage:
+
+
+class ExampleThatIsNotADataClass:
+    label: QLabel
+    label_with_name: QLabel
+    label_with_class_names: QLabel
+    label_with_both: QLabel
+
+    def __init__(self):
+        self.label = _make(QLabel, "Hello, World! I am a constructor argument to QLabel.")
+        self.label_with_name = _make((QLabel, "the-object-name"), "Hello, World! I am a constructor argument to QLabel.")
+        self.label_with_class_names = _make((QLabel, ["class1", "class2"]), "Hello, World! I am a constructor argument to QLabel.")
+        self.label_with_both = _make((QLabel, "the-object-name", ["class1", "class2"]), "Hello, World! I am a constructor argument to QLabel.")
