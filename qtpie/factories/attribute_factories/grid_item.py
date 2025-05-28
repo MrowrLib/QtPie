@@ -8,7 +8,7 @@ T = TypeVar("T", covariant=True)
 P = ParamSpec("P")
 
 
-def make(
+def grid_item(
     position: tuple[int, int], widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str]] | tuple[Callable[P, T], str, list[str]], *args: P.args, **kwargs: P.kwargs
 ) -> T:
     widget_type: Callable[P, T]

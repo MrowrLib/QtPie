@@ -8,7 +8,7 @@ T = TypeVar("T", covariant=True)
 P = ParamSpec("P")
 
 
-def make(label: str, widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str]] | tuple[Callable[P, T], str, list[str]], *args: P.args, **kwargs: P.kwargs) -> T:
+def form_row(label: str, widget_type_info: Callable[P, T] | tuple[Callable[P, T], str | list[str]] | tuple[Callable[P, T], str, list[str]], *args: P.args, **kwargs: P.kwargs) -> T:
     widget_type: Callable[P, T]
     object_name: str | None = None
     class_names: list[str] = []

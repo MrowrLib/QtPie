@@ -2,8 +2,8 @@ from assertpy import assert_that
 from pytestqt.qtbot import QtBot
 from qtpy.QtWidgets import QLabel
 
-from qtpie.factories.attribute_factories.form_row import make as form_row
-from qtpie.factories.attribute_factories.grid_item import make as grid_item
+from qtpie.factories.attribute_factories.form_row import form_row
+from qtpie.factories.attribute_factories.grid_item import grid_item
 from qtpie.factories.attribute_factories.make import make
 
 

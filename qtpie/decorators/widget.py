@@ -106,14 +106,7 @@ def widget_class(
     layout: WidgetLayoutType | None = "vertical",
     classes: list[str] | None = None,
 ) -> T | Callable[[T], T]:
-    """
-    Decorator for manual-init QWidget subclasses.
-
-    IMPORTANT:
-    Do NOT call super().__init__() in your __init__ method.
-    The decorator will call QWidget.__init__() for you before your __init__ runs.
-    Calling super().__init__() yourself will result in double-initialization and a RuntimeError.
-    """
+    """Decorator for non-dataclass QWidget subclasses."""
 
     def decorator(cls: T) -> T:
         return _widget_impl(cls, name=name, layout=layout, classes=classes)
