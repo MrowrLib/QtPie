@@ -60,3 +60,112 @@ def test_widget_class_labelwidget_custom_init_sets_text(qtbot: QtBot) -> None:
 
     widget = LabelWidgetCustomInit(42)
     assert_that(widget.text()).is_equal_to("The number is: 42")
+
+
+def test_layout_vertical_adds_widgets(qtbot: QtBot) -> None:
+    """Test @widget_class with vertical layout adds widgets from factories."""
+    from qtpy.QtWidgets import QLabel, QLineEdit
+
+    from qtpie.factories.attribute_factories.make import make
+
+    @widget_class(layout="vertical")
+    class VerticalWidget(QWidget):
+        label: QLabel
+        input: QLineEdit
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.label = make((QLabel, "my-label", ["title"]), "Hello")
+            self.input = make(QLineEdit)
+
+    widget = VerticalWidget()
+    layout = widget.layout()
+    assert layout is not None
+    assert_that(layout.count()).is_equal_to(2)
+    assert_that(widget.label.objectName()).is_equal_to("my-label")
+    from qtpie.styles.classes import get_classes
+
+    assert_that(get_classes(widget.label)).contains("title")
+    assert_that(widget.label.text()).is_equal_to("Hello")
+
+
+def test_layout_form_adds_rows_and_sets_object_name(qtbot: QtBot) -> None:
+    """Test @widget_class with form layout adds rows with labels."""
+    from qtpy.QtWidgets import QFormLayout, QLineEdit
+
+    from qtpie.factories.attribute_factories.form_row import form_row
+
+    @widget_class(layout="form")
+    class FormWidget(QWidget):
+        name: QLineEdit
+        email: QLineEdit
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.name = form_row("Name", (QLineEdit, "name-field"))
+            self.email = form_row("Email", (QLineEdit, "email-field", ["input", "email"]))
+
+    widget = FormWidget()
+    layout = widget.layout()
+    assert layout is not None
+    assert isinstance(layout, QFormLayout)
+    assert_that(layout.rowCount()).is_equal_to(2)
+    assert_that(widget.name.objectName()).is_equal_to("name-field")
+    assert_that(widget.email.objectName()).is_equal_to("email-field")
+    from qtpie.styles.classes import get_classes
+
+    assert_that(get_classes(widget.email)).contains("input", "email")
+
+
+def test_layout_grid_places_widget_correctly(qtbot: QtBot) -> None:
+    """Test @widget_class with grid layout places widgets at correct positions."""
+    from qtpy.QtWidgets import QGridLayout, QLineEdit
+
+    from qtpie.factories.attribute_factories.grid_item import grid_item
+    from qtpie.factories.grid_position import GridPosition
+
+    @widget_class(layout="grid")
+    class GridWidget(QWidget):
+        field: QLineEdit
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.field = grid_item(GridPosition(2, 3), (QLineEdit, "grid-field"))
+
+    widget = GridWidget()
+    layout = widget.layout()
+    assert layout is not None
+    assert isinstance(layout, QGridLayout)
+    item = layout.itemAtPosition(2, 3)
+    assert_that(item).is_not_none()
+    assert item is not None
+    assert_that(item.widget()).is_equal_to(widget.field)
+    assert_that(widget.field.objectName()).is_equal_to("grid-field")
+
+
+def test_layout_horizontal_adds_widgets_in_order(qtbot: QtBot) -> None:
+    """Test @widget_class with horizontal layout adds widgets in order."""
+    from qtpy.QtWidgets import QLabel
+
+    from qtpie.factories.attribute_factories.make import make
+
+    @widget_class(layout="horizontal")
+    class HorizontalWidget(QWidget):
+        left: QLabel
+        right: QLabel
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.left = make(QLabel, "Left")
+            self.right = make(QLabel, "Right")
+
+    widget = HorizontalWidget()
+    layout = widget.layout()
+    assert layout is not None
+    assert_that(layout.count()).is_equal_to(2)
+    item0 = layout.itemAt(0)
+    item1 = layout.itemAt(1)
+    assert item0 is not None
+    assert item1 is not None
+    assert_that(item0.widget().text()).is_equal_to("Left")
+    assert_that(item1.widget().text()).is_equal_to("Right")
