@@ -20,6 +20,8 @@ def _widget_impl(
         raise TypeError(f"Widget decorator can only be applied to QWidget subclasses, got {cls.__name__}")
 
     def _finalize_widget(self: QWidget) -> None:
+        from qtpie.factories.widget_factory_properties import WidgetFactoryProperties
+
         self.setObjectName(name or type(self).__name__)
 
         # Set layout if specified
@@ -35,6 +37,41 @@ def _widget_impl(
         # Add classes if provided
         if classes is not None:
             add_classes(self, classes)
+
+        # Process widget factory properties for layout population and styling
+        cls_attributes = getattr(type(self), "__annotations__", {})
+
+        for attr_name, attr_type in cls_attributes.items():
+            # Check if the type annotation is a QWidget subclass
+            try:
+                if isinstance(attr_type, type) and issubclass(attr_type, QWidget):
+                    widget_instance = getattr(self, attr_name, None)
+                    if widget_instance is not None and isinstance(widget_instance, QWidget):
+                        # Get widget factory properties
+                        widget_props = WidgetFactoryProperties.get(widget_instance)
+
+                        # Apply object name and classes if present
+                        if widget_props is not None:
+                            if widget_props.object_name is not None:
+                                widget_instance.setObjectName(widget_props.object_name)
+                            if widget_props.class_names is not None:
+                                add_classes(widget_instance, widget_props.class_names)
+
+                        # Add to layout based on layout type
+                        widget_layout = self.layout()
+                        if widget_layout is not None:
+                            if layout == "horizontal" or layout == "vertical":
+                                widget_layout.addWidget(widget_instance)
+                            elif layout == "grid" and widget_props is not None and widget_props.grid_position is not None:
+                                grid_pos = widget_props.grid_position
+                                if isinstance(widget_layout, QGridLayout):
+                                    widget_layout.addWidget(widget_instance, grid_pos.row, grid_pos.col, grid_pos.rowspan, grid_pos.colspan)
+                            elif layout == "form" and widget_props is not None and widget_props.form_field_label is not None:
+                                if isinstance(widget_layout, QFormLayout):
+                                    widget_layout.addRow(widget_props.form_field_label, widget_instance)
+            except (TypeError, AttributeError):
+                # Skip if attr_type is not a proper type or doesn't support issubclass
+                continue
 
     if is_dataclass(cls):
         orig_init = cls.__init__

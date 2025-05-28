@@ -37,8 +37,8 @@ def grid_item(
     def factory_fn() -> T:
         instance = widget_type(*args, **kwargs)
         if isinstance(instance, QObject):
-            instance.setProperty(
-                "widgetFactoryProperties",
+            WidgetFactoryProperties.set(
+                instance,
                 WidgetFactoryProperties(
                     object_name=object_name,
                     class_names=class_names,
