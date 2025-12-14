@@ -13,6 +13,7 @@ dev = [
   "pyright>=1.1.407",
   "pyside6>=6.10.1",
   "pytest>=9.0.2",
+  "pytest-cov>=7.0.0",
   "qtpie_samples",
   "ruff>=0.14.9",
 ]
@@ -73,3 +74,18 @@ select = [
 indent-style = "space"
 line-ending = "auto"
 quote-style = "double"
+
+[tool.coverage.run]
+source = ["qtpie"]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@overload",
+]
+
+[tool.pytest.ini_options]
+addopts = "--cov=qtpie --cov-report=term-missing"

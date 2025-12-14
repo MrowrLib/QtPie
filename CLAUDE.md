@@ -138,12 +138,18 @@ The `tech-docs/DRAFTING_SUMMARY.md` compares features across drafts.
 
 ## Running Things
 
-```bash
-# Run all tests
-uv run pytest tests/ -v
+**Run tests frequently!** Coverage runs automatically with every test run.
 
-# Run just qtpie tests
-uv run pytest tests/test_qtpie/ -v
+```bash
+# Run qtpie tests (coverage prints automatically)
+uv run python -m pytest tests/test_qtpie/ -v
+
+# Run all tests
+uv run python -m pytest tests/ -v
+
+# Generate HTML coverage report (detailed line-by-line view)
+uv run python -m pytest tests/test_qtpie/ --cov-report=html
+# then open htmlcov/index.html in a browser
 
 # Type check
 uv run pyright qtpie/ tests/test_qtpie/
@@ -154,6 +160,8 @@ uv run ruff check qtpie/ tests/test_qtpie/
 # Format
 uv run ruff format qtpie/ tests/test_qtpie/
 ```
+
+Note: Use `python -m pytest` instead of just `pytest` due to workspace editable install quirk.
 
 ---
 
@@ -168,16 +176,19 @@ uv run ruff format qtpie/ tests/test_qtpie/
 
 ---
 
-## Current State (Phase 1 Complete)
+## Current State (Phase 3 Complete)
 
 Working features:
 - `@widget()` and `@widget` (with/without parens)
-- `layout="vertical"` | `"horizontal"` | `"none"`
+- `layout="vertical"` | `"horizontal"` | `"form"` | `"grid"` | `"none"`
 - `name` parameter (objectName)
 - `classes` parameter (CSS-like)
 - Lifecycle hooks (`setup()`, `setup_layout()`, etc.)
 - `make()` with positional args, kwargs, signal connections
-- 30 tests, 0 pyright errors, 0 ruff errors
+- `@window()` decorator for QMainWindow
+- `@action()` and `@menu()` decorators
+- `stretch()` for layout spacing
+- 96 tests, 85% coverage, 0 pyright errors, 0 ruff errors
 
 See `TODO.md` for the full roadmap.
 
