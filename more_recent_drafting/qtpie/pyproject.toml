@@ -1,0 +1,26 @@
+[project]
+dependencies = [
+  "mrowrpurr-pyscss>=1.4.1",
+  "observant>=0.1.2",
+  "qasync>=0.28.0",
+  "qtpy>=2.4.3",
+]
+description = "Tasty way to build Qt apps 🍰"
+name = "qtpie"
+readme = "README.md"
+requires-python = ">=3.14"
+version = "0.1.0"
+
+[dependency-groups]
+dev = [
+  "assertpy>=1.1",
+  "pyside6>=6.10.1",
+  "pytest>=9.0.2",
+]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["qtpie"]
