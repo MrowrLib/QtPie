@@ -155,6 +155,15 @@ wheels = [
 ]
 
 [[package]]
+name = "observant"
+version = "0.1.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/b7/90806187fb373ade71ea3b87e976d60e02b2b3be64cef71e2a60e0652436/observant-0.1.5.tar.gz", hash = "sha256:c7823910369eb94ce7771ce477e1462b8ec9bedd5ec602fd00a7067b8da8c696", size = 33007, upload-time = "2025-12-13T21:55:37.024Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/8c/35557d4309a37ddbf8b73611830848afd25fbaf85b02ec199217e2c860e5/observant-0.1.5-py3-none-any.whl", hash = "sha256:30c1c067117ab94e9c9d92c774cefce82483833c722d7bf6c3165ba6724cec68", size = 35713, upload-time = "2025-12-13T21:55:35.89Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -362,11 +371,15 @@ name = "qtpie"
 version = "0.1.0"
 source = { editable = "qtpie" }
 dependencies = [
+    { name = "observant" },
     { name = "qtpy" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "qtpy", specifier = ">=2.4.3" }]
+requires-dist = [
+    { name = "observant", specifier = ">=0.1.5" },
+    { name = "qtpy", specifier = ">=2.4.3" },
+]
 
 [[package]]
 name = "qtpie-project"

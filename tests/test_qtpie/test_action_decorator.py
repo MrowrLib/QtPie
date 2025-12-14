@@ -4,11 +4,13 @@ Note: QAction is not a QWidget, so we can't use qt.track() for these tests.
 We still use the qt fixture to ensure QApplication exists.
 """
 
+from dataclasses import field
+
 from assertpy import assert_that
 from qtpy.QtGui import QAction, QIcon, QKeySequence
 from qtpy.QtWidgets import QApplication, QStyle
 
-from qtpie import action
+from qtpie import action, make
 from qtpie_test import QtDriver
 
 
@@ -292,6 +294,31 @@ class TestActionFields:
         assert_that(a.count).is_equal_to(42)
         assert_that(a.name).is_equal_to("custom")
 
+    def test_field_with_default_factory(self, qt: QtDriver) -> None:
+        """Action fields with default_factory should be initialized."""
+        _ = qt
+
+        def make_list() -> list[str]:
+            return []
+
+        def make_dict() -> dict[str, int]:
+            return {}
+
+        @action("&Test")
+        class TestAction(QAction):
+            items: list[str] = field(default_factory=make_list)
+            mapping: dict[str, int] = field(default_factory=make_dict)
+
+        a = TestAction()
+
+        assert_that(a.items).is_equal_to([])
+        assert_that(a.mapping).is_equal_to({})
+
+        # Verify each instance gets its own list (not shared)
+        a.items.append("one")
+        b = TestAction()
+        assert_that(b.items).is_equal_to([])
+
 
 class TestActionShortcutObject:
     """Tests for shortcut as QKeySequence object."""
@@ -354,3 +381,47 @@ class TestActionIcon:
         app = QApplication.instance()
         assert_that(app).is_not_none()
         assert_that(a.icon().isNull()).is_false()
+
+
+class TestActionSignalConnections:
+    """Tests for signal connections via make() metadata."""
+
+    def test_child_field_signal_connection_by_method_name(self, qt: QtDriver) -> None:
+        """Child fields with signal connections should connect to parent methods."""
+        _ = qt
+        triggered_count = 0
+
+        @action("&Parent")
+        class ParentAction(QAction):
+            child: QAction = make(QAction, "Child", triggered="on_child_triggered")
+
+            def on_child_triggered(self) -> None:
+                nonlocal triggered_count
+                triggered_count += 1
+
+        a = ParentAction()
+
+        # Trigger the child action
+        a.child.trigger()
+
+        assert_that(triggered_count).is_equal_to(1)
+
+    def test_child_field_signal_connection_by_lambda(self, qt: QtDriver) -> None:
+        """Child fields with lambda signal connections should work."""
+        _ = qt
+        triggered_count = 0
+
+        def increment() -> None:
+            nonlocal triggered_count
+            triggered_count += 1
+
+        @action("&Parent")
+        class ParentAction(QAction):
+            child: QAction = make(QAction, "Child", triggered=increment)
+
+        a = ParentAction()
+
+        # Trigger the child action
+        a.child.trigger()
+
+        assert_that(triggered_count).is_equal_to(1)

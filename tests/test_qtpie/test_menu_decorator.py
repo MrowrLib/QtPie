@@ -293,3 +293,47 @@ class TestMenuFields:
 
         assert_that(m.count).is_equal_to(99)
         assert_that(m.name).is_equal_to("custom")
+
+
+class TestMenuSignalConnections:
+    """Tests for signal connections via make() metadata."""
+
+    def test_action_signal_connection_by_method_name(self, qt: QtDriver) -> None:
+        """Actions with signal connections should connect to menu methods."""
+        triggered_count = 0
+
+        @menu("&Test")
+        class TestMenu(QMenu):
+            save: QAction = make(QAction, "&Save", triggered="on_save")
+
+            def on_save(self) -> None:
+                nonlocal triggered_count
+                triggered_count += 1
+
+        m = TestMenu()
+        qt.track(m)
+
+        # Trigger the action
+        m.save.trigger()
+
+        assert_that(triggered_count).is_equal_to(1)
+
+    def test_action_signal_connection_by_lambda(self, qt: QtDriver) -> None:
+        """Actions with lambda signal connections should work."""
+        triggered_count = 0
+
+        def increment() -> None:
+            nonlocal triggered_count
+            triggered_count += 1
+
+        @menu("&Test")
+        class TestMenu(QMenu):
+            run: QAction = make(QAction, "&Run", triggered=increment)
+
+        m = TestMenu()
+        qt.track(m)
+
+        # Trigger the action
+        m.run.trigger()
+
+        assert_that(triggered_count).is_equal_to(1)

@@ -24,6 +24,8 @@ from qtpy.QtWidgets import (
 )
 
 from qtpie.factories.make import (
+    BIND_METADATA_KEY,
+    BIND_PROP_METADATA_KEY,
     FORM_LABEL_METADATA_KEY,
     GRID_POSITION_METADATA_KEY,
     SIGNALS_METADATA_KEY,
@@ -189,6 +191,10 @@ def widget[T](
             _call_if_exists(self, "setup")
             _call_if_exists(self, "setup_values")
             _call_if_exists(self, "setup_bindings")
+
+            # Process data bindings after setup (user creates proxy in setup())
+            _process_bindings(self, cls)
+
             if self.layout() is not None:
                 _call_if_exists(self, "setup_layout", self.layout())
             _call_if_exists(self, "setup_styles")
@@ -242,3 +248,50 @@ def _call_if_exists(obj: object, method_name: str, *args: object) -> None:
     method = getattr(obj, method_name, None)
     if method is not None and callable(method):
         method(*args)
+
+
+def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
+    """Process data bindings from make() metadata."""
+    # Import here to avoid circular import
+    from qtpie.bindings import bind, get_binding_registry
+
+    for f in fields(cls):  # type: ignore[arg-type]
+        bind_path = f.metadata.get(BIND_METADATA_KEY)
+        if bind_path is None:
+            continue
+
+        # Get the widget instance for this field
+        widget_instance = getattr(widget, f.name, None)
+        if widget_instance is None:
+            continue
+
+        # Parse the bind path: "proxy.name" or "proxy.address?.city"
+        # First part is the field name on self that holds the proxy
+        parts = bind_path.split(".", 1)
+        if len(parts) < 2:
+            # Invalid path - need at least "proxy.field"
+            continue
+
+        proxy_field_name = parts[0]
+        observable_path = parts[1]
+
+        # Get the proxy from self
+        proxy = getattr(widget, proxy_field_name, None)
+        if proxy is None:
+            # Proxy not yet created - skip silently
+            continue
+
+        # Check if proxy has observable_for_path method (is ObservableProxy)
+        if not hasattr(proxy, "observable_for_path"):
+            continue
+
+        # Get the observable for the path
+        observable = proxy.observable_for_path(observable_path)
+
+        # Get the property to bind to
+        bind_prop = f.metadata.get(BIND_PROP_METADATA_KEY)
+        if bind_prop is None:
+            bind_prop = get_binding_registry().get_default_prop(widget_instance)
+
+        # Create the binding
+        bind(observable, widget_instance, bind_prop)

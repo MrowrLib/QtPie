@@ -1,6 +1,7 @@
 [project]
 dependencies = [
   "qtpy>=2.4.3",
+  "observant>=0.1.5",
 ]
 description = "Add your description here"
 name = "qtpie"

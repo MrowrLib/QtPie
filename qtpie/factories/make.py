@@ -10,6 +10,8 @@ from typing import Any
 SIGNALS_METADATA_KEY = "qtpie_signals"
 FORM_LABEL_METADATA_KEY = "qtpie_form_label"
 GRID_POSITION_METADATA_KEY = "qtpie_grid_position"
+BIND_METADATA_KEY = "qtpie_bind"
+BIND_PROP_METADATA_KEY = "qtpie_bind_prop"
 
 # Type alias for grid position tuples
 GridTuple = tuple[int, int] | tuple[int, int, int, int]
@@ -20,6 +22,8 @@ def make[T](
     *args: Any,
     form_label: str | None = None,
     grid: GridTuple | None = None,
+    bind: str | None = None,
+    bind_prop: str | None = None,
     **kwargs: Any,
 ) -> T:
     """
@@ -32,6 +36,8 @@ def make[T](
         *args: Positional arguments passed to the constructor.
         form_label: Label text for form layouts. When set, creates a labeled row.
         grid: Position in grid layout as (row, col) or (row, col, rowspan, colspan).
+        bind: Path to bind to an ObservableProxy field, e.g. "proxy.name" or "proxy.address?.city".
+        bind_prop: Explicit widget property to bind. If None, uses the default for the widget type.
         **kwargs: Keyword arguments - if value is a string or callable,
                   it's treated as a potential signal connection. Otherwise,
                   it's passed to the constructor.
@@ -55,6 +61,11 @@ def make[T](
         # Grid layout with position
         btn: QPushButton = make(QPushButton, "7", grid=(1, 0))
         display: QLineEdit = make(QLineEdit, grid=(0, 0, 1, 4))  # spans 4 cols
+
+        # Data binding
+        name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
+        age_spin: QSpinBox = make(QSpinBox, bind="proxy.age")
+        city_edit: QLineEdit = make(QLineEdit, bind="proxy.address?.city")  # optional chaining
 
     Returns:
         At type-check time: T (the widget type)
@@ -86,5 +97,27 @@ def make[T](
         metadata[FORM_LABEL_METADATA_KEY] = form_label
     if grid is not None:
         metadata[GRID_POSITION_METADATA_KEY] = grid
+    if bind is not None:
+        metadata[BIND_METADATA_KEY] = bind
+    if bind_prop is not None:
+        metadata[BIND_PROP_METADATA_KEY] = bind_prop
 
     return field(default_factory=factory_fn, metadata=metadata if metadata else {})  # type: ignore[return-value]
+
+
+def make_later() -> Any:
+    """
+    Declare a field that will be initialized later (in setup()).
+
+    Use this for fields that need to reference other fields or self.
+
+    Example:
+        @widget()
+        class MyWidget(QWidget):
+            model: Dog = make(Dog)
+            proxy: ObservableProxy[Dog] = make_later()  # initialized in setup()
+
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+    """
+    return field(init=False)
