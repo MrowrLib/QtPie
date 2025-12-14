@@ -1,3 +1,3 @@
-# Qt Pie
+# Qt Pie 🍰
 
-Tasty way to build Qt apps 🍰
+> Tasty way to build Qt apps
