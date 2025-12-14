@@ -244,7 +244,54 @@ tests/test_qtpie/
 
 ---
 
-## Phase 6: Styling System
+## Phase 6: ModelWidget Base Class
+
+**Goal**: Base class for widgets with automatic model binding.
+
+### TODO
+
+- [ ] `ModelWidget[T]` generic base class
+- [ ] Auto-detect model type from generic parameter
+- [ ] Auto-bind fields with matching names
+- [ ] Model property for accessing the bound model
+- [ ] Tests for ModelWidget
+
+### API Design
+
+```python
+class Person:
+    name: str
+    email: str
+
+@widget()
+class PersonEditor(ModelWidget[Person]):
+    # These auto-bind to person.name and person.email
+    name: QLineEdit = make(QLineEdit)
+    email: QLineEdit = make(QLineEdit)
+
+    def setup(self) -> None:
+        # self.model is typed as Person
+        print(f"Editing: {self.model.name}")
+```
+
+---
+
+## Phase 7: Pre-built Widgets & Utilities
+
+**Goal**: Common widgets and helpers that aren't in Qt.
+
+### TODO
+
+- [ ] `FilterableDropdown` - searchable combo box
+- [ ] `AutoHeightTextEdit` - grows with content
+- [ ] `ColoredSvgIcon` - SVG with dynamic color
+- [ ] `center_on_screen()` utility
+- [ ] `screen_geometry()` utility
+- [ ] Dock system helpers (TabbedDocksMainWindow, DockManager)
+
+---
+
+## Phase 8: Styling System
 
 **Goal**: SCSS-based styling with hot reload.
 
@@ -285,7 +332,7 @@ class MyCard(QWidget):
 
 ---
 
-## Phase 7: App Class & Entry Point
+## Phase 9: App Class & Entry Point
 
 **Goal**: Simplified application bootstrapping.
 
@@ -317,53 +364,6 @@ def main():
 
 ---
 
-## Phase 8: Pre-built Widgets & Utilities
-
-**Goal**: Common widgets and helpers that aren't in Qt.
-
-### TODO
-
-- [ ] `FilterableDropdown` - searchable combo box
-- [ ] `AutoHeightTextEdit` - grows with content
-- [ ] `ColoredSvgIcon` - SVG with dynamic color
-- [ ] `center_on_screen()` utility
-- [ ] `screen_geometry()` utility
-- [ ] Dock system helpers (TabbedDocksMainWindow, DockManager)
-
----
-
-## Phase 9: ModelWidget Base Class
-
-**Goal**: Base class for widgets with automatic model binding.
-
-### TODO
-
-- [ ] `ModelWidget[T]` generic base class
-- [ ] Auto-detect model type from generic parameter
-- [ ] Auto-bind fields with matching names
-- [ ] Model property for accessing the bound model
-- [ ] Tests for ModelWidget
-
-### API Design
-
-```python
-class Person:
-    name: str
-    email: str
-
-@widget()
-class PersonEditor(ModelWidget[Person]):
-    # These auto-bind to person.name and person.email
-    name: QLineEdit = make(QLineEdit)
-    email: QLineEdit = make(QLineEdit)
-
-    def setup(self) -> None:
-        # self.model is typed as Person
-        print(f"Editing: {self.model.name}")
-```
-
----
-
 ## Future Ideas (Backlog)
 
 - [ ] QML-like declarative syntax (if Python ever gets macros...)
@@ -388,7 +388,7 @@ class PersonEditor(ModelWidget[Person]):
 | Phase 3: @window | ✅ Complete | 67 |
 | Phase 4: @menu/@action | ✅ Complete | 96 |
 | Phase 5: Data Binding | ✅ Complete | 127 |
-| Phase 6: Styling | 🎯 Next | - |
-| Phase 7: App Class | Planned | - |
-| Phase 8: Pre-built Widgets | Planned | - |
-| Phase 9: ModelWidget | Planned | - |
+| Phase 6: ModelWidget | 🎯 Next | - |
+| Phase 7: Pre-built Widgets | Planned | - |
+| Phase 8: Styling | Planned | - |
+| Phase 9: App Class | Planned | - |
