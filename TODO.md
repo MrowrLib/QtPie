@@ -89,27 +89,33 @@ class ToolPanel(QWidget):
 
 ---
 
-## Phase 3: @window Decorator
+## Phase 3: @window Decorator ✅ COMPLETE
 
 **Goal**: Declarative QMainWindow with common window setup.
 
-### TODO
+### Accomplished
 
-- [ ] `@window` decorator for QMainWindow subclasses
-- [ ] `title` parameter
-- [ ] `size` parameter: `(width, height)`
-- [ ] `icon` parameter: path to icon file
-- [ ] `center` parameter: center on screen
-- [ ] Auto-create central widget if needed
-- [ ] Status bar helpers
-- [ ] Tests for @window
+- [x] `@window` decorator for QMainWindow subclasses
+- [x] `@window` works with AND without parentheses
+- [x] `title` parameter for window title
+- [x] `size` parameter: `(width, height)`
+- [x] `icon` parameter: path to icon file
+- [x] `center` parameter: center on screen
+- [x] Auto-set `central_widget` field as central widget
+- [x] Auto-add QMenu fields to menu bar
+- [x] Same lifecycle hooks as @widget
+- [x] Auto-generate objectName (strips "Window" suffix)
+- [x] 19 new tests (67 total)
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
 
 ### API Design
 
 ```python
 @window(title="My Application", size=(1024, 768), center=True)
 class MainWindow(QMainWindow):
-    editor: QTextEdit = make(QTextEdit)
+    central_widget: QTextEdit = make(QTextEdit)
+    file_menu: QMenu = field(default_factory=lambda: QMenu("&File"))
 
     def setup(self) -> None:
         self.statusBar().showMessage("Ready")
@@ -344,8 +350,8 @@ class PersonEditor(ModelWidget[Person]):
 |-------|--------|-------|
 | Phase 1: Core Foundation | ✅ Complete | 30 |
 | Phase 2: Layout Extensions | ✅ Complete | 48 |
-| Phase 3: @window | 🎯 Next | - |
-| Phase 4: @menu/@action | Planned | - |
+| Phase 3: @window | ✅ Complete | 67 |
+| Phase 4: @menu/@action | 🎯 Next | - |
 | Phase 5: Data Binding | Planned | - |
 | Phase 6: Styling | Planned | - |
 | Phase 7: App Class | Planned | - |
