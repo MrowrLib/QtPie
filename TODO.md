@@ -244,34 +244,71 @@ tests/test_qtpie/
 
 ---
 
-## Phase 6: ModelWidget Base Class
+## Phase 6: ModelWidget Base Class ✅ COMPLETE
 
 **Goal**: Base class for widgets with automatic model binding.
 
-### TODO
+### Accomplished
 
-- [ ] `ModelWidget[T]` generic base class
-- [ ] Auto-detect model type from generic parameter
-- [ ] Auto-bind fields with matching names
-- [ ] Model property for accessing the bound model
-- [ ] Tests for ModelWidget
+- [x] `ModelWidget[T]` generic base class with Python 3.12 type parameter syntax
+- [x] Auto-detect model type from generic parameter
+- [x] Auto-create model as `T()` when no model field defined
+- [x] Support custom model factory via `model: Person = make(Person, name="Bob")`
+- [x] Support manual model setup via `model: Person = make_later()` + set in `setup()`
+- [x] Error if `make_later()` used but model not set in `setup()`
+- [x] Auto-create `ObservableProxy` wrapping the model
+- [x] Auto-bind widget fields to model properties by matching names
+- [x] `set_model()` method for changing model after creation
+- [x] 20 new tests (147 total)
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
 
 ### API Design
 
 ```python
-class Person:
-    name: str
-    email: str
+from dataclasses import dataclass
+from qtpie import ModelWidget, widget, make, make_later
 
+@dataclass
+class Person:
+    name: str = ""
+    age: int = 0
+
+# Auto-creates Person() as model, auto-binds by field name
 @widget()
-class PersonEditor(ModelWidget[Person]):
-    # These auto-bind to person.name and person.email
+class PersonEditor(QWidget, ModelWidget[Person]):
+    name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
+    age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
+
+# Custom model factory
+@widget()
+class PersonEditor(QWidget, ModelWidget[Person]):
+    model: Person = make(Person, name="Unknown", age=0)
     name: QLineEdit = make(QLineEdit)
-    email: QLineEdit = make(QLineEdit)
+
+# Manual model setup
+@widget()
+class PersonEditor(QWidget, ModelWidget[Person]):
+    model: Person = make_later()
+    name: QLineEdit = make(QLineEdit)
 
     def setup(self) -> None:
-        # self.model is typed as Person
-        print(f"Editing: {self.model.name}")
+        self.model = load_person_from_db()
+```
+
+### Files Created/Modified
+
+```
+qtpie/
+├── __init__.py              # Added: ModelWidget export
+├── model_widget.py          # NEW: ModelWidget[T] base class
+├── factories/
+│   └── make.py              # Fixed: signal detection only for QObject subclasses
+└── decorators/
+    └── widget.py            # Added: _process_model_widget(), _process_model_widget_auto_bindings()
+
+tests/test_qtpie/
+└── test_model_widget.py     # NEW: 14 ModelWidget tests
 ```
 
 ---
@@ -388,7 +425,7 @@ def main():
 | Phase 3: @window | ✅ Complete | 67 |
 | Phase 4: @menu/@action | ✅ Complete | 96 |
 | Phase 5: Data Binding | ✅ Complete | 127 |
-| Phase 6: ModelWidget | 🎯 Next | - |
-| Phase 7: Pre-built Widgets | Planned | - |
+| Phase 6: ModelWidget | ✅ Complete | 147 |
+| Phase 7: Pre-built Widgets | 🎯 Next | - |
 | Phase 8: Styling | Planned | - |
 | Phase 9: App Class | Planned | - |

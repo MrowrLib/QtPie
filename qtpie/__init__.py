@@ -6,5 +6,16 @@ from qtpie.decorators.menu import menu
 from qtpie.decorators.widget import widget
 from qtpie.decorators.window import window
 from qtpie.factories.make import make, make_later
+from qtpie.model_widget import ModelWidget
 
-__all__ = ["action", "bind", "make", "make_later", "menu", "register_binding", "widget", "window"]
+__all__ = [
+    "ModelWidget",
+    "action",
+    "bind",
+    "make",
+    "make_later",
+    "menu",
+    "register_binding",
+    "widget",
+    "window",
+]

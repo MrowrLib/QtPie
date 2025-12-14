@@ -28,6 +28,7 @@ from qtpie.factories.make import (
     BIND_PROP_METADATA_KEY,
     FORM_LABEL_METADATA_KEY,
     GRID_POSITION_METADATA_KEY,
+    MAKE_LATER_METADATA_KEY,
     SIGNALS_METADATA_KEY,
     GridTuple,
 )
@@ -192,8 +193,14 @@ def widget[T](
             _call_if_exists(self, "setup_values")
             _call_if_exists(self, "setup_bindings")
 
+            # Process ModelWidget if applicable (after setup, before bindings)
+            _process_model_widget(self, cls)
+
             # Process data bindings after setup (user creates proxy in setup())
             _process_bindings(self, cls)
+
+            # Process auto-bindings for ModelWidget (by field name)
+            _process_model_widget_auto_bindings(self, cls)
 
             if self.layout() is not None:
                 _call_if_exists(self, "setup_layout", self.layout())
@@ -295,3 +302,118 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
 
         # Create the binding
         bind(observable, widget_instance, bind_prop)
+
+
+def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
+    """Process ModelWidget initialization - create model and proxy."""
+    # Import here to avoid circular import
+    from qtpie.model_widget import get_model_type, is_model_widget_subclass
+
+    if not is_model_widget_subclass(cls):
+        return
+
+    # Check if model field exists
+    model_field = None
+    for f in fields(cls):  # type: ignore[arg-type]
+        if f.name == "model":
+            model_field = f
+            break
+
+    model_instance = None
+
+    if model_field is not None:
+        # User defined a model field
+        is_make_later = model_field.metadata.get(MAKE_LATER_METADATA_KEY, False)
+
+        if is_make_later:
+            # Check if user set it in setup()
+            current_value = getattr(widget, "model", None)
+            if current_value is None or not hasattr(widget, "model"):
+                raise ValueError(
+                    f"ModelWidget field 'model' was declared with make_later() but not set in setup(). Either set self.model in setup() or use make({cls.__name__}, ...) to provide a factory."
+                )
+            model_instance = current_value
+        else:
+            # User used make() - get the created instance
+            model_instance = getattr(widget, "model", None)
+    else:
+        # No model field defined - auto-create T()
+        model_type = get_model_type(cls)
+        if model_type is None:
+            raise ValueError(f"Cannot determine model type for {cls.__name__}. Ensure the class inherits from ModelWidget[YourModelType].")
+        model_instance = model_type()
+        widget.model = model_instance  # type: ignore[attr-defined]
+
+    # Create proxy from model
+    if model_instance is not None:
+        from observant import ObservableProxy  # type: ignore[import-untyped]
+
+        proxy = ObservableProxy(model_instance, sync=True)
+        widget.proxy = proxy  # type: ignore[attr-defined]
+
+
+def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None:
+    """Auto-bind widget fields to model properties by matching names."""
+    # Import here to avoid circular import
+    from qtpie.bindings import bind, get_binding_registry
+    from qtpie.model_widget import is_model_widget_subclass
+
+    if not is_model_widget_subclass(cls):
+        return
+
+    # Get proxy
+    proxy = getattr(widget, "proxy", None)
+    if proxy is None:
+        return
+
+    # Get model to check for attribute names
+    model = getattr(widget, "model", None)
+    if model is None:
+        return
+
+    # Get type hints for field types
+    type_hints = get_type_hints(cls)
+
+    for f in fields(cls):  # type: ignore[arg-type]
+        # Skip private fields
+        if f.name.startswith("_"):
+            continue
+
+        # Skip model and proxy fields
+        if f.name in ("model", "proxy"):
+            continue
+
+        # Skip fields that already have explicit bind=
+        if f.metadata.get(BIND_METADATA_KEY) is not None:
+            continue
+
+        # Check if this field name matches a model attribute
+        if not hasattr(model, f.name):
+            continue
+
+        # Check if this is a QWidget field
+        field_type = type_hints.get(f.name)
+        if not isinstance(field_type, type) or not issubclass(field_type, QWidget):
+            continue
+
+        # Get the widget instance
+        widget_instance = getattr(widget, f.name, None)
+        if widget_instance is None:
+            continue
+
+        # Get the observable for this model property
+        try:
+            observable = proxy.observable_for_path(f.name)
+        except Exception:
+            # Property might not be observable
+            continue
+
+        # Get the default property for this widget type
+        bind_prop = get_binding_registry().get_default_prop(widget_instance)
+
+        # Create the binding
+        try:
+            bind(observable, widget_instance, bind_prop)
+        except Exception:
+            # Binding might fail for some widget types
+            pass
