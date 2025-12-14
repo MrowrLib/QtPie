@@ -2,9 +2,9 @@
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
-from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QWidget
+from qtpy.QtCore import Qt
+from qtpy.QtTest import QTest
+from qtpy.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot

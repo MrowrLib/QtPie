@@ -325,14 +325,14 @@ name = "qtpie-test"
 version = "0.1.0"
 source = { editable = "qtpie_test" }
 dependencies = [
-    { name = "pyside6" },
     { name = "pytest-qt" },
+    { name = "qtpy" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "pyside6", specifier = ">=6.10.1" },
     { name = "pytest-qt", specifier = ">=4.5.0" },
+    { name = "qtpy", specifier = ">=2.4.3" },
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 [project]
 dependencies = [
-  "pyside6>=6.10.1",
   "pytest-qt>=4.5.0",
+  "qtpy>=2.4.3",
 ]
 description = "Test helpers for QtPie"
 name = "qtpie_test"
