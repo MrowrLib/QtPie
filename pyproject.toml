@@ -13,17 +13,63 @@ dev = [
   "pyright>=1.1.407",
   "pyside6>=6.10.1",
   "pytest>=9.0.2",
-  "pytest-qt>=4.5.0",
+  "qtpie_samples",
   "ruff>=0.14.9",
 ]
+
+[tool.uv.sources]
+qtpie_samples = {workspace = true}
 
 [tool.uv.workspace]
 members = [
   "qtpie",
-  "samples",
+  "qtpie_samples",
+  "qtpie_test",
+  "tests",
 ]
 
 [tool.pyright]
+pythonPlatform = "All"
+pythonVersion = "3.12"
 reportPrivateImportUsage = false
+typeCheckingMode = "strict"
 venv = ".venv"
 venvPath = "."
+
+# Analyze unannotated functions (so you still get checking),
+# but DO NOT require explicit return annotations.
+analyzeUnannotatedFunctions = true
+
+# Ban unknown / untyped stuff everywhere
+reportMissingParameterType = "error"
+reportMissingTypeArgument = "error"
+reportUnknownArgumentType = "error"
+reportUnknownLambdaType = "error"
+reportUnknownMemberType = "error"
+reportUnknownParameterType = "error"
+reportUnknownVariableType = "error"
+
+# Extra pedantic goodness
+strictDictionaryInference = true
+strictListInference = true
+strictParameterNoneValue = true
+strictSetInference = true
+
+[tool.ruff]
+line-length = 200
+target-version = "py314"
+
+[tool.ruff.lint]
+ignore = []
+select = [
+  "E", # pycodestyle errors
+  "F", # pyflakes
+  "I", # isort-style import rules
+  "B", # flake8-bugbear: common bugs & gotchas
+  "UP", # pyupgrade: use modern Python features
+]
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "auto"
+quote-style = "double"
