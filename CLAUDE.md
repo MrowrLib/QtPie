@@ -125,7 +125,7 @@ The `tech-docs/DRAFTING_SUMMARY.md` compares features across drafts.
 
 ## Tech Stack
 
-- **Python 3.12+** - using new type parameter syntax (`def foo[T]()`)
+- **Python 3.13+** - using new type parameter syntax (`def foo[T]()`)
 - **qtpy** - Qt abstraction (works with PySide6 or PyQt6)
 - **PySide6** - the Qt binding we're testing with
 - **pytest + pytest-qt** - testing (wrapped by qtpie_test)

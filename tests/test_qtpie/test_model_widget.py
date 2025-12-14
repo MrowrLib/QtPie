@@ -1,6 +1,7 @@
-"""Tests for ModelWidget functionality."""
+"""Tests for Widget base class functionality."""
 
 from dataclasses import dataclass
+from typing import override
 
 import pytest
 from assertpy import assert_that
@@ -12,7 +13,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from qtpie import ModelWidget, make, make_later, widget
+from qtpie import Widget, make, make_later, widget
 from qtpie_test import QtDriver
 
 
@@ -33,14 +34,48 @@ class Dog:
     breed: str = ""
 
 
-class TestModelWidgetAutoCreate:
-    """Tests for automatic model creation."""
+class TestWidgetWithoutTypeParam:
+    """Tests for Widget used without type parameter (no model binding)."""
+
+    def test_widget_without_type_param_works(self, qt: QtDriver) -> None:
+        """Widget without type param should work as simple mixin."""
+
+        @widget()
+        class SimpleWidget(QWidget, Widget):
+            label: QLabel = make(QLabel, "Hello")
+            button: QLineEdit = make(QLineEdit)
+
+        w = SimpleWidget()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Hello")
+        # No model or proxy should exist
+        assert_that(hasattr(w, "model")).is_false()
+        assert_that(hasattr(w, "proxy")).is_false()
+
+    def test_widget_without_type_param_no_auto_binding(self, qt: QtDriver) -> None:
+        """Widget without type param should not do auto-binding."""
+
+        @widget()
+        class SimpleWidget(QWidget, Widget):
+            name: QLineEdit = make(QLineEdit)  # Same name as Person.name but no binding
+
+        w = SimpleWidget()
+        qt.track(w)
+
+        # Just a regular widget field
+        w.name.setText("Test")
+        assert_that(w.name.text()).is_equal_to("Test")
+
+
+class TestWidgetWithTypeParam:
+    """Tests for automatic model creation with Widget[T]."""
 
     def test_auto_creates_model_with_no_args(self, qt: QtDriver) -> None:
         """Should auto-create model as T() when no model field defined."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
 
         w = PersonEditor()
@@ -54,7 +89,7 @@ class TestModelWidgetAutoCreate:
         """Should auto-create ObservableProxy for the model."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
 
         w = PersonEditor()
@@ -65,14 +100,14 @@ class TestModelWidgetAutoCreate:
         assert_that(w.proxy.observable(str, "name").get()).is_equal_to("")
 
 
-class TestModelWidgetCustomFactory:
+class TestWidgetCustomFactory:
     """Tests for custom model factory with make()."""
 
     def test_uses_make_factory_for_model(self, qt: QtDriver) -> None:
         """Should use make() factory when model field is defined."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make(Person, name="Bob", age=30)
             name: QLineEdit = make(QLineEdit)
 
@@ -86,7 +121,7 @@ class TestModelWidgetCustomFactory:
         """Proxy should wrap the custom model."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make(Person, name="Alice")
             name: QLineEdit = make(QLineEdit)
 
@@ -96,17 +131,18 @@ class TestModelWidgetCustomFactory:
         assert_that(w.proxy.observable(str, "name").get()).is_equal_to("Alice")
 
 
-class TestModelWidgetMakeLater:
-    """Tests for make_later() with ModelWidget."""
+class TestWidgetMakeLater:
+    """Tests for make_later() with Widget[T]."""
 
     def test_make_later_with_setup(self, qt: QtDriver) -> None:
         """Should use model set in setup() when make_later() is used."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make_later()
             name: QLineEdit = make(QLineEdit)
 
+            @override
             def setup(self) -> None:
                 self.model = Person(name="Charlie", age=25)
 
@@ -120,7 +156,7 @@ class TestModelWidgetMakeLater:
         """Should raise error if make_later() is used but model not set in setup()."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make_later()
             name: QLineEdit = make(QLineEdit)
             # Note: no setup() method to set model
@@ -129,14 +165,14 @@ class TestModelWidgetMakeLater:
             PersonEditor()
 
 
-class TestModelWidgetAutoBinding:
+class TestWidgetAutoBinding:
     """Tests for automatic binding by field name."""
 
     def test_auto_binds_by_matching_name(self, qt: QtDriver) -> None:
         """Should auto-bind widget fields to model properties with matching names."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
             age: QSpinBox = make(QSpinBox)
 
@@ -154,7 +190,7 @@ class TestModelWidgetAutoBinding:
         """Widget changes should update model via auto-binding."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
             age: QSpinBox = make(QSpinBox)
 
@@ -172,7 +208,7 @@ class TestModelWidgetAutoBinding:
         """Should not bind widget fields that don't match model properties."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
             extra_field: QLineEdit = make(QLineEdit)  # No 'extra_field' on Person
 
@@ -188,7 +224,7 @@ class TestModelWidgetAutoBinding:
         """Explicit bind= should override auto-binding."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make(Person, name="Initial")
             # Field named 'name' but explicitly bound to nothing (no bind=)
             # This should still auto-bind
@@ -210,13 +246,13 @@ class TestModelWidgetAutoBinding:
 
 
 class TestModelWidgetCheckbox:
-    """Tests for checkbox binding in ModelWidget."""
+    """Tests for checkbox binding in Widget."""
 
     def test_checkbox_auto_binding(self, qt: QtDriver) -> None:
         """Checkbox should auto-bind to bool model property."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             active: QCheckBox = make(QCheckBox, "Active")
 
         w = PersonEditor()
@@ -238,7 +274,7 @@ class TestModelWidgetSetModel:
         """set_model() should update all bound widgets."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             name: QLineEdit = make(QLineEdit)
             age: QSpinBox = make(QSpinBox)
 
@@ -265,7 +301,7 @@ class TestModelWidgetDifferentModels:
         """Should work with any dataclass model type."""
 
         @widget()
-        class DogEditor(QWidget, ModelWidget[Dog]):
+        class DogEditor(QWidget, Widget[Dog]):
             name: QLineEdit = make(QLineEdit)
             breed: QLineEdit = make(QLineEdit)
 
@@ -286,7 +322,7 @@ class TestModelWidgetWithCustomModel:
         """Custom model should work with auto-binding."""
 
         @widget()
-        class PersonEditor(QWidget, ModelWidget[Person]):
+        class PersonEditor(QWidget, Widget[Person]):
             model: Person = make(Person, name="George", age=60)
             name: QLineEdit = make(QLineEdit)
             age: QSpinBox = make(QSpinBox)

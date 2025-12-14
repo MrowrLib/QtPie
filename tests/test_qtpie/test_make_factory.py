@@ -3,7 +3,7 @@
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QSlider, QVBoxLayout, QWidget
 
-from qtpie import make, widget
+from qtpie import Widget, make, widget
 from qtpie_test import QtDriver
 
 
@@ -14,7 +14,7 @@ class TestMakeFactory:
         """make() should create a widget instance via default_factory."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = make(QLabel)
 
         w = MyWidget()
@@ -26,7 +26,7 @@ class TestMakeFactory:
         """make() should pass positional args to the constructor."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = make(QLabel, "Hello World")
 
         w = MyWidget()
@@ -38,7 +38,7 @@ class TestMakeFactory:
         """make() kwargs that aren't signals should be set as properties."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             edit: QLineEdit = make(QLineEdit, placeholderText="Enter name")
 
         w = MyWidget()
@@ -50,7 +50,7 @@ class TestMakeFactory:
         """make() should connect signals to methods by name string."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             button: QPushButton = make(QPushButton, "Click", clicked="on_click")
             click_count: int = 0
 
@@ -70,7 +70,7 @@ class TestMakeFactory:
         captured: list[bool] = []
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             button: QPushButton = make(QPushButton, "Click", clicked=lambda: captured.append(True))
 
         w = MyWidget()
@@ -84,7 +84,7 @@ class TestMakeFactory:
         """make() should support connecting multiple signals."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             slider: QSlider = make(
                 QSlider,
                 valueChanged="on_value_changed",
@@ -111,7 +111,7 @@ class TestMakeFactory:
         """make() widgets should be added to layout correctly."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = make(QLabel, "First")
             button: QPushButton = make(QPushButton, "Second")
 
@@ -134,7 +134,7 @@ class TestMakeFactory:
         # Compare: make(QLabel, "Hello") vs field(default_factory=lambda: QLabel("Hello"))
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = make(QLabel, "Clean syntax!")
 
         w = MyWidget()

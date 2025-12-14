@@ -3,7 +3,7 @@
 from assertpy import assert_that
 from qtpy.QtWidgets import QGridLayout, QLabel, QLineEdit, QPushButton, QWidget
 
-from qtpie import make, widget
+from qtpie import Widget, make, widget
 from qtpie_test import QtDriver
 
 
@@ -14,7 +14,7 @@ class TestGridLayout:
         """layout='grid' should create a QGridLayout."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             pass
 
         w = MyGrid()
@@ -26,7 +26,7 @@ class TestGridLayout:
         """grid=(row, col) should place widget at specified position."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             btn: QPushButton = make(QPushButton, "Click", grid=(0, 0))
 
         w = MyGrid()
@@ -44,7 +44,7 @@ class TestGridLayout:
         """Multiple widgets should be placed at their specified positions."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             btn_00: QPushButton = make(QPushButton, "00", grid=(0, 0))
             btn_01: QPushButton = make(QPushButton, "01", grid=(0, 1))
             btn_10: QPushButton = make(QPushButton, "10", grid=(1, 0))
@@ -74,7 +74,7 @@ class TestGridLayout:
         """grid=(row, col, rowspan, colspan) should span columns."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             display: QLineEdit = make(QLineEdit, grid=(0, 0, 1, 4))  # spans 4 cols
             btn_0: QPushButton = make(QPushButton, "0", grid=(1, 0))
             btn_1: QPushButton = make(QPushButton, "1", grid=(1, 1))
@@ -102,7 +102,7 @@ class TestGridLayout:
         """grid=(row, col, rowspan, colspan) should span rows."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             side: QPushButton = make(QPushButton, "+", grid=(0, 1, 2, 1))  # spans 2 rows
             top: QPushButton = make(QPushButton, "T", grid=(0, 0))
             bottom: QPushButton = make(QPushButton, "B", grid=(1, 0))
@@ -129,7 +129,7 @@ class TestGridLayout:
         """Widgets without grid position should not be added to grid layout."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             positioned: QPushButton = make(QPushButton, "Pos", grid=(0, 0))
             not_positioned: QPushButton = make(QPushButton, "No Pos")  # No grid
 
@@ -151,7 +151,7 @@ class TestGridLayout:
         """Private fields should not be added to grid layout."""
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             btn: QPushButton = make(QPushButton, "Public", grid=(0, 0))
             _helper: QLabel = make(QLabel, "Hidden", grid=(0, 1))
 
@@ -168,7 +168,7 @@ class TestGridLayout:
         """Real-world example: calculator-style grid."""
 
         @widget(layout="grid")
-        class Calculator(QWidget):
+        class Calculator(QWidget, Widget):
             display: QLineEdit = make(QLineEdit, grid=(0, 0, 1, 4))
             btn_7: QPushButton = make(QPushButton, "7", grid=(1, 0))
             btn_8: QPushButton = make(QPushButton, "8", grid=(1, 1))

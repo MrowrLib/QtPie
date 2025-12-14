@@ -6,7 +6,7 @@ dependencies = [
 ]
 description = "Tests for QtPie"
 name = "tests"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 version = "0.1.0"
 
 [tool.uv.sources]

@@ -19,7 +19,7 @@
 - [x] `make()` kwargs: signals (string/callable) vs properties (other values)
 - [x] Signal connections by method name string
 - [x] Signal connections by lambda/callable
-- [x] Python 3.12 type parameter syntax (`def widget[T](...)`)
+- [x] Python 3.13 type parameter syntax (`def widget[T](...)`)
 - [x] 30 tests passing
 - [x] 0 pyright errors (strict mode)
 - [x] 0 ruff errors
@@ -244,13 +244,16 @@ tests/test_qtpie/
 
 ---
 
-## Phase 6: ModelWidget Base Class ✅ COMPLETE
+## Phase 6: Widget Base Class ✅ COMPLETE
 
 **Goal**: Base class for widgets with automatic model binding.
 
 ### Accomplished
 
-- [x] `ModelWidget[T]` generic base class with Python 3.12 type parameter syntax
+- [x] Unified `Widget[T]` generic base class with Python 3.13 type parameter syntax
+- [x] Works **both** with and without type parameter:
+  - `Widget[None]` - simple mixin, no model binding
+  - `Widget[Dog]` - enables automatic model binding
 - [x] Auto-detect model type from generic parameter
 - [x] Auto-create model as `T()` when no model field defined
 - [x] Support custom model factory via `model: Person = make(Person, name="Bob")`
@@ -259,36 +262,43 @@ tests/test_qtpie/
 - [x] Auto-create `ObservableProxy` wrapping the model
 - [x] Auto-bind widget fields to model properties by matching names
 - [x] `set_model()` method for changing model after creation
-- [x] 20 new tests (147 total)
+- [x] `ModelWidget` kept as backwards-compatibility alias for `Widget`
+- [x] 16 tests for Widget base class (149 total)
 - [x] 0 pyright errors (strict mode)
 - [x] 0 ruff errors
+- [x] 96% code coverage
 
 ### API Design
 
 ```python
 from dataclasses import dataclass
-from qtpie import ModelWidget, widget, make, make_later
+from qtpie import Widget, widget, make, make_later
 
 @dataclass
 class Person:
     name: str = ""
     age: int = 0
 
+# Simple widget without model binding
+@widget()
+class SimpleWidget(QWidget, Widget[None]):
+    label: QLabel = make(QLabel, "Hello")
+
 # Auto-creates Person() as model, auto-binds by field name
 @widget()
-class PersonEditor(QWidget, ModelWidget[Person]):
+class PersonEditor(QWidget, Widget[Person]):
     name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
     age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
 
 # Custom model factory
 @widget()
-class PersonEditor(QWidget, ModelWidget[Person]):
+class PersonEditor(QWidget, Widget[Person]):
     model: Person = make(Person, name="Unknown", age=0)
     name: QLineEdit = make(QLineEdit)
 
 # Manual model setup
 @widget()
-class PersonEditor(QWidget, ModelWidget[Person]):
+class PersonEditor(QWidget, Widget[Person]):
     model: Person = make_later()
     name: QLineEdit = make(QLineEdit)
 
@@ -300,15 +310,15 @@ class PersonEditor(QWidget, ModelWidget[Person]):
 
 ```
 qtpie/
-├── __init__.py              # Added: ModelWidget export
-├── model_widget.py          # NEW: ModelWidget[T] base class
+├── __init__.py              # Added: Widget, ModelWidget exports
+├── widget_base.py           # NEW: Widget[T] base class + helper functions
 ├── factories/
 │   └── make.py              # Fixed: signal detection only for QObject subclasses
 └── decorators/
     └── widget.py            # Added: _process_model_widget(), _process_model_widget_auto_bindings()
 
 tests/test_qtpie/
-└── test_model_widget.py     # NEW: 14 ModelWidget tests
+└── test_model_widget.py     # NEW: 16 Widget tests
 ```
 
 ---
@@ -418,14 +428,14 @@ def main():
 
 ## Current Status
 
-| Phase | Status | Tests |
-|-------|--------|-------|
-| Phase 1: Core Foundation | ✅ Complete | 30 |
-| Phase 2: Layout Extensions | ✅ Complete | 48 |
-| Phase 3: @window | ✅ Complete | 67 |
-| Phase 4: @menu/@action | ✅ Complete | 96 |
-| Phase 5: Data Binding | ✅ Complete | 127 |
-| Phase 6: ModelWidget | ✅ Complete | 147 |
-| Phase 7: Pre-built Widgets | 🎯 Next | - |
-| Phase 8: Styling | Planned | - |
-| Phase 9: App Class | Planned | - |
+| Phase                      | Status     | Tests |
+| -------------------------- | ---------- | ----- |
+| Phase 1: Core Foundation   | ✅ Complete | 30    |
+| Phase 2: Layout Extensions | ✅ Complete | 48    |
+| Phase 3: @window           | ✅ Complete | 67    |
+| Phase 4: @menu/@action     | ✅ Complete | 96    |
+| Phase 5: Data Binding      | ✅ Complete | 127   |
+| Phase 6: Widget Base Class | ✅ Complete | 149   |
+| Phase 7: Pre-built Widgets | 🎯 Next     | -     |
+| Phase 8: Styling           | Planned    | -     |
+| Phase 9: App Class         | Planned    | -     |

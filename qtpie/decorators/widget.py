@@ -305,11 +305,19 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
 
 
 def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
-    """Process ModelWidget initialization - create model and proxy."""
+    """Process Widget[T] initialization - create model and proxy if type param provided."""
     # Import here to avoid circular import
-    from qtpie.model_widget import get_model_type, is_model_widget_subclass
+    from qtpie.widget_base import (
+        get_model_type_from_widget,
+        has_model_type_param,
+        is_widget_subclass,
+    )
 
-    if not is_model_widget_subclass(cls):
+    if not is_widget_subclass(cls):
+        return
+
+    # Only do model binding if type parameter was provided (Widget[Dog] vs Widget)
+    if not has_model_type_param(cls):
         return
 
     # Check if model field exists
@@ -338,9 +346,9 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
             model_instance = getattr(widget, "model", None)
     else:
         # No model field defined - auto-create T()
-        model_type = get_model_type(cls)
+        model_type = get_model_type_from_widget(cls)
         if model_type is None:
-            raise ValueError(f"Cannot determine model type for {cls.__name__}. Ensure the class inherits from ModelWidget[YourModelType].")
+            raise ValueError(f"Cannot determine model type for {cls.__name__}. Ensure the class inherits from Widget[YourModelType].")
         model_instance = model_type()
         widget.model = model_instance  # type: ignore[attr-defined]
 
@@ -356,9 +364,13 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
     """Auto-bind widget fields to model properties by matching names."""
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
-    from qtpie.model_widget import is_model_widget_subclass
+    from qtpie.widget_base import has_model_type_param, is_widget_subclass
 
-    if not is_model_widget_subclass(cls):
+    if not is_widget_subclass(cls):
+        return
+
+    # Only do auto-binding if type parameter was provided
+    if not has_model_type_param(cls):
         return
 
     # Get proxy

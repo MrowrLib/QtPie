@@ -23,7 +23,7 @@
 - **Never** create type aliases for primitives (e.g. `UserId = str` is disallowed).
 - Use **type inference** for local variables where types are obvious.
 - Use `X | Y` instead of `Union[X, Y]`, and `str | None` instead of `Optional[str]`.
-- NEVER use `typing_extensions`, we are using Python 3.12+ and can use the latest features. Import from `typing` directly.
+- NEVER use `typing_extensions`, we are using Python 3.13+ and can use the latest features. Import from `typing` directly.
 
 ### Data Modeling
 - Use `@dataclass` for small value types. Mutability is preferred (`frozen=False` by default).

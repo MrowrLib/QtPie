@@ -3,7 +3,7 @@
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
-from qtpie import make, widget
+from qtpie import Widget, make, widget
 from qtpie_test import QtDriver
 
 
@@ -14,7 +14,7 @@ class TestStretch:
         """_stretch field with int type should add stretch to layout."""
 
         @widget(layout="vertical")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             header: QLabel = make(QLabel, "Header")
             _stretch1: int = 1
             footer: QLabel = make(QLabel, "Footer")
@@ -47,7 +47,7 @@ class TestStretch:
         """_stretch with value 0 should still add a spacer."""
 
         @widget(layout="vertical")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             header: QLabel = make(QLabel, "Header")
             _stretch1: int = 0
             footer: QLabel = make(QLabel, "Footer")
@@ -70,7 +70,7 @@ class TestStretch:
         """Stretch should be placed between widgets in layout order."""
 
         @widget(layout="vertical")
-        class ToolPanel(QWidget):
+        class ToolPanel(QWidget, Widget):
             toolbar: QPushButton = make(QPushButton, "Toolbar")
             _stretch_middle: int = 1
             content: QLabel = make(QLabel, "Content")
@@ -97,7 +97,7 @@ class TestStretch:
         """Stretch should work in horizontal layouts too."""
 
         @widget(layout="horizontal")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             left: QLabel = make(QLabel, "Left")
             _stretch1: int = 1
             right: QLabel = make(QLabel, "Right")
@@ -121,7 +121,7 @@ class TestStretch:
         from qtpy.QtWidgets import QFormLayout
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             name: QLabel = make(QLabel, form_label="Name")
             _stretch1: int = 1  # Should be ignored
             email: QLabel = make(QLabel, form_label="Email")
@@ -140,7 +140,7 @@ class TestStretch:
         from qtpy.QtWidgets import QGridLayout
 
         @widget(layout="grid")
-        class MyGrid(QWidget):
+        class MyGrid(QWidget, Widget):
             btn1: QPushButton = make(QPushButton, "1", grid=(0, 0))
             _stretch1: int = 1  # Should be ignored
             btn2: QPushButton = make(QPushButton, "2", grid=(0, 1))
@@ -158,7 +158,7 @@ class TestStretch:
         """Any field starting with _stretch should work."""
 
         @widget(layout="vertical")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             top: QLabel = make(QLabel, "Top")
             _stretch_a: int = 1
             middle: QLabel = make(QLabel, "Middle")

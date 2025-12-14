@@ -3,7 +3,7 @@ dependencies = []
 description = "Tasty way to build Qt apps 🍰"
 name = "qtpie-project"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 version = "0.1.0"
 
 [dependency-groups]
@@ -31,7 +31,7 @@ members = [
 
 [tool.pyright]
 pythonPlatform = "All"
-pythonVersion = "3.12"
+pythonVersion = "3.13"
 reportPrivateImportUsage = false
 typeCheckingMode = "strict"
 venv = ".venv"
@@ -55,6 +55,7 @@ strictDictionaryInference = true
 strictListInference = true
 strictParameterNoneValue = true
 strictSetInference = true
+reportImplicitOverride = "error"
 
 [tool.ruff]
 line-length = 200
@@ -76,8 +77,8 @@ line-ending = "auto"
 quote-style = "double"
 
 [tool.coverage.run]
-source = ["qtpie"]
 omit = ["*/tests/*", "*/__init__.py"]
+source = ["qtpie"]
 
 [tool.coverage.report]
 exclude_lines = [

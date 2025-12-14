@@ -1,11 +1,12 @@
 """Tests for the @widget decorator."""
 
 from dataclasses import field
+from typing import override
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from qtpie import widget
+from qtpie import Widget, widget
 from qtpie_test import QtDriver
 
 
@@ -16,7 +17,7 @@ class TestWidgetDecorator:
         """A decorated class with no child widgets should still work."""
 
         @widget()
-        class EmptyWidget(QWidget):
+        class EmptyWidget(QWidget, Widget):
             pass
 
         w = EmptyWidget()
@@ -28,7 +29,7 @@ class TestWidgetDecorator:
         """@widget without parentheses should work with defaults."""
 
         @widget
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -41,7 +42,7 @@ class TestWidgetDecorator:
         """Default layout should be vertical."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -53,7 +54,7 @@ class TestWidgetDecorator:
         """layout='horizontal' should create QHBoxLayout."""
 
         @widget(layout="horizontal")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -65,7 +66,7 @@ class TestWidgetDecorator:
         """A QWidget field should be automatically added to the layout."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = field(default_factory=QLabel)
 
         w = MyWidget()
@@ -87,7 +88,7 @@ class TestWidgetDecorator:
         """Multiple widget fields should be added in declaration order."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             first: QLabel = field(default_factory=QLabel)
             second: QPushButton = field(default_factory=QPushButton)
             third: QLabel = field(default_factory=QLabel)
@@ -109,7 +110,7 @@ class TestWidgetDecorator:
         """Non-QWidget fields (like int, str) should not go in the layout."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = field(default_factory=QLabel)
             counter: int = 0
             name: str = "test"
@@ -130,7 +131,7 @@ class TestWidgetDecorator:
         """Fields starting with _ should not be added to layout."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = field(default_factory=QLabel)
             _hidden: QLabel = field(default_factory=QLabel)
 
@@ -155,7 +156,7 @@ class TestWidgetDecorator:
         """layout='none' should not create any layout."""
 
         @widget(layout="none")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -171,7 +172,7 @@ class TestWidgetName:
         """name parameter should set the widget's objectName."""
 
         @widget(name="MyCustomName")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -183,7 +184,7 @@ class TestWidgetName:
         """Without name param, objectName should be derived from class name."""
 
         @widget()
-        class SomeWidget(QWidget):
+        class SomeWidget(QWidget, Widget):
             pass
 
         w = SomeWidget()
@@ -196,7 +197,7 @@ class TestWidgetName:
         """Class name without Widget suffix should be used as-is."""
 
         @widget()
-        class Editor(QWidget):
+        class Editor(QWidget, Widget):
             pass
 
         w = Editor()
@@ -212,7 +213,7 @@ class TestWidgetClasses:
         """classes parameter should set a 'class' property on the widget."""
 
         @widget(classes=["card", "shadow"])
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -225,7 +226,7 @@ class TestWidgetClasses:
         """Without classes param, no class property should be set."""
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             pass
 
         w = MyWidget()
@@ -244,7 +245,8 @@ class TestWidgetLifecycleHooks:
         calls: list[str] = []
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
+            @override
             def setup(self) -> None:
                 calls.append("setup")
 
@@ -258,25 +260,32 @@ class TestWidgetLifecycleHooks:
         calls: list[str] = []
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
+            @override
             def setup(self) -> None:
                 calls.append("setup")
 
+            @override
             def setup_values(self) -> None:
                 calls.append("setup_values")
 
+            @override
             def setup_bindings(self) -> None:
                 calls.append("setup_bindings")
 
+            @override
             def setup_layout(self, layout: object) -> None:
                 calls.append("setup_layout")
 
+            @override
             def setup_styles(self) -> None:
                 calls.append("setup_styles")
 
+            @override
             def setup_events(self) -> None:
                 calls.append("setup_events")
 
+            @override
             def setup_signals(self) -> None:
                 calls.append("setup_signals")
 
@@ -300,10 +309,12 @@ class TestWidgetLifecycleHooks:
         calls: list[str] = []
 
         @widget(layout="none")
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
+            @override
             def setup(self) -> None:
                 calls.append("setup")
 
+            @override
             def setup_layout(self, layout: object) -> None:
                 calls.append("setup_layout")
 
@@ -318,9 +329,10 @@ class TestWidgetLifecycleHooks:
         from qtpie import make
 
         @widget()
-        class MyWidget(QWidget):
+        class MyWidget(QWidget, Widget):
             label: QLabel = make(QLabel, "Initial")
 
+            @override
             def setup(self) -> None:
                 # Should be able to access and modify child widgets
                 self.label.setText("Modified in setup")

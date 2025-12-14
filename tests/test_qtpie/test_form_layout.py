@@ -3,7 +3,7 @@
 from assertpy import assert_that
 from qtpy.QtWidgets import QFormLayout, QLabel, QLineEdit, QSpinBox, QWidget
 
-from qtpie import make, widget
+from qtpie import Widget, make, widget
 from qtpie_test import QtDriver
 
 
@@ -14,7 +14,7 @@ class TestFormLayout:
         """layout='form' should create a QFormLayout."""
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             pass
 
         w = MyForm()
@@ -26,7 +26,7 @@ class TestFormLayout:
         """form_label parameter should create a labeled row."""
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             name: QLineEdit = make(QLineEdit, form_label="Full Name")
 
         w = MyForm()
@@ -54,7 +54,7 @@ class TestFormLayout:
         """Multiple fields should create rows in declaration order."""
 
         @widget(layout="form")
-        class PersonForm(QWidget):
+        class PersonForm(QWidget, Widget):
             name: QLineEdit = make(QLineEdit, form_label="Name")
             email: QLineEdit = make(QLineEdit, form_label="Email")
             age: QSpinBox = make(QSpinBox, form_label="Age")
@@ -91,7 +91,7 @@ class TestFormLayout:
         """Form layout should auto-add 'form' class for styling."""
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             pass
 
         w = MyForm()
@@ -104,7 +104,7 @@ class TestFormLayout:
         """Form layout should preserve existing classes when adding 'form'."""
 
         @widget(layout="form", classes=["card", "shadow"])
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             pass
 
         w = MyForm()
@@ -119,7 +119,7 @@ class TestFormLayout:
         """Widget without form_label should still be added to form."""
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             name: QLineEdit = make(QLineEdit)  # No form_label
 
         w = MyForm()
@@ -140,7 +140,7 @@ class TestFormLayout:
         """Private fields should not be added to form layout."""
 
         @widget(layout="form")
-        class MyForm(QWidget):
+        class MyForm(QWidget, Widget):
             name: QLineEdit = make(QLineEdit, form_label="Name")
             _helper: QLabel = make(QLabel, "Hidden")
 
