@@ -1,0 +1,11 @@
+[project]
+dependencies = [
+  "qtpie",
+]
+description = "Sample project for qtpie"
+name = "qtpie-sample"
+requires-python = ">=3.10"
+version = "0.1.0"
+
+[tool.uv.sources]
+qtpie = {workspace = true}

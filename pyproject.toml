@@ -1,0 +1,24 @@
+[project]
+dependencies = []
+description = "Tasty way to build Qt apps 🍰"
+name = "qtpie-project"
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.1.0"
+
+[dependency-groups]
+dev = [
+  "assertpy>=1.1",
+  "pre-commit>=4.5.0",
+  "pyright>=1.1.407",
+  "pyside6>=6.10.1",
+  "pytest>=9.0.2",
+  "pytest-qt>=4.5.0",
+  "ruff>=0.14.9",
+]
+
+[tool.uv.workspace]
+members = [
+  "qtpie",
+  "sample",
+]
