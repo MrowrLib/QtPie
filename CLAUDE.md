@@ -136,6 +136,17 @@ The `tech-docs/DRAFTING_SUMMARY.md` compares features across drafts.
 
 ---
 
+## Related Libraries
+
+**observant** - Observable/reactive data library, also authored by the user.
+
+- Location: `C:\Code\mrowr\MrowrLib\observant.py`
+- Owner: Same author as QtPie
+- Purpose: Will be used for Phase 5 (Data Binding) to provide reactive model objects
+- Note: Can be modified as needed to better support QtPie integration
+
+---
+
 ## Running Things
 
 **Run tests frequently!** Coverage runs automatically with every test run.
