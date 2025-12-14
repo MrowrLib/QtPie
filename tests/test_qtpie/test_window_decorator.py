@@ -1,5 +1,7 @@
 """Tests for the @window decorator."""
 
+from pathlib import Path
+
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QMainWindow, QMenu, QPushButton, QTextEdit
 
@@ -326,3 +328,116 @@ class TestWindowMenuBar:
         # Should have one menu
         assert_that(len(actions)).is_equal_to(1)
         assert_that(actions[0].text()).is_equal_to("&File")
+
+
+class TestWindowIcon:
+    """Tests for the icon parameter."""
+
+    def test_icon_sets_window_icon(self, qt: QtDriver, tmp_path: Path) -> None:
+        """icon parameter should set the window icon."""
+        # Create a minimal valid PNG file (1x1 pixel)
+        icon_path = tmp_path / "icon.png"
+        icon_path.write_bytes(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+            b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+            b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+
+        @window(icon=str(icon_path))
+        class MyWindow(QMainWindow):
+            pass
+
+        w = MyWindow()
+        qt.track(w)
+
+        assert_that(w.windowIcon().isNull()).is_false()
+
+
+class TestWindowFieldDefaults:
+    """Tests for field default values."""
+
+    def test_field_with_simple_default(self, qt: QtDriver) -> None:
+        """Fields with simple default values should work."""
+
+        @window()
+        class MyWindow(QMainWindow):
+            count: int = 42
+            name: str = "default"
+
+        w = MyWindow()
+        qt.track(w)
+
+        assert_that(w.count).is_equal_to(42)
+        assert_that(w.name).is_equal_to("default")
+
+    def test_field_via_kwargs(self, qt: QtDriver) -> None:
+        """Fields can be set via constructor kwargs."""
+
+        @window()
+        class MyWindow(QMainWindow):
+            count: int = 0
+
+        w = MyWindow(count=99)
+        qt.track(w)
+
+        assert_that(w.count).is_equal_to(99)
+
+
+class TestWindowPrivateFields:
+    """Tests for private field handling."""
+
+    def test_private_fields_not_added_to_menubar(self, qt: QtDriver) -> None:
+        """Private QMenu fields should not be added to menu bar."""
+        from dataclasses import field
+
+        @window()
+        class MyWindow(QMainWindow):
+            _hidden_menu: QMenu = field(default_factory=lambda: QMenu("Hidden"))
+            visible_menu: QMenu = field(default_factory=lambda: QMenu("Visible"))
+
+        w = MyWindow()
+        qt.track(w)
+
+        menubar = w.menuBar()
+        actions = menubar.actions()
+
+        # Only visible_menu should be added
+        assert_that(len(actions)).is_equal_to(1)
+        assert_that(actions[0].text()).is_equal_to("Visible")
+
+
+class TestWindowSignalConnectionsExtended:
+    """Extended tests for signal connections via make()."""
+
+    def test_signal_connection_by_lambda(self, qt: QtDriver) -> None:
+        """Signals should connect via lambda/callable."""
+        clicked_count = [0]
+
+        @window()
+        class MyWindow(QMainWindow):
+            central_widget: QPushButton = make(
+                QPushButton,
+                "Click",
+                clicked=lambda: clicked_count.__setitem__(0, clicked_count[0] + 1),
+            )
+
+        w = MyWindow()
+        qt.track(w)
+
+        qt.click(w.central_widget)
+
+        assert_that(clicked_count[0]).is_equal_to(1)
+
+    def test_property_setter_via_make(self, qt: QtDriver) -> None:
+        """Non-signal kwargs should be set via property setters."""
+
+        @window()
+        class MyWindow(QMainWindow):
+            central_widget: QPushButton = make(QPushButton, "Button", enabled=False, toolTip="A tooltip")
+
+        w = MyWindow()
+        qt.track(w)
+
+        assert_that(w.central_widget.isEnabled()).is_false()
+        assert_that(w.central_widget.toolTip()).is_equal_to("A tooltip")
