@@ -7,16 +7,30 @@ from dataclasses import MISSING, dataclass, fields
 from typing import (
     Any,
     Literal,
+    cast,
     dataclass_transform,
     get_type_hints,
     overload,
 )
 
-from qtpy.QtWidgets import QBoxLayout, QHBoxLayout, QVBoxLayout, QWidget
+from qtpy.QtWidgets import (
+    QBoxLayout,
+    QFormLayout,
+    QGridLayout,
+    QHBoxLayout,
+    QLayout,
+    QVBoxLayout,
+    QWidget,
+)
 
-from qtpie.factories.make import SIGNALS_METADATA_KEY
+from qtpie.factories.make import (
+    FORM_LABEL_METADATA_KEY,
+    GRID_POSITION_METADATA_KEY,
+    SIGNALS_METADATA_KEY,
+    GridTuple,
+)
 
-LayoutType = Literal["vertical", "horizontal", "none"]
+LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
 
 @overload
@@ -112,12 +126,27 @@ def widget[T](
                 _set_classes(self, classes)
 
             # Set up layout
-            _layout: QBoxLayout | None = None
+            _layout: QLayout | None = None
+            _box_layout: QBoxLayout | None = None
+            _form_layout: QFormLayout | None = None
+            _grid_layout: QGridLayout | None = None
 
             if layout == "vertical":
-                _layout = QVBoxLayout()
+                _box_layout = QVBoxLayout()
+                _layout = _box_layout
             elif layout == "horizontal":
-                _layout = QHBoxLayout()
+                _box_layout = QHBoxLayout()
+                _layout = _box_layout
+            elif layout == "form":
+                _form_layout = QFormLayout()
+                _layout = _form_layout
+                # Add "form" class for styling
+                prop_value = self.property("class")
+                current_classes = cast(list[str], prop_value) if isinstance(prop_value, list) else []
+                _set_classes(self, [*current_classes, "form"])
+            elif layout == "grid":
+                _grid_layout = QGridLayout()
+                _layout = _grid_layout
             elif layout == "none":
                 _layout = None
 
@@ -127,7 +156,15 @@ def widget[T](
                 # Add child widgets to layout
                 type_hints = get_type_hints(cls)
                 for f in fields(cls):  # type: ignore[arg-type]
-                    # Skip private fields (but allow _stretch later)
+                    # Handle _stretch fields for box layouts
+                    if f.name.startswith("_stretch"):
+                        field_type = type_hints.get(f.name)
+                        if isinstance(field_type, type) and issubclass(field_type, int) and _box_layout is not None:
+                            stretch_value = getattr(self, f.name, 0)
+                            _box_layout.addStretch(stretch_value)
+                        continue
+
+                    # Skip other private fields
                     if f.name.startswith("_"):
                         continue
 
@@ -135,7 +172,18 @@ def widget[T](
                     if isinstance(field_type, type) and issubclass(field_type, QWidget):
                         widget_instance = getattr(self, f.name, None)
                         if isinstance(widget_instance, QWidget):
-                            _layout.addWidget(widget_instance)
+                            if _box_layout is not None:
+                                _box_layout.addWidget(widget_instance)
+                            elif _form_layout is not None:
+                                form_label = f.metadata.get(FORM_LABEL_METADATA_KEY, "")
+                                _form_layout.addRow(form_label, widget_instance)
+                            elif _grid_layout is not None:
+                                grid_pos: GridTuple | None = f.metadata.get(GRID_POSITION_METADATA_KEY)
+                                if grid_pos is not None:
+                                    row, col = grid_pos[0], grid_pos[1]
+                                    rowspan = grid_pos[2] if len(grid_pos) > 2 else 1
+                                    colspan = grid_pos[3] if len(grid_pos) > 3 else 1
+                                    _grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
 
             # Call lifecycle hooks if they exist
             _call_if_exists(self, "setup")

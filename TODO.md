@@ -44,19 +44,21 @@ tests/test_qtpie/
 
 ---
 
-## Phase 2: Layout Extensions 🎯 NEXT
+## Phase 2: Layout Extensions ✅ COMPLETE
 
 **Goal**: Add form and grid layout support for richer UI composition.
 
-### TODO
+### Accomplished
 
-- [ ] `layout="form"` creates QFormLayout
-- [ ] `form_label` parameter in `make()` for form row labels
-- [ ] `layout="grid"` creates QGridLayout
-- [ ] `grid` parameter in `make()` for positioning: `(row, col)` or `(row, col, rowspan, colspan)`
-- [ ] Stretch support: `_stretch` fields or `stretch()` helper
-- [ ] Tests for form layout
-- [ ] Tests for grid layout
+- [x] `layout="form"` creates QFormLayout
+- [x] `form_label` parameter in `make()` for form row labels
+- [x] `layout="grid"` creates QGridLayout
+- [x] `grid` parameter in `make()` for positioning: `(row, col)` or `(row, col, rowspan, colspan)`
+- [x] Stretch support: `_stretch` fields (int type)
+- [x] Auto-add "form" class to form layout widgets
+- [x] 18 new tests (48 total)
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
 
 ### API Design
 
@@ -76,6 +78,13 @@ class Calculator(QWidget):
     btn_8: QPushButton = make(QPushButton, "8", grid=(1, 1))
     btn_9: QPushButton = make(QPushButton, "9", grid=(1, 2))
     btn_plus: QPushButton = make(QPushButton, "+", grid=(1, 3, 2, 1))  # spans 2 rows
+
+# Stretch in Box Layouts
+@widget(layout="vertical")
+class ToolPanel(QWidget):
+    toolbar: QWidget = make(QWidget)
+    _stretch1: int = 1  # pushes content to bottom
+    content: QWidget = make(QWidget)
 ```
 
 ---
@@ -334,8 +343,8 @@ class PersonEditor(ModelWidget[Person]):
 | Phase | Status | Tests |
 |-------|--------|-------|
 | Phase 1: Core Foundation | ✅ Complete | 30 |
-| Phase 2: Layout Extensions | 🎯 Next | - |
-| Phase 3: @window | Planned | - |
+| Phase 2: Layout Extensions | ✅ Complete | 48 |
+| Phase 3: @window | 🎯 Next | - |
 | Phase 4: @menu/@action | Planned | - |
 | Phase 5: Data Binding | Planned | - |
 | Phase 6: Styling | Planned | - |
