@@ -176,7 +176,7 @@ Note: Use `python -m pytest` instead of just `pytest` due to workspace editable 
 
 ---
 
-## Current State (Phase 3 Complete)
+## Current State (Phase 4 Complete)
 
 Working features:
 - `@widget()` and `@widget` (with/without parens)
