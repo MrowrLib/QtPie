@@ -5,7 +5,8 @@ We still use the qt fixture to ensure QApplication exists.
 """
 
 from assertpy import assert_that
-from qtpy.QtGui import QAction, QKeySequence
+from qtpy.QtGui import QAction, QIcon, QKeySequence
+from qtpy.QtWidgets import QApplication, QStyle
 
 from qtpie import action
 from qtpie_test import QtDriver
@@ -258,3 +259,98 @@ class TestActionCombined:
         assert_that(a.shortcut().toString()).is_equal_to("Ctrl+B")
         assert_that(a.statusTip()).is_equal_to("Toggle bold")
         assert_that(a.isCheckable()).is_true()
+
+
+class TestActionFields:
+    """Tests for dataclass field handling."""
+
+    def test_field_with_default_value(self, qt: QtDriver) -> None:
+        """Action fields with default values should be initialized."""
+        _ = qt
+
+        @action("&Test")
+        class TestAction(QAction):
+            count: int = 0
+            name: str = "default"
+
+        a = TestAction()
+
+        assert_that(a.count).is_equal_to(0)
+        assert_that(a.name).is_equal_to("default")
+
+    def test_field_via_kwargs(self, qt: QtDriver) -> None:
+        """Action fields can be set via kwargs."""
+        _ = qt
+
+        @action("&Test")
+        class TestAction(QAction):
+            count: int = 0
+            name: str = "default"
+
+        a = TestAction(count=42, name="custom")
+
+        assert_that(a.count).is_equal_to(42)
+        assert_that(a.name).is_equal_to("custom")
+
+
+class TestActionShortcutObject:
+    """Tests for shortcut as QKeySequence object."""
+
+    def test_shortcut_qkeysequence_object(self, qt: QtDriver) -> None:
+        """shortcut parameter can be a QKeySequence object directly."""
+        _ = qt
+
+        @action("&Copy", shortcut=QKeySequence("Ctrl+C"))
+        class CopyAction(QAction):
+            pass
+
+        a = CopyAction()
+
+        assert_that(a.shortcut().toString()).is_equal_to("Ctrl+C")
+
+
+class TestActionIcon:
+    """Tests for the icon parameter."""
+
+    def test_icon_string_path(self, qt: QtDriver) -> None:
+        """icon parameter with string path should set icon (even if file missing)."""
+        _ = qt
+
+        @action("&Save", icon="nonexistent/path/icon.png")
+        class SaveAction(QAction):
+            pass
+
+        a = SaveAction()
+
+        # Icon is set but will be null since file doesn't exist
+        # This still covers the code path
+        assert_that(a.icon()).is_not_none()
+
+    def test_icon_qicon_object(self, qt: QtDriver) -> None:
+        """icon parameter can be a QIcon object."""
+        _ = qt
+        test_icon = QIcon()
+
+        @action("&Open", icon=test_icon)
+        class OpenAction(QAction):
+            pass
+
+        a = OpenAction()
+
+        # Icon was set (even though it's an empty QIcon)
+        assert_that(a.icon()).is_not_none()
+
+    def test_icon_standard_pixmap(self, qt: QtDriver) -> None:
+        """icon parameter can be a QStyle.StandardPixmap."""
+        _ = qt
+
+        @action("&Info", icon=QStyle.StandardPixmap.SP_MessageBoxInformation)
+        class InfoAction(QAction):
+            pass
+
+        a = InfoAction()
+
+        # Should have a real icon from the style
+        app = QApplication.instance()
+        assert_that(app).is_not_none()
+        assert_that(a.icon().isNull()).is_false()

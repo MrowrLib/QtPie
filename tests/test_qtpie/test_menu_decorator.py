@@ -261,3 +261,35 @@ class TestMenuPrivateFields:
         actions = m.actions()
         assert_that(len(actions)).is_equal_to(1)
         assert_that(actions[0]).is_same_as(m.public)
+
+
+class TestMenuFields:
+    """Tests for dataclass field handling."""
+
+    def test_field_with_default_value(self, qt: QtDriver) -> None:
+        """Menu fields with default values should be initialized."""
+
+        @menu("&Test")
+        class TestMenu(QMenu):
+            count: int = 5
+            name: str = "default"
+
+        m = TestMenu()
+        qt.track(m)
+
+        assert_that(m.count).is_equal_to(5)
+        assert_that(m.name).is_equal_to("default")
+
+    def test_field_via_kwargs(self, qt: QtDriver) -> None:
+        """Menu fields can be set via kwargs."""
+
+        @menu("&Test")
+        class TestMenu(QMenu):
+            count: int = 0
+            name: str = "default"
+
+        m = TestMenu(count=99, name="custom")
+        qt.track(m)
+
+        assert_that(m.count).is_equal_to(99)
+        assert_that(m.name).is_equal_to("custom")
