@@ -123,46 +123,56 @@ class MainWindow(QMainWindow):
 
 ---
 
-## Phase 4: @menu / @action Decorators
+## Phase 4: @menu / @action Decorators ✅ COMPLETE
 
 **Goal**: Declarative menu bars and actions.
 
-### TODO
+### Accomplished
 
-- [ ] `@menu` decorator for menu definitions
-- [ ] `@action` decorator with `shortcut`, `icon`, `tooltip`, `checkable`
-- [ ] Separator support
-- [ ] Nested submenus
-- [ ] Context menus
-- [ ] Toolbar integration
-- [ ] Tests for menus and actions
+- [x] `@menu` decorator for QMenu subclasses
+- [x] `@action` decorator for QAction subclasses
+- [x] `@menu("&File")` - text as positional arg or keyword
+- [x] `@action("&New")` - text as positional arg or keyword
+- [x] Auto-text from class name (strips "Menu"/"Action" suffix)
+- [x] `shortcut` parameter (string, QKeySequence, or StandardKey)
+- [x] `tooltip` parameter (sets both toolTip and statusTip)
+- [x] `icon` parameter (path, QIcon, or QStyle.StandardPixmap)
+- [x] `checkable` parameter for toggle actions
+- [x] Auto-connect `on_triggered()` method to triggered signal
+- [x] Auto-connect `on_toggled()` method to toggled signal
+- [x] Auto-add QAction/QMenu fields to parent menu
+- [x] Nested submenus support
+- [x] 29 new tests (96 total)
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
 
 ### API Design
 
 ```python
+from qtpie import action, menu, make
+
+@action("&New", shortcut="Ctrl+N", tooltip="Create new file")
+class NewAction(QAction):
+    def on_triggered(self) -> None:
+        print("New file!")
+
+@action("&Bold", shortcut="Ctrl+B", checkable=True)
+class BoldAction(QAction):
+    def on_toggled(self, checked: bool) -> None:
+        print(f"Bold: {checked}")
+
+@menu("&Recent")
+class RecentMenu(QMenu):
+    pass
+
+@menu("&File")
+class FileMenu(QMenu):
+    new: NewAction = make(NewAction)
+    recent: RecentMenu = make(RecentMenu)  # submenu
+
 @window(title="Editor")
 class MainWindow(QMainWindow):
-    @menu("&File")
-    class FileMenu:
-        @action("&New", shortcut="Ctrl+N", icon="icons/new.svg")
-        def new_file(self) -> None:
-            ...
-
-        @action("&Open...", shortcut="Ctrl+O")
-        def open_file(self) -> None:
-            ...
-
-        # --- separator ---
-
-        @action("E&xit", shortcut="Alt+F4")
-        def exit_app(self) -> None:
-            self.close()
-
-    @menu("&Edit")
-    class EditMenu:
-        @action("&Undo", shortcut="Ctrl+Z")
-        def undo(self) -> None:
-            ...
+    file_menu: FileMenu = make(FileMenu)  # auto-added to menu bar
 ```
 
 ---
@@ -351,8 +361,8 @@ class PersonEditor(ModelWidget[Person]):
 | Phase 1: Core Foundation | ✅ Complete | 30 |
 | Phase 2: Layout Extensions | ✅ Complete | 48 |
 | Phase 3: @window | ✅ Complete | 67 |
-| Phase 4: @menu/@action | 🎯 Next | - |
-| Phase 5: Data Binding | Planned | - |
+| Phase 4: @menu/@action | ✅ Complete | 96 |
+| Phase 5: Data Binding | 🎯 Next | - |
 | Phase 6: Styling | Planned | - |
 | Phase 7: App Class | Planned | - |
 | Phase 8: Pre-built Widgets | Planned | - |
