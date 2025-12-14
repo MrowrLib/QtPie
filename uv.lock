@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 members = [
     "qtpie",
     "qtpie-project",
-    "qtpie-sample",
+    "qtpie-samples",
 ]
 
 [[package]]
@@ -340,9 +340,9 @@ dev = [
 ]
 
 [[package]]
-name = "qtpie-sample"
+name = "qtpie-samples"
 version = "0.1.0"
-source = { virtual = "sample" }
+source = { virtual = "samples" }
 dependencies = [
     { name = "qtpie" },
 ]

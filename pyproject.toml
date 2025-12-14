@@ -20,5 +20,10 @@ dev = [
 [tool.uv.workspace]
 members = [
   "qtpie",
-  "sample",
+  "samples",
 ]
+
+[tool.pyright]
+reportPrivateImportUsage = false
+venv = ".venv"
+venvPath = "."
