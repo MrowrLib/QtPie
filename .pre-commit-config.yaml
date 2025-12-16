@@ -13,3 +13,14 @@ repos:
     hooks:
       - id: pyright
         exclude: ^DRAFT*
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: Run pytest
+        entry: uv run python -m pytest tests/
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: false
+        exclude: ^DRAFT*
