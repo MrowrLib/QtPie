@@ -34,12 +34,13 @@ class TestActionDecorator:
         _ = qt
 
         @action
-        class MyAction(QAction):
+        class SaveAction(QAction):
             pass
 
-        a = MyAction()
+        a = SaveAction()
 
         assert_that(a).is_instance_of(QAction)
+        assert_that(a.text()).is_equal_to("Save")
 
 
 class TestActionText:

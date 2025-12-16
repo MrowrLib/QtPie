@@ -29,13 +29,14 @@ class TestMenuDecorator:
         """@menu without parentheses should work with defaults."""
 
         @menu
-        class MyMenu(QMenu):
+        class FileMenu(QMenu):
             pass
 
-        m = MyMenu()
+        m = FileMenu()
         qt.track(m)
 
         assert_that(m).is_instance_of(QMenu)
+        assert_that(m.title()).is_equal_to("File")
 
 
 class TestMenuText:
