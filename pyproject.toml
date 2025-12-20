@@ -16,18 +16,20 @@ dev = [
   "pyside6>=6.10.1",
   "pytest>=9.0.2",
   "pytest-cov>=7.0.0",
+  "qtpie",
   "qtpie-test",
   "qtpie_samples",
   "ruff>=0.14.9",
 ]
 
 [tool.uv.sources]
+qtpie = {workspace = true}
 qtpie-test = {workspace = true}
 qtpie_samples = {workspace = true}
 
 [tool.uv.workspace]
 members = [
-  "qtpie",
+  "lib",
   "samples",
   "qtpie_test",
   "tests",
@@ -82,7 +84,7 @@ quote-style = "double"
 
 [tool.coverage.run]
 omit = ["*/tests/*", "*/__init__.py"]
-source = ["qtpie"]
+source = ["lib/qtpie"]
 
 [tool.coverage.report]
 exclude_lines = [
