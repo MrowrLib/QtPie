@@ -6,7 +6,7 @@ from assertpy import assert_that
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import QMenu
 
-from qtpie import action, make, menu
+from qtpie import action, make, menu, separator
 from qtpie_test import QtDriver
 
 
@@ -338,3 +338,107 @@ class TestMenuSignalConnections:
         m.run.trigger()
 
         assert_that(triggered_count).is_equal_to(1)
+
+
+class TestMenuSeparators:
+    """Tests for separator() functionality in menus."""
+
+    def test_separator_added_to_menu(self, qt: QtDriver) -> None:
+        """separator() should add a separator action to the menu."""
+
+        @action("&New")
+        class NewAction(QAction):
+            pass
+
+        @action("E&xit")
+        class ExitAction(QAction):
+            pass
+
+        @menu("&File")
+        class FileMenu(QMenu):
+            new: NewAction = make(NewAction)
+            sep1: QAction = separator()
+            exit_app: ExitAction = make(ExitAction)
+
+        m = FileMenu()
+        qt.track(m)
+
+        actions = m.actions()
+        assert_that(len(actions)).is_equal_to(3)
+        assert_that(actions[0]).is_same_as(m.new)
+        assert_that(actions[1].isSeparator()).is_true()
+        assert_that(actions[2]).is_same_as(m.exit_app)
+
+    def test_separator_stored_on_instance(self, qt: QtDriver) -> None:
+        """The separator QAction should be accessible on the instance."""
+
+        @menu("&Test")
+        class TestMenu(QMenu):
+            sep1: QAction = separator()
+
+        m = TestMenu()
+        qt.track(m)
+
+        # The separator field should have the actual QAction
+        assert_that(m.sep1).is_instance_of(QAction)
+        assert_that(m.sep1.isSeparator()).is_true()
+
+    def test_multiple_separators(self, qt: QtDriver) -> None:
+        """Multiple separators can be added to a menu."""
+
+        @action("&Undo")
+        class UndoAction(QAction):
+            pass
+
+        @action("Cu&t")
+        class CutAction(QAction):
+            pass
+
+        @action("Select &All")
+        class SelectAllAction(QAction):
+            pass
+
+        @menu("&Edit")
+        class EditMenu(QMenu):
+            undo: UndoAction = make(UndoAction)
+            sep1: QAction = separator()
+            cut: CutAction = make(CutAction)
+            sep2: QAction = separator()
+            select_all: SelectAllAction = make(SelectAllAction)
+
+        m = EditMenu()
+        qt.track(m)
+
+        actions = m.actions()
+        assert_that(len(actions)).is_equal_to(5)
+        assert_that(actions[0]).is_same_as(m.undo)
+        assert_that(actions[1].isSeparator()).is_true()
+        assert_that(actions[2]).is_same_as(m.cut)
+        assert_that(actions[3].isSeparator()).is_true()
+        assert_that(actions[4]).is_same_as(m.select_all)
+
+    def test_separator_with_submenu(self, qt: QtDriver) -> None:
+        """Separators work alongside submenus."""
+
+        @menu("&Recent")
+        class RecentMenu(QMenu):
+            pass
+
+        @action("E&xit")
+        class ExitAction(QAction):
+            pass
+
+        @menu("&File")
+        class FileMenu(QMenu):
+            recent: RecentMenu = make(RecentMenu)
+            sep1: QAction = separator()
+            exit_app: ExitAction = make(ExitAction)
+
+        m = FileMenu()
+        qt.track(m)
+
+        actions = m.actions()
+        assert_that(len(actions)).is_equal_to(3)
+        assert_that(actions[0].menu()).is_same_as(m.recent)
+        assert_that(actions[1].isSeparator()).is_true()
+        assert_that(actions[2]).is_same_as(m.exit_app)

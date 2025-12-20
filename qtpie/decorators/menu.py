@@ -15,6 +15,7 @@ from qtpy.QtGui import QAction
 from qtpy.QtWidgets import QMenu
 
 from qtpie.factories.make import SIGNALS_METADATA_KEY
+from qtpie.factories.separator import SEPARATOR_METADATA_KEY
 
 
 @overload
@@ -116,6 +117,12 @@ def menu[T: QMenu](
             type_hints = get_type_hints(cls)
             for f in fields(cls):  # type: ignore[arg-type]
                 if f.name.startswith("_"):
+                    continue
+
+                # Check for separator() marker in metadata
+                if f.metadata.get(SEPARATOR_METADATA_KEY):
+                    separator_action = self.addSeparator()
+                    setattr(self, f.name, separator_action)
                     continue
 
                 field_type = type_hints.get(f.name)
