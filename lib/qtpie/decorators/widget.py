@@ -259,7 +259,16 @@ def _call_if_exists(obj: object, method_name: str, *args: object) -> None:
 
 
 def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
-    """Process data bindings from make() metadata."""
+    """Process data bindings from make() metadata.
+
+    Supports two forms of bind paths:
+    - Short form: bind="name" or bind="address.city" → uses self.proxy
+    - Explicit form: bind="other_proxy.name" → uses self.other_proxy
+
+    Smart detection: if the first segment of the path is a field on self
+    that has an observable_for_path method (i.e., is an ObservableProxy),
+    it's treated as explicit. Otherwise, the path is relative to self.proxy.
+    """
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
 
@@ -273,15 +282,23 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
         if widget_instance is None:
             continue
 
-        # Parse the bind path: "proxy.name" or "proxy.address?.city"
-        # First part is the field name on self that holds the proxy
+        # Smart detection: check if first segment is an ObservableProxy field
         parts = bind_path.split(".", 1)
-        if len(parts) < 2:
-            # Invalid path - need at least "proxy.field"
-            continue
+        first_segment = parts[0]
 
-        proxy_field_name = parts[0]
-        observable_path = parts[1]
+        potential_proxy = getattr(widget, first_segment, None)
+        if potential_proxy is not None and hasattr(potential_proxy, "observable_for_path"):
+            # Explicit path: first segment is a proxy field (e.g., "other_proxy.name")
+            proxy_field_name = first_segment
+            observable_path = parts[1] if len(parts) > 1 else ""
+        else:
+            # Short form: use default "proxy" field (e.g., "name" or "address.city")
+            proxy_field_name = "proxy"
+            observable_path = bind_path
+
+        # Handle empty observable path (invalid - can't bind to proxy itself)
+        if not observable_path:
+            continue
 
         # Get the proxy from self
         proxy = getattr(widget, proxy_field_name, None)

@@ -427,3 +427,175 @@ class TestMultipleBindings:
         assert_that(w.edit1.text()).is_equal_to("Shared")
         assert_that(w.edit2.text()).is_equal_to("Shared")
         assert_that(w.label.text()).is_equal_to("Shared")
+
+
+class TestShortFormBinding:
+    """Tests for short form bind syntax (bind='name' instead of bind='proxy.name')."""
+
+    def test_short_form_simple_property(self, qt: QtDriver) -> None:
+        """bind='name' should work as shorthand for bind='proxy.name'."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @widget()
+        class DogEditor(QWidget, Widget[Dog]):
+            model: Dog = make(Dog)
+            proxy: ObservableProxy[Dog] = make_later()
+            name_edit: QLineEdit = make(QLineEdit, bind="name")  # Short form!
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = DogEditor()
+        qt.track(w)
+
+        # Model → Widget
+        w.proxy.observable(str, "name").set("Buddy")
+        assert_that(w.name_edit.text()).is_equal_to("Buddy")
+
+        # Widget → Model
+        w.name_edit.setText("Max")
+        assert_that(w.model.name).is_equal_to("Max")
+
+    def test_short_form_nested_path(self, qt: QtDriver) -> None:
+        """bind='address.city' should work as shorthand for bind='proxy.address.city'."""
+
+        @dataclass
+        class Address:
+            city: str = ""
+
+        @dataclass
+        class Person:
+            address: Address = field(default_factory=Address)
+
+        @widget()
+        class PersonEditor(QWidget, Widget[Person]):
+            model: Person = make(Person)
+            proxy: ObservableProxy[Person] = make_later()
+            city_edit: QLineEdit = make(QLineEdit, bind="address.city")  # Short form nested!
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = PersonEditor()
+        qt.track(w)
+
+        w.proxy.observable_for_path("address.city").set("New York")
+        assert_that(w.city_edit.text()).is_equal_to("New York")
+
+    def test_explicit_proxy_still_works(self, qt: QtDriver) -> None:
+        """bind='proxy.name' should still work (backwards compatible)."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @widget()
+        class DogEditor(QWidget, Widget[Dog]):
+            model: Dog = make(Dog)
+            proxy: ObservableProxy[Dog] = make_later()
+            name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")  # Explicit form
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = DogEditor()
+        qt.track(w)
+
+        w.proxy.observable(str, "name").set("Buddy")
+        assert_that(w.name_edit.text()).is_equal_to("Buddy")
+
+    def test_explicit_other_proxy(self, qt: QtDriver) -> None:
+        """bind='other_proxy.name' should use self.other_proxy."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @dataclass
+        class Cat:
+            name: str = ""
+
+        @widget()
+        class PetEditor(QWidget, Widget[Dog]):
+            model: Dog = make(Dog)
+            proxy: ObservableProxy[Dog] = make_later()
+            cat_model: Cat = make(Cat)
+            cat_proxy: ObservableProxy[Cat] = make_later()
+
+            dog_name: QLineEdit = make(QLineEdit, bind="name")  # Short → proxy.name
+            cat_name: QLineEdit = make(QLineEdit, bind="cat_proxy.name")  # Explicit
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+                self.cat_proxy = ObservableProxy(self.cat_model, sync=True)
+
+        w = PetEditor()
+        qt.track(w)
+
+        # Dog uses short form
+        w.proxy.observable(str, "name").set("Buddy")
+        assert_that(w.dog_name.text()).is_equal_to("Buddy")
+
+        # Cat uses explicit proxy
+        w.cat_proxy.observable(str, "name").set("Whiskers")
+        assert_that(w.cat_name.text()).is_equal_to("Whiskers")
+
+    def test_short_form_with_optional_chaining(self, qt: QtDriver) -> None:
+        """bind='owner?.name' should work with optional chaining."""
+
+        @dataclass
+        class Owner:
+            name: str = ""
+
+        @dataclass
+        class Dog:
+            owner: Owner | None = None
+
+        @widget()
+        class DogEditor(QWidget, Widget[Dog]):
+            model: Dog = make(Dog)
+            proxy: ObservableProxy[Dog] = make_later()
+            owner_edit: QLineEdit = make(QLineEdit, bind="owner?.name")  # Short + optional
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = DogEditor()
+        qt.track(w)
+
+        # With None owner, should show empty
+        assert_that(w.owner_edit.text()).is_equal_to("")
+
+    def test_short_form_with_widget_base_class(self, qt: QtDriver) -> None:
+        """Short form should work with Widget[T] auto-created proxy."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @widget()
+        class DogEditor(QWidget, Widget[Dog]):
+            # No explicit model/proxy - Widget[Dog] creates them
+            name_edit: QLineEdit = make(QLineEdit, bind="name")
+            age_spin: QSpinBox = make(QSpinBox, bind="age")
+
+        w = DogEditor()
+        qt.track(w)
+
+        # Proxy is auto-created by Widget[Dog]
+        assert_that(w.proxy).is_not_none()
+
+        w.proxy.observable(str, "name").set("Rex")
+        assert_that(w.name_edit.text()).is_equal_to("Rex")
+
+        w.age_spin.setValue(5)
+        assert_that(w.model.age).is_equal_to(5)
