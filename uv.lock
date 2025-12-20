@@ -415,7 +415,7 @@ dev = [
     { name = "pyside6", specifier = ">=6.10.1" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "qtpie-samples", editable = "qtpie_samples" },
+    { name = "qtpie-samples", editable = "samples" },
     { name = "qtpie-test", editable = "qtpie_test" },
     { name = "ruff", specifier = ">=0.14.9" },
 ]
@@ -423,7 +423,7 @@ dev = [
 [[package]]
 name = "qtpie-samples"
 version = "0.1.0"
-source = { editable = "qtpie_samples" }
+source = { editable = "samples" }
 dependencies = [
     { name = "qtpie" },
 ]
@@ -518,7 +518,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "qtpie", editable = "qtpie" },
-    { name = "qtpie-samples", editable = "qtpie_samples" },
+    { name = "qtpie-samples", editable = "samples" },
     { name = "qtpie-test", editable = "qtpie_test" },
 ]
 

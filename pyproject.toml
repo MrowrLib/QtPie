@@ -1,6 +1,6 @@
 [project]
 dependencies = [
-    "observant>=0.1.6",
+  "observant>=0.1.6",
 ]
 description = "Tasty way to build Qt apps 🍰"
 name = "qtpie-project"
@@ -22,13 +22,13 @@ dev = [
 ]
 
 [tool.uv.sources]
+qtpie-test = {workspace = true}
 qtpie_samples = {workspace = true}
-qtpie-test = { workspace = true }
 
 [tool.uv.workspace]
 members = [
   "qtpie",
-  "qtpie_samples",
+  "samples",
   "qtpie_test",
   "tests",
 ]
@@ -55,11 +55,11 @@ reportUnknownParameterType = "error"
 reportUnknownVariableType = "error"
 
 # Extra pedantic goodness
+reportImplicitOverride = "error"
 strictDictionaryInference = true
 strictListInference = true
 strictParameterNoneValue = true
 strictSetInference = true
-reportImplicitOverride = "error"
 
 [tool.ruff]
 line-length = 200
@@ -95,5 +95,5 @@ exclude_lines = [
 [tool.pytest.ini_options]
 addopts = "--cov=qtpie --cov-report=term-missing"
 markers = [
-    "e2e: end-to-end subprocess tests (can be skipped with -m 'not e2e')",
+  "e2e: end-to-end subprocess tests (can be skipped with -m 'not e2e')",
 ]
