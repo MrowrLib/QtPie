@@ -82,6 +82,10 @@ indent-style = "space"
 line-ending = "auto"
 quote-style = "double"
 
+[tool.ruff.lint.isort]
+known-first-party = ["qtpie"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
 [tool.coverage.run]
 omit = ["*/tests/*", "*/__init__.py"]
 source = ["lib/qtpie"]
