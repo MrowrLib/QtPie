@@ -19,6 +19,8 @@ from qtpy.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLayout,
+    QSizePolicy,
+    QSpacerItem,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +34,7 @@ from qtpie.factories.make import (
     SIGNALS_METADATA_KEY,
     GridTuple,
 )
+from qtpie.factories.stretch import STRETCH_METADATA_KEY, StretchConfig
 
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
@@ -159,16 +162,16 @@ def widget[T](
                 # Add child widgets to layout
                 type_hints = get_type_hints(cls)
                 for f in fields(cls):  # type: ignore[arg-type]
-                    # Handle _stretch fields for box layouts
-                    if f.name.startswith("_stretch"):
-                        field_type = type_hints.get(f.name)
-                        if isinstance(field_type, type) and issubclass(field_type, int) and _box_layout is not None:
-                            stretch_value = getattr(self, f.name, 0)
-                            _box_layout.addStretch(stretch_value)
+                    # Private fields are completely ignored
+                    if f.name.startswith("_"):
                         continue
 
-                    # Skip other private fields
-                    if f.name.startswith("_"):
+                    # Handle stretch() fields
+                    stretch_config: StretchConfig | None = f.metadata.get(STRETCH_METADATA_KEY)
+                    if stretch_config is not None:
+                        if _box_layout is not None:
+                            spacer = _create_spacer(_box_layout, stretch_config, layout)
+                            setattr(self, f.name, spacer)
                         continue
 
                     field_type = type_hints.get(f.name)
@@ -429,3 +432,59 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
         except Exception:
             # Binding might fail for some widget types
             pass
+
+
+def _create_spacer(
+    box_layout: QBoxLayout,
+    config: StretchConfig,
+    layout_type: LayoutType,
+) -> QSpacerItem:
+    """Create a QSpacerItem and add it to a box layout.
+
+    Args:
+        box_layout: The box layout to add the spacer to.
+        config: Stretch configuration with factor, min_size, max_size.
+        layout_type: "vertical" or "horizontal" to determine direction.
+
+    Returns:
+        The created QSpacerItem (also stored on the widget instance).
+    """
+    is_vertical = layout_type == "vertical"
+
+    # Determine size policies based on constraints
+    if config.min_size > 0 and config.max_size > 0 and config.min_size == config.max_size:
+        # Fixed size
+        policy = QSizePolicy.Policy.Fixed
+    elif config.max_size > 0:
+        # Has max constraint
+        policy = QSizePolicy.Policy.Maximum
+    elif config.min_size > 0:
+        # Has min constraint, can expand
+        policy = QSizePolicy.Policy.Expanding
+    else:
+        # Default: expanding (same as addStretch)
+        policy = QSizePolicy.Policy.Expanding
+
+    # Create spacer with appropriate dimensions and policies
+    if is_vertical:
+        # Vertical layout: height matters, width is minimum
+        width = 0
+        height = config.min_size
+        h_policy = QSizePolicy.Policy.Minimum
+        v_policy = policy
+    else:
+        # Horizontal layout: width matters, height is minimum
+        width = config.min_size
+        height = 0
+        h_policy = policy
+        v_policy = QSizePolicy.Policy.Minimum
+
+    spacer = QSpacerItem(width, height, h_policy, v_policy)
+    box_layout.addSpacerItem(spacer)
+
+    # Set stretch factor on the layout item (replicates addStretch behavior)
+    if config.factor > 0:
+        item_index = box_layout.count() - 1
+        box_layout.setStretch(item_index, config.factor)
+
+    return spacer

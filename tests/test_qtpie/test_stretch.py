@@ -1,22 +1,22 @@
 """Tests for stretch support in box layouts."""
 
 from assertpy import assert_that
-from qtpy.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QLabel, QPushButton, QSpacerItem, QVBoxLayout, QWidget
 
-from qtpie import Widget, make, widget
+from qtpie import Widget, make, stretch, widget
 from qtpie_test import QtDriver
 
 
 class TestStretch:
-    """Phase 2: Stretch support for box layouts."""
+    """Tests for stretch() factory function in box layouts."""
 
-    def test_stretch_field_adds_stretch(self, qt: QtDriver) -> None:
-        """_stretch field with int type should add stretch to layout."""
+    def test_stretch_adds_spacer_to_layout(self, qt: QtDriver) -> None:
+        """stretch() should add a spacer item to the layout."""
 
         @widget(layout="vertical")
         class MyWidget(QWidget, Widget):
             header: QLabel = make(QLabel, "Header")
-            _stretch1: int = 1
+            middle_spacer: QSpacerItem = stretch(1)
             footer: QLabel = make(QLabel, "Footer")
 
         w = MyWidget()
@@ -43,13 +43,28 @@ class TestStretch:
         assert item2 is not None
         assert_that(item2.widget()).is_same_as(w.footer)
 
-    def test_stretch_zero_adds_spacer(self, qt: QtDriver) -> None:
-        """_stretch with value 0 should still add a spacer."""
+    def test_stretch_stored_on_instance(self, qt: QtDriver) -> None:
+        """The QSpacerItem should be stored on the widget instance."""
 
         @widget(layout="vertical")
         class MyWidget(QWidget, Widget):
             header: QLabel = make(QLabel, "Header")
-            _stretch1: int = 0
+            spacer: QSpacerItem = stretch(1)
+            footer: QLabel = make(QLabel, "Footer")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Spacer should be accessible on the instance
+        assert_that(w.spacer).is_instance_of(QSpacerItem)
+
+    def test_stretch_zero_adds_spacer(self, qt: QtDriver) -> None:
+        """stretch() with factor 0 should still add a spacer."""
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            header: QLabel = make(QLabel, "Header")
+            spacer: QSpacerItem = stretch()  # default factor is 0
             footer: QLabel = make(QLabel, "Footer")
 
         w = MyWidget()
@@ -72,9 +87,9 @@ class TestStretch:
         @widget(layout="vertical")
         class ToolPanel(QWidget, Widget):
             toolbar: QPushButton = make(QPushButton, "Toolbar")
-            _stretch_middle: int = 1
+            spacer1: QSpacerItem = stretch(1)
             content: QLabel = make(QLabel, "Content")
-            _stretch_bottom: int = 0
+            spacer2: QSpacerItem = stretch()
             footer: QLabel = make(QLabel, "Footer")
 
         w = ToolPanel()
@@ -99,7 +114,7 @@ class TestStretch:
         @widget(layout="horizontal")
         class MyWidget(QWidget, Widget):
             left: QLabel = make(QLabel, "Left")
-            _stretch1: int = 1
+            spacer: QSpacerItem = stretch(1)
             right: QLabel = make(QLabel, "Right")
 
         w = MyWidget()
@@ -123,7 +138,7 @@ class TestStretch:
         @widget(layout="form")
         class MyForm(QWidget, Widget):
             name: QLabel = make(QLabel, form_label="Name")
-            _stretch1: int = 1  # Should be ignored
+            spacer: QSpacerItem = stretch(1)  # Should be ignored in form layout
             email: QLabel = make(QLabel, form_label="Email")
 
         w = MyForm()
@@ -142,7 +157,7 @@ class TestStretch:
         @widget(layout="grid")
         class MyGrid(QWidget, Widget):
             btn1: QPushButton = make(QPushButton, "1", grid=(0, 0))
-            _stretch1: int = 1  # Should be ignored
+            spacer: QSpacerItem = stretch(1)  # Should be ignored in grid layout
             btn2: QPushButton = make(QPushButton, "2", grid=(0, 1))
 
         w = MyGrid()
@@ -154,15 +169,15 @@ class TestStretch:
         # Should have 2 widgets (stretch ignored)
         assert_that(layout.count()).is_equal_to(2)
 
-    def test_multiple_stretch_names(self, qt: QtDriver) -> None:
-        """Any field starting with _stretch should work."""
+    def test_multiple_stretches(self, qt: QtDriver) -> None:
+        """Multiple stretch() calls should all work."""
 
         @widget(layout="vertical")
         class MyWidget(QWidget, Widget):
             top: QLabel = make(QLabel, "Top")
-            _stretch_a: int = 1
+            spacer1: QSpacerItem = stretch(1)
             middle: QLabel = make(QLabel, "Middle")
-            _stretch_b: int = 2
+            spacer2: QSpacerItem = stretch(2)
             bottom: QLabel = make(QLabel, "Bottom")
 
         w = MyWidget()
@@ -173,3 +188,121 @@ class TestStretch:
 
         # Should have 5 items
         assert_that(layout.count()).is_equal_to(5)
+
+        # Both spacers should be stored
+        assert_that(w.spacer1).is_instance_of(QSpacerItem)
+        assert_that(w.spacer2).is_instance_of(QSpacerItem)
+
+    def test_stretch_factor_is_set(self, qt: QtDriver) -> None:
+        """Stretch factor should be set on the layout item."""
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            top: QLabel = make(QLabel, "Top")
+            spacer: QSpacerItem = stretch(3)
+            bottom: QLabel = make(QLabel, "Bottom")
+
+        w = MyWidget()
+        qt.track(w)
+
+        layout = w.layout()
+        assert isinstance(layout, QVBoxLayout)
+
+        # Stretch factor should be 3 on the middle item (index 1)
+        assert_that(layout.stretch(1)).is_equal_to(3)
+
+
+class TestStretchSizeConstraints:
+    """Tests for stretch() min_size and max_size features."""
+
+    def test_stretch_min_size_vertical(self, qt: QtDriver) -> None:
+        """min_size should set the minimum height in vertical layouts."""
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            top: QLabel = make(QLabel, "Top")
+            gap: QSpacerItem = stretch(min_size=50)
+            bottom: QLabel = make(QLabel, "Bottom")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Spacer should have minimum height of 50
+        assert_that(w.gap.sizeHint().height()).is_equal_to(50)
+        assert_that(w.gap.sizeHint().width()).is_equal_to(0)
+
+    def test_stretch_min_size_horizontal(self, qt: QtDriver) -> None:
+        """min_size should set the minimum width in horizontal layouts."""
+
+        @widget(layout="horizontal")
+        class MyWidget(QWidget, Widget):
+            left: QLabel = make(QLabel, "Left")
+            gap: QSpacerItem = stretch(min_size=100)
+            right: QLabel = make(QLabel, "Right")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Spacer should have minimum width of 100
+        assert_that(w.gap.sizeHint().width()).is_equal_to(100)
+        assert_that(w.gap.sizeHint().height()).is_equal_to(0)
+
+    def test_stretch_fixed_size(self, qt: QtDriver) -> None:
+        """Setting min_size == max_size should create a fixed-size spacer."""
+        from qtpy.QtWidgets import QSizePolicy
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            top: QLabel = make(QLabel, "Top")
+            fixed_spacer: QSpacerItem = stretch(min_size=75, max_size=75)
+            bottom: QLabel = make(QLabel, "Bottom")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Should have fixed size policy
+        policy = w.fixed_spacer.sizePolicy()
+        assert_that(policy.verticalPolicy()).is_equal_to(QSizePolicy.Policy.Fixed)
+
+    def test_stretch_with_min_and_factor(self, qt: QtDriver) -> None:
+        """min_size with factor should create an expanding spacer with minimum."""
+        from qtpy.QtWidgets import QSizePolicy
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            top: QLabel = make(QLabel, "Top")
+            spacer: QSpacerItem = stretch(1, min_size=30)
+            bottom: QLabel = make(QLabel, "Bottom")
+
+        w = MyWidget()
+        qt.track(w)
+
+        layout = w.layout()
+        assert isinstance(layout, QVBoxLayout)
+
+        # Should have stretch factor
+        assert_that(layout.stretch(1)).is_equal_to(1)
+
+        # Should have minimum size
+        assert_that(w.spacer.sizeHint().height()).is_equal_to(30)
+
+        # Should be expanding
+        policy = w.spacer.sizePolicy()
+        assert_that(policy.verticalPolicy()).is_equal_to(QSizePolicy.Policy.Expanding)
+
+    def test_stretch_max_size_sets_maximum_policy(self, qt: QtDriver) -> None:
+        """max_size should set Maximum size policy."""
+        from qtpy.QtWidgets import QSizePolicy
+
+        @widget(layout="vertical")
+        class MyWidget(QWidget, Widget):
+            top: QLabel = make(QLabel, "Top")
+            spacer: QSpacerItem = stretch(max_size=200)
+            bottom: QLabel = make(QLabel, "Bottom")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Should have maximum policy
+        policy = w.spacer.sizePolicy()
+        assert_that(policy.verticalPolicy()).is_equal_to(QSizePolicy.Policy.Maximum)
