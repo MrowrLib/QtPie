@@ -94,3 +94,6 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 addopts = "--cov=qtpie --cov-report=term-missing"
+markers = [
+    "e2e: end-to-end subprocess tests (can be skipped with -m 'not e2e')",
+]

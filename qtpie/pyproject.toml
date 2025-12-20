@@ -3,6 +3,7 @@ dependencies = [
   "qtpy>=2.4.3",
   "observant>=0.1.5",
   "mrowrpurr-pyscss>=1.4.1",
+  "qasync>=0.27.1",
 ]
 description = "Add your description here"
 name = "qtpie"

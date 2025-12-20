@@ -379,34 +379,77 @@ class MyCard(QWidget):
 
 ---
 
-## Phase 9: App Class & Entry Point
+## Phase 9: App Class & Entry Point ✅ COMPLETE
 
 **Goal**: Simplified application bootstrapping.
 
-### TODO
+### Accomplished
 
-- [ ] `App` class extending QApplication
-- [ ] `@entry_point` decorator for main functions
-- [ ] Async support with qasync
-- [ ] Dev mode: hot reload, debug tools
-- [ ] Global stylesheet loading
-- [ ] Tests for App class
+- [x] `App` class extending QApplication with lifecycle hooks
+- [x] `@entry_point` decorator for main functions and classes
+- [x] Async support with qasync event loop
+- [x] `run_app()` standalone function for non-App usage
+- [x] `dark_mode` and `light_mode` parameters
+- [x] `load_stylesheet()` method for QSS/SCSS loading
+- [x] Auto-run detection (`__main__` module check)
+- [x] pytest-qt integration (qapp_cls fixture override)
+- [x] E2E subprocess tests for full app lifecycle
+- [x] 18 new tests (242 total)
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
 
 ### API Design
 
 ```python
-from qtpie import App, entry_point, window
+from qtpie import App, entry_point, run_app
 
-@window(title="My App")
-class MainWindow(QMainWindow):
-    ...
-
+# Simplest - function returning a widget
 @entry_point
 def main():
-    app = App(dev_mode=True, stylesheet="styles/main.scss")
-    window = MainWindow()
-    window.show()
-    return app.run()
+    return QLabel("Hello World!")
+
+# With configuration
+@entry_point(dark_mode=True, title="My App", size=(800, 600))
+def main():
+    return MyWidget()
+
+# On a @widget class
+@entry_point
+@widget
+class MyApp(QWidget):
+    label: QLabel = make(QLabel, "Hello!")
+
+# App subclass with lifecycle hooks
+@entry_point
+class MyApp(App):
+    def setup(self):
+        self.load_stylesheet("styles.qss")
+
+    def create_window(self):
+        return MyMainWindow()
+
+# Standalone run_app for plain QApplication
+app = QApplication([])
+window = MyWidget()
+window.show()
+run_app(app)
+```
+
+### Files Created/Modified
+
+```
+qtpie/
+├── __init__.py              # Added: App, entry_point, run_app
+├── app.py                   # NEW: App class and run_app()
+└── decorators/
+    └── entry_point.py       # NEW: @entry_point decorator
+
+tests/
+├── conftest.py              # NEW: qapp_cls fixture override (for all tests)
+└── test_qtpie/
+    ├── test_app.py              # NEW: App class tests
+    ├── test_entry_point.py      # NEW: @entry_point unit tests
+    └── test_entry_point_e2e.py  # NEW: subprocess E2E tests
 ```
 
 ---
@@ -428,14 +471,14 @@ def main():
 
 ## Current Status
 
-| Phase                      | Status     | Tests |
-| -------------------------- | ---------- | ----- |
+| Phase                      | Status      | Tests |
+| -------------------------- | ----------- | ----- |
 | Phase 1: Core Foundation   | ✅ Complete | 30    |
 | Phase 2: Layout Extensions | ✅ Complete | 48    |
 | Phase 3: @window           | ✅ Complete | 67    |
 | Phase 4: @menu/@action     | ✅ Complete | 96    |
 | Phase 5: Data Binding      | ✅ Complete | 127   |
 | Phase 6: Widget Base Class | ✅ Complete | 149   |
-| Phase 7: Pre-built Widgets | 🎯 Next     | -     |
-| Phase 8: Styling           | Planned    | -     |
-| Phase 9: App Class         | Planned    | -     |
+| Phase 7: Pre-built Widgets | Planned     | -     |
+| Phase 8: Styling           | ✅ Complete | 224   |
+| Phase 9: App Class         | ✅ Complete | 242   |
