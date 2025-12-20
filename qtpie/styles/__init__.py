@@ -11,6 +11,12 @@ from qtpie.styles.classes import (
     set_classes,
     toggle_class,
 )
+from qtpie.styles.color_scheme import (
+    ColorScheme,
+    enable_dark_mode,
+    enable_light_mode,
+    set_color_scheme,
+)
 from qtpie.styles.compiler import compile_scss
 from qtpie.styles.loader import load_stylesheet
 from qtpie.styles.watcher import (
@@ -32,6 +38,11 @@ __all__ = [
     "replace_class",
     "set_classes",
     "toggle_class",
+    # Color scheme
+    "ColorScheme",
+    "enable_dark_mode",
+    "enable_light_mode",
+    "set_color_scheme",
     # Compiler
     "compile_scss",
     # Loader

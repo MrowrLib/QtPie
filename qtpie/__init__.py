@@ -8,18 +8,28 @@ from qtpie.decorators.window import window
 from qtpie.factories.make import make, make_later
 from qtpie.factories.separator import separator
 from qtpie.factories.stretch import stretch
+from qtpie.styles import (
+    ColorScheme,
+    enable_dark_mode,
+    enable_light_mode,
+    set_color_scheme,
+)
 from qtpie.widget_base import ModelWidget, Widget
 
 __all__ = [
+    "ColorScheme",
     "ModelWidget",  # Backwards compatibility alias
     "Widget",
     "action",
     "bind",
+    "enable_dark_mode",
+    "enable_light_mode",
     "make",
     "make_later",
     "menu",
     "register_binding",
     "separator",
+    "set_color_scheme",
     "stretch",
     "widget",
     "window",
