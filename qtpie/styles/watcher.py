@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from qtpy.QtCore import QFileSystemWatcher, QObject, QTimer
+from qtpy.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.compiler import compile_scss
@@ -15,7 +15,10 @@ class QssWatcher(QObject):
     Handles:
     - File that doesn't exist yet (waits for creation)
     - Editor delete+recreate behavior (vim, VSCode, etc.)
+    - macOS FSEvents quirks (re-arms watches after changes)
     """
+
+    stylesheetApplied = Signal()
 
     def __init__(
         self,
@@ -26,54 +29,71 @@ class QssWatcher(QObject):
         super().__init__(parent)
         self._target = target
         self._qss_path = Path(qss_path).resolve()
+        self._mtime: float | None = None
 
         self._watcher = QFileSystemWatcher(self)
         self._watcher.directoryChanged.connect(self._on_dir_changed)
         self._watcher.fileChanged.connect(self._on_file_changed)
 
-        # Debounce timer to handle rapid file changes
+        # Debounce timer - 150ms handles editor multi-step saves
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
-        self._debounce_timer.setInterval(50)
-        self._debounce_timer.timeout.connect(self._apply_stylesheet)
+        self._debounce_timer.setInterval(150)
+        self._debounce_timer.timeout.connect(self._apply_if_changed)
 
         # Always watch the parent directory (catches file creation)
         parent_dir = str(self._qss_path.parent)
         self._watcher.addPath(parent_dir)
 
         # Try to watch the file if it exists
-        self._maybe_watch_file(initial=True)
+        self._ensure_file_watched()
 
-    def _maybe_watch_file(self, initial: bool = False) -> None:
-        """Add file to watcher if it exists."""
+        # Apply initial stylesheet
+        self._apply_if_changed(initial=True)
+
+    def _ensure_file_watched(self) -> None:
+        """Ensure file is in watch list (re-arms after delete/rename)."""
         if self._qss_path.exists():
             qss_str = str(self._qss_path)
             if qss_str not in self._watcher.files():
                 self._watcher.addPath(qss_str)
-            if initial:
-                self._apply_stylesheet()
-            else:
-                # Debounce non-initial changes
-                self._debounce_timer.start()
 
     def _on_dir_changed(self, _path: str) -> None:
         """Directory changed - file might have been created."""
-        self._maybe_watch_file()
+        self._ensure_file_watched()
+        self._debounce_timer.start()
 
     def _on_file_changed(self, _path: str) -> None:
         """File changed - might be modified or replaced by editor."""
-        if self._qss_path.exists():
-            # Re-add path if editor delete+recreated (new inode)
-            qss_str = str(self._qss_path)
-            if qss_str not in self._watcher.files():
-                self._watcher.addPath(qss_str)
-            self._debounce_timer.start()
+        # Qt drops watch after delete/rename - always re-arm
+        self._ensure_file_watched()
+        self._debounce_timer.start()
 
-    def _apply_stylesheet(self) -> None:
-        """Read QSS file and apply to target."""
-        if self._qss_path.exists():
+    def _apply_if_changed(self, initial: bool = False) -> None:
+        """Read QSS file and apply to target if actually changed."""
+        if not self._qss_path.exists():
+            self._mtime = None
+            return
+
+        # Check mtime to avoid redundant reloads
+        try:
+            current_mtime = self._qss_path.stat().st_mtime
+        except OSError:
+            return
+
+        if not initial and self._mtime is not None and current_mtime <= self._mtime:
+            # No actual change
+            return
+
+        self._mtime = current_mtime
+
+        try:
             qss = self._qss_path.read_text()
-            self._target.setStyleSheet(qss)
+        except OSError:
+            return
+
+        self._target.setStyleSheet(qss)
+        self.stylesheetApplied.emit()
 
     def stop(self) -> None:
         """Stop watching."""
@@ -87,7 +107,10 @@ class ScssWatcher(QObject):
     Watch SCSS files, compile to QSS, and hot-reload on changes.
 
     Watches the main SCSS file and all search paths for changes.
+    Handles macOS FSEvents quirks by re-arming watches after changes.
     """
+
+    stylesheetApplied = Signal()
 
     def __init__(
         self,
@@ -102,53 +125,88 @@ class ScssWatcher(QObject):
         self._scss_path = Path(scss_path).resolve()
         self._qss_path = Path(qss_path).resolve()
         self._search_paths = [Path(p).resolve() for p in (search_paths or [])]
+        self._mtimes: dict[str, float] = {}
 
         self._watcher = QFileSystemWatcher(self)
         self._watcher.directoryChanged.connect(self._on_changed)
         self._watcher.fileChanged.connect(self._on_changed)
 
-        # Debounce timer
+        # Debounce timer - 150ms handles editor multi-step saves
         self._debounce_timer = QTimer(self)
         self._debounce_timer.setSingleShot(True)
-        self._debounce_timer.setInterval(50)
-        self._debounce_timer.timeout.connect(self._recompile)
+        self._debounce_timer.setInterval(150)
+        self._debounce_timer.timeout.connect(self._recompile_if_changed)
 
         # Watch SCSS file's directory
         self._watcher.addPath(str(self._scss_path.parent))
-        if self._scss_path.exists():
-            self._watcher.addPath(str(self._scss_path))
+        self._ensure_file_watched(self._scss_path)
 
-        # Watch search path directories
+        # Watch search path directories and their scss files
         for search_path in self._search_paths:
             if search_path.exists():
                 self._watcher.addPath(str(search_path))
-                # Watch all scss files in search paths
                 for scss_file in search_path.glob("*.scss"):
-                    self._watcher.addPath(str(scss_file))
+                    self._ensure_file_watched(scss_file)
 
         # Initial compile
-        self._recompile()
+        self._recompile_if_changed(initial=True)
+
+    def _ensure_file_watched(self, path: Path) -> None:
+        """Ensure file is in watch list (re-arms after delete/rename)."""
+        if path.exists():
+            path_str = str(path)
+            if path_str not in self._watcher.files():
+                self._watcher.addPath(path_str)
 
     def _on_changed(self, path: str) -> None:
         """File or directory changed."""
         changed = Path(path)
 
-        # Re-add file to watcher if it was replaced
-        if changed.is_file() and str(changed) not in self._watcher.files():
-            self._watcher.addPath(str(changed))
+        # Re-arm file watch if it was replaced (Qt drops watch after delete/rename)
+        if changed.is_file():
+            self._ensure_file_watched(changed)
 
-        # If a new .scss file appeared in a watched directory, watch it
+        # If a directory changed, re-watch any scss files in it
         if changed.is_dir():
             for scss_file in changed.glob("*.scss"):
-                if str(scss_file) not in self._watcher.files():
-                    self._watcher.addPath(str(scss_file))
+                self._ensure_file_watched(scss_file)
 
         self._debounce_timer.start()
 
-    def _recompile(self) -> None:
-        """Compile SCSS and apply to target."""
+    def _get_all_scss_mtimes(self) -> dict[str, float]:
+        """Get mtimes for all watched scss files."""
+        mtimes: dict[str, float] = {}
+
+        # Main file
+        if self._scss_path.exists():
+            try:
+                mtimes[str(self._scss_path)] = self._scss_path.stat().st_mtime
+            except OSError:
+                pass
+
+        # Search path files
+        for search_path in self._search_paths:
+            if search_path.exists():
+                for scss_file in search_path.glob("*.scss"):
+                    try:
+                        mtimes[str(scss_file)] = scss_file.stat().st_mtime
+                    except OSError:
+                        pass
+
+        return mtimes
+
+    def _recompile_if_changed(self, initial: bool = False) -> None:
+        """Compile SCSS and apply to target if actually changed."""
         if not self._scss_path.exists():
             return
+
+        # Check if any scss file actually changed
+        current_mtimes = self._get_all_scss_mtimes()
+        if not initial and current_mtimes == self._mtimes:
+            # No actual change
+            return
+
+        self._mtimes = current_mtimes
 
         try:
             compile_scss(
@@ -160,9 +218,9 @@ class ScssWatcher(QObject):
             if self._qss_path.exists():
                 qss = self._qss_path.read_text()
                 self._target.setStyleSheet(qss)
+                self.stylesheetApplied.emit()
         except Exception:
             # Don't crash on SCSS errors - just keep old styles
-            # TODO: Could emit a signal or log the error
             pass
 
     def stop(self) -> None:

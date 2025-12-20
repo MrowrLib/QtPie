@@ -4,13 +4,38 @@ import time
 from pathlib import Path
 
 from assertpy import assert_that
-from qtpy.QtTest import QTest
+from qtpy.QtCore import QEventLoop, QTimer
 from qtpy.QtWidgets import QWidget
 
 from qtpie.styles import watch_qss, watch_scss, watch_styles
+from qtpie.styles.watcher import QssWatcher, ScssWatcher
 from qtpie_test import QtDriver
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scss"
+
+
+def wait_for_signal(watcher: QssWatcher | ScssWatcher, timeout_ms: int = 2000) -> bool:
+    """Wait for stylesheetApplied signal. Returns True if signal received."""
+    loop = QEventLoop()
+    timer = QTimer()
+    timer.setSingleShot(True)
+    received = False
+
+    def on_applied() -> None:
+        nonlocal received
+        received = True
+        if loop.isRunning():
+            loop.quit()
+
+    def on_timeout() -> None:
+        if loop.isRunning():
+            loop.quit()
+
+    watcher.stylesheetApplied.connect(on_applied)
+    timer.timeout.connect(on_timeout)
+    timer.start(timeout_ms)
+    loop.exec()
+    return received
 
 
 class TestQssWatcher:
@@ -43,9 +68,9 @@ class TestQssWatcher:
         # Change the file
         qss_file.write_text("QWidget { background-color: blue; }")
 
-        # Wait for debounce + file system events
-        QTest.qWait(200)
-
+        # Wait for signal instead of fixed sleep
+        received = wait_for_signal(watcher)
+        assert_that(received).is_true()
         assert_that(widget.styleSheet()).contains("blue")
         watcher.stop()
 
@@ -65,9 +90,9 @@ class TestQssWatcher:
         # Create the file
         qss_file.write_text("QWidget { background-color: green; }")
 
-        # Wait for directory watcher to pick it up
-        QTest.qWait(200)
-
+        # Wait for signal
+        received = wait_for_signal(watcher)
+        assert_that(received).is_true()
         assert_that(widget.styleSheet()).contains("green")
         watcher.stop()
 
@@ -87,8 +112,9 @@ class TestQssWatcher:
         time.sleep(0.05)  # Small delay between delete and create
         qss_file.write_text("QWidget { background-color: yellow; }")
 
-        QTest.qWait(200)
-
+        # Wait for signal
+        received = wait_for_signal(watcher)
+        assert_that(received).is_true()
         assert_that(widget.styleSheet()).contains("yellow")
         watcher.stop()
 
@@ -138,8 +164,10 @@ class TestScssWatcher:
 
         # Change SCSS
         scss_file.write_text("QWidget { background-color: cyan; }")
-        QTest.qWait(200)
 
+        # Wait for signal
+        received = wait_for_signal(watcher)
+        assert_that(received).is_true()
         assert_that(widget.styleSheet()).contains("cyan")
         watcher.stop()
 
@@ -164,8 +192,10 @@ class TestScssWatcher:
 
         # Change the imported file
         variables.write_text("$bg: pink;")
-        QTest.qWait(200)
 
+        # Wait for signal
+        received = wait_for_signal(watcher)
+        assert_that(received).is_true()
         assert_that(widget.styleSheet()).contains("pink")
         watcher.stop()
 
