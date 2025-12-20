@@ -1,7 +1,5 @@
 """The separator() factory function for adding separators to menus."""
 
-from __future__ import annotations
-
 from dataclasses import field
 from typing import Any
 

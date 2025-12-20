@@ -1,7 +1,5 @@
 """Binding registry for mapping widget types to their bindable properties."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any

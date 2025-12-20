@@ -1,10 +1,8 @@
 """Two-way binding between observables and Qt widgets."""
 
-from __future__ import annotations
-
 from typing import Any
 
-from observant import IObservable  # type: ignore[import-untyped]
+from observant import IObservable
 from qtpy.QtCore import QObject
 
 from qtpie.bindings.registry import get_binding_registry

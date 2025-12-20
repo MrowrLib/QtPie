@@ -187,7 +187,21 @@ Note: Use `python -m pytest` instead of just `pytest` due to workspace editable 
 
 ---
 
-## Current State (Phase 4 Complete)
+## Code Style - No Unnecessary Bullshit
+
+**Don't add imports or code that isn't actually needed.**
+
+- **NO `from __future__ import annotations`** - Python 3.13+ doesn't need it. Only use if you have actual forward references (rare).
+- **NO unnecessary imports** - Don't import things "just in case"
+- **NO cargo-cult patterns** - If you can't explain why something is needed, don't add it
+- **NO defensive coding against impossible cases** - Trust the type system
+- **NO premature abstractions** - Write concrete code first
+
+When in doubt, leave it out. Simpler is better.
+
+---
+
+## Current State (Phase 6 Complete)
 
 Working features:
 - `@widget()` and `@widget` (with/without parens)
@@ -198,8 +212,12 @@ Working features:
 - `make()` with positional args, kwargs, signal connections
 - `@window()` decorator for QMainWindow
 - `@action()` and `@menu()` decorators
-- `stretch()` for layout spacing
-- 96 tests, 85% coverage, 0 pyright errors, 0 ruff errors
+- `stretch()` and `separator()` for layouts/menus
+- `Widget[T]` base class with auto model binding
+- Data binding via `bind=` parameter and `observant` library
+- SCSS compilation, stylesheet loading, hot reload watchers
+- CSS class helpers (`add_class`, `remove_class`, `toggle_class`, etc.)
+- 202 tests, 96% coverage, 0 pyright errors, 0 ruff errors
 
 See `TODO.md` for the full roadmap.
 

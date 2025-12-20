@@ -1,7 +1,5 @@
 """The make() factory function for creating widget instances."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import field
 from typing import Any, cast

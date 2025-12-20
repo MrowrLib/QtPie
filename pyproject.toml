@@ -1,5 +1,7 @@
 [project]
-dependencies = []
+dependencies = [
+    "observant>=0.1.6",
+]
 description = "Tasty way to build Qt apps 🍰"
 name = "qtpie-project"
 readme = "README.md"

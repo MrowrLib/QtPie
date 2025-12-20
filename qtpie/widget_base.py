@@ -1,10 +1,8 @@
 """Widget base class - optional mixin with model binding support."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, get_args, get_origin
 
-from observant import ObservableProxy  # type: ignore[import-untyped]
+from observant import ObservableProxy
 from qtpy.QtWidgets import QLayout
 
 

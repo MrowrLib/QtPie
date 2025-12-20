@@ -1,7 +1,5 @@
 """The stretch() factory function for adding stretch/spacers to box layouts."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

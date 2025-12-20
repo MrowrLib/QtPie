@@ -1,7 +1,5 @@
 """The @widget decorator - transforms classes into Qt widgets with automatic layout."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
 from typing import (
@@ -357,7 +355,7 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
 
     # Create proxy from model
     if model_instance is not None:
-        from observant import ObservableProxy  # type: ignore[import-untyped]
+        from observant import ObservableProxy
 
         proxy = ObservableProxy(model_instance, sync=True)
         widget.proxy = proxy  # type: ignore[attr-defined]

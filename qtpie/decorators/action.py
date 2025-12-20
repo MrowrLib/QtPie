@@ -1,7 +1,5 @@
 """The @action decorator - transforms classes into Qt actions."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
 from typing import (

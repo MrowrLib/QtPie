@@ -1,7 +1,5 @@
 """The @menu decorator - transforms classes into Qt menus."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
 from typing import (
