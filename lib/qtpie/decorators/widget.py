@@ -32,7 +32,7 @@ from qtpie.factories.make import (
     SIGNALS_METADATA_KEY,
     GridTuple,
 )
-from qtpie.factories.stretch import STRETCH_METADATA_KEY, StretchConfig
+from qtpie.factories.spacer import SPACER_METADATA_KEY, SpacerConfig
 
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
@@ -169,11 +169,11 @@ def widget[T](
                     if f.name.startswith("_"):
                         continue
 
-                    # Handle stretch() fields
-                    stretch_config: StretchConfig | None = f.metadata.get(STRETCH_METADATA_KEY)
-                    if stretch_config is not None:
+                    # Handle spacer() fields
+                    spacer_config: SpacerConfig | None = f.metadata.get(SPACER_METADATA_KEY)
+                    if spacer_config is not None:
                         if _box_layout is not None:
-                            spacer = _create_spacer(_box_layout, stretch_config, layout)
+                            spacer = _create_spacer(_box_layout, spacer_config, layout)
                             setattr(self, f.name, spacer)
                         continue
 
@@ -457,7 +457,7 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
 
 def _create_spacer(
     box_layout: QBoxLayout,
-    config: StretchConfig,
+    config: SpacerConfig,
     layout_type: LayoutType,
 ) -> QSpacerItem:
     """Create a QSpacerItem and add it to a box layout.
