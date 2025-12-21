@@ -4,14 +4,28 @@ from dataclasses import dataclass, field
 from typing import override
 
 from assertpy import assert_that
-from observant import ObservableProxy  # type: ignore[import-untyped]
+from observant import ObservableProxy
+from qtpy.QtCore import QDate, QDateTime, QTime
+from qtpy.QtGui import QFont, QKeySequence
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDateEdit,
+    QDateTimeEdit,
+    QDial,
+    QDoubleSpinBox,
+    QFontComboBox,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QPlainTextEdit,
+    QProgressBar,
+    QRadioButton,
     QSlider,
     QSpinBox,
+    QTextEdit,
+    QTimeEdit,
     QWidget,
 )
 
@@ -599,3 +613,327 @@ class TestShortFormBinding:
 
         w.age_spin.setValue(5)
         assert_that(w.model.age).is_equal_to(5)
+
+
+class TestAllWidgetBindings:
+    """Tests for all registered widget bindings."""
+
+    def test_text_edit_binding(self, qt: QtDriver) -> None:
+        """QTextEdit should bind to text property."""
+
+        @dataclass
+        class Model:
+            content: str = ""
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            text_edit: QTextEdit = make(QTextEdit, bind="proxy.content")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(str, "content").set("Hello World")
+        assert_that(w.text_edit.toPlainText()).is_equal_to("Hello World")
+
+        w.text_edit.setPlainText("Updated")
+        assert_that(w.model.content).is_equal_to("Updated")
+
+    def test_plain_text_edit_binding(self, qt: QtDriver) -> None:
+        """QPlainTextEdit should bind to text property."""
+
+        @dataclass
+        class Model:
+            content: str = ""
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            text_edit: QPlainTextEdit = make(QPlainTextEdit, bind="proxy.content")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(str, "content").set("Plain text")
+        assert_that(w.text_edit.toPlainText()).is_equal_to("Plain text")
+
+        w.text_edit.setPlainText("Changed")
+        assert_that(w.model.content).is_equal_to("Changed")
+
+    def test_double_spinbox_binding(self, qt: QtDriver) -> None:
+        """QDoubleSpinBox should bind to float values."""
+
+        @dataclass
+        class Model:
+            price: float = 0.0
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            price_spin: QDoubleSpinBox = make(QDoubleSpinBox, bind="proxy.price")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(float, "price").set(19.99)
+        assert_that(w.price_spin.value()).is_equal_to(19.99)
+
+        w.price_spin.setValue(29.99)
+        assert_that(w.model.price).is_equal_to(29.99)
+
+    def test_radio_button_binding(self, qt: QtDriver) -> None:
+        """QRadioButton should bind to bool (checked) property."""
+
+        @dataclass
+        class Model:
+            selected: bool = False
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            radio: QRadioButton = make(QRadioButton, "Option", bind="proxy.selected")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(bool, "selected").set(True)
+        assert_that(w.radio.isChecked()).is_true()
+
+        w.radio.setChecked(False)
+        assert_that(w.model.selected).is_false()
+
+    def test_dial_binding(self, qt: QtDriver) -> None:
+        """QDial should bind to int value."""
+
+        @dataclass
+        class Model:
+            rotation: int = 0
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            dial: QDial = make(QDial, bind="proxy.rotation")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(int, "rotation").set(50)
+        assert_that(w.dial.value()).is_equal_to(50)
+
+        w.dial.setValue(75)
+        assert_that(w.model.rotation).is_equal_to(75)
+
+    def test_progress_bar_binding(self, qt: QtDriver) -> None:
+        """QProgressBar should bind one-way (model → widget only)."""
+
+        @dataclass
+        class Model:
+            progress: int = 0
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            bar: QProgressBar = make(QProgressBar, bind="proxy.progress")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(int, "progress").set(50)
+        assert_that(w.bar.value()).is_equal_to(50)
+
+        w.proxy.observable(int, "progress").set(100)
+        assert_that(w.bar.value()).is_equal_to(100)
+
+    def test_date_edit_binding(self, qt: QtDriver) -> None:
+        """QDateEdit should bind to QDate values."""
+
+        @dataclass
+        class Model:
+            birth_date: QDate = field(default_factory=lambda: QDate.currentDate())
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            date_edit: QDateEdit = make(QDateEdit, bind="proxy.birth_date")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        test_date = QDate(2000, 6, 15)
+        w.proxy.observable(QDate, "birth_date").set(test_date)
+        assert_that(w.date_edit.date()).is_equal_to(test_date)
+
+        new_date = QDate(1990, 1, 1)
+        w.date_edit.setDate(new_date)
+        assert_that(w.model.birth_date).is_equal_to(new_date)
+
+    def test_time_edit_binding(self, qt: QtDriver) -> None:
+        """QTimeEdit should bind to QTime values."""
+
+        @dataclass
+        class Model:
+            alarm_time: QTime = field(default_factory=lambda: QTime.currentTime())
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            time_edit: QTimeEdit = make(QTimeEdit, bind="proxy.alarm_time")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        test_time = QTime(14, 30, 0)
+        w.proxy.observable(QTime, "alarm_time").set(test_time)
+        assert_that(w.time_edit.time()).is_equal_to(test_time)
+
+        new_time = QTime(8, 0, 0)
+        w.time_edit.setTime(new_time)
+        assert_that(w.model.alarm_time).is_equal_to(new_time)
+
+    def test_datetime_edit_binding(self, qt: QtDriver) -> None:
+        """QDateTimeEdit should bind to QDateTime values."""
+
+        @dataclass
+        class Model:
+            event_time: QDateTime = field(default_factory=lambda: QDateTime.currentDateTime())
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            datetime_edit: QDateTimeEdit = make(QDateTimeEdit, bind="proxy.event_time")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        test_dt = QDateTime(QDate(2024, 12, 25), QTime(12, 0, 0))
+        w.proxy.observable(QDateTime, "event_time").set(test_dt)
+        assert_that(w.datetime_edit.dateTime()).is_equal_to(test_dt)
+
+        new_dt = QDateTime(QDate(2025, 1, 1), QTime(0, 0, 0))
+        w.datetime_edit.setDateTime(new_dt)
+        assert_that(w.model.event_time).is_equal_to(new_dt)
+
+    def test_font_combo_box_binding(self, qt: QtDriver) -> None:
+        """QFontComboBox should bind to QFont values."""
+
+        @dataclass
+        class Model:
+            selected_font: QFont = field(default_factory=QFont)
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            font_combo: QFontComboBox = make(QFontComboBox, bind="proxy.selected_font")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        # Test setting font from model
+        test_font = QFont("Arial")
+        w.proxy.observable(QFont, "selected_font").set(test_font)
+        assert_that(w.font_combo.currentFont().family()).is_equal_to(test_font.family())
+
+    def test_key_sequence_edit_binding(self, qt: QtDriver) -> None:
+        """QKeySequenceEdit should bind to QKeySequence values."""
+
+        @dataclass
+        class Model:
+            shortcut: QKeySequence = field(default_factory=QKeySequence)
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            key_edit: QKeySequenceEdit = make(QKeySequenceEdit, bind="proxy.shortcut")
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        test_seq = QKeySequence("Ctrl+S")
+        w.proxy.observable(QKeySequence, "shortcut").set(test_seq)
+        assert_that(w.key_edit.keySequence().toString()).is_equal_to(test_seq.toString())
+
+        new_seq = QKeySequence("Ctrl+N")
+        w.key_edit.setKeySequence(new_seq)
+        assert_that(w.model.shortcut.toString()).is_equal_to(new_seq.toString())
+
+    def test_list_widget_binding(self, qt: QtDriver) -> None:
+        """QListWidget should bind currentRow to int values."""
+
+        @dataclass
+        class Model:
+            selected_index: int = -1
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            list_widget: QListWidget = make(QListWidget, bind="proxy.selected_index")
+
+            @override
+            def setup(self) -> None:
+                self.list_widget.addItems(["Item 1", "Item 2", "Item 3"])
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        w.proxy.observable(int, "selected_index").set(1)
+        assert_that(w.list_widget.currentRow()).is_equal_to(1)
+
+        w.list_widget.setCurrentRow(2)
+        assert_that(w.model.selected_index).is_equal_to(2)

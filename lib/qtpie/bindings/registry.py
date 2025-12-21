@@ -8,16 +8,22 @@ from qtpy.QtCore import QObject
 from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDateEdit,
+    QDateTimeEdit,
     QDial,
     QDoubleSpinBox,
+    QFontComboBox,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPlainTextEdit,
     QProgressBar,
     QRadioButton,
     QSlider,
     QSpinBox,
     QTextEdit,
+    QTimeEdit,
 )
 
 
@@ -261,3 +267,69 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         ),
     )
     registry.set_default_prop(QProgressBar, "value")
+
+    # QDateEdit - date
+    registry.add(
+        BindingKey(QDateEdit, "date"),
+        BindingAdapter(
+            getter=lambda w: w.date(),
+            setter=lambda w, v: w.setDate(v) if v is not None else None,
+            signal_name="dateChanged",
+        ),
+    )
+    registry.set_default_prop(QDateEdit, "date")
+
+    # QTimeEdit - time
+    registry.add(
+        BindingKey(QTimeEdit, "time"),
+        BindingAdapter(
+            getter=lambda w: w.time(),
+            setter=lambda w, v: w.setTime(v) if v is not None else None,
+            signal_name="timeChanged",
+        ),
+    )
+    registry.set_default_prop(QTimeEdit, "time")
+
+    # QDateTimeEdit - dateTime
+    registry.add(
+        BindingKey(QDateTimeEdit, "dateTime"),
+        BindingAdapter(
+            getter=lambda w: w.dateTime(),
+            setter=lambda w, v: w.setDateTime(v) if v is not None else None,
+            signal_name="dateTimeChanged",
+        ),
+    )
+    registry.set_default_prop(QDateTimeEdit, "dateTime")
+
+    # QFontComboBox - currentFont
+    registry.add(
+        BindingKey(QFontComboBox, "currentFont"),
+        BindingAdapter(
+            getter=lambda w: w.currentFont(),
+            setter=lambda w, v: w.setCurrentFont(v) if v is not None else None,
+            signal_name="currentFontChanged",
+        ),
+    )
+    registry.set_default_prop(QFontComboBox, "currentFont")
+
+    # QKeySequenceEdit - keySequence
+    registry.add(
+        BindingKey(QKeySequenceEdit, "keySequence"),
+        BindingAdapter(
+            getter=lambda w: w.keySequence(),
+            setter=lambda w, v: w.setKeySequence(v) if v is not None else None,
+            signal_name="keySequenceChanged",
+        ),
+    )
+    registry.set_default_prop(QKeySequenceEdit, "keySequence")
+
+    # QListWidget - currentRow
+    registry.add(
+        BindingKey(QListWidget, "currentRow"),
+        BindingAdapter(
+            getter=lambda w: w.currentRow(),
+            setter=lambda w, v: w.setCurrentRow(int(v) if v is not None else -1),
+            signal_name="currentRowChanged",
+        ),
+    )
+    registry.set_default_prop(QListWidget, "currentRow")
