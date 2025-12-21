@@ -40,6 +40,10 @@ from qtpie.state import get_state_observable, get_state_proxy, is_state_descript
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
 
+# Metadata key for storing undo config on the class
+UNDO_CONFIG_METADATA_KEY = "_qtpie_undo_config"
+
+
 @overload
 @dataclass_transform()
 def widget[T](
@@ -49,6 +53,9 @@ def widget[T](
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
     auto_bind: bool = ...,
+    undo: bool = ...,
+    undo_max: int | None = ...,
+    undo_debounce_ms: int | None = ...,
 ) -> type[T]: ...
 
 
@@ -61,6 +68,9 @@ def widget[T](
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
     auto_bind: bool = ...,
+    undo: bool = ...,
+    undo_max: int | None = ...,
+    undo_debounce_ms: int | None = ...,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -72,6 +82,9 @@ def widget[T](
     classes: list[str] | None = None,
     layout: LayoutType = "vertical",
     auto_bind: bool = True,
+    undo: bool = False,
+    undo_max: int | None = None,
+    undo_debounce_ms: int | None = None,
 ) -> Callable[[type[T]], type[T]] | type[T]:
     """
     Decorator that transforms a class into a Qt widget with automatic layout.
@@ -83,6 +96,9 @@ def widget[T](
                 Defaults to "vertical".
         auto_bind: If True (default), Widget[T] fields with names matching model
                    properties are automatically bound. Set to False to disable.
+        undo: If True, enable undo/redo for Widget[T] model fields.
+        undo_max: Maximum undo steps to store (default: unlimited).
+        undo_debounce_ms: Debounce time for undo recording (useful for text input).
 
     Example:
         @widget(name="MyEditor", classes=["card"], layout="vertical")
@@ -96,10 +112,19 @@ def widget[T](
             def on_click(self) -> None:
                 print("Clicked!")
     """
+    # Store undo config for later use
+    undo_config = {
+        "undo": undo,
+        "undo_max": undo_max,
+        "undo_debounce_ms": undo_debounce_ms,
+    }
 
     def decorator(cls: type[T]) -> type[T]:
         # Apply @dataclass to register fields
         cls = dataclass(cls)  # type: ignore[assignment]
+
+        # Store undo config on class for _process_model_widget to use
+        setattr(cls, UNDO_CONFIG_METADATA_KEY, undo_config)
 
         def new_init(self: QWidget, *args: object, **kwargs: object) -> None:
             # Initialize QWidget base class first
@@ -340,7 +365,10 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
     Handles:
     - Simple state: "count" → [state observable]
     - Nested state: "dog.name" → [nested observable, top-level state observable]
+    - Widget[T] model fields: "name" → [proxy observable for "name"]
     """
+    from qtpie.widget_base import is_widget_subclass
+
     # Normalize optional chaining for splitting
     normalized = field_path.replace("?.", ".")
     parts = normalized.split(".", 1)
@@ -351,27 +379,48 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
     try:
         _ = getattr(widget, first_segment)
     except AttributeError:
-        return []
+        pass  # Continue - might be a proxy field
 
     if not has_nested:
-        # Simple state field
+        # Try state field first
         obs = get_state_observable(widget, field_path)
-        return [obs] if obs is not None else []
+        if obs is not None:
+            return [obs]
+
+        # Try Widget[T] proxy field
+        if is_widget_subclass(type(widget)):
+            proxy = getattr(widget, "proxy", None)
+            if proxy is not None and hasattr(proxy, "observable_for_path"):
+                try:
+                    return [proxy.observable_for_path(field_path)]
+                except Exception:
+                    pass
+
+        return []
     else:
-        # Nested path on state object
+        # Nested path
         result: list[Any] = []
 
-        # Add the top-level state observable (fires when whole object replaced)
+        # Try state object first
         top_level_obs = get_state_observable(widget, first_segment)
         if top_level_obs:
             result.append(top_level_obs)
 
-        # Add the nested path observable (fires when nested property changes)
         state_proxy = get_state_proxy(widget, first_segment)
         if state_proxy is not None:
             nested_path = field_path.split(".", 1)[1] if "." in field_path else ""
             if nested_path:
                 result.append(state_proxy.observable_for_path(nested_path))
+            return result
+
+        # Try Widget[T] proxy for nested paths like "address.city"
+        if is_widget_subclass(type(widget)):
+            proxy = getattr(widget, "proxy", None)
+            if proxy is not None and hasattr(proxy, "observable_for_path"):
+                try:
+                    result.append(proxy.observable_for_path(field_path))
+                except Exception:
+                    pass
 
         return result
 
@@ -440,10 +489,12 @@ def _process_format_binding(
     - Expressions: {count + 5}, {name.upper()}, {x if x > 0 else 'none'}
     - Format specs: {price:.2f}, {price * 1.1:.2f}
     - self reference: {self.count + 5}
+    - Widget[T] model fields: {name}, {age}
 
     Returns True if binding was successful, False otherwise.
     """
     from qtpie.bindings import get_binding_registry
+    from qtpie.widget_base import is_widget_subclass
 
     fields = _parse_format_fields(format_string)
     if not fields:
@@ -486,6 +537,9 @@ def _process_format_binding(
     if adapter is None or adapter.setter is None:
         return False
 
+    # Check if this is a Widget[T] with a proxy
+    widget_proxy = getattr(widget, "proxy", None) if is_widget_subclass(type(widget)) else None
+
     # Build the compute function
     def compute() -> str:
         # Build context with current values (use ROOT names for getattr)
@@ -493,8 +547,18 @@ def _process_format_binding(
 
         # Add all variable values to context using root names
         for root_name in root_names:
+            # Try widget attribute first (for state fields)
             value = getattr(widget, root_name, None)
-            context[root_name] = value
+            if value is not None:
+                context[root_name] = value
+            elif widget_proxy is not None:
+                # Try proxy for Widget[T] model fields
+                try:
+                    context[root_name] = widget_proxy.observable(object, root_name).get()
+                except Exception:
+                    context[root_name] = None
+            else:
+                context[root_name] = None
 
         # Process each field and build the result
         result_parts: list[str] = []
@@ -691,8 +755,25 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
     if model_instance is not None:
         from observant import ObservableProxy
 
-        proxy = ObservableProxy(model_instance, sync=True)
+        # Get undo config from class metadata
+        undo_config = getattr(cls, UNDO_CONFIG_METADATA_KEY, {})
+        undo_enabled = undo_config.get("undo", False)
+        undo_max = undo_config.get("undo_max")
+        undo_debounce_ms = undo_config.get("undo_debounce_ms")
+
+        proxy = ObservableProxy(model_instance, sync=True, undo=undo_enabled)
         widget.proxy = proxy  # type: ignore[attr-defined]
+
+        # Apply per-field undo config if specified
+        if undo_enabled and (undo_max is not None or undo_debounce_ms is not None):
+            # Get all field names from the model
+            for f in fields(model_instance):  # type: ignore[arg-type]
+                config_kwargs: dict[str, Any] = {"enabled": True}
+                if undo_max is not None:
+                    config_kwargs["undo_max"] = undo_max
+                if undo_debounce_ms is not None:
+                    config_kwargs["undo_debounce_ms"] = undo_debounce_ms
+                proxy.set_undo_config(f.name, **config_kwargs)
 
 
 def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None:
