@@ -33,6 +33,7 @@ from qtpie.factories.make import (
     GridTuple,
 )
 from qtpie.factories.spacer import SPACER_METADATA_KEY, SpacerConfig
+from qtpie.state import get_state_observable, get_state_proxy, is_state_descriptor
 
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
@@ -104,6 +105,10 @@ def widget[T](
 
             # Manually set dataclass fields (with default_factory support)
             for f in fields(cls):  # type: ignore[arg-type]
+                # Skip state() fields - they're handled by the descriptor
+                if f.default is not MISSING and is_state_descriptor(f.default):
+                    continue
+
                 if f.name in kwargs:
                     setattr(self, f.name, kwargs[f.name])
                 elif f.default is not MISSING:
@@ -267,13 +272,15 @@ def _call_if_exists(obj: object, method_name: str, *args: object) -> None:
 def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
     """Process data bindings from make() metadata.
 
-    Supports two forms of bind paths:
+    Supports three forms of bind paths:
+    - State field: bind="count" → binds to state(0) field on self
     - Short form: bind="name" or bind="address.city" → uses self.proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
 
-    Smart detection: if the first segment of the path is a field on self
-    that has an observable_for_path method (i.e., is an ObservableProxy),
-    it's treated as explicit. Otherwise, the path is relative to self.proxy.
+    Smart detection order:
+    1. Check if bind path (without dots) is a state field on self
+    2. Check if first segment is an ObservableProxy field
+    3. Otherwise, treat as path relative to self.proxy
     """
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
@@ -288,15 +295,48 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
         if widget_instance is None:
             continue
 
-        # Smart detection: check if first segment is an ObservableProxy field
-        parts = bind_path.split(".", 1)
-        first_segment = parts[0]
+        # Get the property to bind to
+        bind_prop = f.metadata.get(BIND_PROP_METADATA_KEY)
+        if bind_prop is None:
+            bind_prop = get_binding_registry().get_default_prop(widget_instance)
 
+        # Parse path for detection (normalize ?. to . just for splitting)
+        normalized_for_split = bind_path.replace("?.", ".")
+        parts = normalized_for_split.split(".", 1)
+        first_segment = parts[0]
+        has_nested_path = len(parts) > 1
+
+        # Check 1: Is this a state field?
+        # Access the field to trigger observable creation (lazy initialization)
+        try:
+            _ = getattr(widget, first_segment)
+        except AttributeError:
+            pass
+
+        if not has_nested_path:
+            # Simple state field: bind="count"
+            state_observable = get_state_observable(widget, bind_path)
+            if state_observable is not None:
+                bind(state_observable, widget_instance, bind_prop)
+                continue
+        else:
+            # Check if first segment is a state field with nested path: bind="dog.name"
+            state_proxy = get_state_proxy(widget, first_segment)
+            if state_proxy is not None:
+                # Get the nested path (everything after the first segment)
+                nested_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
+                if nested_path:
+                    observable = state_proxy.observable_for_path(nested_path)
+                    bind(observable, widget_instance, bind_prop)
+                    continue
+
+        # Check 2: Is first segment an ObservableProxy field?
         potential_proxy = getattr(widget, first_segment, None)
         if potential_proxy is not None and hasattr(potential_proxy, "observable_for_path"):
             # Explicit path: first segment is a proxy field (e.g., "other_proxy.name")
             proxy_field_name = first_segment
-            observable_path = parts[1] if len(parts) > 1 else ""
+            # Use original path with ?. intact, minus the first segment
+            observable_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
         else:
             # Short form: use default "proxy" field (e.g., "name" or "address.city")
             proxy_field_name = "proxy"
@@ -318,11 +358,6 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
 
         # Get the observable for the path
         observable = proxy.observable_for_path(observable_path)
-
-        # Get the property to bind to
-        bind_prop = f.metadata.get(BIND_PROP_METADATA_KEY)
-        if bind_prop is None:
-            bind_prop = get_binding_registry().get_default_prop(widget_instance)
 
         # Create the binding
         bind(observable, widget_instance, bind_prop)

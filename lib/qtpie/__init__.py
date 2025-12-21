@@ -10,6 +10,7 @@ from qtpie.decorators.window import window
 from qtpie.factories.make import make, make_later
 from qtpie.factories.separator import separator
 from qtpie.factories.spacer import spacer
+from qtpie.state import state
 from qtpie.styles import (
     ColorScheme,
     enable_dark_mode,
@@ -36,6 +37,7 @@ __all__ = [
     "separator",
     "set_color_scheme",
     "spacer",
+    "state",
     "widget",
     "window",
 ]

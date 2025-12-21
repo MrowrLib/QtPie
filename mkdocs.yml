@@ -1,0 +1,92 @@
+site_name: QtPie
+site_description: Declarative UI for Qt/PySide6 in Python
+site_url: https://mrowrlib.github.io/QtPie
+
+repo_name: MrowrLib/QtPie
+repo_url: https://github.com/MrowrLib/QtPie
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Fira Code
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: start/install.md
+      - Hello World: start/hello-world.md
+      - Key Concepts: start/concepts.md
+  - Basics:
+      - Widgets: basics/widgets.md
+      - Layouts: basics/layouts.md
+      - Signals: basics/signals.md
+      - Styling: basics/styling.md
+      - Data Binding: basics/binding.md
+  - Guides:
+      - Windows & Menus: guides/windows-menus.md
+      - Form Layouts: guides/forms.md
+      - Grid Layouts: guides/grids.md
+      - Model Widgets: guides/model-widgets.md
+      - SCSS Hot Reload: guides/scss.md
+      - App & Entry Points: guides/app.md
+      - Testing: guides/testing.md
+  - Reference:
+      - Decorators:
+          - "@widget": reference/decorators/widget.md
+          - "@window": reference/decorators/window.md
+          - "@menu": reference/decorators/menu.md
+          - "@action": reference/decorators/action.md
+          - "@entry_point": reference/decorators/entry-point.md
+      - Factories:
+          - "make()": reference/factories/make.md
+          - "make_later()": reference/factories/make-later.md
+          - "stretch()": reference/factories/stretch.md
+          - "separator()": reference/factories/separator.md
+      - Bindings:
+          - "bind()": reference/bindings/bind.md
+          - "register_binding()": reference/bindings/register.md
+          - "Widget[T]": reference/bindings/widget-base.md
+      - Styles:
+          - Class Helpers: reference/styles/class-helpers.md
+          - Color Schemes: reference/styles/color-schemes.md
+      - App:
+          - App Class: reference/app/app.md
+          - "run_app()": reference/app/run-app.md
+  - Examples: examples.md
