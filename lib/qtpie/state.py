@@ -1,16 +1,16 @@
-"""Reactive state for widget fields."""
+"""Reactive state for widget fields - powered by ObservableProxy."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast, overload
 
 from observant import Observable, ObservableProxy
 
-# Metadata key to identify state descriptors
-STATE_OBSERVABLE_ATTR = "_qtpie_state_observables"
+# Metadata key to identify state proxies on instances
 STATE_PROXY_ATTR = "_qtpie_state_proxies"
 
-# Primitive types that don't need ObservableProxy
+# Primitive types that need wrapping in a container
 _PRIMITIVE_TYPES = (int, float, str, bool, bytes, type(None))
 
 
@@ -19,60 +19,60 @@ def _is_primitive(value: Any) -> bool:
     return isinstance(value, _PRIMITIVE_TYPES)
 
 
+@dataclass
+class _PrimitiveContainer[T]:
+    """Container for primitive values so they can be wrapped with ObservableProxy."""
+
+    value: T
+
+
 class ReactiveDescriptor[T]:
     """
-    Descriptor that makes a field reactive.
+    Descriptor that makes a field reactive using ObservableProxy.
 
     When accessed, returns the actual value (e.g., int, str, Dog).
     When assigned, updates the value and notifies observers.
 
-    For object types (non-primitives), internally uses ObservableProxy
-    to support nested path bindings like "dog.name".
+    All values are backed by ObservableProxy:
+    - Primitives (int, str, etc.) are wrapped in _PrimitiveContainer
+    - Objects (dataclasses, etc.) are wrapped directly
     """
 
     def __init__(self, default: T | None = None) -> None:
         self.default = default
         self.name: str = ""
-        self.private_name: str = ""
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
-        self.private_name = f"_state_{name}"
 
-    def _get_observable(self, obj: object) -> Observable[T]:
-        """Get or create the observable for this field on the instance."""
-        observables: dict[str, Observable[Any]] = getattr(obj, STATE_OBSERVABLE_ATTR, None) or {}
-        if not hasattr(obj, STATE_OBSERVABLE_ATTR):
-            setattr(obj, STATE_OBSERVABLE_ATTR, observables)
-
-        if self.name not in observables:
-            # Create observable with initial value
-            initial = getattr(obj, self.private_name, self.default)
-            observables[self.name] = Observable(initial)
-
-        return observables[self.name]
-
-    def get_proxy(self, obj: object) -> ObservableProxy[T] | None:
-        """Get or create an ObservableProxy for object types.
-
-        Used by the widget decorator for nested path bindings.
-        """
-        value = self._get_observable(obj).get()
-
-        # Only create proxy for non-primitive values
-        if value is None or _is_primitive(value):
-            return None
-
+    def get_proxy(self, obj: object) -> ObservableProxy[Any]:
+        """Get or create the ObservableProxy for this field on the instance."""
         proxies: dict[str, ObservableProxy[Any]] = getattr(obj, STATE_PROXY_ATTR, None) or {}
         if not hasattr(obj, STATE_PROXY_ATTR):
             setattr(obj, STATE_PROXY_ATTR, proxies)
 
-        # Create proxy if it doesn't exist
-        # Note: The proxy cache is invalidated in __set__ when the value changes
         if self.name not in proxies:
-            proxies[self.name] = ObservableProxy(value, sync=True)
+            if _is_primitive(self.default):
+                # Wrap primitive in container
+                container = _PrimitiveContainer(self.default)
+                proxies[self.name] = ObservableProxy(container, sync=True)
+            else:
+                # Wrap object directly
+                proxies[self.name] = ObservableProxy(self.default, sync=True)
 
         return proxies[self.name]
+
+    def get_observable(self, obj: object) -> Observable[T]:
+        """Get the observable for this field's value."""
+        proxy = self.get_proxy(obj)
+        if _is_primitive(self.default):
+            # For primitives, the value is in container.value
+            return cast(Observable[T], proxy.observable(object, "value"))
+        else:
+            # For objects, we need the observable that tracks the whole object
+            # ObservableProxy doesn't expose this directly, so we use a workaround:
+            # Create a "virtual" observable that wraps get/set on the proxy's internal model
+            return cast(Observable[T], _ObjectObservable(proxy, self.name, obj))
 
     @overload
     def __get__(self, obj: None, objtype: type | None = None) -> ReactiveDescriptor[T]: ...
@@ -83,14 +83,53 @@ class ReactiveDescriptor[T]:
     def __get__(self, obj: object | None, objtype: type | None = None) -> T | ReactiveDescriptor[T]:
         if obj is None:
             return self
-        return self._get_observable(obj).get()
+        proxy = self.get_proxy(obj)
+        if _is_primitive(self.default):
+            return cast(T, proxy.observable(object, "value").get())
+        else:
+            # For objects, return the proxied object itself
+            return cast(T, proxy.get())
 
     def __set__(self, obj: object, value: T) -> None:
-        self._get_observable(obj).set(value)
-        # Invalidate proxy cache when value changes
-        proxies = getattr(obj, STATE_PROXY_ATTR, None)
-        if proxies and self.name in proxies:
-            del proxies[self.name]
+        proxies: dict[str, ObservableProxy[Any]] = getattr(obj, STATE_PROXY_ATTR, None) or {}
+
+        if _is_primitive(self.default):
+            proxy = self.get_proxy(obj)
+            proxy.observable(object, "value").set(value)
+        else:
+            # For objects, replace the entire proxy with a new one
+            proxies[self.name] = ObservableProxy(value, sync=True)
+            if not hasattr(obj, STATE_PROXY_ATTR):
+                setattr(obj, STATE_PROXY_ATTR, proxies)
+
+
+class _ObjectObservable[T]:
+    """
+    Observable wrapper for object-type state fields.
+
+    This provides an Observable-like interface for the whole object,
+    allowing subscriptions to be notified when the object is replaced.
+    """
+
+    def __init__(self, proxy: ObservableProxy[T], field_name: str, widget: object) -> None:
+        self._proxy = proxy
+        self._field_name = field_name
+        self._widget = widget
+        self._callbacks: list[Any] = []
+
+    def get(self) -> T:
+        return self._proxy.get()
+
+    def set(self, value: T) -> None:
+        # Replace the proxy entirely
+        proxies: dict[str, ObservableProxy[Any]] = getattr(self._widget, STATE_PROXY_ATTR, {})
+        proxies[self._field_name] = ObservableProxy(value, sync=True)
+        # Notify callbacks
+        for cb in self._callbacks:
+            cb(value)
+
+    def on_change(self, callback: Any) -> None:
+        self._callbacks.append(callback)
 
 
 class _SubscriptedState[T]:
@@ -156,10 +195,12 @@ def get_state_observable(obj: object, field_name: str) -> Observable[Any] | None
     Returns:
         The Observable for the field, or None if not a state field
     """
-    observables = getattr(obj, STATE_OBSERVABLE_ATTR, None)
-    if observables is None:
+    # Get the descriptor from the class
+    descriptor = getattr(type(obj), field_name, None)
+    if not isinstance(descriptor, ReactiveDescriptor):
         return None
-    return observables.get(field_name)
+
+    return cast(Observable[Any], descriptor.get_observable(obj))
 
 
 def get_state_proxy(obj: object, field_name: str) -> ObservableProxy[object] | None:
@@ -173,16 +214,25 @@ def get_state_proxy(obj: object, field_name: str) -> ObservableProxy[object] | N
         field_name: The name of the state field
 
     Returns:
-        The ObservableProxy for the field, or None if not a state field or primitive
+        The ObservableProxy for the field, or None if not a state field
     """
-    # First, get the descriptor from the class
+    # Get the descriptor from the class
     descriptor = getattr(type(obj), field_name, None)
     if not isinstance(descriptor, ReactiveDescriptor):
         return None
 
-    # Use the descriptor's method to get/create the proxy
-    # Cast needed because ReactiveDescriptor is generic and we lose type info via getattr
-    return cast(ObservableProxy[object] | None, descriptor.get_proxy(obj))
+    # For primitives wrapped in container, the proxy is on the container
+    # For nested paths, caller will use observable_for_path which needs the raw object proxy
+    proxy = descriptor.get_proxy(obj)
+
+    # If it's a primitive (wrapped in container), nested paths don't make sense
+    # But we still return the proxy - caller can decide what to do
+    # Cast descriptor to get proper typing (getattr returns Unknown for generic descriptors)
+    typed_descriptor = cast(ReactiveDescriptor[object], descriptor)
+    if _is_primitive(typed_descriptor.default):
+        return None  # Nested paths don't work on primitives
+
+    return cast(ObservableProxy[object], proxy)
 
 
 def is_state_descriptor(value: object) -> bool:
