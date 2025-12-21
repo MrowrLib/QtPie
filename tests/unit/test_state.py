@@ -600,3 +600,187 @@ class TestFormatStringBinding:
 
         w.dog = Dog(name="Fido")
         assert_that(w.label.text()).is_equal_to("Dog #2: Fido")
+
+    def test_format_binding_nested_path_two_way(self, qt: QtDriver) -> None:
+        """Format binding should update when nested property changes via two-way binding."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @widget
+        class DogEditor(QWidget):
+            dog: Dog = state(Dog(name="Buddy"))
+            name_edit: QLineEdit = make(QLineEdit, bind="dog.name")
+            label: QLabel = make(QLabel, bind="Hello, {dog.name}!")
+
+        w = DogEditor()
+        qt.track(w)
+
+        # Initial
+        assert_that(w.label.text()).is_equal_to("Hello, Buddy!")
+        assert_that(w.name_edit.text()).is_equal_to("Buddy")
+
+        # Change via the QLineEdit (two-way binding)
+        w.name_edit.setText("Max")
+        assert_that(w.dog.name).is_equal_to("Max")
+        assert_that(w.label.text()).is_equal_to("Hello, Max!")
+
+
+class TestExpressionBinding:
+    """Tests for expression bindings like bind='{count + 5}'."""
+
+    def test_simple_math_expression(self, qt: QtDriver) -> None:
+        """bind='{count + 5}' should evaluate the expression."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="{count + 5}")
+
+        w = Counter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("5")
+
+        w.count = 10
+        assert_that(w.label.text()).is_equal_to("15")
+
+    def test_expression_with_text(self, qt: QtDriver) -> None:
+        """bind='Count plus 5 -> {count + 5}' with surrounding text."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="Count plus 5 -> {count + 5}")
+
+        w = Counter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Count plus 5 -> 5")
+
+        w.count = 7
+        assert_that(w.label.text()).is_equal_to("Count plus 5 -> 12")
+
+    def test_expression_with_format_spec(self, qt: QtDriver) -> None:
+        """bind='{price * 1.1:.2f}' with format spec."""
+
+        @widget
+        class PriceDisplay(QWidget):
+            price: float = state(10.0)
+            label: QLabel = make(QLabel, bind="Total: ${price * 1.1:.2f}")
+
+        w = PriceDisplay()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Total: $11.00")
+
+        w.price = 99.99
+        assert_that(w.label.text()).is_equal_to("Total: $109.99")
+
+    def test_method_call_expression(self, qt: QtDriver) -> None:
+        """bind='{name.upper()}' with method call."""
+
+        @widget
+        class NameDisplay(QWidget):
+            name: str = state("hello")
+            label: QLabel = make(QLabel, bind="{name.upper()}")
+
+        w = NameDisplay()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("HELLO")
+
+        w.name = "world"
+        assert_that(w.label.text()).is_equal_to("WORLD")
+
+    def test_nested_path_with_method(self, qt: QtDriver) -> None:
+        """bind='{dog.name.upper()}' with nested path and method."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @widget
+        class DogDisplay(QWidget):
+            dog: Dog = state(Dog(name="buddy"))
+            label: QLabel = make(QLabel, bind="{dog.name.upper()}")
+
+        w = DogDisplay()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("BUDDY")
+
+        w.dog = Dog(name="max")
+        assert_that(w.label.text()).is_equal_to("MAX")
+
+    def test_ternary_expression(self, qt: QtDriver) -> None:
+        """bind='{count if count > 0 else 'none'}' with ternary."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="{count if count > 0 else 'none'}")
+
+        w = Counter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("none")
+
+        w.count = 5
+        assert_that(w.label.text()).is_equal_to("5")
+
+        w.count = 0
+        assert_that(w.label.text()).is_equal_to("none")
+
+    def test_multiple_variables_in_expression(self, qt: QtDriver) -> None:
+        """bind='{a + b}' with multiple variables."""
+
+        @widget
+        class Calculator(QWidget):
+            a: int = state(10)
+            b: int = state(20)
+            label: QLabel = make(QLabel, bind="{a} + {b} = {a + b}")
+
+        w = Calculator()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("10 + 20 = 30")
+
+        w.a = 5
+        assert_that(w.label.text()).is_equal_to("5 + 20 = 25")
+
+        w.b = 3
+        assert_that(w.label.text()).is_equal_to("5 + 3 = 8")
+
+    def test_builtin_functions(self, qt: QtDriver) -> None:
+        """bind='{len(name)}' with builtin functions."""
+
+        @widget
+        class LengthDisplay(QWidget):
+            name: str = state("hello")
+            label: QLabel = make(QLabel, bind="Length: {len(name)}")
+
+        w = LengthDisplay()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Length: 5")
+
+        w.name = "goodbye"
+        assert_that(w.label.text()).is_equal_to("Length: 7")
+
+    def test_self_access(self, qt: QtDriver) -> None:
+        """bind='{self.count + 5}' with self reference."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="Value: {self.count + self.count}")
+
+        w = Counter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Value: 0")
+
+        w.count = 10
+        assert_that(w.label.text()).is_equal_to("Value: 20")

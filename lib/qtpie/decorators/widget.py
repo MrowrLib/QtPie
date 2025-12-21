@@ -1,5 +1,6 @@
 """The @widget decorator - transforms classes into Qt widgets with automatic layout."""
 
+import ast
 import string
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
@@ -275,19 +276,58 @@ def _is_format_string(bind_path: str) -> bool:
     return "{" in bind_path and "}" in bind_path
 
 
-def _parse_format_fields(format_string: str) -> list[str]:
-    """Extract field names from a format string using string.Formatter.
+def _extract_ast_names(expr: str) -> set[str]:
+    """Extract all variable names from a Python expression using AST.
 
-    Example: "Count: {count}" → ["count"]
-    Example: "{first} {last}" → ["first", "last"]
-    Example: "Dog: {dog.name}" → ["dog.name"]
+    Only returns top-level names (for 'dog.name', returns 'dog').
+
+    Example: "count + 5" → {"count"}
+    Example: "dog.name.upper()" → {"dog"}
+    Example: "x + y * z" → {"x", "y", "z"}
+    Example: "len(name)" → {"name"}
+    """
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError:
+        return set()
+
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+    return names
+
+
+def _is_simple_name(expr: str) -> bool:
+    """Check if expression is a simple name or dotted path (no operators/calls)."""
+    # Simple name: "count" or "dog.name" or "dog?.name"
+    normalized = expr.replace("?.", ".")
+    return all(part.isidentifier() for part in normalized.split("."))
+
+
+@dataclass
+class _FormatField:
+    """A parsed field from a format string."""
+
+    expression: str  # The expression: "count", "count + 5", "name.upper()"
+    format_spec: str  # Format spec: "", ".2f", etc.
+    is_expression: bool  # True if it's more than a simple name/path
+
+
+def _parse_format_fields(format_string: str) -> list[_FormatField]:
+    """Extract fields from a format string using string.Formatter.
+
+    Example: "Count: {count}" → [_FormatField("count", "", False)]
+    Example: "{price * 1.1:.2f}" → [_FormatField("price * 1.1", ".2f", True)]
+    Example: "{name.upper()}" → [_FormatField("name.upper()", "", True)]
     """
     formatter = string.Formatter()
-    field_names: list[str] = []
-    for _, field_name, _, _ in formatter.parse(format_string):
+    fields: list[_FormatField] = []
+    for _, field_name, format_spec, _ in formatter.parse(format_string):
         if field_name is not None and field_name != "":
-            field_names.append(field_name)
-    return field_names
+            is_expr = not _is_simple_name(field_name)
+            fields.append(_FormatField(field_name, format_spec or "", is_expr))
+    return fields
 
 
 def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
@@ -336,54 +376,152 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
         return result
 
 
+def _get_expression_variable_names(fields: list[_FormatField]) -> set[str]:
+    """Extract all variable names/paths from format fields.
+
+    For simple names like 'count' or 'dog.name', returns the full path.
+    For expressions like 'count + 5', uses AST to find all root names.
+    Filters out Python builtins.
+    """
+    # Common builtins that shouldn't be treated as widget attributes
+    builtins = {
+        "len",
+        "str",
+        "int",
+        "float",
+        "bool",
+        "abs",
+        "min",
+        "max",
+        "sum",
+        "round",
+        "sorted",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "range",
+        "enumerate",
+        "zip",
+        "map",
+        "filter",
+        "any",
+        "all",
+        "True",
+        "False",
+        "None",
+    }
+
+    names: set[str] = set()
+    for field in fields:
+        if field.is_expression:
+            # Use AST to extract names from expression
+            expr_names = _extract_ast_names(field.expression)
+            names.update(expr_names - builtins)
+        else:
+            # Simple name or dotted path - keep the full path for proper observable subscription
+            normalized = field.expression.replace("?.", ".")
+            root = normalized.split(".")[0]
+            if root not in builtins:
+                names.add(normalized)  # Add full path, not just root
+    return names
+
+
 def _process_format_binding(
     widget: QWidget,
     widget_instance: QWidget,
     format_string: str,
     bind_prop: str,
 ) -> bool:
-    """Process a format string binding like 'Count: {count}'.
+    """Process a format string binding like 'Count: {count}' or '{count + 5}'.
+
+    Supports:
+    - Simple names: {count}, {dog.name}
+    - Expressions: {count + 5}, {name.upper()}, {x if x > 0 else 'none'}
+    - Format specs: {price:.2f}, {price * 1.1:.2f}
+    - self reference: {self.count + 5}
 
     Returns True if binding was successful, False otherwise.
     """
     from qtpie.bindings import get_binding_registry
 
-    field_names = _parse_format_fields(format_string)
-    if not field_names:
+    fields = _parse_format_fields(format_string)
+    if not fields:
         return False
 
-    # Collect all observables to subscribe to (may be multiple per field for nested paths)
+    # Extract all variable names/paths we need to observe
+    var_names = _get_expression_variable_names(fields)
+
+    # Handle 'self' specially - we need to observe all state fields
+    uses_self = "self" in var_names
+    var_names.discard("self")
+
+    # Get ROOT names for building eval context (e.g., "dog" from "dog.name")
+    root_names: set[str] = set()
+    for var_name in var_names:
+        root = var_name.split(".")[0]
+        root_names.add(root)
+
+    # Collect all observables to subscribe to
     all_observables: list[Any] = []
-    for field_name in field_names:
-        obs_list = _get_observables_for_field(widget, field_name)
-        if not obs_list:
-            return False  # Can't resolve a field, fall back to normal binding
-        all_observables.extend(obs_list)
+
+    for var_name in var_names:
+        obs_list = _get_observables_for_field(widget, var_name)
+        if obs_list:
+            all_observables.extend(obs_list)
+        # If we can't find observables, still continue - might be a non-state attribute
+
+    # If using 'self', subscribe to ALL state fields on the widget
+    if uses_self:
+        from qtpie.state import ReactiveDescriptor
+
+        for name in dir(type(widget)):
+            descriptor = getattr(type(widget), name, None)
+            if isinstance(descriptor, ReactiveDescriptor):
+                obs_list = _get_observables_for_field(widget, name)
+                all_observables.extend(obs_list)
 
     # Get the adapter for one-way binding
     adapter = get_binding_registry().get(widget_instance, bind_prop)
     if adapter is None or adapter.setter is None:
         return False
 
-    # Build format string with indexed placeholders (Python interprets {dog.name} as attribute access)
-    indexed_format = format_string
-    for i, name in enumerate(field_names):
-        indexed_format = indexed_format.replace("{" + name + "}", "{" + str(i) + "}")
-
-    # Build the compute function - gets fresh values each time
+    # Build the compute function
     def compute() -> str:
-        values_list: list[Any] = []
-        for field_name in field_names:
-            # Get fresh value by traversing the path
-            normalized = field_name.replace("?.", ".")
-            parts = normalized.split(".")
-            value: Any = getattr(widget, parts[0], None)
-            for part in parts[1:]:
-                if value is None:
-                    break
-                value = getattr(value, part, None)
-            values_list.append(value)
-        return indexed_format.format(*values_list)
+        # Build context with current values (use ROOT names for getattr)
+        context: dict[str, Any] = {"self": widget}
+
+        # Add all variable values to context using root names
+        for root_name in root_names:
+            value = getattr(widget, root_name, None)
+            context[root_name] = value
+
+        # Process each field and build the result
+        result_parts: list[str] = []
+
+        formatter = string.Formatter()
+        for literal_text, field_name, format_spec, _ in formatter.parse(format_string):
+            result_parts.append(literal_text)
+
+            if field_name is not None and field_name != "":
+                # Evaluate the expression
+                try:
+                    value = eval(field_name, {"__builtins__": __builtins__}, context)
+                except Exception:
+                    value = f"<error: {field_name}>"
+
+                # Apply format spec if present
+                if format_spec:
+                    try:
+                        value = format(value, format_spec)
+                    except Exception:
+                        value = str(value)
+                else:
+                    value = str(value)
+
+                result_parts.append(value)
+
+        return "".join(result_parts)
 
     # Set initial value
     setter = adapter.setter
