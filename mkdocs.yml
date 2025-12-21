@@ -58,12 +58,18 @@ nav:
       - Layouts: basics/layouts.md
       - Signals: basics/signals.md
       - Styling: basics/styling.md
-      - Data Binding: basics/binding.md
+  - Data & Forms:
+      - Reactive State: data/state.md
+      - Format Expressions: data/format.md
+      - Model Widgets: data/model-widgets.md
+      - Validation: data/validation.md
+      - Dirty Tracking: data/dirty.md
+      - Undo & Redo: data/undo.md
+      - Save & Load: data/save-load.md
   - Guides:
       - Windows & Menus: guides/windows-menus.md
       - Form Layouts: guides/forms.md
       - Grid Layouts: guides/grids.md
-      - Model Widgets: guides/model-widgets.md
       - SCSS Hot Reload: guides/scss.md
       - App & Entry Points: guides/app.md
       - Testing: guides/testing.md
@@ -77,6 +83,7 @@ nav:
       - Factories:
           - "make()": reference/factories/make.md
           - "make_later()": reference/factories/make-later.md
+          - "state()": reference/factories/state.md
           - "stretch()": reference/factories/stretch.md
           - "separator()": reference/factories/separator.md
       - Bindings:

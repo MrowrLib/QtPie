@@ -460,12 +460,199 @@ tests/
 
 ---
 
+## Phase 10: Reactive State & Advanced Bindings ✅ COMPLETE
+
+**Goal**: Local reactive state and powerful format string bindings.
+
+### Accomplished
+
+#### Reactive State Fields (`state()`)
+
+- [x] `state()` descriptor for reactive widget-local state
+- [x] Type inferred from default value: `count: int = state(0)`
+- [x] Explicit type syntax: `dog: Dog | None = state[Dog | None]()`
+- [x] Works with primitives (int, str, bool, float) and objects (dataclasses)
+- [x] Automatic widget binding: `bind="count"` syncs with state field
+- [x] Nested path binding: `bind="dog.name"` for object state fields
+- [x] Assignment triggers reactive updates: `self.count += 1` updates bound widgets
+
+#### Format String Bindings
+
+- [x] Format strings in bind: `bind="Count: {count}"`
+- [x] Multiple fields: `bind="{name}, age {age}"`
+- [x] Nested paths: `bind="Owner: {dog.name}"`
+- [x] Python expressions: `bind="{count + 5}"`, `bind="{name.upper()}"`
+- [x] Conditionals: `bind="{x if x > 0 else 'none'}"`
+- [x] Format specs: `bind="{price:.2f}"`, `bind="{value:04d}"`
+- [x] Self reference: `bind="{self.count + self.offset}"`
+- [x] Works with Widget[T] model fields
+- [x] **Smart field resolution**: `{name}` prefers model field over widget when names match
+
+#### Tests
+
+- [x] 17 tests for state() fields
+- [x] 3 tests for format string bindings with Widget[T]
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
+
+### API Design
+
+```python
+from qtpie import widget, make, state, Widget
+
+# Local reactive state
+@widget
+class Counter(QWidget):
+    count: int = state(0)
+    label: QLabel = make(QLabel, bind="Count: {count}")
+    button: QPushButton = make(QPushButton, "+1", clicked="increment")
+
+    def increment(self) -> None:
+        self.count += 1  # Label auto-updates!
+
+# Object state with nested binding
+@dataclass
+class Dog:
+    name: str = ""
+    age: int = 0
+
+@widget
+class DogCard(QWidget):
+    dog: Dog = state(Dog())
+    info: QLabel = make(QLabel, bind="{dog.name}, age {dog.age}")
+
+# Format bindings with Widget[T] - names can match!
+@widget
+class DogEditor(QWidget, Widget[Dog]):
+    name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
+    age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
+    info: QLabel = make(QLabel, bind="Name: {name}, Age: {age}")  # uses model values!
+```
+
+### Files Created/Modified
+
+```
+lib/qtpie/
+├── __init__.py              # Added: state export
+├── state.py                 # NEW: state(), ReactiveDescriptor, helpers
+└── decorators/
+    └── widget.py            # Format binding, state field detection
+
+tests/unit/
+├── test_state.py            # state() tests
+└── test_widget_observant_features.py  # Format binding with Widget[T]
+```
+
+---
+
+## Phase 11: Observant Integration (Validation, Dirty, Undo, Save/Load) ✅ COMPLETE
+
+**Goal**: Integrate Observant library features into Widget[T] with a delightful API.
+
+### Accomplished
+
+#### @widget Decorator Options
+
+- [x] `undo=True` - enable undo/redo for model fields
+- [x] `undo_max=50` - maximum undo history depth
+- [x] `undo_debounce_ms=500` - debounce rapid changes
+- [x] `auto_bind=True` (default) - auto-bind widget fields to model by name
+- [x] `auto_bind=False` - disable automatic binding
+
+#### Validation (delegate to `self.proxy`)
+
+- [x] `add_validator(field, validator)` - add validation rule
+- [x] `is_valid()` - Observable[bool] for all validators
+- [x] `validation_for(field)` - Observable list of errors for field
+- [x] `validation_errors()` - ObservableDict of all errors
+
+#### Dirty Tracking (delegate to `self.proxy`)
+
+- [x] `is_dirty()` - True if any field modified
+- [x] `dirty_fields()` - set of modified field names
+- [x] `reset_dirty()` - mark current values as baseline
+
+#### Undo/Redo (delegate to `self.proxy`)
+
+- [x] `undo(field)` - undo last change
+- [x] `redo(field)` - redo last undone change
+- [x] `can_undo(field)` - check if undo available
+- [x] `can_redo(field)` - check if redo available
+
+#### Save/Load (delegate to `self.proxy`)
+
+- [x] `save_to(target)` - copy proxy values to model instance
+- [x] `load_dict(data)` - load values from dictionary
+
+#### Tests
+
+- [x] 16 tests for Observant features
+- [x] 316 total tests
+- [x] 0 pyright errors (strict mode)
+- [x] 0 ruff errors
+
+### API Design
+
+```python
+from dataclasses import dataclass
+from qtpie import widget, make, Widget
+
+@dataclass
+class User:
+    name: str = ""
+    email: str = ""
+    age: int = 0
+
+@widget(undo=True, undo_max=50)
+class UserEditor(QWidget, Widget[User]):
+    name: QLineEdit = make(QLineEdit)
+    email: QLineEdit = make(QLineEdit)
+    age: QSpinBox = make(QSpinBox)
+
+    save_btn: QPushButton = make(QPushButton, "Save")
+    undo_btn: QPushButton = make(QPushButton, "Undo")
+
+    def setup(self) -> None:
+        # Validation
+        self.add_validator("name", lambda v: "Required" if not v else None)
+        self.add_validator("email", lambda v: "Invalid" if "@" not in v else None)
+        self.add_validator("age", lambda v: "Must be 18+" if v < 18 else None)
+
+        # Enable save only when valid
+        self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
+
+    def on_undo_clicked(self) -> None:
+        if self.can_undo("name"):
+            self.undo("name")
+
+    def on_save_clicked(self) -> None:
+        if self.is_valid().get():
+            self.save_to(self.model)  # Copy to original model
+            self.reset_dirty()         # Mark as clean
+
+    def on_load_clicked(self) -> None:
+        self.load_dict({"name": "Alice", "email": "alice@example.com", "age": 30})
+```
+
+### Files Modified
+
+```
+lib/qtpie/
+├── widget_base.py           # Delegate methods for validation, dirty, undo, save/load
+└── decorators/
+    └── widget.py            # undo, undo_max, undo_debounce_ms, auto_bind options
+
+tests/unit/
+└── test_widget_observant_features.py  # Validation, dirty, undo, save/load tests
+```
+
+---
+
 ## Future Ideas (Backlog)
 
 - [ ] QML-like declarative syntax (if Python ever gets macros...)
 - [ ] Visual designer integration
 - [ ] State machines for complex UI flows
-- [ ] Undo/redo framework integration
 - [ ] Drag and drop helpers
 - [ ] Internationalization helpers
 - [ ] Accessibility helpers
@@ -477,16 +664,18 @@ tests/
 
 ## Current Status
 
-| Phase                      | Status      |
-| -------------------------- | ----------- |
-| Phase 1: Core Foundation   | ✅ Complete |
-| Phase 2: Layout Extensions | ✅ Complete |
-| Phase 3: @window           | ✅ Complete |
-| Phase 4: @menu/@action     | ✅ Complete |
-| Phase 5: Data Binding      | ✅ Complete |
-| Phase 6: Widget Base Class | ✅ Complete |
-| Phase 7: Pre-built Widgets | Planned     |
-| Phase 8: Styling           | ✅ Complete |
-| Phase 9: App Class         | ✅ Complete |
+| Phase                                  | Status      |
+| -------------------------------------- | ----------- |
+| Phase 1: Core Foundation               | ✅ Complete |
+| Phase 2: Layout Extensions             | ✅ Complete |
+| Phase 3: @window                       | ✅ Complete |
+| Phase 4: @menu/@action                 | ✅ Complete |
+| Phase 5: Data Binding                  | ✅ Complete |
+| Phase 6: Widget Base Class             | ✅ Complete |
+| Phase 7: Pre-built Widgets             | Planned     |
+| Phase 8: Styling                       | ✅ Complete |
+| Phase 9: App Class                     | ✅ Complete |
+| Phase 10: Reactive State & Bindings    | ✅ Complete |
+| Phase 11: Observant Integration        | ✅ Complete |
 
-**Total tests:** 248
+**Total tests:** 316
