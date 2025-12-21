@@ -27,7 +27,7 @@
 ### Files Created
 
 ```
-qtpie/
+lib/qtpie/
 ├── __init__.py
 ├── decorators/
 │   ├── __init__.py
@@ -36,7 +36,7 @@ qtpie/
     ├── __init__.py
     └── make.py
 
-tests/test_qtpie/
+tests/unit/
 ├── __init__.py
 ├── test_widget_decorator.py
 └── test_make_factory.py
@@ -54,11 +54,8 @@ tests/test_qtpie/
 - [x] `form_label` parameter in `make()` for form row labels
 - [x] `layout="grid"` creates QGridLayout
 - [x] `grid` parameter in `make()` for positioning: `(row, col)` or `(row, col, rowspan, colspan)`
-- [x] Stretch support: `_stretch` fields (int type)
+- [x] `stretch()` factory for spacers in box layouts
 - [x] Auto-add "form" class to form layout widgets
-- [x] 18 new tests (48 total)
-- [x] 0 pyright errors (strict mode)
-- [x] 0 ruff errors
 
 ### API Design
 
@@ -83,7 +80,7 @@ class Calculator(QWidget):
 @widget(layout="vertical")
 class ToolPanel(QWidget):
     toolbar: QWidget = make(QWidget)
-    _stretch1: int = 1  # pushes content to bottom
+    spacer: QSpacerItem = stretch(1)  # pushes content to bottom
     content: QWidget = make(QWidget)
 ```
 
@@ -142,9 +139,7 @@ class MainWindow(QMainWindow):
 - [x] Auto-connect `on_toggled()` method to toggled signal
 - [x] Auto-add QAction/QMenu fields to parent menu
 - [x] Nested submenus support
-- [x] 29 new tests (96 total)
-- [x] 0 pyright errors (strict mode)
-- [x] 0 ruff errors
+- [x] `separator()` factory for menu separators
 
 ### API Design
 
@@ -188,7 +183,7 @@ class MainWindow(QMainWindow):
   - QSpinBox → value, QDoubleSpinBox → value, QSlider → value, QDial → value
   - QCheckBox → checked, QRadioButton → checked
   - QComboBox → currentText, QProgressBar → value
-- [x] `bind` parameter in `make()`: `bind="proxy.property"`
+- [x] `bind` parameter in `make()`: `bind="property_name"`
 - [x] `bind_prop` parameter to override default property
 - [x] `make_later()` for fields initialized in setup()
 - [x] Observable model integration (observant library)
@@ -213,21 +208,15 @@ class Dog:
     age: int = 0
 
 @widget()
-class DogEditor(QWidget):
-    model: Dog = make(Dog)
-    proxy: ObservableProxy[Dog] = make_later()
-
-    name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
-    age_spin: QSpinBox = make(QSpinBox, bind="proxy.age")
-
-    def setup(self) -> None:
-        self.proxy = ObservableProxy(self.model, sync=True)
+class DogEditor(QWidget, Widget[Dog]):
+    name_edit: QLineEdit = make(QLineEdit, bind="name")
+    age_spin: QSpinBox = make(QSpinBox, bind="age")
 ```
 
 ### Files Created/Modified
 
 ```
-qtpie/
+lib/qtpie/
 ├── __init__.py              # Added: bind, make_later, register_binding
 ├── bindings/                # NEW MODULE
 │   ├── __init__.py
@@ -238,8 +227,8 @@ qtpie/
 └── decorators/
     └── widget.py            # Added: _process_bindings()
 
-tests/test_qtpie/
-└── test_bindings.py         # 18 binding tests
+tests/unit/
+└── test_bindings.py         # Binding tests
 ```
 
 ---
@@ -309,7 +298,7 @@ class PersonEditor(QWidget, Widget[Person]):
 ### Files Created/Modified
 
 ```
-qtpie/
+lib/qtpie/
 ├── __init__.py              # Added: Widget, ModelWidget exports
 ├── widget_base.py           # NEW: Widget[T] base class + helper functions
 ├── factories/
@@ -317,8 +306,8 @@ qtpie/
 └── decorators/
     └── widget.py            # Added: _process_model_widget(), _process_model_widget_auto_bindings()
 
-tests/test_qtpie/
-└── test_model_widget.py     # NEW: 16 Widget tests
+tests/unit/
+└── test_model_widget.py     # Widget tests
 ```
 
 ---
@@ -338,43 +327,59 @@ tests/test_qtpie/
 
 ---
 
-## Phase 8: Styling System
+## Phase 8: Styling System ✅ COMPLETE
 
 **Goal**: SCSS-based styling with hot reload.
 
-### TODO
+### Accomplished
 
-- [ ] SCSS → QSS compilation
-- [ ] CSS class selectors: `.card`, `.primary`, `.danger`
-- [ ] Class inheritance/composition
-- [ ] Theme variables
-- [ ] Hot reload in dev mode
-- [ ] `add_class()`, `remove_class()`, `toggle_class()` helpers
-- [ ] Tests for styling
+- [x] SCSS → QSS compilation
+- [x] CSS class selectors via Qt properties
+- [x] Hot reload with file system watcher
+- [x] `add_class()`, `remove_class()`, `toggle_class()`, `has_class()` helpers
+- [x] `enable_dark_mode()`, `enable_light_mode()`, `set_color_scheme()`
+- [x] Stylesheet loading and watching
+- [x] Tests for styling
 
 ### API Design
 
 ```python
-# styles/main.scss
-$primary: #3b82f6;
-$danger: #ef4444;
+from qtpie import widget, make, enable_dark_mode
+from qtpie.styles import add_class, remove_class, toggle_class
 
-.card {
-    background: white;
-    border-radius: 8px;
-    padding: 16px;
-}
-
-.btn-primary {
-    background: $primary;
-    color: white;
-}
+# Enable dark mode
+enable_dark_mode()
 
 # Usage
 @widget(classes=["card"])
 class MyCard(QWidget):
-    title: QLabel = make(QLabel, "Title", classes=["heading"])
-    action: QPushButton = make(QPushButton, "Go", classes=["btn-primary"])
+    title: QLabel = make(QLabel, "Title")
+    action: QPushButton = make(QPushButton, "Go")
+
+    def highlight(self) -> None:
+        add_class(self, "highlighted")
+
+    def toggle_active(self) -> None:
+        toggle_class(self.action, "active")
+```
+
+### Files Created/Modified
+
+```
+lib/qtpie/
+├── styles/
+│   ├── __init__.py          # Exports class helpers and color scheme
+│   ├── classes.py           # add_class, remove_class, toggle_class, etc.
+│   ├── color_scheme.py      # Dark/light mode helpers
+│   ├── compiler.py          # SCSS compilation
+│   ├── loader.py            # Stylesheet loading
+│   └── watcher.py           # File system watcher for hot reload
+
+tests/unit/
+├── test_styles_classes.py
+├── test_styles_compiler.py
+├── test_styles_loader.py
+└── test_styles_watcher.py
 ```
 
 ---
@@ -438,18 +443,19 @@ run_app(app)
 ### Files Created/Modified
 
 ```
-qtpie/
+lib/qtpie/
 ├── __init__.py              # Added: App, entry_point, run_app
 ├── app.py                   # NEW: App class and run_app()
 └── decorators/
     └── entry_point.py       # NEW: @entry_point decorator
 
 tests/
-├── conftest.py              # NEW: qapp_cls fixture override (for all tests)
-└── test_qtpie/
-    ├── test_app.py              # NEW: App class tests
-    ├── test_entry_point.py      # NEW: @entry_point unit tests
-    └── test_entry_point_e2e.py  # NEW: subprocess E2E tests
+├── conftest.py              # qapp_cls fixture override
+├── unit/
+│   ├── test_app.py          # App class tests
+│   └── test_entry_point.py  # @entry_point unit tests
+└── e2e/
+    └── test_entry_point_e2e.py  # subprocess E2E tests
 ```
 
 ---
@@ -471,14 +477,16 @@ tests/
 
 ## Current Status
 
-| Phase                      | Status      | Tests |
-| -------------------------- | ----------- | ----- |
-| Phase 1: Core Foundation   | ✅ Complete | 30    |
-| Phase 2: Layout Extensions | ✅ Complete | 48    |
-| Phase 3: @window           | ✅ Complete | 67    |
-| Phase 4: @menu/@action     | ✅ Complete | 96    |
-| Phase 5: Data Binding      | ✅ Complete | 127   |
-| Phase 6: Widget Base Class | ✅ Complete | 149   |
-| Phase 7: Pre-built Widgets | Planned     | -     |
-| Phase 8: Styling           | ✅ Complete | 224   |
-| Phase 9: App Class         | ✅ Complete | 242   |
+| Phase                      | Status      |
+| -------------------------- | ----------- |
+| Phase 1: Core Foundation   | ✅ Complete |
+| Phase 2: Layout Extensions | ✅ Complete |
+| Phase 3: @window           | ✅ Complete |
+| Phase 4: @menu/@action     | ✅ Complete |
+| Phase 5: Data Binding      | ✅ Complete |
+| Phase 6: Widget Base Class | ✅ Complete |
+| Phase 7: Pre-built Widgets | Planned     |
+| Phase 8: Styling           | ✅ Complete |
+| Phase 9: App Class         | ✅ Complete |
+
+**Total tests:** 248

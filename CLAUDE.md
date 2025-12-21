@@ -45,32 +45,33 @@ class MyWidget(QWidget):
 
 ```
 QtPie/
-├── qtpie/                 # THE LIBRARY - this is what we're building
-│   ├── decorators/        # @widget, @window, etc.
-│   └── factories/         # make(), make_form_row(), etc.
+├── lib/
+│   └── qtpie/             # THE LIBRARY - this is what we're building
+│       ├── decorators/    # @widget, @window, @menu, @action, @entry_point
+│       ├── factories/     # make(), stretch(), separator()
+│       ├── bindings/      # Data binding (bind, registry)
+│       ├── styles/        # SCSS/QSS, classes, watcher
+│       ├── app.py         # App class, run_app()
+│       └── widget_base.py # Widget[T] base class
 │
 ├── qtpie_test/            # Test framework wrapper around pytest-qt
 │   ├── driver.py          # QtDriver - strongly-typed test API
 │   └── plugin.py          # pytest plugin (provides `qt` fixture)
 │
-├── qtpie_samples/         # Example apps using qtpie
-│   └── samples/
-│       └── regular_qt_app/  # "Before" example (plain Qt, no qtpie)
+├── samples/               # Example apps using qtpie
+│   └── single_file_apps/  # Single-file app examples
 │
 ├── tests/                 # All tests live here
-│   ├── samples/           # Tests for sample apps
-│   └── test_qtpie/        # Tests for qtpie library itself
+│   ├── unit/              # Unit tests for qtpie library
+│   └── e2e/               # End-to-end tests
 │
 ├── DRAFT/                 # OLD drafts - reference only, don't modify
-│   ├── drafting/          # One draft version
-│   ├── more_recent_drafting/  # Another draft version
-│   └── other_drafting/    # Yet another draft version
 │
-├── tech-docs/             # Design documents
+├── tech-docs/             # Design documents (historical reference)
 │   ├── DRAFTING_SUMMARY.md   # Feature comparison of drafts
 │   └── QTPIE_TEST_LIBRARY.md # qtpie_test design doc
 │
-├── TODO.md                # Development roadmap with phases
+├── TODO.md                # Development roadmap with phases and status
 └── CLAUDE.md              # You are here
 ```
 
@@ -80,12 +81,23 @@ QtPie/
 
 ### `qtpie` - The Main Library
 
-What users import. Currently exports:
-- `widget` - decorator for QWidget subclasses
-- `make` - factory for creating child widgets
+What users import:
 
 ```python
-from qtpie import widget, make
+from qtpie import (
+    # Decorators
+    widget, window, menu, action, entry_point,
+    # Factories
+    make, make_later, stretch, separator,
+    # Base classes
+    Widget, ModelWidget,
+    # App
+    App, run_app,
+    # Bindings
+    bind, register_binding,
+    # Styles
+    ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme,
+)
 ```
 
 ### `qtpie_test` - Test Framework
@@ -104,10 +116,6 @@ def test_something(qt: QtDriver) -> None:
     qt.click(widget.button)
     assert_that(widget.label.text()).is_equal_to("Clicked!")
 ```
-
-### `qtpie_samples` - Example Apps
-
-Reference implementations. The `regular_qt_app` shows "vanilla Qt" without qtpie - useful for comparison.
 
 ---
 
@@ -140,36 +148,31 @@ The `tech-docs/DRAFTING_SUMMARY.md` compares features across drafts.
 
 **observant** - Observable/reactive data library, also authored by the user.
 
-- Location: `C:\Code\mrowr\MrowrLib\observant.py`
 - Owner: Same author as QtPie
-- Purpose: Will be used for Phase 5 (Data Binding) to provide reactive model objects
+- Purpose: Used for data binding to provide reactive model objects
 - Note: Can be modified as needed to better support QtPie integration
 
 ---
 
 ## Running Things
 
-**Run tests frequently!** Coverage runs automatically with every test run.
+**Run tests frequently!**
 
 ```bash
-# Run qtpie tests (coverage prints automatically)
-uv run python -m pytest tests/test_qtpie/ -v
-
 # Run all tests
 uv run python -m pytest tests/ -v
 
-# Generate HTML coverage report (detailed line-by-line view)
-uv run python -m pytest tests/test_qtpie/ --cov-report=html
-# then open htmlcov/index.html in a browser
+# Run unit tests only
+uv run python -m pytest tests/unit/ -v
 
 # Type check
-uv run pyright qtpie/ tests/test_qtpie/
+uv run pyright lib/qtpie/ tests/unit/
 
 # Lint
-uv run ruff check qtpie/ tests/test_qtpie/
+uv run ruff check lib/qtpie/ tests/unit/
 
 # Format
-uv run ruff format qtpie/ tests/test_qtpie/
+uv run ruff format lib/qtpie/ tests/unit/
 ```
 
 Note: Use `python -m pytest` instead of just `pytest` due to workspace editable install quirk.
@@ -198,28 +201,6 @@ Note: Use `python -m pytest` instead of just `pytest` due to workspace editable 
 - **NO premature abstractions** - Write concrete code first
 
 When in doubt, leave it out. Simpler is better.
-
----
-
-## Current State (Phase 6 Complete)
-
-Working features:
-- `@widget()` and `@widget` (with/without parens)
-- `layout="vertical"` | `"horizontal"` | `"form"` | `"grid"` | `"none"`
-- `name` parameter (objectName)
-- `classes` parameter (CSS-like)
-- Lifecycle hooks (`setup()`, `setup_layout()`, etc.)
-- `make()` with positional args, kwargs, signal connections
-- `@window()` decorator for QMainWindow
-- `@action()` and `@menu()` decorators
-- `stretch()` and `separator()` for layouts/menus
-- `Widget[T]` base class with auto model binding
-- Data binding via `bind=` parameter and `observant` library
-- SCSS compilation, stylesheet loading, hot reload watchers
-- CSS class helpers (`add_class`, `remove_class`, `toggle_class`, etc.)
-- 202 tests, 96% coverage, 0 pyright errors, 0 ruff errors
-
-See `TODO.md` for the full roadmap.
 
 ---
 
@@ -261,4 +242,32 @@ def test_counter_increments(qt: QtDriver) -> None:
 
     assert_that(w.count).is_equal_to(1)
     assert_that(w.label.text()).is_equal_to("Count: 1")
+```
+
+### Data binding
+
+```python
+from dataclasses import dataclass
+from qtpie import widget, make, Widget
+
+@dataclass
+class Person:
+    name: str = ""
+    age: int = 0
+
+@widget()
+class PersonEditor(QWidget, Widget[Person]):
+    name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
+    age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
+```
+
+### App entry point
+
+```python
+from qtpie import entry_point, widget, make
+
+@entry_point
+@widget
+class MyApp(QWidget):
+    label: QLabel = make(QLabel, "Hello!")
 ```
