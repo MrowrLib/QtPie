@@ -9,6 +9,8 @@ from observant import Observable, ObservableProxy
 
 # Metadata key to identify state proxies on instances
 STATE_PROXY_ATTR = "_qtpie_state_proxies"
+# Metadata key for object observables (persists across proxy replacements)
+STATE_OBJECT_OBS_ATTR = "_qtpie_state_object_observables"
 
 # Primitive types that need wrapping in a container
 _PRIMITIVE_TYPES = (int, float, str, bool, bytes, type(None))
@@ -69,10 +71,16 @@ class ReactiveDescriptor[T]:
             # For primitives, the value is in container.value
             return cast(Observable[T], proxy.observable(object, "value"))
         else:
-            # For objects, we need the observable that tracks the whole object
-            # ObservableProxy doesn't expose this directly, so we use a workaround:
-            # Create a "virtual" observable that wraps get/set on the proxy's internal model
-            return cast(Observable[T], _ObjectObservable(proxy, self.name, obj))
+            # For objects, get or create a persistent _ObjectObservable
+            # This survives proxy replacement and holds callbacks
+            obj_observables: dict[str, _ObjectObservable[Any]] = getattr(obj, STATE_OBJECT_OBS_ATTR, None) or {}
+            if not hasattr(obj, STATE_OBJECT_OBS_ATTR):
+                setattr(obj, STATE_OBJECT_OBS_ATTR, obj_observables)
+
+            if self.name not in obj_observables:
+                obj_observables[self.name] = _ObjectObservable(self.name, obj)
+
+            return cast(Observable[T], obj_observables[self.name])
 
     @overload
     def __get__(self, obj: None, objtype: type | None = None) -> ReactiveDescriptor[T]: ...
@@ -102,6 +110,11 @@ class ReactiveDescriptor[T]:
             if not hasattr(obj, STATE_PROXY_ATTR):
                 setattr(obj, STATE_PROXY_ATTR, proxies)
 
+            # Notify any object observable callbacks
+            obj_observables: dict[str, _ObjectObservable[Any]] = getattr(obj, STATE_OBJECT_OBS_ATTR, None) or {}
+            if self.name in obj_observables:
+                obj_observables[self.name].notify(value)
+
 
 class _ObjectObservable[T]:
     """
@@ -109,27 +122,29 @@ class _ObjectObservable[T]:
 
     This provides an Observable-like interface for the whole object,
     allowing subscriptions to be notified when the object is replaced.
+    Stored persistently so callbacks survive proxy replacement.
     """
 
-    def __init__(self, proxy: ObservableProxy[T], field_name: str, widget: object) -> None:
-        self._proxy = proxy
+    def __init__(self, field_name: str, widget: object) -> None:
         self._field_name = field_name
         self._widget = widget
         self._callbacks: list[Any] = []
 
     def get(self) -> T:
-        return self._proxy.get()
+        # Get current value from widget
+        return cast(T, getattr(self._widget, self._field_name))
 
     def set(self, value: T) -> None:
-        # Replace the proxy entirely
-        proxies: dict[str, ObservableProxy[Any]] = getattr(self._widget, STATE_PROXY_ATTR, {})
-        proxies[self._field_name] = ObservableProxy(value, sync=True)
-        # Notify callbacks
-        for cb in self._callbacks:
-            cb(value)
+        # Set via widget (triggers __set__)
+        setattr(self._widget, self._field_name, value)
 
     def on_change(self, callback: Any) -> None:
         self._callbacks.append(callback)
+
+    def notify(self, value: T) -> None:
+        """Called by ReactiveDescriptor.__set__ when object is replaced."""
+        for cb in self._callbacks:
+            cb(value)
 
 
 class _SubscriptedState[T]:

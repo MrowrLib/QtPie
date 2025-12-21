@@ -1,5 +1,6 @@
 """The @widget decorator - transforms classes into Qt widgets with automatic layout."""
 
+import string
 from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields
 from typing import (
@@ -269,18 +270,149 @@ def _call_if_exists(obj: object, method_name: str, *args: object) -> None:
         method(*args)
 
 
+def _is_format_string(bind_path: str) -> bool:
+    """Check if bind path is a format string like 'Count: {count}'."""
+    return "{" in bind_path and "}" in bind_path
+
+
+def _parse_format_fields(format_string: str) -> list[str]:
+    """Extract field names from a format string using string.Formatter.
+
+    Example: "Count: {count}" → ["count"]
+    Example: "{first} {last}" → ["first", "last"]
+    Example: "Dog: {dog.name}" → ["dog.name"]
+    """
+    formatter = string.Formatter()
+    field_names: list[str] = []
+    for _, field_name, _, _ in formatter.parse(format_string):
+        if field_name is not None and field_name != "":
+            field_names.append(field_name)
+    return field_names
+
+
+def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
+    """Get observables for a field path (simple or nested).
+
+    Returns a list of observables to subscribe to. For nested paths,
+    returns both the nested observable AND the top-level state observable
+    (so we get notified when the whole object is replaced).
+
+    Handles:
+    - Simple state: "count" → [state observable]
+    - Nested state: "dog.name" → [nested observable, top-level state observable]
+    """
+    # Normalize optional chaining for splitting
+    normalized = field_path.replace("?.", ".")
+    parts = normalized.split(".", 1)
+    first_segment = parts[0]
+    has_nested = len(parts) > 1
+
+    # Trigger lazy initialization
+    try:
+        _ = getattr(widget, first_segment)
+    except AttributeError:
+        return []
+
+    if not has_nested:
+        # Simple state field
+        obs = get_state_observable(widget, field_path)
+        return [obs] if obs is not None else []
+    else:
+        # Nested path on state object
+        result: list[Any] = []
+
+        # Add the top-level state observable (fires when whole object replaced)
+        top_level_obs = get_state_observable(widget, first_segment)
+        if top_level_obs:
+            result.append(top_level_obs)
+
+        # Add the nested path observable (fires when nested property changes)
+        state_proxy = get_state_proxy(widget, first_segment)
+        if state_proxy is not None:
+            nested_path = field_path.split(".", 1)[1] if "." in field_path else ""
+            if nested_path:
+                result.append(state_proxy.observable_for_path(nested_path))
+
+        return result
+
+
+def _process_format_binding(
+    widget: QWidget,
+    widget_instance: QWidget,
+    format_string: str,
+    bind_prop: str,
+) -> bool:
+    """Process a format string binding like 'Count: {count}'.
+
+    Returns True if binding was successful, False otherwise.
+    """
+    from qtpie.bindings import get_binding_registry
+
+    field_names = _parse_format_fields(format_string)
+    if not field_names:
+        return False
+
+    # Collect all observables to subscribe to (may be multiple per field for nested paths)
+    all_observables: list[Any] = []
+    for field_name in field_names:
+        obs_list = _get_observables_for_field(widget, field_name)
+        if not obs_list:
+            return False  # Can't resolve a field, fall back to normal binding
+        all_observables.extend(obs_list)
+
+    # Get the adapter for one-way binding
+    adapter = get_binding_registry().get(widget_instance, bind_prop)
+    if adapter is None or adapter.setter is None:
+        return False
+
+    # Build format string with indexed placeholders (Python interprets {dog.name} as attribute access)
+    indexed_format = format_string
+    for i, name in enumerate(field_names):
+        indexed_format = indexed_format.replace("{" + name + "}", "{" + str(i) + "}")
+
+    # Build the compute function - gets fresh values each time
+    def compute() -> str:
+        values_list: list[Any] = []
+        for field_name in field_names:
+            # Get fresh value by traversing the path
+            normalized = field_name.replace("?.", ".")
+            parts = normalized.split(".")
+            value: Any = getattr(widget, parts[0], None)
+            for part in parts[1:]:
+                if value is None:
+                    break
+                value = getattr(value, part, None)
+            values_list.append(value)
+        return indexed_format.format(*values_list)
+
+    # Set initial value
+    setter = adapter.setter
+    setter(widget_instance, compute())
+
+    # Subscribe to ALL observables - when any changes, recompute
+    def on_any_change(_: Any) -> None:
+        setter(widget_instance, compute())
+
+    for obs in all_observables:
+        obs.on_change(on_any_change)
+
+    return True
+
+
 def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
     """Process data bindings from make() metadata.
 
-    Supports three forms of bind paths:
+    Supports multiple forms of bind paths:
+    - Format string: bind="Count: {count}" → computed format binding
     - State field: bind="count" → binds to state(0) field on self
     - Short form: bind="name" or bind="address.city" → uses self.proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
 
     Smart detection order:
-    1. Check if bind path (without dots) is a state field on self
-    2. Check if first segment is an ObservableProxy field
-    3. Otherwise, treat as path relative to self.proxy
+    1. Check if bind path is a format string (contains {})
+    2. Check if bind path (without dots) is a state field on self
+    3. Check if first segment is an ObservableProxy field
+    4. Otherwise, treat as path relative to self.proxy
     """
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
@@ -299,6 +431,12 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
         bind_prop = f.metadata.get(BIND_PROP_METADATA_KEY)
         if bind_prop is None:
             bind_prop = get_binding_registry().get_default_prop(widget_instance)
+
+        # Check 0: Is this a format string binding?
+        if _is_format_string(bind_path):
+            if _process_format_binding(widget, widget_instance, bind_path, bind_prop):
+                continue
+            # Fall through if format binding fails
 
         # Parse path for detection (normalize ?. to . just for splitting)
         normalized_for_split = bind_path.replace("?.", ".")

@@ -473,3 +473,130 @@ class TestNestedStateBinding:
         # Update via widget works (two-way binding)
         w.name_edit.setText("Charlie")
         assert_that(w.person.name).is_equal_to("Charlie")
+
+
+class TestFormatStringBinding:
+    """Tests for format string bindings like bind='Count: {count}'."""
+
+    def test_simple_format_binding(self, qt: QtDriver) -> None:
+        """bind='Count: {count}' should format and update automatically."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="Count: {count}")
+
+        w = Counter()
+        qt.track(w)
+
+        # Initial value
+        assert_that(w.label.text()).is_equal_to("Count: 0")
+
+        # Update state
+        w.count = 42
+        assert_that(w.label.text()).is_equal_to("Count: 42")
+
+    def test_multiple_vars_format_binding(self, qt: QtDriver) -> None:
+        """bind='{first} {last}' should bind multiple state fields."""
+
+        @widget
+        class NameDisplay(QWidget):
+            first: str = state("John")
+            last: str = state("Doe")
+            label: QLabel = make(QLabel, bind="{first} {last}")
+
+        w = NameDisplay()
+        qt.track(w)
+
+        # Initial value
+        assert_that(w.label.text()).is_equal_to("John Doe")
+
+        # Update first
+        w.first = "Jane"
+        assert_that(w.label.text()).is_equal_to("Jane Doe")
+
+        # Update last
+        w.last = "Smith"
+        assert_that(w.label.text()).is_equal_to("Jane Smith")
+
+    def test_format_binding_with_text(self, qt: QtDriver) -> None:
+        """Format strings with mixed text and variables."""
+
+        @widget
+        class Status(QWidget):
+            current: int = state(5)
+            total: int = state(10)
+            label: QLabel = make(QLabel, bind="{current} / {total} items")
+
+        w = Status()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("5 / 10 items")
+
+        w.current = 7
+        assert_that(w.label.text()).is_equal_to("7 / 10 items")
+
+        w.total = 20
+        assert_that(w.label.text()).is_equal_to("7 / 20 items")
+
+    def test_format_binding_single_var_no_text(self, qt: QtDriver) -> None:
+        """bind='{count}' should work same as bind='count' but formatted."""
+
+        @widget
+        class Counter(QWidget):
+            count: int = state(0)
+            label: QLabel = make(QLabel, bind="{count}")
+
+        w = Counter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("0")
+
+        w.count = 99
+        assert_that(w.label.text()).is_equal_to("99")
+
+    def test_format_binding_with_nested_path(self, qt: QtDriver) -> None:
+        """bind='Hello, {dog.name}!' should support nested paths."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @widget
+        class DogGreeter(QWidget):
+            dog: Dog = state(Dog(name="Buddy", age=3))
+            label: QLabel = make(QLabel, bind="Hello, {dog.name}!")
+
+        w = DogGreeter()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Hello, Buddy!")
+
+        # Update via the widget's nested path binding
+        w.dog = Dog(name="Max", age=5)
+        assert_that(w.label.text()).is_equal_to("Hello, Max!")
+
+    def test_format_binding_mixed_simple_and_nested(self, qt: QtDriver) -> None:
+        """Format with both simple state and nested paths."""
+
+        @dataclass
+        class Dog:
+            name: str = ""
+
+        @widget
+        class DogInfo(QWidget):
+            count: int = state(1)
+            dog: Dog = state(Dog(name="Rex"))
+            label: QLabel = make(QLabel, bind="Dog #{count}: {dog.name}")
+
+        w = DogInfo()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Dog #1: Rex")
+
+        w.count = 2
+        assert_that(w.label.text()).is_equal_to("Dog #2: Rex")
+
+        w.dog = Dog(name="Fido")
+        assert_that(w.label.text()).is_equal_to("Dog #2: Fido")
