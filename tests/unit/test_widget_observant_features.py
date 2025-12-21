@@ -54,6 +54,29 @@ class TestWidgetFormatBinding:
 
         assert_that(w.label.text()).is_equal_to("Bob, age 25")
 
+    def test_format_binding_same_name_as_widget(self, qt: QtDriver) -> None:
+        """bind='{name}' should use model.name even when widget is also named 'name'."""
+
+        @widget
+        class UserDisplay(QWidget, Widget[User]):
+            # Widget field name matches model field name
+            name: QLineEdit = make(QLineEdit, bind="name")
+            age: QSpinBox = make(QSpinBox, bind="age")
+            info: QLabel = make(QLabel, bind="Name: {name}, Age: {age}")
+
+        w = UserDisplay()
+        qt.track(w)
+
+        # Initially empty
+        assert_that(w.info.text()).is_equal_to("Name: , Age: 0")
+
+        # Change via widgets
+        w.name.setText("Alice")
+        w.age.setValue(25)
+
+        # Format binding should use model values, not the QLineEdit widgets
+        assert_that(w.info.text()).is_equal_to("Name: Alice, Age: 25")
+
 
 class TestWidgetValidation:
     """Tests for Widget[T] validation delegate methods."""

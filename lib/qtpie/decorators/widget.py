@@ -547,18 +547,21 @@ def _process_format_binding(
 
         # Add all variable values to context using root names
         for root_name in root_names:
-            # Try widget attribute first (for state fields)
-            value = getattr(widget, root_name, None)
-            if value is not None:
-                context[root_name] = value
-            elif widget_proxy is not None:
-                # Try proxy for Widget[T] model fields
+            # For Widget[T], prefer proxy fields over widget attributes
+            # This allows {name} to mean model.name even when there's a QLineEdit named "name"
+            if widget_proxy is not None:
                 try:
                     context[root_name] = widget_proxy.observable(object, root_name).get()
+                    continue  # Successfully got from proxy
                 except Exception:
-                    context[root_name] = None
-            else:
-                context[root_name] = None
+                    pass  # Not a proxy field, fall back to widget attribute
+
+            # Fall back to widget attribute (for state fields or regular attributes)
+            value = getattr(widget, root_name, None)
+            # Skip QWidget children - they're child widgets, not format values
+            if isinstance(value, QWidget):
+                value = None
+            context[root_name] = value
 
         # Process each field and build the result
         result_parts: list[str] = []

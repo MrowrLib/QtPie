@@ -15,11 +15,6 @@ class Dog:
 @entry_point
 @widget(layout="form")
 class MyWidget(QWidget, Widget[Dog]):
-    name_field: QLineEdit = make(QLineEdit, form_label="Name", bind="name")
-    age_field: QSlider = make(QSlider, Qt.Orientation.Horizontal, form_label="Age", minimum=0, maximum=20, bind="age")
+    name: QLineEdit = make(QLineEdit, form_label="Name")
+    age: QSlider = make(QSlider, Qt.Orientation.Horizontal, form_label="Age", minimum=0, maximum=20)
     info: QLabel = make(QLabel, bind="Name: {name}, Age: {age}")
-    # button: QPushButton = make(QPushButton, "Print Info", clicked="on_button_click")
-
-    # def on_button_click(self):
-    #     dog = self.model
-    #     print(f"Dog's Name: {dog.name}, Age: {dog.age}")
