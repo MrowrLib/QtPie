@@ -337,3 +337,64 @@ class TestModelWidgetWithCustomModel:
         # Two-way binding should work
         w.name.setText("Henry")
         assert_that(w.model.name).is_equal_to("Henry")
+
+
+class TestAutoBindFalse:
+    """Tests for auto_bind=False to disable automatic binding by field name."""
+
+    def test_auto_bind_false_disables_name_matching(self, qt: QtDriver) -> None:
+        """With auto_bind=False, fields should NOT auto-bind by name."""
+
+        @widget(auto_bind=False)
+        class PersonEditor(QWidget, Widget[Person]):
+            name: QLineEdit = make(QLineEdit)
+            age: QSpinBox = make(QSpinBox)
+
+        w = PersonEditor()
+        qt.track(w)
+
+        # Model should exist with defaults
+        assert_that(w.model.name).is_equal_to("")
+        assert_that(w.model.age).is_equal_to(0)
+
+        # Widget should NOT be bound - changing widget won't affect model
+        w.name.setText("Alice")
+        w.age.setValue(30)
+
+        # Model should still have default values (no binding occurred)
+        assert_that(w.model.name).is_equal_to("")
+        assert_that(w.model.age).is_equal_to(0)
+
+    def test_auto_bind_false_still_allows_explicit_bind(self, qt: QtDriver) -> None:
+        """With auto_bind=False, explicit bind= should still work."""
+
+        @widget(auto_bind=False)
+        class PersonEditor(QWidget, Widget[Person]):
+            model: Person = make(Person, name="Bob", age=25)
+            name_input: QLineEdit = make(QLineEdit, bind="name")
+            age_input: QSpinBox = make(QSpinBox, bind="age")
+
+        w = PersonEditor()
+        qt.track(w)
+
+        # Explicit bindings should work
+        assert_that(w.name_input.text()).is_equal_to("Bob")
+        assert_that(w.age_input.value()).is_equal_to(25)
+
+        # Two-way sync should work
+        w.name_input.setText("Charlie")
+        assert_that(w.model.name).is_equal_to("Charlie")
+
+    def test_auto_bind_true_by_default(self, qt: QtDriver) -> None:
+        """Verify auto_bind=True is the default (current behavior preserved)."""
+
+        @widget()  # No auto_bind specified - should default to True
+        class PersonEditor(QWidget, Widget[Person]):
+            model: Person = make(Person, name="Default")
+            name: QLineEdit = make(QLineEdit)
+
+        w = PersonEditor()
+        qt.track(w)
+
+        # Auto-binding should work by default
+        assert_that(w.name.text()).is_equal_to("Default")

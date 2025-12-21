@@ -45,6 +45,7 @@ def widget[T](
     name: str | None = ...,
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
+    auto_bind: bool = ...,
 ) -> type[T]: ...
 
 
@@ -56,6 +57,7 @@ def widget[T](
     name: str | None = ...,
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
+    auto_bind: bool = ...,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -66,6 +68,7 @@ def widget[T](
     name: str | None = None,
     classes: list[str] | None = None,
     layout: LayoutType = "vertical",
+    auto_bind: bool = True,
 ) -> Callable[[type[T]], type[T]] | type[T]:
     """
     Decorator that transforms a class into a Qt widget with automatic layout.
@@ -75,6 +78,8 @@ def widget[T](
         classes: CSS-like classes for styling.
         layout: The layout type - "vertical", "horizontal", or "none".
                 Defaults to "vertical".
+        auto_bind: If True (default), Widget[T] fields with names matching model
+                   properties are automatically bound. Set to False to disable.
 
     Example:
         @widget(name="MyEditor", classes=["card"], layout="vertical")
@@ -201,7 +206,8 @@ def widget[T](
             _process_bindings(self, cls)
 
             # Process auto-bindings for ModelWidget (by field name)
-            _process_model_widget_auto_bindings(self, cls)
+            if auto_bind:
+                _process_model_widget_auto_bindings(self, cls)
 
             if self.layout() is not None:
                 _call_if_exists(self, "setup_layout", self.layout())
