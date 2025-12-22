@@ -6,12 +6,12 @@ Usage:
     2. Run this client:   uv run python samples/single_file_apps/async_websocket_client.py
     3. Run MORE clients in separate terminals to see presence + chat!
 
-This demonstrates why async is essential. WITHOUT proper handling:
-    - @asyncSlot: Coroutines never await, buttons do nothing
-    - @asyncClose: WebSocket leaks, server never sees disconnect
-    - async receive loop: UI freezes waiting for messages
+This demonstrates QtPie's async support:
+    - @slot: Smart decorator that handles async functions properly
+    - async closeEvent: Auto-wrapped by @widget for proper cleanup
+    - async receive loop: Runs in background without blocking UI
 
-Try removing @asyncSlot from on_connect() and watch it silently fail!
+Try removing @slot from on_connect() and watch it silently fail!
 """
 
 import asyncio
@@ -19,13 +19,11 @@ import json
 import random
 
 import websockets
-from qasync import asyncClose, asyncSlot  # type: ignore[import-untyped]
 from qtpy.QtCore import Signal
-from qtpy.QtGui import QCloseEvent
 from qtpy.QtWidgets import QLabel, QLineEdit, QListWidget, QPushButton, QTextEdit, QWidget
 from websockets.asyncio.client import ClientConnection
 
-from qtpie import entry_point, make, widget
+from qtpie import entry_point, make, slot, widget
 
 RANDOM_NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Hank"]
 
@@ -89,7 +87,7 @@ class ChatClient(QWidget):
         self.setWindowTitle(f"Chat - {self._username}")
         self.resize(600, 400)
 
-    @asyncSlot()
+    @slot
     async def on_connect(self) -> None:
         if self._ws is not None:
             return
@@ -111,7 +109,7 @@ class ChatClient(QWidget):
             self.chat_panel.status.setText(f"Error: {e}")
             self.chat_panel.connect_btn.setEnabled(True)
 
-    @asyncSlot()
+    @slot
     async def on_disconnect(self) -> None:
         await self._cleanup()
         self.chat_panel.status.setText("Disconnected")
@@ -120,7 +118,7 @@ class ChatClient(QWidget):
         self.chat_panel.send_btn.setEnabled(False)
         self.users_panel.users_list.clear()
 
-    @asyncSlot(str)
+    @slot(str)  # type: ignore[misc]
     async def on_send(self, text: str) -> None:
         if self._ws is None:
             return
@@ -166,6 +164,6 @@ class ChatClient(QWidget):
             await self._ws.close()
             self._ws = None
 
-    @asyncClose
-    async def closeEvent(self, event: QCloseEvent) -> None:  # type: ignore[override]
+    async def closeEvent(self, event: object) -> None:  # type: ignore[override]
+        """Auto-wrapped by @widget - blocks until cleanup completes."""
         await self._cleanup()

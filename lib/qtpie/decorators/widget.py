@@ -25,6 +25,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from qtpie.decorators._async_wrap import wrap_async_methods
 from qtpie.factories.make import (
     BIND_METADATA_KEY,
     BIND_PROP_METADATA_KEY,
@@ -120,6 +121,9 @@ def widget[T](
     }
 
     def decorator(cls: type[T]) -> type[T]:
+        # Auto-wrap async methods (e.g., async def closeEvent)
+        wrap_async_methods(cls)
+
         # Apply @dataclass to register fields
         cls = dataclass(cls)  # type: ignore[assignment]
 
