@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast, overload
 
+from qtpy.QtCore import QFile, QIODevice, QTextStream
 from qtpy.QtWidgets import QApplication, QWidget
+
+from qtpie.styles.watcher import QssWatcher, ScssWatcher
 
 # Import App and run_app lazily to avoid circular imports
 _App: type | None = None
@@ -43,6 +48,8 @@ class EntryConfig:
     title: str | None = None
     size: tuple[int, int] | None = None
     stylesheet: str | None = None
+    watch_stylesheet: bool = False
+    scss_search_paths: tuple[str, ...] = field(default_factory=tuple)
     window: type[QWidget] | None = None
 
 
@@ -58,6 +65,80 @@ def _is_main_module(target: Any) -> bool:
 def _should_auto_run(target: Any) -> bool:
     """Check if we should auto-run the entry point."""
     return _is_main_module(target) and QApplication.instance() is None
+
+
+def _load_qrc_stylesheet(qrc_path: str) -> str:
+    """Load stylesheet content from a QRC resource path."""
+    qrc_file = QFile(qrc_path)
+    if qrc_file.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        stream = QTextStream(qrc_file)
+        content = stream.readAll()
+        qrc_file.close()
+        return content
+    return ""
+
+
+def _compile_scss_to_string(scss_path: str, search_paths: list[str]) -> str:
+    """Compile SCSS file to a QSS string."""
+    from scss import Compiler  # type: ignore[import-untyped]
+
+    scss_file = Path(scss_path)
+    if not scss_file.exists():
+        return ""
+
+    compiler = Compiler(search_path=search_paths)
+    return cast(str, compiler.compile(str(scss_file)))  # pyright: ignore[reportUnknownMemberType]
+
+
+def _apply_stylesheet(app: QApplication, config: EntryConfig) -> QssWatcher | ScssWatcher | None:
+    """
+    Apply stylesheet to the application based on config.
+
+    Returns a watcher if watch_stylesheet=True, otherwise None.
+    """
+    if not config.stylesheet:
+        return None
+
+    stylesheet_path = config.stylesheet
+    is_qrc = stylesheet_path.startswith(":/")
+    is_scss = stylesheet_path.endswith(".scss")
+
+    # Determine search paths for SCSS
+    if config.scss_search_paths:
+        # Use explicit paths only
+        search_paths = list(config.scss_search_paths)
+    elif is_scss:
+        # Auto-add the SCSS file's parent folder
+        search_paths = [str(Path(stylesheet_path).parent)]
+    else:
+        search_paths = []
+
+    if config.watch_stylesheet and not is_qrc:
+        # Set up a watcher - it will handle initial load too
+        if is_scss:
+            # Create a temp file for compiled QSS
+            temp_dir = Path(tempfile.gettempdir()) / "qtpie_scss"
+            temp_dir.mkdir(exist_ok=True)
+            qss_path = str(temp_dir / f"{Path(stylesheet_path).stem}.qss")
+            return ScssWatcher(app, stylesheet_path, qss_path, search_paths or None)
+        else:
+            # QSS file
+            return QssWatcher(app, stylesheet_path)
+
+    # One-shot load (no watching)
+    if is_qrc:
+        content = _load_qrc_stylesheet(stylesheet_path)
+    elif is_scss:
+        content = _compile_scss_to_string(stylesheet_path, search_paths)
+    else:
+        # Regular QSS file
+        qss_file = Path(stylesheet_path)
+        content = qss_file.read_text() if qss_file.exists() else ""
+
+    if content:
+        app.setStyleSheet(content)
+
+    return None
 
 
 def _run_entry_point(target: Any, config: EntryConfig) -> None:
@@ -80,9 +161,15 @@ def _run_entry_point(target: Any, config: EntryConfig) -> None:
     window: QWidget | None = None
     app: QApplication
 
+    # Keep watcher alive for duration of app
+    _watcher: QssWatcher | ScssWatcher | None = None
+
     if is_app_subclass:
         # Target is an App or QApplication subclass
         app = cast(QApplication, target())
+
+        # Apply stylesheet to the app
+        _watcher = _apply_stylesheet(app, config)
 
         # Call create_window if it exists and is overridden
         create_window_method: Callable[[], QWidget | None] | None = getattr(app, "create_window", None)
@@ -93,6 +180,9 @@ def _run_entry_point(target: Any, config: EntryConfig) -> None:
     else:
         # Create a default App
         app = App(**app_kwargs)
+
+        # Apply stylesheet to the app
+        _watcher = _apply_stylesheet(app, config)
 
         if is_function:
             # Target is a function
@@ -157,6 +247,8 @@ def entry_point[T](
     title: str | None = ...,
     size: tuple[int, int] | None = ...,
     stylesheet: str | None = ...,
+    watch_stylesheet: bool = ...,
+    scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
 ) -> type[T]: ...
 
@@ -170,6 +262,8 @@ def entry_point[T](
     title: str | None = ...,
     size: tuple[int, int] | None = ...,
     stylesheet: str | None = ...,
+    watch_stylesheet: bool = ...,
+    scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
 ) -> Callable[..., T]: ...
 
@@ -183,6 +277,8 @@ def entry_point[T](
     title: str | None = ...,
     size: tuple[int, int] | None = ...,
     stylesheet: str | None = ...,
+    watch_stylesheet: bool = ...,
+    scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
@@ -195,6 +291,8 @@ def entry_point(
     title: str | None = None,
     size: tuple[int, int] | None = None,
     stylesheet: str | None = None,
+    watch_stylesheet: bool = False,
+    scss_search_paths: list[str] | None = None,
     window: type[QWidget] | None = None,
 ) -> Any:
     """
@@ -212,7 +310,14 @@ def entry_point(
         light_mode: Enable light mode color scheme.
         title: Window title to set.
         size: Window size as (width, height) tuple.
-        stylesheet: Path to a QSS/SCSS stylesheet to load.
+        stylesheet: Path to stylesheet. Can be:
+            - QRC path (e.g., ":/styles/app.qss") - loads from Qt resources
+            - QSS file (e.g., "styles.qss") - loads from filesystem
+            - SCSS file (e.g., "styles.scss") - compiles and applies
+        watch_stylesheet: If True, hot-reload stylesheet on file changes.
+            Not applicable to QRC paths.
+        scss_search_paths: Directories for SCSS @import resolution.
+            If not provided, the SCSS file's parent folder is used.
         window: A widget class to instantiate as the main window.
 
     Examples:
@@ -259,6 +364,8 @@ def entry_point(
         title=title,
         size=size,
         stylesheet=stylesheet,
+        watch_stylesheet=watch_stylesheet,
+        scss_search_paths=tuple(scss_search_paths) if scss_search_paths else (),
         window=window,
     )
 

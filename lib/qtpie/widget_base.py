@@ -1,10 +1,12 @@
 """Widget base class - optional mixin with model binding support."""
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, get_args, get_origin
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
 
 from observant import ObservableProxy
-from qtpy.QtWidgets import QLayout
+from qtpy.QtWidgets import QLayout, QWidget
+
+from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 
 
 class Widget[T = None]:
@@ -85,6 +87,27 @@ class Widget[T = None]:
     def setup_signals(self) -> None:
         """Called after setup_events(). Override to connect signals."""
         pass
+
+    # =========================================================================
+    # Stylesheet Loading
+    # =========================================================================
+
+    def load_stylesheet(
+        self,
+        path: str | None = None,
+        qrc_path: str | None = None,
+    ) -> None:
+        """
+        Load a stylesheet from a file path or QRC resource.
+
+        Args:
+            path: Path to a .qss file.
+            qrc_path: Optional QRC resource path for fallback.
+        """
+        stylesheet = _load_stylesheet(qss_path=path, qrc_path=qrc_path)
+        if stylesheet:
+            # Widget is a mixin used with QWidget, so self has setStyleSheet
+            cast(QWidget, self).setStyleSheet(stylesheet)
 
     # =========================================================================
     # Validation - delegate to self.proxy
