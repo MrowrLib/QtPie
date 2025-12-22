@@ -17,11 +17,11 @@ Since Qt stylesheets (QSS) are CSS-like, SCSS compiles perfectly to QSS.
 The simplest way to use SCSS with hot reload is the `watch_scss()` function:
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpie.styles import watch_scss
 from qtpy.QtWidgets import QWidget, QPushButton
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     button: QPushButton = make(QPushButton, "Click Me")

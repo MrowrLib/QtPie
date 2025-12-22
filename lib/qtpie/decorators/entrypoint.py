@@ -1,4 +1,4 @@
-"""The @entry_point decorator for declarative app entry points."""
+"""The @entrypoint decorator for declarative app entry points."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def _get_run_app_fn() -> Callable[..., int]:
 
 @dataclass(frozen=True)
 class EntryConfig:
-    """Configuration stored by @entry_point decorator."""
+    """Configuration stored by @entrypoint decorator."""
 
     dark_mode: bool = False
     light_mode: bool = False
@@ -141,7 +141,7 @@ def _apply_stylesheet(app: QApplication, config: EntryConfig) -> QssWatcher | Sc
     return None
 
 
-def _run_entry_point(target: Any, config: EntryConfig) -> None:
+def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     """Execute the entry point."""
     App = _get_app_class()
     run_app_fn = _get_run_app_fn()
@@ -239,7 +239,7 @@ def _apply_window_config(window: QWidget, config: EntryConfig) -> None:
 
 # Overload order matters: type[T] must come before Callable since classes are callable
 @overload
-def entry_point[T](
+def entrypoint[T](
     _target: type[T],
     *,
     dark_mode: bool = ...,
@@ -254,7 +254,7 @@ def entry_point[T](
 
 
 @overload
-def entry_point[T](
+def entrypoint[T](
     _target: Callable[..., T],
     *,
     dark_mode: bool = ...,
@@ -269,7 +269,7 @@ def entry_point[T](
 
 
 @overload
-def entry_point[T](
+def entrypoint[T](
     _target: None = None,
     *,
     dark_mode: bool = ...,
@@ -283,7 +283,7 @@ def entry_point[T](
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
-def entry_point(
+def entrypoint(
     _target: Callable[..., Any] | type | None = None,
     *,
     dark_mode: bool = False,
@@ -322,35 +322,35 @@ def entry_point(
 
     Examples:
         # Simplest - function returning a widget
-        @entry_point
+        @entrypoint
         def main():
             return QLabel("Hello World!")
 
         # With configuration
-        @entry_point(dark_mode=True, title="My App", size=(800, 600))
+        @entrypoint(dark_mode=True, title="My App", size=(800, 600))
         def main():
             return MyWidget()
 
         # On a @widget class
-        @entry_point
+        @entrypoint
         @widget
         class MyApp(QWidget):
             label: QLabel = make(QLabel, "Hello!")
 
         # On a @window class
-        @entry_point(dark_mode=True)
+        @entrypoint(dark_mode=True)
         @window(title="My Application")
         class MyApp(QMainWindow):
             ...
 
         # Async function
-        @entry_point
+        @entrypoint
         async def main():
             data = await fetch_data()
             return DataViewer(data)
 
         # App subclass with lifecycle hooks
-        @entry_point
+        @entrypoint
         class MyApp(App):
             def setup(self):
                 self.load_stylesheet("styles.qss")
@@ -375,13 +375,13 @@ def entry_point(
 
         # Check if we should auto-run
         if _should_auto_run(target):
-            _run_entry_point(target, config)
+            _run_entrypoint(target, config)
 
         return target
 
     if _target is not None:
-        # Called without parentheses: @entry_point
+        # Called without parentheses: @entrypoint
         return decorator(_target)
 
-    # Called with parentheses: @entry_point(...)
+    # Called with parentheses: @entrypoint(...)
     return decorator

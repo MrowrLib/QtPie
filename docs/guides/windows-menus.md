@@ -278,7 +278,7 @@ The "Action" suffix is automatically stripped.
 Here's a complete application with window, menus, and actions:
 
 ```python
-from qtpie import window, menu, action, make, separator, entry_point
+from qtpie import window, menu, action, make, separator, entrypoint
 from qtpy.QtWidgets import QMainWindow, QMenu, QTextEdit
 from qtpy.QtGui import QAction
 
@@ -328,7 +328,7 @@ class EditMenu(QMenu):
     redo: RedoAction = make(RedoAction)
 
 # Define window
-@entry_point
+@entrypoint
 @window(title="Text Editor", size=(1024, 768), center=True)
 class EditorWindow(QMainWindow):
     file_menu: FileMenu = make(FileMenu)
@@ -436,6 +436,6 @@ class FileMenu(QMenu):
 
 - [Widgets](../basics/widgets.md) - Using the `@widget` decorator
 - [Styling](../basics/styling.md) - CSS classes and styling
-- [@entry_point](../reference/decorators/entry-point.md) - Application entry points
+- [@entrypoint](../reference/decorators/entry-point.md) - Application entry points
 - [make()](../reference/factories/make.md) - Creating widget instances
 - [separator()](../reference/factories/separator.md) - Menu separators

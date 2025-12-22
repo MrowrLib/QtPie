@@ -6,8 +6,8 @@ Standalone function to run a QApplication with qasync event loop support.
 
 `run_app()` is a helper function that sets up qasync and runs any QApplication. Unlike the standard `app.exec()`, it provides full async/await support for modern Python async code.
 
-**Key differences from `@entry_point`:**
-- `@entry_point` - Declarative decorator that automatically creates the app and runs it when module is `__main__`
+**Key differences from `@entrypoint`:**
+- `@entrypoint` - Declarative decorator that automatically creates the app and runs it when module is `__main__`
 - `run_app()` - Imperative function you call explicitly to run an existing QApplication instance
 
 ## Basic Usage
@@ -136,7 +136,7 @@ exit_code = run_app(app)
 print(f"App exited with code: {exit_code}")  # Always 0 currently
 ```
 
-## When to Use run_app() vs @entry_point
+## When to Use run_app() vs @entrypoint
 
 ### Use `run_app()` when:
 - You need manual control over app creation and initialization
@@ -162,17 +162,17 @@ window.show()
 run_app(app)
 ```
 
-### Use `@entry_point` when:
+### Use `@entrypoint` when:
 - You want declarative, automatic app lifecycle
 - You're creating a standalone application
 - You want single-file app simplicity
 - You prefer the "run when main" pattern
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Hello!")
@@ -223,10 +223,10 @@ Under the hood, `run_app()`:
 4. Runs the event loop until the quit signal fires
 5. Returns exit code 0
 
-This is the same mechanism used by `App.run()` and `@entry_point`.
+This is the same mechanism used by `App.run()` and `@entrypoint`.
 
 ## See Also
 
 - [App Class](app.md) - QApplication subclass with lifecycle hooks
-- [@entry_point](../decorators/entry-point.md) - Declarative entry point decorator
+- [@entrypoint](../decorators/entry-point.md) - Declarative entry point decorator
 - [App & Entry Points Guide](../../guides/app.md) - Complete guide to application lifecycle

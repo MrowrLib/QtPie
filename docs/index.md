@@ -3,11 +3,11 @@
 **Tasty way to build Qt apps**
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -138,11 +138,11 @@ pip install qtpie
 ```
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Hello(QWidget):
     label: QLabel = make(QLabel, "Hello, World!")

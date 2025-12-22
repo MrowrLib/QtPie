@@ -63,10 +63,10 @@ print("QtPie installed successfully!")
 Or test with a working app:
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel
 
-@entry_point
+@entrypoint
 @widget
 class HelloWorld(QWidget):
     label: QLabel = make(QLabel, "Hello, QtPie!")

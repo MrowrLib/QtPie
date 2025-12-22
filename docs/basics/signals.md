@@ -206,10 +206,10 @@ edit: QLineEdit = make(
 A complete working example showing signal connections:
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel, QPushButton
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = 0

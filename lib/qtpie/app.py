@@ -146,7 +146,7 @@ class App(QApplication):
         Lifecycle hook to create the main window.
 
         Override this method in subclasses to return a main window widget.
-        The @entry_point decorator will call this and show the returned widget.
+        The @entrypoint decorator will call this and show the returned widget.
 
         Returns:
             A QWidget to show as the main window, or None.

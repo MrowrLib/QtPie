@@ -117,20 +117,20 @@ The color scheme functions work in two ways:
 This means you can call these functions either before or after creating your `QApplication`:
 
 ```python
-from qtpie import entry_point, widget
+from qtpie import entrypoint, widget
 from qtpie.styles import enable_dark_mode
 from qtpy.QtWidgets import QWidget
 
 # Option 1: Enable before app runs
 enable_dark_mode()
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     pass
 
 # Option 2: Enable after app exists
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     def setup(self) -> None:

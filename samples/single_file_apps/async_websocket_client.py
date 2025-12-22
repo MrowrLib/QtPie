@@ -23,7 +23,7 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import QLabel, QLineEdit, QListWidget, QPushButton, QTextEdit, QWidget
 from websockets.asyncio.client import ClientConnection
 
-from qtpie import entry_point, make, slot, widget
+from qtpie import entrypoint, make, slot, widget
 
 RANDOM_NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Hank"]
 
@@ -65,7 +65,7 @@ class ChatPanel(QWidget):
             self.send_requested.emit(text)
 
 
-@entry_point
+@entrypoint
 @widget(layout="horizontal")
 class ChatClient(QWidget):
     """WebSocket chat client with presence awareness."""

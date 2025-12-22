@@ -2,25 +2,25 @@
 
 QtPie provides three ways to launch your application:
 
-1. **`@entry_point` decorator** - The simplest approach for single-file apps
+1. **`@entrypoint` decorator** - The simplest approach for single-file apps
 2. **`App` class** - Full control with lifecycle hooks
 3. **`run_app()` function** - Use any QApplication with qasync support
 
 ---
 
-## The `@entry_point` Decorator
+## The `@entrypoint` Decorator
 
-The `@entry_point` decorator is the easiest way to create a runnable app. When you run the file directly (as `__main__`), it automatically creates a QApplication and starts the event loop.
+The `@entrypoint` decorator is the easiest way to create a runnable app. When you run the file directly (as `__main__`), it automatically creates a QApplication and starts the event loop.
 
 ### Function Entry Point
 
 The simplest form - just return a widget:
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello, World!")
 ```
@@ -34,10 +34,10 @@ That's it! No manual app creation, no event loop boilerplate.
 Combine with `@widget` for declarative UI:
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Count: 0")
@@ -54,7 +54,7 @@ class MyApp(QWidget):
 Customize the app with parameters:
 
 ```python
-@entry_point(
+@entrypoint(
     dark_mode=True,
     title="My Application",
     size=(800, 600)
@@ -75,7 +75,7 @@ Available options:
 
 ### How It Works
 
-The `@entry_point` decorator is smart about when to run:
+The `@entrypoint` decorator is smart about when to run:
 
 - **When file is run directly** (`__main__`): Creates app, shows window, starts event loop
 - **When imported**: Does nothing - just stores configuration
@@ -84,7 +84,7 @@ This means you can use the same class in tests or as a library:
 
 ```python
 # my_app.py
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     ...
@@ -102,7 +102,7 @@ def test_counter():
 Entry points can be async functions:
 
 ```python
-@entry_point
+@entrypoint
 async def main():
     data = await fetch_data_async()
     return DataViewer(data)
@@ -118,10 +118,10 @@ For more control, subclass `App` (which extends `QApplication`):
 
 ```python
 from typing import override
-from qtpie import App, entry_point
+from qtpie import App, entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 class MyApp(App):
     @override
     def create_window(self):
@@ -159,7 +159,7 @@ Hook order:
 2. `setup()` - General setup
 3. `setup_styles()` - Load stylesheets
 
-When using `@entry_point`, it also calls:
+When using `@entrypoint`, it also calls:
 4. `create_window()` - Creates and shows the window
 5. Event loop starts
 
@@ -285,14 +285,14 @@ run_app(app)
 
 ## Comparison: Which Should I Use?
 
-### Use `@entry_point` when:
+### Use `@entrypoint` when:
 - Building single-file apps
 - Want minimal boilerplate
 - Don't need app lifecycle hooks
 - Prototyping or creating examples
 
 ```python
-@entry_point
+@entrypoint
 @widget
 class QuickApp(QWidget):
     ...
@@ -305,7 +305,7 @@ class QuickApp(QWidget):
 - Need custom QApplication subclass behavior
 
 ```python
-@entry_point
+@entrypoint
 class MyApp(App):
     def setup(self):
         self.load_config()
@@ -331,10 +331,10 @@ run_app(app)
 ### Simple Counter (Function Entry Point)
 
 ```python
-from qtpie import entry_point, make, widget, state
+from qtpie import entrypoint, make, widget, state
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -349,14 +349,14 @@ class Counter(QWidget):
 
 ```python
 from typing import override
-from qtpie import App, entry_point, make, widget
+from qtpie import App, entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QWidget
 
 @widget
 class MainWindow(QWidget):
     label: QLabel = make(QLabel, "Welcome!")
 
-@entry_point(dark_mode=True, title="My App", size=(1024, 768))
+@entrypoint(dark_mode=True, title="My App", size=(1024, 768))
 class MyApp(App):
     @override
     def setup(self):
@@ -396,10 +396,10 @@ Full async example with background tasks:
 
 ```python
 import asyncio
-from qtpie import entry_point, make, widget, state
+from qtpie import entrypoint, make, widget, state
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class AsyncCounter(QWidget):
     count: int = state(0)
@@ -414,20 +414,20 @@ class AsyncCounter(QWidget):
         self.start_btn.setEnabled(True)
 ```
 
-The `run_app()` function (used internally by `@entry_point`) sets up qasync automatically, so async/await just works.
+The `run_app()` function (used internally by `@entrypoint`) sets up qasync automatically, so async/await just works.
 
 ---
 
 ## Testing Entry Points
 
-When writing tests, the `@entry_point` decorator won't auto-run because:
+When writing tests, the `@entrypoint` decorator won't auto-run because:
 
 1. Tests import modules (not `__main__`)
 2. pytest-qt creates QApplication already
 
 ```python
 from qtpie_test import QtDriver
-from my_app import MyApp  # Has @entry_point, won't auto-run
+from my_app import MyApp  # Has @entrypoint, won't auto-run
 
 def test_my_app(qt: QtDriver):
     app = MyApp()  # Just creates the widget
@@ -443,6 +443,6 @@ See [Testing Guide](testing.md) for more details.
 ## See Also
 
 - [Testing](testing.md) - Testing QtPie applications
-- [@entry_point Reference](../reference/decorators/entry-point.md) - Full decorator API
+- [@entrypoint Reference](../reference/decorators/entry-point.md) - Full decorator API
 - [App Class Reference](../reference/app/app.md) - Complete App class documentation
 - [run_app() Reference](../reference/app/run-app.md) - Function details

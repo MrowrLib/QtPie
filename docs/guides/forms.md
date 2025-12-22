@@ -41,10 +41,10 @@ No manual `QLabel` creation needed - QtPie handles it all.
 Here's a complete contact form with various input types:
 
 ```python
-from qtpie import widget, make, entry_point
+from qtpie import widget, make, entrypoint
 from qtpy.QtWidgets import QWidget, QLineEdit, QSpinBox, QTextEdit, QComboBox
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class ContactForm(QWidget):
     name: QLineEdit = make(QLineEdit, form_label="Full Name", placeholderText="John Doe")
@@ -63,7 +63,7 @@ Forms work seamlessly with data binding and model widgets:
 
 ```python
 from dataclasses import dataclass
-from qtpie import widget, make, Widget, entry_point
+from qtpie import widget, make, Widget, entrypoint
 from qtpy.QtWidgets import QWidget, QLineEdit, QSlider, QLabel
 from qtpy.QtCore import Qt
 
@@ -72,7 +72,7 @@ class Dog:
     name: str = ""
     age: int = 0
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class DogEditor(QWidget, Widget[Dog]):
     name: QLineEdit = make(QLineEdit, form_label="Name")
@@ -242,7 +242,7 @@ Here's a complete, runnable example combining forms with data binding, validatio
 
 ```python
 from dataclasses import dataclass
-from qtpie import widget, make, Widget, entry_point
+from qtpie import widget, make, Widget, entrypoint
 from qtpy.QtWidgets import QWidget, QLineEdit, QSpinBox, QPushButton, QLabel
 
 @dataclass
@@ -251,7 +251,7 @@ class User:
     email: str = ""
     age: int = 18
 
-@entry_point
+@entrypoint
 @widget(layout="form", classes=["card"])
 class UserProfileEditor(QWidget, Widget[User]):
     name: QLineEdit = make(QLineEdit, form_label="Name")

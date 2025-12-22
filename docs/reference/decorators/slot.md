@@ -123,16 +123,16 @@ If you try to use `@slot` on an async function without qasync, you'll get:
 RuntimeError: qasync is required for async slots. Install it with: pip install qasync
 ```
 
-QtPie's `@entry_point` and `run_app()` automatically set up qasync, so async slots work out of the box in most cases.
+QtPie's `@entrypoint` and `run_app()` automatically set up qasync, so async slots work out of the box in most cases.
 
 ## Complete Example
 
 ```python
 import asyncio
-from qtpie import entry_point, widget, make, slot, state
+from qtpie import entrypoint, widget, make, slot, state
 from qtpy.QtWidgets import QWidget, QPushButton, QLabel, QLineEdit
 
-@entry_point
+@entrypoint
 @widget
 class SearchWidget(QWidget):
     query: str = state("")

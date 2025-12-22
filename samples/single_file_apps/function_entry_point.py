@@ -1,7 +1,8 @@
-from qtpie import entry_point
 from qtpy.QtWidgets import QLabel
 
+from qtpie import entrypoint
 
-@entry_point
+
+@entrypoint
 def main():
     return QLabel("Hello, World!")

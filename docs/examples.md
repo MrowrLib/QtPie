@@ -9,10 +9,10 @@ A collection of example applications showcasing QtPie features.
 The canonical counter example demonstrating reactive state and automatic UI updates.
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -42,10 +42,10 @@ QtPie offers multiple approaches for different needs.
 The simplest possible QtPie app - a function that returns a widget.
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello, World!")
 ```
@@ -55,10 +55,10 @@ def main():
 For apps that need interactivity and state.
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class MyWidget(QWidget):
     text: QLabel = make(QLabel, "Hello, World!")
@@ -74,10 +74,10 @@ For apps that need full control over initialization.
 
 ```python
 from typing import override
-from qtpie import App, entry_point
+from qtpie import App, entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 class MyApp(App):
     @override
     def create_window(self):
@@ -87,7 +87,7 @@ class MyApp(App):
 **What it demonstrates:**
 - Three different entry point patterns
 - Choose the right level of complexity for your needs
-- All three use `@entry_point` to handle app lifecycle
+- All three use `@entrypoint` to handle app lifecycle
 
 ---
 
@@ -99,14 +99,14 @@ A form that automatically binds input fields to a model.
 from dataclasses import dataclass
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QLabel, QLineEdit, QSlider, QWidget
-from qtpie import Widget, entry_point, make, widget
+from qtpie import Widget, entrypoint, make, widget
 
 @dataclass
 class Dog:
     name: str = ""
     age: int = 0
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class DogEditor(QWidget, Widget[Dog]):
     name: QLineEdit = make(QLineEdit, form_label="Name")
@@ -141,14 +141,14 @@ Real-time validation with visual feedback.
 ```python
 from dataclasses import dataclass
 from qtpy.QtWidgets import QLabel, QLineEdit, QWidget
-from qtpie import Widget, entry_point, make, widget
+from qtpie import Widget, entrypoint, make, widget
 
 @dataclass
 class User:
     name: str = ""
     email: str = ""
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class UserEditor(QWidget, Widget[User]):
     name: QLineEdit = make(QLineEdit, form_label="Name")
@@ -256,10 +256,10 @@ class EditorWindow(QMainWindow):
 A counter with increment and decrement.
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -290,10 +290,10 @@ class Counter(QWidget):
 Advanced format string bindings with expressions.
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class Calculator(QWidget):
     price: float = state(10.0)
@@ -345,7 +345,7 @@ Binding to nested object properties.
 
 ```python
 from dataclasses import dataclass
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget
 
 @dataclass
@@ -353,7 +353,7 @@ class Dog:
     name: str = ""
     age: int = 0
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class DogEditor(QWidget):
     dog: Dog = state(Dog(name="Buddy", age=3))
@@ -378,7 +378,7 @@ Track unsaved changes in a form.
 
 ```python
 from dataclasses import dataclass
-from qtpie import Widget, entry_point, make, widget
+from qtpie import Widget, entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QWidget
 
 @dataclass
@@ -386,7 +386,7 @@ class User:
     name: str = ""
     email: str = ""
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class UserEditor(QWidget, Widget[User]):
     name: QLineEdit = make(QLineEdit, form_label="Name")
@@ -424,10 +424,10 @@ class UserEditor(QWidget, Widget[User]):
 A text editor with undo and redo buttons.
 
 ```python
-from qtpie import Widget, entry_point, make, widget
+from qtpie import Widget, entrypoint, make, widget
 from qtpy.QtWidgets import QLineEdit, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget(undo=True)  # Enable undo/redo tracking
 class Editor(QWidget):
     text: str = ""
@@ -471,10 +471,10 @@ class Editor(QWidget):
 A form with multiple independent state fields.
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class UserForm(QWidget):
     # Independent state fields

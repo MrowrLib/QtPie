@@ -3,7 +3,7 @@
 from qtpie.app import App, run_app
 from qtpie.bindings import bind, register_binding
 from qtpie.decorators.action import action
-from qtpie.decorators.entry_point import entry_point
+from qtpie.decorators.entrypoint import entrypoint
 from qtpie.decorators.menu import menu
 from qtpie.decorators.slot import slot
 from qtpie.decorators.widget import widget
@@ -29,7 +29,7 @@ __all__ = [
     "bind",
     "enable_dark_mode",
     "enable_light_mode",
-    "entry_point",
+    "entrypoint",
     "make",
     "make_later",
     "menu",

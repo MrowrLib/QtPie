@@ -1,8 +1,9 @@
-from qtpie import entry_point, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
+from qtpie import entrypoint, make, widget
 
-@entry_point
+
+@entrypoint
 @widget
 class MyWidget(QWidget):
     text: QLabel = make(QLabel, "Hello, World!")

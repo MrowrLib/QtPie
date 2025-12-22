@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QLabel, QLineEdit, QSlider, QWidget
 
-from qtpie import Widget, entry_point, make, widget
+from qtpie import Widget, entrypoint, make, widget
 
 
 @dataclass
@@ -12,7 +12,7 @@ class Dog:
     age: int = 0
 
 
-@entry_point
+@entrypoint
 @widget(layout="form")
 class MyWidget(QWidget, Widget[Dog]):
     name: QLineEdit = make(QLineEdit, form_label="Name")

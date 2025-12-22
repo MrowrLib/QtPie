@@ -1,7 +1,7 @@
-"""End-to-end tests for @entry_point using subprocess.
+"""End-to-end tests for @entrypoint using subprocess.
 
 These tests actually run Python scripts in subprocesses to test
-the full @entry_point behavior including auto-run.
+the full @entrypoint behavior including auto-run.
 
 These tests are marked with @pytest.mark.e2e and can be skipped with:
     pytest -m "not e2e"
@@ -48,17 +48,17 @@ def run_script(script_path: Path, timeout: int = 10) -> subprocess.CompletedProc
 
 @pytest.mark.e2e
 class TestEntryPointFunctionE2E:
-    """E2E tests for @entry_point on functions."""
+    """E2E tests for @entrypoint on functions."""
 
-    def test_entry_point_function_runs(self, tmp_path: Path) -> None:
-        """@entry_point on a function should run when executed directly."""
+    def test_entrypoint_function_runs(self, tmp_path: Path) -> None:
+        """@entrypoint on a function should run when executed directly."""
         script = tmp_path / "app.py"
         script.write_text("""
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel, QApplication
 from qtpy.QtCore import QTimer
 
-@entry_point
+@entrypoint
 def main():
     print("MAIN_CALLED")
     label = QLabel("Test")
@@ -74,15 +74,15 @@ def main():
         assert_that(result.stdout).contains("MAIN_CALLED")
         assert_that(result.stdout).contains("LABEL_TEXT=Test")
 
-    def test_entry_point_function_with_config(self, tmp_path: Path) -> None:
-        """@entry_point with config should apply settings."""
+    def test_entrypoint_function_with_config(self, tmp_path: Path) -> None:
+        """@entrypoint with config should apply settings."""
         script = tmp_path / "app.py"
         script.write_text("""
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel, QApplication
 from qtpy.QtCore import QTimer
 
-@entry_point(title="My Test App", size=(800, 600))
+@entrypoint(title="My Test App", size=(800, 600))
 def main():
     label = QLabel("Configured")
     print(f"TITLE={label.windowTitle()}")  # Will be empty until shown
@@ -96,17 +96,17 @@ def main():
 
 @pytest.mark.e2e
 class TestEntryPointWidgetClassE2E:
-    """E2E tests for @entry_point on widget classes."""
+    """E2E tests for @entrypoint on widget classes."""
 
-    def test_entry_point_widget_class_runs(self, tmp_path: Path) -> None:
-        """@entry_point on a @widget class should run when executed."""
+    def test_entrypoint_widget_class_runs(self, tmp_path: Path) -> None:
+        """@entrypoint on a @widget class should run when executed."""
         script = tmp_path / "app.py"
         script.write_text("""
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel, QApplication
 from qtpy.QtCore import QTimer
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Hello from widget!")
@@ -124,20 +124,20 @@ class MyApp(QWidget):
 
 @pytest.mark.e2e
 class TestEntryPointImportBehavior:
-    """Tests for @entry_point import behavior."""
+    """Tests for @entrypoint import behavior."""
 
     def test_import_does_not_autorun(self, tmp_path: Path) -> None:
         """
-        When a module with @entry_point is IMPORTED (not run directly),
+        When a module with @entrypoint is IMPORTED (not run directly),
         the app should NOT auto-run.
         """
-        # App module with @entry_point
+        # App module with @entrypoint
         app_script = tmp_path / "myapp.py"
         app_script.write_text("""
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Test")
@@ -153,7 +153,7 @@ import sys
 sys.path.insert(0, "{tmp_path}")
 
 # This imports myapp, but myapp.__module__ == "myapp", not "__main__"
-# So @entry_point should NOT auto-run
+# So @entrypoint should NOT auto-run
 from myapp import MyApp
 
 print("IMPORT_SUCCESS")
@@ -170,17 +170,17 @@ print(f"CLASS={{MyApp.__name__}}")
 
 @pytest.mark.e2e
 class TestEntryPointAppSubclass:
-    """E2E tests for @entry_point on App subclasses."""
+    """E2E tests for @entrypoint on App subclasses."""
 
-    def test_entry_point_app_subclass_runs(self, tmp_path: Path) -> None:
-        """@entry_point on an App subclass should use that App."""
+    def test_entrypoint_app_subclass_runs(self, tmp_path: Path) -> None:
+        """@entrypoint on an App subclass should use that App."""
         script = tmp_path / "app.py"
         script.write_text("""
-from qtpie import App, entry_point
+from qtpie import App, entrypoint
 from qtpy.QtWidgets import QLabel, QApplication
 from qtpy.QtCore import QTimer
 
-@entry_point
+@entrypoint
 class MyApp(App):
     def setup(self):
         print("APP_SETUP_CALLED")

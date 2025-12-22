@@ -1,4 +1,4 @@
-"""Tests for the @entry_point decorator."""
+"""Tests for the @entrypoint decorator."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 from assertpy import assert_that
 from qtpy.QtWidgets import QApplication, QLabel, QWidget
 
-from qtpie import entry_point, make, widget
-from qtpie.decorators.entry_point import (
+from qtpie import entrypoint, make, widget
+from qtpie.decorators.entrypoint import (
     ENTRY_CONFIG_ATTR,
     EntryConfig,
     _apply_stylesheet,  # pyright: ignore[reportPrivateUsage]
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class TestHelperFunctions:
-    """Tests for entry_point helper functions (no qapp needed)."""
+    """Tests for entrypoint helper functions (no qapp needed)."""
 
     def test_is_main_module_returns_true_for_main(self) -> None:
         """_is_main_module should return True when module is __main__."""
@@ -83,12 +83,12 @@ class TestEntryConfig:
 
 
 class TestEntryPointDecorator:
-    """Tests for @entry_point decorator behavior."""
+    """Tests for @entrypoint decorator behavior."""
 
-    def test_entry_point_stores_config_on_function(self) -> None:
-        """@entry_point should store config on decorated function."""
+    def test_entrypoint_stores_config_on_function(self) -> None:
+        """@entrypoint should store config on decorated function."""
 
-        @entry_point(dark_mode=True, title="Test App")
+        @entrypoint(dark_mode=True, title="Test App")
         def my_main() -> QLabel:
             return QLabel("Hi")
 
@@ -97,10 +97,10 @@ class TestEntryPointDecorator:
         assert_that(config.dark_mode).is_true()
         assert_that(config.title).is_equal_to("Test App")
 
-    def test_entry_point_stores_config_on_class(self) -> None:
-        """@entry_point should store config on decorated class."""
+    def test_entrypoint_stores_config_on_class(self) -> None:
+        """@entrypoint should store config on decorated class."""
 
-        @entry_point(dark_mode=True, size=(1024, 768))
+        @entrypoint(dark_mode=True, size=(1024, 768))
         @widget
         class TestWidget(QWidget):
             label: QLabel = make(QLabel, "Test")
@@ -110,10 +110,10 @@ class TestEntryPointDecorator:
         assert_that(config.dark_mode).is_true()
         assert_that(config.size).is_equal_to((1024, 768))
 
-    def test_entry_point_without_parens(self) -> None:
-        """@entry_point should work without parentheses."""
+    def test_entrypoint_without_parens(self) -> None:
+        """@entrypoint should work without parentheses."""
 
-        @entry_point
+        @entrypoint
         def my_main() -> QLabel:
             return QLabel("Hi")
 
@@ -123,10 +123,10 @@ class TestEntryPointDecorator:
         assert_that(config.dark_mode).is_false()
         assert_that(config.title).is_none()
 
-    def test_entry_point_preserves_function(self) -> None:
-        """@entry_point should preserve the original function."""
+    def test_entrypoint_preserves_function(self) -> None:
+        """@entrypoint should preserve the original function."""
 
-        @entry_point
+        @entrypoint
         def my_main() -> str:
             return "hello"
 
@@ -134,10 +134,10 @@ class TestEntryPointDecorator:
         assert_that(callable(my_main)).is_true()
         assert_that(my_main()).is_equal_to("hello")
 
-    def test_entry_point_preserves_class(self) -> None:
-        """@entry_point should preserve the original class."""
+    def test_entrypoint_preserves_class(self) -> None:
+        """@entrypoint should preserve the original class."""
 
-        @entry_point
+        @entrypoint
         @widget
         class TestWidget(QWidget):
             label: QLabel = make(QLabel, "Test")
@@ -149,13 +149,13 @@ class TestEntryPointDecorator:
 
 
 class TestEntryPointWithQApp:
-    """Tests for @entry_point when QApplication exists."""
+    """Tests for @entrypoint when QApplication exists."""
 
-    def test_entry_point_does_not_run_when_app_exists(self, qapp: App) -> None:
-        """@entry_point should not auto-run when QApplication exists."""
+    def test_entrypoint_does_not_run_when_app_exists(self, qapp: App) -> None:
+        """@entrypoint should not auto-run when QApplication exists."""
         run_count = 0
 
-        @entry_point
+        @entrypoint
         def my_main() -> QLabel:
             nonlocal run_count
             run_count += 1
@@ -178,10 +178,10 @@ class TestEntryPointWithQApp:
         # Even with __main__ module, should return False because app exists
         assert_that(_should_auto_run(dummy)).is_false()
 
-    def test_widget_class_still_usable_with_entry_point(self, qapp: App) -> None:
-        """Widget class with @entry_point should still be usable."""
+    def test_widget_class_still_usable_with_entrypoint(self, qapp: App) -> None:
+        """Widget class with @entrypoint should still be usable."""
 
-        @entry_point
+        @entrypoint
         @widget
         class TestWidget(QWidget):
             label: QLabel = make(QLabel, "Hello!")
@@ -192,7 +192,7 @@ class TestEntryPointWithQApp:
 
 
 class TestEntryPointStylesheetConfig:
-    """Tests for @entry_point stylesheet configuration."""
+    """Tests for @entrypoint stylesheet configuration."""
 
     def test_entry_config_stylesheet_defaults(self) -> None:
         """EntryConfig should have default stylesheet settings."""
@@ -212,10 +212,10 @@ class TestEntryPointStylesheetConfig:
         assert_that(config.watch_stylesheet).is_true()
         assert_that(config.scss_search_paths).is_equal_to(("folder1", "folder2"))
 
-    def test_entry_point_stores_stylesheet_config(self) -> None:
-        """@entry_point should store stylesheet config on decorated function."""
+    def test_entrypoint_stores_stylesheet_config(self) -> None:
+        """@entrypoint should store stylesheet config on decorated function."""
 
-        @entry_point(
+        @entrypoint(
             stylesheet="app.qss",
             watch_stylesheet=True,
             scss_search_paths=["partials/"],
@@ -230,7 +230,7 @@ class TestEntryPointStylesheetConfig:
 
 
 class TestEntryPointStylesheetLoading:
-    """Tests for @entry_point stylesheet loading functionality."""
+    """Tests for @entrypoint stylesheet loading functionality."""
 
     def test_apply_stylesheet_loads_qss_file(self, qapp: App, tmp_path: Path) -> None:
         """_apply_stylesheet should load QSS from filesystem."""

@@ -7,11 +7,11 @@ Let's build a Qt app, step by step, from the simplest possible widget to a react
 The simplest QtPie app is a function that returns a widget:
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
 
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello, World!")
 ```
@@ -24,7 +24,7 @@ python hello.py
 
 That's it. A window appears with "Hello, World!". No `QApplication`, no `if __name__ == "__main__"`, no boilerplate.
 
-**What `@entry_point` does:**
+**What `@entrypoint` does:**
 - Creates a `QApplication` instance
 - Calls your function to get a widget
 - Shows the widget in a window
@@ -35,11 +35,11 @@ That's it. A window appears with "Hello, World!". No `QApplication`, no `if __na
 Let's make a real widget with multiple children:
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class MyWidget(QWidget):
     text: QLabel = make(QLabel, "Hello, World!")
@@ -102,11 +102,11 @@ if __name__ == "__main__":
 Right now, clicking the button just sets static text. Let's add a counter:
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     label: QLabel = make(QLabel, "Count: 0")
@@ -125,11 +125,11 @@ This works, but notice we're still manually updating the label with `setText()`.
 Here's where QtPie shines. Use `state()` to create reactive state, and `bind=` to connect widgets:
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -157,11 +157,11 @@ class Counter(QWidget):
 Binding works both ways for input widgets:
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QLineEdit, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Greeter(QWidget):
     name: str = state("")
@@ -175,11 +175,11 @@ class Greeter(QWidget):
 ### Advanced: Multiple Variables in Bindings
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QSpinBox, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Calculator(QWidget):
     a: int = state(10)
@@ -198,11 +198,11 @@ Change either spinbox → both state fields update → result recalculates autom
 Here's the canonical QtPie example - the "Hello World" of reactive frameworks:
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 
-@entry_point
+@entrypoint
 @widget
 class Counter(QWidget):
     count: int = state(0)

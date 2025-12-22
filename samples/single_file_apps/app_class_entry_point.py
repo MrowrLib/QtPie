@@ -1,10 +1,11 @@
 from typing import override
 
-from qtpie import App, entry_point
 from qtpy.QtWidgets import QLabel
 
+from qtpie import App, entrypoint
 
-@entry_point
+
+@entrypoint
 class MyApp(App):
     @override
     def create_window(self):

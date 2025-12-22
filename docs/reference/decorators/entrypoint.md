@@ -1,6 +1,6 @@
-# @entry_point
+# @entrypoint
 
-The `@entry_point` decorator marks a function or class as the application entry point. When the decorated item's file is run directly (module is `__main__`), it automatically creates a Qt application, runs the entry point, and starts the event loop.
+The `@entrypoint` decorator marks a function or class as the application entry point. When the decorated item's file is run directly (module is `__main__`), it automatically creates a Qt application, runs the entry point, and starts the event loop.
 
 When imported from another module, the decorator simply stores configuration without auto-running, allowing the class/function to be used normally.
 
@@ -8,13 +8,13 @@ When imported from another module, the decorator simply stores configuration wit
 
 ### Without Parentheses
 
-For default settings, use `@entry_point` without parentheses:
+For default settings, use `@entrypoint` without parentheses:
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello, World!")
 ```
@@ -23,10 +23,10 @@ Run this file with `python main.py` and it automatically starts the Qt applicati
 
 ### With Parentheses
 
-To customize the application, use `@entry_point()` with parameters:
+To customize the application, use `@entrypoint()` with parameters:
 
 ```python
-@entry_point(dark_mode=True, title="My App", size=(800, 600))
+@entrypoint(dark_mode=True, title="My App", size=(800, 600))
 def main():
     return QLabel("Hello, World!")
 ```
@@ -38,10 +38,10 @@ def main():
 The simplest approach - a function that returns a widget:
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello, World!")
 ```
@@ -53,10 +53,10 @@ When run directly, this creates a `QApplication`, calls `main()`, shows the retu
 Use with `@widget` for declarative widgets:
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point
+@entrypoint
 @widget
 class MyWidget(QWidget):
     text: QLabel = make(QLabel, "Hello, World!")
@@ -74,10 +74,10 @@ For full control over application lifecycle:
 
 ```python
 from typing import override
-from qtpie import App, entry_point
+from qtpie import App, entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 class MyApp(App):
     @override
     def create_window(self):
@@ -92,10 +92,10 @@ Use async functions with `qasync`:
 
 ```python
 import asyncio
-from qtpie import entry_point
+from qtpie import entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 async def main():
     # Perform async operations
     await asyncio.sleep(1)
@@ -117,7 +117,7 @@ Enables dark mode color scheme for the application.
 **Example:**
 
 ```python
-@entry_point(dark_mode=True)
+@entrypoint(dark_mode=True)
 def main():
     return QLabel("Dark mode enabled")
 ```
@@ -132,7 +132,7 @@ Enables light mode color scheme for the application. Typically unnecessary as li
 **Example:**
 
 ```python
-@entry_point(light_mode=True)
+@entrypoint(light_mode=True)
 def main():
     return QLabel("Light mode enabled")
 ```
@@ -147,7 +147,7 @@ Sets the window title. Applied to the widget returned by the entry point functio
 **Example:**
 
 ```python
-@entry_point(title="My Application v1.0")
+@entrypoint(title="My Application v1.0")
 def main():
     return QLabel("Hello!")
 # Window title will be "My Application v1.0"
@@ -163,7 +163,7 @@ Sets the initial window size as `(width, height)` in pixels.
 **Example:**
 
 ```python
-@entry_point(size=(1024, 768))
+@entrypoint(size=(1024, 768))
 def main():
     return QLabel("Hello!")
 # Window opens at 1024x768 pixels
@@ -179,7 +179,7 @@ Path to a QSS/SCSS stylesheet to load. The file is loaded and applied to the app
 **Example:**
 
 ```python
-@entry_point(stylesheet="styles.qss")
+@entrypoint(stylesheet="styles.qss")
 def main():
     return QLabel("Styled!")
 ```
@@ -194,9 +194,9 @@ A widget class to instantiate as the main window. Only used when the entry point
 **Example:**
 
 ```python
-from qtpie import entry_point
+from qtpie import entrypoint
 
-@entry_point(window=MyMainWindow)
+@entrypoint(window=MyMainWindow)
 def main():
     # Perform setup, but don't return a widget
     initialize_database()
@@ -205,7 +205,7 @@ def main():
 
 ## Auto-Run Behavior
 
-The `@entry_point` decorator automatically runs when **both** conditions are met:
+The `@entrypoint` decorator automatically runs when **both** conditions are met:
 
 1. **Module is `__main__`** - The file is executed directly (`python myapp.py`)
 2. **No QApplication exists** - There's no existing Qt application instance
@@ -214,7 +214,7 @@ This means:
 
 ```python
 # myapp.py
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello!")
 
@@ -229,14 +229,14 @@ def main():
 
 ### Testing Compatibility
 
-The auto-run behavior is disabled when a `QApplication` already exists, making `@entry_point` safe to use in tests:
+The auto-run behavior is disabled when a `QApplication` already exists, making `@entrypoint` safe to use in tests:
 
 ```python
 # test_myapp.py
 from qtpie_test import QtDriver
 
 def test_my_app(qt: QtDriver):
-    # This works fine - @entry_point won't auto-run
+    # This works fine - @entrypoint won't auto-run
     # because qt fixture already created a QApplication
     widget = MyAppWidget()
     qt.track(widget)
@@ -248,10 +248,10 @@ def test_my_app(qt: QtDriver):
 ### Simple Counter
 
 ```python
-from qtpie import entry_point, make, state, widget
+from qtpie import entrypoint, make, state, widget
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
-@entry_point(title="Counter", size=(300, 150))
+@entrypoint(title="Counter", size=(300, 150))
 @widget
 class Counter(QWidget):
     count: int = state(0)
@@ -266,14 +266,14 @@ class Counter(QWidget):
 
 ```python
 from typing import override
-from qtpie import App, entry_point, make, widget
+from qtpie import App, entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QMainWindow, QWidget
 
 @widget
 class MainWidget(QWidget):
     label: QLabel = make(QLabel, "Application Ready!")
 
-@entry_point(dark_mode=True, size=(800, 600))
+@entrypoint(dark_mode=True, size=(800, 600))
 class MyApp(App):
     @override
     def setup(self):
@@ -290,7 +290,7 @@ class MyApp(App):
 ### Multiple Configuration Options
 
 ```python
-@entry_point(
+@entrypoint(
     dark_mode=True,
     title="Production Dashboard",
     size=(1280, 720),
@@ -304,14 +304,14 @@ class Dashboard(QWidget):
 ### Function with Window Parameter
 
 ```python
-from qtpie import entry_point, make, widget
+from qtpie import entrypoint, make, widget
 from qtpy.QtWidgets import QLabel, QWidget
 
 @widget
 class MainWindow(QWidget):
     label: QLabel = make(QLabel, "Main Window")
 
-@entry_point(window=MainWindow, title="My App")
+@entrypoint(window=MainWindow, title="My App")
 def main():
     # Perform initialization
     load_config()
@@ -321,33 +321,33 @@ def main():
 
 ## Order with Other Decorators
 
-When using `@entry_point` with other decorators, `@entry_point` should be the **outermost** decorator:
+When using `@entrypoint` with other decorators, `@entrypoint` should be the **outermost** decorator:
 
 ```python
 # Correct order
-@entry_point(dark_mode=True)
+@entrypoint(dark_mode=True)
 @widget(layout="vertical")
 class MyApp(QWidget):
     pass
 
 # Also correct
-@entry_point
+@entrypoint
 @window(title="My Window")
 class MyApp(QMainWindow):
     pass
 ```
 
-This ensures `@entry_point` decorates the fully-configured widget class.
+This ensures `@entrypoint` decorates the fully-configured widget class.
 
 ## When to Use
 
-Use `@entry_point` when:
+Use `@entrypoint` when:
 
 - Building a standalone application with a single entry point file
 - You want automatic app creation and event loop management
 - Writing simple scripts or demos that should "just run"
 
-Don't use `@entry_point` when:
+Don't use `@entrypoint` when:
 
 - Building a library (use regular `@widget` or `@window`)
 - The widget should be reusable as a component
@@ -359,7 +359,7 @@ For library code, prefer explicit app creation:
 from qtpie import run_app, widget
 from qtpy.QtWidgets import QWidget
 
-@widget  # No @entry_point
+@widget  # No @entrypoint
 class MyLibraryWidget(QWidget):
     pass
 

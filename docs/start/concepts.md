@@ -115,15 +115,15 @@ class SaveAction(QAction):
 
 [Full @action reference →](../reference/decorators/action.md)
 
-### @entry_point
+### @entrypoint
 
 Marks the application entry point. Automatically creates the QApplication and event loop when the script is run directly.
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel
 
-@entry_point(dark_mode=True, title="Hello App", size=(400, 200))
+@entrypoint(dark_mode=True, title="Hello App", size=(400, 200))
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Hello, QtPie!")
@@ -136,7 +136,7 @@ class MyApp(QWidget):
 - Starts the event loop
 - Supports dark/light mode, window config
 
-[Full @entry_point reference →](../reference/decorators/entry-point.md)
+[Full @entrypoint reference →](../reference/decorators/entry-point.md)
 
 ---
 

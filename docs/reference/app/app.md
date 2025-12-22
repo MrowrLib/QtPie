@@ -62,7 +62,7 @@ class MyApp(App):
 
     @override
     def create_window(self) -> QWidget | None:
-        # Called by @entry_point to create main window
+        # Called by @entrypoint to create main window
         return MyMainWindow()
 ```
 
@@ -117,7 +117,7 @@ class MyApp(App):
 
 ### create_window()
 
-Called by `@entry_point` to create the main window. Return a `QWidget` to show:
+Called by `@entrypoint` to create the main window. Return a `QWidget` to show:
 
 ```python
 class MyApp(App):
@@ -131,7 +131,7 @@ class MyApp(App):
 1. `App.__init__()` runs (color scheme applied, QApplication initialized)
 2. `setup()` called
 3. `setup_styles()` called
-4. `create_window()` called (only when used with `@entry_point`)
+4. `create_window()` called (only when used with `@entrypoint`)
 
 ## Methods
 
@@ -229,16 +229,16 @@ async def main():
     await app.run_async()
 ```
 
-## Using with @entry_point
+## Using with @entrypoint
 
-The `App` class works seamlessly with `@entry_point`:
+The `App` class works seamlessly with `@entrypoint`:
 
 ```python
 from typing import override
-from qtpie import App, entry_point
+from qtpie import App, entrypoint
 from qtpy.QtWidgets import QLabel
 
-@entry_point
+@entrypoint
 class MyApp(App):
     @override
     def create_window(self):
@@ -247,7 +247,7 @@ class MyApp(App):
 
 When you run this file directly (`python my_app.py`):
 
-1. `@entry_point` detects it's the main module
+1. `@entrypoint` detects it's the main module
 2. Creates an instance of `MyApp`
 3. Calls lifecycle hooks (`setup`, `setup_styles`)
 4. Calls `create_window()` to get the main window
@@ -257,7 +257,7 @@ When you run this file directly (`python my_app.py`):
 **With configuration:**
 
 ```python
-@entry_point(dark_mode=True, title="My Application", size=(800, 600))
+@entrypoint(dark_mode=True, title="My Application", size=(800, 600))
 class MyApp(App):
     @override
     def setup(self) -> None:
@@ -306,18 +306,18 @@ if __name__ == "__main__":
     app.run()
 ```
 
-### Using with @entry_point (Recommended)
+### Using with @entrypoint (Recommended)
 
 ```python
 from typing import override
-from qtpie import App, entry_point, widget, make
+from qtpie import App, entrypoint, widget, make
 from qtpy.QtWidgets import QWidget, QLabel
 
 @widget
 class MainWindow(QWidget):
     label: QLabel = make(QLabel, "Hello World!")
 
-@entry_point(dark_mode=True, title="My App", size=(600, 400))
+@entrypoint(dark_mode=True, title="My App", size=(600, 400))
 class MyApp(App):
     @override
     def setup(self) -> None:
@@ -332,7 +332,7 @@ class MyApp(App):
     def create_window(self) -> QWidget:
         return MainWindow()
 
-# When run directly, @entry_point handles everything:
+# When run directly, @entrypoint handles everything:
 # - Creates MyApp instance
 # - Calls lifecycle hooks
 # - Calls create_window()
@@ -411,6 +411,6 @@ app = GameApp()
 ## See Also
 
 - [run_app()](run-app.md) - Standalone event loop runner
-- [@entry_point](../decorators/entry-point.md) - Application entry point decorator
+- [@entrypoint](../decorators/entry-point.md) - Application entry point decorator
 - [Color Schemes](../styles/color-schemes.md) - Dark/light mode management
 - [SCSS Hot Reload](../../guides/scss.md) - Stylesheet development workflow

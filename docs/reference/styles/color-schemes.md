@@ -113,10 +113,10 @@ class ThemeSwitcher(QWidget):
 ## Complete Example
 
 ```python
-from qtpie import entry_point, widget, make, enable_dark_mode, enable_light_mode
+from qtpie import entrypoint, widget, make, enable_dark_mode, enable_light_mode
 from qtpy.QtWidgets import QWidget, QLabel, QPushButton
 
-@entry_point
+@entrypoint
 @widget
 class ThemeDemo(QWidget):
     label: QLabel = make(QLabel, "Choose your theme")
