@@ -339,6 +339,26 @@ class MyWidget(QWidget):
         print("Button released")
 ```
 
+## Async closeEvent
+
+The `@widget` decorator automatically wraps async `closeEvent` methods with `qasync.asyncClose`, allowing cleanup operations to complete before the widget is destroyed:
+
+```python
+import asyncio
+
+@widget
+class MyWidget(QWidget):
+    async def closeEvent(self, event: QCloseEvent) -> None:
+        # Async cleanup - runs to completion before window closes
+        await self.save_data_async()
+        await self.disconnect_services()
+        event.accept()
+```
+
+Without this automatic wrapping, an async `closeEvent` would not wait for the coroutine to complete, potentially causing data loss or incomplete cleanup.
+
+**Requirements:** Requires `qasync` to be installed. If qasync is not available, async closeEvent methods are not wrapped.
+
 ## Widget Field Behavior
 
 ### Automatic Layout Addition

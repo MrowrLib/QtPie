@@ -244,6 +244,26 @@ class MyWindow(QMainWindow):
 
 All hooks have access to fully initialized child widgets.
 
+## Async closeEvent
+
+The `@window` decorator automatically wraps async `closeEvent` methods with `qasync.asyncClose`, allowing cleanup operations to complete before the window is destroyed:
+
+```python
+import asyncio
+
+@window(title="My App")
+class MyWindow(QMainWindow):
+    async def closeEvent(self, event: QCloseEvent) -> None:
+        # Async cleanup - runs to completion before window closes
+        await self.save_session_async()
+        await self.disconnect_from_server()
+        event.accept()
+```
+
+This ensures async cleanup completes before the window is destroyed. Without this wrapping, the coroutine would be created but not awaited.
+
+**Requirements:** Requires `qasync` to be installed.
+
 ## Signal Connections
 
 Signals are connected via the `make()` factory:

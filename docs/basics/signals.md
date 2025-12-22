@@ -148,6 +148,39 @@ class MyWidget(QWidget):
         print(f"Enabled: {checked}")
 ```
 
+## Async Slots with @slot
+
+For async signal handlers, use the `@slot` decorator:
+
+```python
+import asyncio
+from qtpie import widget, make, slot
+from qtpy.QtWidgets import QWidget, QPushButton, QLabel
+
+@widget
+class AsyncWidget(QWidget):
+    button: QPushButton = make(QPushButton, "Fetch", clicked="fetch_data")
+    label: QLabel = make(QLabel, "Ready")
+
+    @slot
+    async def fetch_data(self) -> None:
+        self.label.setText("Loading...")
+        await asyncio.sleep(2)  # Simulate async operation
+        self.label.setText("Done!")
+```
+
+The `@slot` decorator wraps async functions with `qasync.asyncSlot`, allowing them to work correctly with Qt's signal system. Without it, the coroutine would be created but never awaited.
+
+For sync functions, `@slot` is optional - but you can use it for consistency or when you need Qt's `@Slot` type declarations:
+
+```python
+@slot(str)
+def on_text_changed(self, text: str) -> None:
+    print(f"Text: {text}")
+```
+
+See [@slot Reference](../reference/decorators/slot.md) for full documentation.
+
 ## How It Works
 
 QtPie's `make()` function separates signal connections from widget properties:

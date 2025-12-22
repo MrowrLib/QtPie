@@ -79,12 +79,13 @@ nav:
           - "@window": reference/decorators/window.md
           - "@menu": reference/decorators/menu.md
           - "@action": reference/decorators/action.md
+          - "@slot": reference/decorators/slot.md
           - "@entry_point": reference/decorators/entry-point.md
       - Factories:
           - "make()": reference/factories/make.md
           - "make_later()": reference/factories/make-later.md
           - "state()": reference/factories/state.md
-          - "stretch()": reference/factories/stretch.md
+          - "spacer()": reference/factories/spacer.md
           - "separator()": reference/factories/separator.md
       - Bindings:
           - "bind()": reference/bindings/bind.md
