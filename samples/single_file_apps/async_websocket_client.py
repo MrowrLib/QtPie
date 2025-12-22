@@ -118,7 +118,7 @@ class ChatClient(QWidget):
         self.chat_panel.send_btn.setEnabled(False)
         self.users_panel.users_list.clear()
 
-    @slot(str)  # type: ignore[misc]
+    @slot(str)
     async def on_send(self, text: str) -> None:
         if self._ws is None:
             return
