@@ -174,14 +174,22 @@ def main():
 **Type:** `str | None`
 **Default:** `None`
 
-Path to a QSS or SCSS stylesheet to load. The file is loaded and applied to the application. SCSS files are automatically compiled to QSS.
+Path to a stylesheet. Supports three formats:
 
-**Example:**
+- **Filesystem path** - Regular file path (e.g., `"styles.qss"`, `"styles/main.scss"`)
+- **QRC path** - Qt resource path starting with `:/` (e.g., `":/styles/app.qss"`)
+- **SCSS file** - Any `.scss` file is automatically compiled to QSS
+
+**Examples:**
 
 ```python
-@entrypoint(stylesheet="styles.qss")
+@entrypoint(stylesheet="styles.qss")  # Filesystem
 def main():
     return QLabel("Styled!")
+
+@entrypoint(stylesheet=":/styles/app.qss")  # QRC resource
+def main():
+    return QLabel("Styled from resources!")
 ```
 
 ### watch_stylesheet
@@ -190,6 +198,8 @@ def main():
 **Default:** `False`
 
 Enables hot-reload for the stylesheet. When `True`, changes to the stylesheet file are automatically detected and applied without restarting the app. Useful during development.
+
+**Note:** Not applicable to QRC paths (resources are compiled into the binary).
 
 **Example:**
 

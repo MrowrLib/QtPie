@@ -22,14 +22,22 @@ The stylesheet is loaded when the widget is instantiated and applied via `widget
 
 **Type:** `str`
 
-Path to a QSS or SCSS stylesheet file. SCSS files are automatically compiled to QSS.
+Path to a stylesheet. Supports three formats:
+
+- **Filesystem path** - Regular file path (e.g., `"styles.qss"`, `"styles/main.scss"`)
+- **QRC path** - Qt resource path starting with `:/` (e.g., `":/styles/app.qss"`)
+- **SCSS file** - Any `.scss` file is automatically compiled to QSS
 
 ```python
-@stylesheet("styles.qss")  # Plain QSS
+@stylesheet("styles.qss")  # Plain QSS from filesystem
 class MyWidget(QWidget):
     pass
 
 @stylesheet("styles.scss")  # SCSS (compiled automatically)
+class MyWidget(QWidget):
+    pass
+
+@stylesheet(":/styles/app.qss")  # QRC resource
 class MyWidget(QWidget):
     pass
 ```
@@ -40,6 +48,8 @@ class MyWidget(QWidget):
 **Default:** `False`
 
 Enable hot-reload. When `True`, changes to the stylesheet file are automatically detected and applied without restarting the app.
+
+**Note:** Not applicable to QRC paths (resources are compiled into the binary).
 
 ```python
 @stylesheet("styles.scss", watch=True)
@@ -174,6 +184,25 @@ QLabel {
     color: $text-color;
 }
 ```
+
+### QRC Resources
+
+For production apps, embed stylesheets in Qt resources:
+
+```python
+from qtpie import stylesheet, widget
+from qtpy.QtWidgets import QWidget
+
+# resources.qrc compiled with rcc
+import resources_rc  # noqa: F401
+
+@stylesheet(":/styles/card.qss")
+@widget
+class Card(QWidget):
+    pass
+```
+
+QRC paths start with `:/` and reference compiled Qt resources. This is ideal for distribution since styles are embedded in the binary.
 
 ### On App Subclass
 
