@@ -1,5 +1,5 @@
-site_name: QtPie
-site_description: Declarative UI for Qt/PySide6 in Python
+site_name: Qt Pie
+site_description: Tasty way to build desktop apps
 site_url: https://mrowrlib.github.io/QtPie
 
 repo_name: MrowrLib/QtPie
@@ -7,16 +7,18 @@ repo_url: https://github.com/MrowrLib/QtPie
 
 theme:
   name: material
+  favicon: images/favicon.ico
+  logo: images/QtPie%20256.png
   palette:
     - scheme: default
-      primary: deep purple
-      accent: purple
+      primary: light blue
+      accent: red
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: deep purple
-      accent: purple
+      primary: light blue
+      accent: red
       toggle:
         icon: material/brightness-4
         name: Switch to light mode

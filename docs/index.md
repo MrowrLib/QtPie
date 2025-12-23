@@ -1,4 +1,4 @@
-# QtPie 🍰
+# ![Qt Pie](images/QtPie%2064.png) Qt Pie
 
 **Tasty way to build Qt apps**
 
