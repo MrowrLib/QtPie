@@ -1,15 +1,9 @@
 """QtDriver - A strongly-typed, modern wrapper around pytest-qt."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
+from pytestqt.qtbot import QtBot
 from qtpy.QtCore import Qt
 from qtpy.QtTest import QTest
 from qtpy.QtWidgets import QWidget
-
-if TYPE_CHECKING:
-    from pytestqt.qtbot import QtBot
 
 
 class QtDriver:

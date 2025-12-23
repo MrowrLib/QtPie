@@ -1,19 +1,13 @@
 """pytest configuration for all tests."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import pytest
 
-if TYPE_CHECKING:
-    from qtpie import App
+from qtpie import App
 
 
 @pytest.fixture(scope="session")
 def qapp_cls() -> type[App]:
     """Override pytest-qt's qapp_cls to use our App class."""
-    from qtpie import App
 
     # pytest-qt calls qapp_cls(qapp_args) where qapp_args is a list
     # Our App expects (name, *, argv=...) so we need a wrapper

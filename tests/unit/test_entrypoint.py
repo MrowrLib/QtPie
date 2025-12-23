@@ -1,14 +1,11 @@
 """Tests for the @entrypoint decorator."""
 
-from __future__ import annotations
-
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QApplication, QLabel, QWidget
 
-from qtpie import entrypoint, make, widget
+from qtpie import App, entrypoint, make, widget
 from qtpie.decorators.entrypoint import (
     ENTRY_CONFIG_ATTR,
     EntryConfig,
@@ -18,9 +15,6 @@ from qtpie.decorators.entrypoint import (
     _should_auto_run,  # pyright: ignore[reportPrivateUsage]
 )
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
-
-if TYPE_CHECKING:
-    from qtpie import App
 
 
 class TestHelperFunctions:

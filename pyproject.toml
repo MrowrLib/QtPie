@@ -97,7 +97,6 @@ source = ["lib/qtpie"]
 [tool.coverage.report]
 exclude_lines = [
   "pragma: no cover",
-  "if TYPE_CHECKING:",
   "raise NotImplementedError",
   "@overload",
 ]

@@ -1,16 +1,13 @@
 """Tests for the App class."""
 
-from __future__ import annotations
-
 import inspect
 from pathlib import Path
-from typing import TYPE_CHECKING, override
+from typing import override
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QApplication
 
-if TYPE_CHECKING:
-    from qtpie import App
+from qtpie import App
 
 
 class TestAppClass:
@@ -22,8 +19,6 @@ class TestAppClass:
 
     def test_app_is_our_app_class(self, qapp: App) -> None:
         """qapp fixture should use our App class."""
-        from qtpie import App
-
         assert_that(qapp).is_instance_of(App)
 
     def test_app_has_run_method(self, qapp: App) -> None:
@@ -67,8 +62,6 @@ class TestAppLifecycleHooks:
 
     def test_setup_hook_called_on_subclass(self) -> None:
         """setup() hook should be called when overridden in subclass."""
-        from qtpie import App
-
         setup_called = False
 
         class MyApp(App):
@@ -83,8 +76,6 @@ class TestAppLifecycleHooks:
 
     def test_create_window_hook_exists(self) -> None:
         """create_window() hook should exist on App."""
-        from qtpie import App
-
         assert_that(hasattr(App, "create_window")).is_true()
 
 

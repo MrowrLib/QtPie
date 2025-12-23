@@ -1,19 +1,14 @@
 """App class - a QApplication subclass with lifecycle hooks and qasync support."""
 
-from __future__ import annotations
-
 import asyncio
 import sys
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
 import qasync  # type: ignore[import-untyped]
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 
 def run_app(app: QApplication) -> int:

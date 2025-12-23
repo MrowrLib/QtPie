@@ -1,7 +1,7 @@
 """Widget base class - optional mixin with model binding support."""
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
+from typing import Any, cast, get_args, get_origin
 
 from observant import ObservableProxy
 from qtpy.QtWidgets import QLayout, QWidget
@@ -39,9 +39,8 @@ class Widget[T = None]:
     """
 
     # Type hints for IDE - actual fields are created by @widget decorator
-    if TYPE_CHECKING:
-        model: T
-        proxy: ObservableProxy[T]
+    model: T
+    proxy: ObservableProxy[T]
 
     def set_model(self, model: T) -> None:
         """
