@@ -174,7 +174,7 @@ def main():
 **Type:** `str | None`
 **Default:** `None`
 
-Path to a QSS/SCSS stylesheet to load. The file is loaded and applied to the application.
+Path to a QSS or SCSS stylesheet to load. The file is loaded and applied to the application. SCSS files are automatically compiled to QSS.
 
 **Example:**
 
@@ -182,6 +182,55 @@ Path to a QSS/SCSS stylesheet to load. The file is loaded and applied to the app
 @entrypoint(stylesheet="styles.qss")
 def main():
     return QLabel("Styled!")
+```
+
+### watch_stylesheet
+
+**Type:** `bool`
+**Default:** `False`
+
+Enables hot-reload for the stylesheet. When `True`, changes to the stylesheet file are automatically detected and applied without restarting the app. Useful during development.
+
+**Example:**
+
+```python
+@entrypoint(stylesheet="styles.scss", watch_stylesheet=True)
+@widget
+class MyApp(QWidget):
+    pass
+# Now edit styles.scss and save - changes appear instantly!
+```
+
+### scss_search_paths
+
+**Type:** `Sequence[str]`
+**Default:** `()`
+
+Directories to search when resolving SCSS `@import` statements. If empty, the parent directory of the stylesheet is used automatically.
+
+**Example:**
+
+```python
+@entrypoint(
+    stylesheet="styles/main.scss",
+    watch_stylesheet=True,
+    scss_search_paths=["styles/partials", "styles/themes"]
+)
+@widget
+class MyApp(QWidget):
+    pass
+```
+
+With this structure:
+```
+myapp/
+├── styles/
+│   ├── main.scss          # @import 'variables';
+│   ├── partials/
+│   │   └── _variables.scss
+│   └── themes/
+│       └── _dark.scss
+└── main.py
 ```
 
 ### window
@@ -299,6 +348,22 @@ class MyApp(App):
 @widget
 class Dashboard(QWidget):
     # ... widget implementation
+```
+
+### Full Stylesheet Configuration
+
+```python
+@entrypoint(
+    dark_mode=True,
+    title="My App",
+    size=(1024, 768),
+    stylesheet="styles/main.scss",
+    watch_stylesheet=True,  # Hot-reload during development
+    scss_search_paths=["styles/partials", "styles/themes"],
+)
+@widget
+class MyApp(QWidget):
+    label: QLabel = make(QLabel, "Styled with SCSS!")
 ```
 
 ### Function with Window Parameter

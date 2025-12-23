@@ -12,6 +12,58 @@ SCSS is a superset of CSS that adds powerful features:
 
 Since Qt stylesheets (QSS) are CSS-like, SCSS compiles perfectly to QSS.
 
+## Declarative Alternatives
+
+Before diving into manual `watch_scss()` calls, consider these simpler declarative options:
+
+### Using @entrypoint (App-Wide Styles)
+
+The simplest approach - add stylesheet options directly to your entry point:
+
+```python
+from qtpie import entrypoint, widget, make
+from qtpy.QtWidgets import QWidget, QPushButton
+
+@entrypoint(
+    stylesheet="styles.scss",
+    watch_stylesheet=True,
+    scss_search_paths=["partials/"]
+)
+@widget
+class MyApp(QWidget):
+    button: QPushButton = make(QPushButton, "Click Me")
+```
+
+This applies styles to the entire application with hot-reload enabled.
+
+### Using @stylesheet (Component Styles)
+
+For component-level styles, use the `@stylesheet` decorator:
+
+```python
+from qtpie import stylesheet, widget, make
+from qtpy.QtWidgets import QWidget, QLabel
+
+@stylesheet("card.scss", watch=True)
+@widget
+class Card(QWidget):
+    title: QLabel = make(QLabel, "Card Title")
+```
+
+This scopes styles to the widget and its children.
+
+### When to Use Each Approach
+
+| Approach | Use When |
+|----------|----------|
+| `@entrypoint(stylesheet=...)` | App-wide styles, simplest setup |
+| `@stylesheet` on widget | Component-scoped styles, reusable widgets |
+| `watch_scss()` (below) | Need manual control, dynamic paths, or conditional loading |
+
+If the declarative options work for your use case, you may not need the manual approach described below.
+
+---
+
 ## Quick Start
 
 The simplest way to use SCSS with hot reload is the `watch_scss()` function:

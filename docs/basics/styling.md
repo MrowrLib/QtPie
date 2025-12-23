@@ -141,7 +141,33 @@ class MyApp(QWidget):
 
 QtPie has built-in support for SCSS compilation and hot reload during development. This lets you write stylesheets in SCSS and have them automatically compiled to QSS.
 
-For details on using SCSS, file watching, and hot reload, see the [SCSS Hot Reload guide](../guides/scss.md).
+### Quick Options
+
+**For app-wide styles**, use `@entrypoint` with stylesheet options:
+
+```python
+from qtpie import entrypoint, widget
+from qtpy.QtWidgets import QWidget
+
+@entrypoint(stylesheet="styles.scss", watch_stylesheet=True)
+@widget
+class MyApp(QWidget):
+    pass
+```
+
+**For component-scoped styles**, use the `@stylesheet` decorator:
+
+```python
+from qtpie import stylesheet, widget
+from qtpy.QtWidgets import QWidget
+
+@stylesheet("card.scss", watch=True)
+@widget
+class Card(QWidget):
+    pass
+```
+
+For details on SCSS imports, file watching, and manual control, see the [SCSS Hot Reload guide](../guides/scss.md).
 
 ## Example: Themed Button Widget
 
@@ -187,5 +213,6 @@ class ThemedButton(QWidget):
 
 - [Windows & Menus](../guides/windows-menus.md) - Window styling
 - [SCSS Hot Reload](../guides/scss.md) - Advanced styling with SCSS
+- [@stylesheet Decorator](../reference/decorators/stylesheet.md) - Component-scoped styles
 - [Class Helpers Reference](../reference/styles/class-helpers.md) - Complete API
 - [Color Schemes Reference](../reference/styles/color-schemes.md) - Complete API

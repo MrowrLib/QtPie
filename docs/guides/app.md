@@ -71,7 +71,28 @@ Available options:
 - `title: str` - Set window title
 - `size: tuple[int, int]` - Set window size (width, height)
 - `stylesheet: str` - Path to QSS/SCSS file to load
+- `watch_stylesheet: bool` - Enable hot-reload for the stylesheet
+- `scss_search_paths: Sequence[str]` - Directories for SCSS `@import` resolution
 - `window: type[QWidget]` - Widget class to instantiate as main window
+
+### Stylesheet Options
+
+For development with hot-reload:
+
+```python
+@entrypoint(
+    stylesheet="styles/main.scss",
+    watch_stylesheet=True,
+    scss_search_paths=["styles/partials"]
+)
+@widget
+class MyApp(QWidget):
+    pass
+```
+
+Changes to `main.scss` or any file in `partials/` will be detected and applied instantly.
+
+For component-scoped styles, see the [@stylesheet decorator](../reference/decorators/stylesheet.md).
 
 ### How It Works
 

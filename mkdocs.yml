@@ -80,7 +80,8 @@ nav:
           - "@menu": reference/decorators/menu.md
           - "@action": reference/decorators/action.md
           - "@slot": reference/decorators/slot.md
-          - "@entry_point": reference/decorators/entrypoint.md
+          - "@entrypoint": reference/decorators/entrypoint.md
+          - "@stylesheet": reference/decorators/stylesheet.md
       - Factories:
           - "make()": reference/factories/make.md
           - "make_later()": reference/factories/make-later.md
