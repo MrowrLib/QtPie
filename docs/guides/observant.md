@@ -45,10 +45,10 @@ class PersonEditor(QWidget, Widget[Person]):
 QtPie automatically:
 
 1. Creates a `Person()` instance as `self.model`
-2. Wraps it in `ObservableProxy` as `self.proxy`
-3. Auto-binds widget fields to proxy fields by name
+2. Wraps it in `ObservableProxy` as `self.model_observable_proxy`
+3. Auto-binds widget fields to model fields by name
 
-The proxy enables two-way binding, validation, dirty tracking, and undo/redo.
+The `model_observable_proxy` enables two-way binding, validation, dirty tracking, and undo/redo.
 
 ---
 
@@ -79,7 +79,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
     def setup_bindings(self) -> None:
         # Get observable for a field
-        name_obs = self.proxy.observable(str, "name")
+        name_obs = self.model_observable_proxy.observable(str, "name")
 
         # Subscribe to changes
         name_obs.on_change(lambda v: print(f"Name: {v}"))
@@ -93,10 +93,10 @@ class PersonEditor(QWidget, Widget[Person]):
 
 ```python
 # Get observable for nested path
-city_obs = self.proxy.observable_for_path("address.city")
+city_obs = self.model_observable_proxy.observable_for_path("address.city")
 
 # With optional chaining
-owner_name_obs = self.proxy.observable_for_path("owner?.name")
+owner_name_obs = self.model_observable_proxy.observable_for_path("owner?.name")
 ```
 
 ---

@@ -35,34 +35,44 @@ class MyWidget(QWidget):
 
 The field is uninitialized until you set it in `setup()`.
 
-## Common Use Case: ObservableProxy
+## Common Use Case: Secondary ObservableProxy
 
-The most common use case is creating an `ObservableProxy` that depends on a model field:
+**Note:** For `Widget[T]` classes, QtPie automatically creates `model` and `model_observable_proxy` - you don't need `make_later()` for the default case.
+
+Use `make_later()` when you need a **secondary** proxy for a different model:
 
 ```python
 from dataclasses import dataclass
 from observant import ObservableProxy
 from qtpie import Widget, make, make_later, widget
+from qtpy.QtWidgets import QLineEdit, QWidget
 
 @dataclass
 class Dog:
     name: str = ""
 
+@dataclass
+class Owner:
+    name: str = ""
+
 @widget()
 class DogEditor(QWidget, Widget[Dog]):
-    model: Dog = make(Dog)
-    proxy: ObservableProxy[Dog] = make_later()  # Must be initialized after model
-    name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
+    # model and model_observable_proxy for Dog are auto-created
+    name_edit: QLineEdit = make(QLineEdit, bind="name")  # binds to Dog
+
+    # Secondary model needs make_later() for its proxy
+    owner_model: Owner = make(Owner)
+    owner_proxy: ObservableProxy[Owner] = make_later()
+    owner_edit: QLineEdit = make(QLineEdit, bind="owner_proxy.name")
 
     def setup(self) -> None:
-        # Now we can safely reference self.model
-        self.proxy = ObservableProxy(self.model, sync=True)
+        self.owner_proxy = ObservableProxy(self.owner_model, sync=True)
 ```
 
 **Why use `make_later()` here?**
-- The `proxy` needs to wrap the `model` object
-- But `model` doesn't exist yet during field initialization
-- So we defer `proxy` creation until `setup()` when `model` is available
+- The `owner_proxy` needs to wrap the `owner_model` object
+- But `owner_model` doesn't exist yet during field initialization
+- So we defer `owner_proxy` creation until `setup()` when `owner_model` is available
 
 ## Widget[T] with make_later()
 
@@ -98,9 +108,14 @@ This prevents silent failures when you accidentally omit initialization.
 
 ## Multiple Deferred Fields
 
-You can use `make_later()` for multiple fields:
+You can use `make_later()` for multiple secondary proxies:
 
 ```python
+from dataclasses import dataclass
+from observant import ObservableProxy
+from qtpie import Widget, make, make_later, widget
+from qtpy.QtWidgets import QLineEdit, QWidget
+
 @dataclass
 class Dog:
     name: str = ""
@@ -111,17 +126,15 @@ class Cat:
 
 @widget()
 class PetEditor(QWidget, Widget[Dog]):
-    model: Dog = make(Dog)
-    proxy: ObservableProxy[Dog] = make_later()
+    # Dog's model/model_observable_proxy are auto-created
+    dog_name: QLineEdit = make(QLineEdit, bind="name")  # binds to Dog
 
+    # Cat needs manual proxy setup
     cat_model: Cat = make(Cat)
     cat_proxy: ObservableProxy[Cat] = make_later()
-
-    dog_name: QLineEdit = make(QLineEdit, bind="name")
     cat_name: QLineEdit = make(QLineEdit, bind="cat_proxy.name")
 
     def setup(self) -> None:
-        self.proxy = ObservableProxy(self.model, sync=True)
         self.cat_proxy = ObservableProxy(self.cat_model, sync=True)
 ```
 

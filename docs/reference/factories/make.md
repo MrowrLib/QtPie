@@ -133,13 +133,12 @@ The `bind` parameter connects a widget to a data source, automatically keeping t
 
 ### Basic Binding
 
-Bind a widget to a proxy field:
+Bind a widget to a model field:
 
 ```python
 from dataclasses import dataclass
 from qtpie import widget, make, Widget
 from qtpy.QtWidgets import QLineEdit, QWidget
-from observant import ObservableProxy
 
 @dataclass
 class Person:
@@ -147,14 +146,14 @@ class Person:
 
 @widget
 class Editor(QWidget, Widget[Person]):
-    name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
+    name_edit: QLineEdit = make(QLineEdit, bind="name")
 ```
 
-When `proxy.name` changes, the widget updates. When the user edits the widget, `proxy.name` updates.
+When the model's `name` changes, the widget updates. When the user edits the widget, the model updates.
 
 ### Short Form Binding
 
-When using `Widget[T]`, you can omit `"proxy."` prefix:
+With `Widget[T]`, use simple field names:
 
 ```python
 from dataclasses import dataclass
@@ -168,11 +167,11 @@ class Person:
 
 @widget
 class Editor(QWidget, Widget[Person]):
-    name_edit: QLineEdit = make(QLineEdit, bind="name")  # Short form!
-    age_spin: QSpinBox = make(QSpinBox, bind="age")      # Short form!
+    name_edit: QLineEdit = make(QLineEdit, bind="name")
+    age_spin: QSpinBox = make(QSpinBox, bind="age")
 ```
 
-These automatically expand to `"proxy.name"` and `"proxy.age"`.
+These bind to the auto-created `model_observable_proxy` under the hood.
 
 ### Nested Property Binding
 

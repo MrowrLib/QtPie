@@ -405,7 +405,7 @@ class UserEditor(QWidget, Widget[User]):
 
     def on_save(self) -> None:
         # Save changes
-        print(f"Saving: {self.proxy.name}, {self.proxy.email}")
+        print(f"Saving: {self.model.name}, {self.model.email}")
         # Mark as clean
         self.reset_dirty()
 ```

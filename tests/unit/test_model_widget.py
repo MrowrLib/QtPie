@@ -49,9 +49,9 @@ class TestWidgetWithoutTypeParam:
         qt.track(w)
 
         assert_that(w.label.text()).is_equal_to("Hello")
-        # No model or proxy should exist
+        # No model or model_observable_proxy should exist
         assert_that(hasattr(w, "model")).is_false()
-        assert_that(hasattr(w, "proxy")).is_false()
+        assert_that(hasattr(w, "model_observable_proxy")).is_false()
 
     def test_widget_without_type_param_no_auto_binding(self, qt: QtDriver) -> None:
         """Widget without type param should not do auto-binding."""
@@ -95,9 +95,9 @@ class TestWidgetWithTypeParam:
         w = PersonEditor()
         qt.track(w)
 
-        assert_that(w.proxy).is_not_none()
+        assert_that(w.model_observable_proxy).is_not_none()
         # Proxy should wrap the model
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("")
 
 
 class TestWidgetCustomFactory:
@@ -128,7 +128,7 @@ class TestWidgetCustomFactory:
         w = PersonEditor()
         qt.track(w)
 
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("Alice")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("Alice")
 
 
 class TestWidgetMakeLater:
@@ -180,10 +180,10 @@ class TestWidgetAutoBinding:
         qt.track(w)
 
         # Model → Widget
-        w.proxy.observable(str, "name").set("David")
+        w.model_observable_proxy.observable(str, "name").set("David")
         assert_that(w.name.text()).is_equal_to("David")
 
-        w.proxy.observable(int, "age").set(40)
+        w.model_observable_proxy.observable(int, "age").set(40)
         assert_that(w.age.value()).is_equal_to(40)
 
     def test_auto_binds_widget_to_model(self, qt: QtDriver) -> None:
@@ -230,7 +230,7 @@ class TestWidgetAutoBinding:
             # This should still auto-bind
             name: QLineEdit = make(QLineEdit)
             # Field with different name but explicit bind
-            name_display: QLabel = make(QLabel, bind="proxy.name")
+            name_display: QLabel = make(QLabel, bind="name")
 
         w = PersonEditor()
         qt.track(w)
@@ -260,7 +260,7 @@ class TestModelWidgetCheckbox:
 
         assert_that(w.active.isChecked()).is_false()
 
-        w.proxy.observable(bool, "active").set(True)
+        w.model_observable_proxy.observable(bool, "active").set(True)
         assert_that(w.active.isChecked()).is_true()
 
         w.active.setChecked(False)

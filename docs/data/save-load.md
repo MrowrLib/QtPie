@@ -27,7 +27,7 @@ editor = UserEditor()
 editor.name.setText("Alice")
 editor.age.setValue(30)
 
-# Save proxy values back to model
+# Save model_observable_proxy values back to model
 editor.save_to(editor.model)
 print(editor.model.name)  # "Alice"
 
@@ -38,7 +38,7 @@ print(editor.name.text())  # "Bob"
 
 ## save_to(model)
 
-The `save_to()` method copies all current proxy values to a target model instance.
+The `save_to()` method copies all current `model_observable_proxy` values to a target model instance.
 
 ### Save to Original Model
 
@@ -76,7 +76,7 @@ editor.name.setText("Diana")
 new_user = User(name="Original")
 editor.save_to(new_user)
 
-# New user gets the proxy values
+# New user gets the model_observable_proxy values
 assert new_user.name == "Diana"
 ```
 
@@ -84,7 +84,7 @@ This is useful when you want to keep the original model unchanged or when creati
 
 ## load_dict(data)
 
-The `load_dict()` method updates proxy values from a dictionary. This is useful for loading data from JSON, databases, or other sources.
+The `load_dict()` method updates `model_observable_proxy` values from a dictionary. This is useful for loading data from JSON, databases, or other sources.
 
 ```python
 @widget
@@ -178,8 +178,8 @@ assert editor.model.name == "Saved Name"
 
 Under the hood:
 
-- **`save_to(model)`** calls `self.proxy.save_to(model)`, copying all proxy field values to the target model using `setattr()`
-- **`load_dict(data)`** calls `self.proxy.load_dict(data)`, updating proxy values which automatically triggers bound widget updates
+- **`save_to(model)`** calls `self.model_observable_proxy.save_to(model)`, copying all field values to the target model using `setattr()`
+- **`load_dict(data)`** calls `self.model_observable_proxy.load_dict(data)`, updating values which automatically triggers bound widget updates
 
 Both methods are thin wrappers around the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) from the [Observant](https://mrowrlib.github.io/observant.py/) library ([PyPI](https://pypi.org/project/observant/)).
 

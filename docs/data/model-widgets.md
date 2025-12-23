@@ -41,19 +41,19 @@ class PersonEditor(QWidget, Widget[Person]):
 
 editor = PersonEditor()
 
-# Use the auto-created model and proxy
+# Use the auto-created model and model_observable_proxy
 print(editor.model.name)  # ""
-print(editor.proxy)       # ObservableProxy[Person]
+print(editor.model_observable_proxy)       # ObservableProxy[Person]
 
 # Changes sync both ways
 editor.name.setText("Alice")
 print(editor.model.name)  # "Alice"
 
-editor.proxy.observable(int, "age").set(30)
+editor.model_observable_proxy.observable(int, "age").set(30)
 print(editor.age.value())  # 30
 ```
 
-## model and proxy Attributes
+## model and model_observable_proxy Attributes
 
 Every `Widget[T]` has two attributes:
 
@@ -71,7 +71,7 @@ print(editor.model)  # Dog(name="", breed="")
 print(type(editor.model))  # <class 'Dog'>
 ```
 
-### proxy: ObservableProxy[T]
+### model_observable_proxy: ObservableProxy[T]
 
 An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system:
 
@@ -79,7 +79,7 @@ An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/obser
 editor = DogEditor()
 
 # Access model fields through proxy observables
-name_obs = editor.proxy.observable(str, "name")
+name_obs = editor.model_observable_proxy.observable(str, "name")
 name_obs.on_change(lambda value: print(f"Name changed to: {value}"))
 
 # Setting through proxy triggers observers
@@ -207,7 +207,7 @@ class SimpleWidget(QWidget, Widget):
 widget = SimpleWidget()
 # No model or proxy attributes
 print(hasattr(widget, "model"))  # False
-print(hasattr(widget, "proxy"))  # False
+print(hasattr(widget, "model_observable_proxy"))  # False
 ```
 
 This is useful when you don't need model binding but want to use the lifecycle hooks from `Widget`.
@@ -278,7 +278,7 @@ editor.age.setValue(25)
 print(editor.model.age)         # 25
 
 # Change via proxy
-editor.proxy.observable(bool, "active").set(False)
+editor.model_observable_proxy.observable(bool, "active").set(False)
 print(editor.active.isChecked()) # False
 ```
 

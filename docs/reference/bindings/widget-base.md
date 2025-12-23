@@ -31,7 +31,7 @@ class PersonEditor(QWidget, Widget[Person]):
     age: QSpinBox = make(QSpinBox)      # Auto-binds to model.age
 ```
 
-## Model & Proxy Attributes
+## Model & Observable Proxy Attributes
 
 When using `Widget[T]`, two key attributes are automatically created:
 
@@ -91,7 +91,7 @@ class PersonEditor(QWidget, Widget[Person]):
         self.model = Person(name="Charlie", age=25)
 ```
 
-### `proxy: ObservableProxy[T]`
+### `model_observable_proxy: ObservableProxy[T]`
 
 An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. Changes to the proxy automatically update bound widgets, and widget changes update the proxy. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system.
 
@@ -103,12 +103,12 @@ class PersonEditor(QWidget, Widget[Person]):
 w = PersonEditor()
 
 # Changes via proxy trigger UI updates
-w.proxy.observable(str, "name").set("Alice")
+w.model_observable_proxy.observable(str, "name").set("Alice")
 assert w.name.text() == "Alice"
 
 # Widget changes update the proxy (and model)
 w.name.setText("Bob")
-assert w.proxy.observable(str, "name").get() == "Bob"
+assert w.model_observable_proxy.observable(str, "name").get() == "Bob"
 assert w.model.name == "Bob"
 ```
 
@@ -139,7 +139,7 @@ w = PersonEditor()
 w.name.setText("Alice")
 assert w.model.name == "Alice"
 
-w.proxy.observable(int, "age").set(30)
+w.model_observable_proxy.observable(int, "age").set(30)
 assert w.age.value() == 30
 ```
 
@@ -191,7 +191,7 @@ assert w.model.name == "Alice"
 
 ## Validation Methods
 
-Validation is powered by the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). All validation methods delegate to `self.proxy`.
+Validation is powered by the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). All validation methods delegate to `self.model_observable_proxy`.
 
 ### add_validator()
 
@@ -428,7 +428,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
     def setup_bindings(self) -> None:
         # Show status when dirty state changes
-        self.proxy.is_dirty_observable().on_change(self.update_status)
+        self.model_observable_proxy.is_dirty_observable().on_change(self.update_status)
 
     def update_status(self, dirty: bool) -> None:
         if dirty:
@@ -482,10 +482,10 @@ class TextEditor(QWidget, Widget[Document]):
 w = TextEditor()
 
 w.content.setText("Alice")
-assert w.proxy.observable(str, "content").get() == "Alice"
+assert w.model_observable_proxy.observable(str, "content").get() == "Alice"
 
 w.undo("content")
-assert w.proxy.observable(str, "content").get() == ""  # Reverted
+assert w.model_observable_proxy.observable(str, "content").get() == ""  # Reverted
 ```
 
 ### redo()
@@ -510,10 +510,10 @@ w = TextEditor()
 
 w.content.setText("Alice")
 w.undo("content")
-assert w.proxy.observable(str, "content").get() == ""
+assert w.model_observable_proxy.observable(str, "content").get() == ""
 
 w.redo("content")
-assert w.proxy.observable(str, "content").get() == "Alice"  # Restored
+assert w.model_observable_proxy.observable(str, "content").get() == "Alice"  # Restored
 ```
 
 ### can_undo()
@@ -539,7 +539,7 @@ class TextEditor(QWidget, Widget[Document]):
 
     def setup_bindings(self) -> None:
         # Update button state when undo availability changes
-        self.proxy.observable(str, "content").on_change(self.update_undo_btn)
+        self.model_observable_proxy.observable(str, "content").on_change(self.update_undo_btn)
 
     def update_undo_btn(self, _: str) -> None:
         self.undo_btn.setEnabled(self.can_undo("content"))
@@ -580,7 +580,7 @@ class TextEditor(QWidget, Widget[Document]):
     redo_btn: QPushButton = make(QPushButton, "Redo", clicked="do_redo")
 
     def setup_bindings(self) -> None:
-        self.proxy.observable(str, "content").on_change(self.update_redo_btn)
+        self.model_observable_proxy.observable(str, "content").on_change(self.update_redo_btn)
 
     def update_redo_btn(self, _: str) -> None:
         self.redo_btn.setEnabled(self.can_redo("content"))
@@ -616,7 +616,7 @@ class TextEditor(QWidget, Widget[Document]):
 
     def setup_bindings(self) -> None:
         # Update button states when content changes
-        self.proxy.observable(str, "content").on_change(self.update_buttons)
+        self.model_observable_proxy.observable(str, "content").on_change(self.update_buttons)
         self.update_buttons("")  # Initial state
 
     def update_buttons(self, _: str) -> None:
@@ -856,10 +856,10 @@ class UserEditor(QWidget, Widget[User]):
         self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
 
         # Show dirty status
-        self.proxy.is_dirty_observable().on_change(self.update_status)
+        self.model_observable_proxy.is_dirty_observable().on_change(self.update_status)
 
         # Update undo/redo buttons
-        self.proxy.observable(str, "name").on_change(self.update_undo_buttons)
+        self.model_observable_proxy.observable(str, "name").on_change(self.update_undo_buttons)
 
     def update_status(self, dirty: bool) -> None:
         if dirty:

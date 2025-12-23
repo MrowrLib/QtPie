@@ -266,9 +266,9 @@ class MyWidget(QWidget, Widget[Person]):
     name_label: QLabel = make(QLabel)
 
     def setup_bindings(self) -> None:
-        # Create model/proxy in setup or setup_values
+        # model/model_observable_proxy are auto-created for Widget[T]
         # Custom binding logic here
-        bind(self.proxy.observable(str, "name"), self.name_label, "text")
+        bind(self.model_observable_proxy.observable(str, "name"), self.name_label, "text")
 ```
 
 ### setup_layout(layout: QLayout)

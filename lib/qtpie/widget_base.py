@@ -40,7 +40,7 @@ class Widget[T = None]:
 
     # Type hints for IDE - actual fields are created by @widget decorator
     model: T
-    proxy: ObservableProxy[T]
+    model_observable_proxy: ObservableProxy[T]
 
     def set_model(self, model: T) -> None:
         """
@@ -49,7 +49,7 @@ class Widget[T = None]:
         This allows changing the model after widget creation.
         """
         self.model = model
-        self.proxy = ObservableProxy(model, sync=True)
+        self.model_observable_proxy = ObservableProxy(model, sync=True)
         # Rebind widgets - this is called by the decorator
         self._rebind_model_widgets()
 
@@ -109,7 +109,7 @@ class Widget[T = None]:
             cast(QWidget, self).setStyleSheet(stylesheet)
 
     # =========================================================================
-    # Validation - delegate to self.proxy
+    # Validation - delegate to self.model_observable_proxy
     # =========================================================================
 
     def add_validator(self, field: str, validator: Callable[[Any], str | None]) -> None:
@@ -125,7 +125,7 @@ class Widget[T = None]:
             self.add_validator("name", lambda v: "Required" if not v else None)
             self.add_validator("age", lambda v: "Must be 18+" if v < 18 else None)
         """
-        self.proxy.add_validator(field, validator)
+        self.model_observable_proxy.add_validator(field, validator)
 
     def is_valid(self) -> Any:
         """
@@ -137,7 +137,7 @@ class Widget[T = None]:
         Example:
             self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
         """
-        return self.proxy.is_valid()
+        return self.model_observable_proxy.is_valid()
 
     def validation_for(self, field: str) -> Any:
         """
@@ -152,7 +152,7 @@ class Widget[T = None]:
         Example:
             self.validation_for("email").on_change(self.show_email_errors)
         """
-        return self.proxy.validation_for(field)
+        return self.model_observable_proxy.validation_for(field)
 
     def validation_errors(self) -> Any:
         """
@@ -166,10 +166,10 @@ class Widget[T = None]:
             for field, messages in errors.items():
                 print(f"{field}: {', '.join(messages)}")
         """
-        return self.proxy.validation_errors()
+        return self.model_observable_proxy.validation_errors()
 
     # =========================================================================
-    # Dirty Tracking - delegate to self.proxy
+    # Dirty Tracking - delegate to self.model_observable_proxy
     # =========================================================================
 
     def is_dirty(self) -> bool:
@@ -183,7 +183,7 @@ class Widget[T = None]:
             if self.is_dirty():
                 self.status.setText("Modified")
         """
-        return self.proxy.is_dirty()
+        return self.model_observable_proxy.is_dirty()
 
     def dirty_fields(self) -> set[str]:
         """
@@ -196,7 +196,7 @@ class Widget[T = None]:
             for field in self.dirty_fields():
                 print(f"Modified: {field}")
         """
-        return self.proxy.dirty_fields()
+        return self.model_observable_proxy.dirty_fields()
 
     def reset_dirty(self) -> None:
         """
@@ -206,10 +206,10 @@ class Widget[T = None]:
             self.save_to(self.model)
             self.reset_dirty()  # Mark all fields as clean
         """
-        self.proxy.reset_dirty()
+        self.model_observable_proxy.reset_dirty()
 
     # =========================================================================
-    # Undo/Redo - delegate to self.proxy
+    # Undo/Redo - delegate to self.model_observable_proxy
     # =========================================================================
 
     def undo(self, field: str) -> None:
@@ -226,7 +226,7 @@ class Widget[T = None]:
             if self.can_undo("name"):
                 self.undo("name")
         """
-        self.proxy.undo(field)
+        self.model_observable_proxy.undo(field)
 
     def redo(self, field: str) -> None:
         """
@@ -242,7 +242,7 @@ class Widget[T = None]:
             if self.can_redo("name"):
                 self.redo("name")
         """
-        self.proxy.redo(field)
+        self.model_observable_proxy.redo(field)
 
     def can_undo(self, field: str) -> bool:
         """
@@ -257,7 +257,7 @@ class Widget[T = None]:
         Example:
             self.undo_btn.setEnabled(self.can_undo("name"))
         """
-        return self.proxy.can_undo(field)
+        return self.model_observable_proxy.can_undo(field)
 
     def can_redo(self, field: str) -> bool:
         """
@@ -272,10 +272,10 @@ class Widget[T = None]:
         Example:
             self.redo_btn.setEnabled(self.can_redo("name"))
         """
-        return self.proxy.can_redo(field)
+        return self.model_observable_proxy.can_redo(field)
 
     # =========================================================================
-    # Save/Load - delegate to self.proxy
+    # Save/Load - delegate to self.model_observable_proxy
     # =========================================================================
 
     def save_to(self, target: T) -> None:
@@ -291,7 +291,7 @@ class Widget[T = None]:
             self.save_to(self.model)  # Save back to original model
             self.save_to(new_user)    # Save to a different instance
         """
-        self.proxy.save_to(target)
+        self.model_observable_proxy.save_to(target)
 
     def load_dict(self, data: dict[str, Any]) -> None:
         """
@@ -303,7 +303,7 @@ class Widget[T = None]:
         Example:
             self.load_dict({"name": "Alice", "age": 30})
         """
-        self.proxy.load_dict(data)
+        self.model_observable_proxy.load_dict(data)
 
 
 def get_model_type_from_widget[T](cls: type[Widget[T]]) -> type[T] | None:

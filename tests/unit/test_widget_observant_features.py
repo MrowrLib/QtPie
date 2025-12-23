@@ -223,11 +223,11 @@ class TestWidgetUndo:
 
         # Make a change
         w.name.setText("Alice")
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("Alice")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("Alice")
 
         # Undo
         w.undo("name")
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("")
 
     def test_redo_restores_change(self, qt: QtDriver) -> None:
         """redo should restore a previously undone change."""
@@ -241,10 +241,10 @@ class TestWidgetUndo:
 
         w.name.setText("Alice")
         w.undo("name")
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("")
 
         w.redo("name")
-        assert_that(w.proxy.observable(str, "name").get()).is_equal_to("Alice")
+        assert_that(w.model_observable_proxy.observable(str, "name").get()).is_equal_to("Alice")
 
     def test_can_undo_returns_availability(self, qt: QtDriver) -> None:
         """can_undo should indicate whether undo is available."""

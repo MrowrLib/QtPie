@@ -99,7 +99,7 @@ class TextEditor(QWidget, Widget[Document]):
 
     def setup_bindings(self) -> None:
         # Update button states whenever content changes
-        self.proxy.observable(str, "content").on_change(self.update_buttons)
+        self.model_observable_proxy.observable(str, "content").on_change(self.update_buttons)
         self.update_buttons()
 
     def update_buttons(self, _value: str | None = None) -> None:

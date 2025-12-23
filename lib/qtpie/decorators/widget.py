@@ -391,9 +391,9 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
         if obs is not None:
             return [obs]
 
-        # Try Widget[T] proxy field
+        # Try Widget[T] model_observable_proxy field
         if is_widget_subclass(type(widget)):
-            proxy = getattr(widget, "proxy", None)
+            proxy = getattr(widget, "model_observable_proxy", None)
             if proxy is not None and hasattr(proxy, "observable_for_path"):
                 try:
                     return [proxy.observable_for_path(field_path)]
@@ -417,9 +417,9 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
                 result.append(state_proxy.observable_for_path(nested_path))
             return result
 
-        # Try Widget[T] proxy for nested paths like "address.city"
+        # Try Widget[T] model_observable_proxy for nested paths like "address.city"
         if is_widget_subclass(type(widget)):
-            proxy = getattr(widget, "proxy", None)
+            proxy = getattr(widget, "model_observable_proxy", None)
             if proxy is not None and hasattr(proxy, "observable_for_path"):
                 try:
                     result.append(proxy.observable_for_path(field_path))
@@ -541,8 +541,8 @@ def _process_format_binding(
     if adapter is None or adapter.setter is None:
         return False
 
-    # Check if this is a Widget[T] with a proxy
-    widget_proxy = getattr(widget, "proxy", None) if is_widget_subclass(type(widget)) else None
+    # Check if this is a Widget[T] with a model_observable_proxy
+    widget_proxy = getattr(widget, "model_observable_proxy", None) if is_widget_subclass(type(widget)) else None
 
     # Build the compute function
     def compute() -> str:
@@ -614,14 +614,14 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
     Supports multiple forms of bind paths:
     - Format string: bind="Count: {count}" → computed format binding
     - State field: bind="count" → binds to state(0) field on self
-    - Short form: bind="name" or bind="address.city" → uses self.proxy
+    - Short form: bind="name" or bind="address.city" → uses self.model_observable_proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
 
     Smart detection order:
     1. Check if bind path is a format string (contains {})
     2. Check if bind path (without dots) is a state field on self
     3. Check if first segment is an ObservableProxy field
-    4. Otherwise, treat as path relative to self.proxy
+    4. Otherwise, treat as path relative to self.model_observable_proxy
     """
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
@@ -685,8 +685,8 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
             # Use original path with ?. intact, minus the first segment
             observable_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
         else:
-            # Short form: use default "proxy" field (e.g., "name" or "address.city")
-            proxy_field_name = "proxy"
+            # Short form: use default "model_observable_proxy" field (e.g., "name" or "address.city")
+            proxy_field_name = "model_observable_proxy"
             observable_path = bind_path
 
         # Handle empty observable path (invalid - can't bind to proxy itself)
@@ -769,7 +769,7 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
         undo_debounce_ms = undo_config.get("undo_debounce_ms")
 
         proxy = ObservableProxy(model_instance, sync=True, undo=undo_enabled)
-        widget.proxy = proxy  # type: ignore[attr-defined]
+        widget.model_observable_proxy = proxy  # type: ignore[attr-defined]
 
         # Apply per-field undo config if specified
         if undo_enabled and (undo_max is not None or undo_debounce_ms is not None):
@@ -796,8 +796,8 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
     if not has_model_type_param(cls):
         return
 
-    # Get proxy
-    proxy = getattr(widget, "proxy", None)
+    # Get model_observable_proxy
+    proxy = getattr(widget, "model_observable_proxy", None)
     if proxy is None:
         return
 
@@ -814,8 +814,8 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
         if f.name.startswith("_"):
             continue
 
-        # Skip model and proxy fields
-        if f.name in ("model", "proxy"):
+        # Skip model and model_observable_proxy fields
+        if f.name in ("model", "model_observable_proxy"):
             continue
 
         # Skip fields that already have explicit bind=

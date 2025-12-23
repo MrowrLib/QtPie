@@ -286,9 +286,7 @@ In most cases, use the `bind` parameter in `make()` instead of calling `bind()` 
 
 ```python
 from dataclasses import dataclass
-from typing import override
-from observant import ObservableProxy
-from qtpie import widget, make, make_later, bind, Widget
+from qtpie import widget, make, bind, Widget
 from qtpy.QtWidgets import QLineEdit, QWidget
 
 @dataclass
@@ -297,15 +295,11 @@ class Dog:
 
 @widget
 class DogEditor(QWidget, Widget[Dog]):
-    model: Dog = make(Dog)
-    proxy: ObservableProxy[Dog] = make_later()
     name_edit: QLineEdit = make(QLineEdit)
 
-    @override
-    def setup(self) -> None:
-        self.proxy = ObservableProxy(self.model, sync=True)
+    def setup_bindings(self) -> None:
         # Manual binding - verbose!
-        bind(self.proxy.observable(str, "name"), self.name_edit)
+        bind(self.model_observable_proxy.observable(str, "name"), self.name_edit)
 ```
 
 ### Do This
@@ -321,11 +315,11 @@ class Dog:
 
 @widget
 class DogEditor(QWidget, Widget[Dog]):
-    # Short form auto-binds to proxy.name
+    # Short form - clean and simple!
     name_edit: QLineEdit = make(QLineEdit, bind="name")
 ```
 
-Much cleaner! The `Widget[Dog]` base class creates the proxy automatically, and `bind="name"` expands to `bind="proxy.name"` behind the scenes.
+Much cleaner! The `Widget[Dog]` base class creates the `model_observable_proxy` automatically, and `bind="name"` expands to `bind="model_observable_proxy.name"` behind the scenes.
 
 ## API Reference
 
@@ -355,6 +349,6 @@ None. The function sets up the binding as a side effect.
 
 - [make()](../factories/make.md) - Preferred way to create bindings with `bind` parameter
 - [register_binding()](register.md) - Register custom widget bindings
-- [Widget[T]](widget-base.md) - Base class that auto-creates proxy for model editing
+- [Widget[T]](widget-base.md) - Base class that auto-creates `model_observable_proxy` for model editing
 - [Reactive State](../../data/state.md) - Reactive state with `state()` function
 - [Model Widgets](../../data/model-widgets.md) - Using `Widget[T]` for forms

@@ -308,7 +308,7 @@ def test_multi_var_format(qt: QtDriver) -> None:
 
 ## Testing Model Widgets
 
-Test Widget[T] with model/proxy.
+Test Widget[T] with model/model_observable_proxy.
 
 ```python
 def test_model_widget(qt: QtDriver) -> None:
@@ -328,7 +328,7 @@ def test_model_widget(qt: QtDriver) -> None:
     qt.track(w)
 
     # Model -> Widget
-    w.proxy.observable(str, "name").set("Buddy")
+    w.model_observable_proxy.observable(str, "name").set("Buddy")
     assert w.name_edit.text() == "Buddy"
 
     # Widget -> Model
