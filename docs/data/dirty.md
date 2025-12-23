@@ -190,7 +190,7 @@ class UserEditor(QWidget, Widget[User]):
 
 ## How It Works
 
-Dirty tracking is powered by the **observant** library's `ObservableProxy`:
+Dirty tracking is powered by [Observant](https://mrowrlib.github.io/observant.py/)'s [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) ([PyPI](https://pypi.org/project/observant/)):
 
 1. When you create a `Widget[T]`, QtPie wraps your model in an `ObservableProxy`
 2. The proxy tracks the **initial value** of each field
@@ -245,3 +245,4 @@ class UserEditor(QWidget, Widget[User]):
 - [Model Widgets](model-widgets.md) - Learn about `Widget[T]` and the proxy
 - [Save & Load](save-load.md) - Persist changes to models
 - [Validation](validation.md) - Validate before saving
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

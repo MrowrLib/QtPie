@@ -401,7 +401,7 @@ def state[Type](default: Type | None) -> Type: ...
 
 ## Implementation Details
 
-State is powered by the `observant` library's `ObservableProxy`:
+State is powered by [Observant](https://mrowrlib.github.io/observant.py/)'s [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) ([PyPI](https://pypi.org/project/observant/)):
 
 - Primitive values (int, str, bool, etc.) are wrapped in a container
 - Object values are proxied directly
@@ -415,3 +415,4 @@ State is powered by the `observant` library's `ObservableProxy`:
 - [Reactive State guide](../../data/state.md) - Detailed guide with more examples
 - [Format Expressions guide](../../data/format.md) - Deep dive into format bindings
 - [Model Widgets](../../data/model-widgets.md) - Widget[T] for form editing
+- [Observant Integration](../../guides/observant.md) - Understanding the reactive layer

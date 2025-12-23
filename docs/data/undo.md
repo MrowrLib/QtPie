@@ -1,6 +1,6 @@
 # Undo & Redo
 
-QtPie provides built-in undo/redo functionality for `Widget[T]` model fields through the underlying `observant` library's `ObservableProxy`.
+QtPie provides built-in undo/redo functionality for `Widget[T]` model fields through [Observant](https://mrowrlib.github.io/observant.py/)'s [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) ([PyPI](https://pypi.org/project/observant/)).
 
 ## Enable Undo
 
@@ -174,3 +174,4 @@ class UserEditor(QWidget, Widget[User]):
 - [Dirty Tracking](dirty.md) - Detect unsaved changes
 - [Validation](validation.md) - Validate field values
 - [@widget decorator](../reference/decorators/widget.md) - Full decorator API
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

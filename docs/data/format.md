@@ -258,6 +258,25 @@ Expressions are evaluated using Python's `eval()` with:
 - Access to common builtins (len, min, max, etc.)
 - No access to dangerous operations (imports, file I/O, etc.)
 
+### Non-Reactive Attributes
+
+Format expressions can reference **any** widget attribute, not just `state()` fields or `Widget[T]` model properties:
+
+```python
+@widget
+class Mixed(QWidget):
+    count: int = state(0)              # Reactive - triggers updates
+    greeting: str = "Hello"            # NOT reactive - regular attribute
+
+    label: QLabel = make(QLabel, bind="{greeting}, count is {count}")
+```
+
+The label shows `"Hello, count is 0"` initially. When `count` changes, the entire format string re-evaluates, reading `greeting`'s **current** value.
+
+However, changing `greeting` alone won't trigger an update - only reactive fields (`state()` or `Widget[T]` model fields) trigger re-computation.
+
+**Use case**: Static text combined with dynamic values, or attributes you only change alongside reactive fields.
+
 ## Simple vs Format Binding
 
 When should you use format expressions vs simple bindings?
@@ -280,3 +299,4 @@ For labels and read-only text, format expressions are perfect. For input widgets
 - [Reactive State](state.md) - Using `state()` to create reactive fields
 - [Model Widgets](model-widgets.md) - Working with `Widget[T]` for form binding
 - [make()](../reference/factories/make.md) - The `bind` parameter in detail
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

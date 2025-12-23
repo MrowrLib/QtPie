@@ -363,7 +363,7 @@ All widgets update automatically as state changes.
 
 ## How It Works
 
-Under the hood, `state()` creates a `ReactiveDescriptor` powered by `ObservableProxy` from the `observant` library:
+Under the hood, `state()` creates a `ReactiveDescriptor` powered by [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) from the [Observant](https://mrowrlib.github.io/observant.py/) library ([PyPI](https://pypi.org/project/observant/)):
 
 - **Primitives** (int, str, etc.) are wrapped in a container object
 - **Objects** (dataclasses, etc.) are wrapped directly
@@ -381,3 +381,4 @@ You don't need to understand this to use it. Just remember:
 - [Model Widgets](model-widgets.md) - `Widget[T]` for form editing
 - [Signals](../basics/signals.md) - Connecting buttons and actions
 - [`make()`](../reference/factories/make.md) - Widget factory with bind parameter
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

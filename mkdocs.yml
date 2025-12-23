@@ -75,6 +75,7 @@ nav:
       - App & Entry Points: guides/app.md
       - Async: guides/async.md
       - Testing: guides/testing.md
+      - Observant Integration: guides/observant.md
   - Reference:
       - Decorators:
           - "@widget": reference/decorators/widget.md

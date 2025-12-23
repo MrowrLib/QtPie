@@ -1,10 +1,10 @@
 # Validation
 
-Real-time validation for `Widget[T]` forms using the observant library.
+Real-time validation for `Widget[T]` forms using the [Observant](https://mrowrlib.github.io/observant.py/) library ([PyPI](https://pypi.org/project/observant/)).
 
 ## Overview
 
-When you use `Widget[T]`, you get built-in validation capabilities through the underlying `ObservableProxy`. Add validation rules to fields and get real-time feedback as users edit.
+When you use `Widget[T]`, you get built-in validation capabilities through the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). Add validation rules to fields and get real-time feedback as users edit.
 
 ```python
 from dataclasses import dataclass
@@ -228,3 +228,4 @@ errors = self.validation_for("password").get()
 - [Dirty Tracking](dirty.md) - Detect unsaved changes
 - [Save & Load](save-load.md) - Persisting form data
 - [Reactive State](state.md) - Observable state management
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

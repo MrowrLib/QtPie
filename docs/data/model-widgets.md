@@ -29,7 +29,7 @@ That's it! Widget fields automatically bind to model properties with matching na
 When you use `Widget[T]`:
 
 1. **Model is auto-created** - A `T()` instance is created automatically
-2. **Proxy is auto-created** - An `ObservableProxy[T]` wraps the model
+2. **Proxy is auto-created** - An [ObservableProxy[T]](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wraps the model
 3. **Fields auto-bind by name** - Widget fields bind to model properties with the same name
 
 ```python
@@ -73,7 +73,7 @@ print(type(editor.model))  # <class 'Dog'>
 
 ### proxy: ObservableProxy[T]
 
-An observable wrapper around the model that enables reactive bindings:
+An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system:
 
 ```python
 editor = DogEditor()
@@ -291,3 +291,4 @@ print(editor.active.isChecked()) # False
 - [Undo & Redo](undo.md) - Enabling undo/redo on model fields
 - [Save & Load](save-load.md) - Saving and loading model data
 - [Widget[T] Reference](../reference/bindings/widget-base.md) - Full API reference
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer

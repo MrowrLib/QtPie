@@ -93,7 +93,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 ### `proxy: ObservableProxy[T]`
 
-An observable wrapper around the model that enables reactive bindings. Changes to the proxy automatically update bound widgets, and widget changes update the proxy.
+An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. Changes to the proxy automatically update bound widgets, and widget changes update the proxy. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system.
 
 ```python
 @widget
@@ -191,7 +191,7 @@ assert w.model.name == "Alice"
 
 ## Validation Methods
 
-Validation is powered by the underlying `ObservableProxy`. All validation methods delegate to `self.proxy`.
+Validation is powered by the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). All validation methods delegate to `self.proxy`.
 
 ### add_validator()
 
@@ -894,3 +894,4 @@ class UserEditor(QWidget, Widget[User]):
 - [Dirty Tracking Guide](../../data/dirty.md) - Tracking unsaved changes
 - [Undo & Redo Guide](../../data/undo.md) - Implementing undo/redo
 - [Save & Load Guide](../../data/save-load.md) - Saving and loading data
+- [Observant Integration](../../guides/observant.md) - Understanding the reactive layer

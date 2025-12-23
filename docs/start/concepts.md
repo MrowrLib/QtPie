@@ -218,7 +218,7 @@ class Counter(QWidget):
 - Pre-initialized: `config: Config = state(Config(debug=True))`
 
 **How it works:**
-- Backed by `ObservableProxy` from the `observant` library
+- Backed by [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) from the [Observant](https://mrowrlib.github.io/observant.py/) library
 - Assignment triggers change notifications
 - Bound widgets update automatically
 
@@ -267,7 +267,7 @@ class FileMenu(QMenu):
 The `Widget[T]` base class enables automatic model binding. When you inherit from `Widget[Person]`, QtPie automatically:
 
 1. Creates a `model` instance of type `Person`
-2. Creates an `ObservableProxy` wrapper as `self.proxy`
+2. Creates an [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper as `self.proxy`
 3. Auto-binds widget fields to model properties by matching names
 
 ```python
@@ -288,7 +288,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 **What you get:**
 - `self.model` - The Person instance
-- `self.proxy` - ObservableProxy wrapping the model
+- `self.proxy` - [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapping the model
 - Two-way data binding between widgets and model
 - Validation, dirty tracking, undo/redo support
 

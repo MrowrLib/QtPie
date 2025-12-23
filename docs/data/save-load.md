@@ -181,7 +181,7 @@ Under the hood:
 - **`save_to(model)`** calls `self.proxy.save_to(model)`, copying all proxy field values to the target model using `setattr()`
 - **`load_dict(data)`** calls `self.proxy.load_dict(data)`, updating proxy values which automatically triggers bound widget updates
 
-Both methods are thin wrappers around the underlying `ObservableProxy` from the `observant` library.
+Both methods are thin wrappers around the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) from the [Observant](https://mrowrlib.github.io/observant.py/) library ([PyPI](https://pypi.org/project/observant/)).
 
 ## Working with Dirty Tracking
 
@@ -209,3 +209,4 @@ See [Dirty Tracking](dirty.md) for more details.
 - [Model Widgets](model-widgets.md) - Understanding `Widget[T]`
 - [Dirty Tracking](dirty.md) - Track which fields changed
 - [Validation](validation.md) - Validate before saving
+- [Observant Integration](../guides/observant.md) - Understanding the reactive layer
