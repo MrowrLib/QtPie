@@ -436,6 +436,6 @@ class FileMenu(QMenu):
 
 - [Widgets](../basics/widgets.md) - Using the `@widget` decorator
 - [Styling](../basics/styling.md) - CSS classes and styling
-- [@entrypoint](../reference/decorators/entry-point.md) - Application entry points
+- [@entrypoint](../reference/decorators/entrypoint.md) - Application entry points
 - [make()](../reference/factories/make.md) - Creating widget instances
 - [separator()](../reference/factories/separator.md) - Menu separators

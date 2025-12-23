@@ -464,6 +464,6 @@ See [Testing Guide](testing.md) for more details.
 ## See Also
 
 - [Testing](testing.md) - Testing QtPie applications
-- [@entrypoint Reference](../reference/decorators/entry-point.md) - Full decorator API
+- [@entrypoint Reference](../reference/decorators/entrypoint.md) - Full decorator API
 - [App Class Reference](../reference/app/app.md) - Complete App class documentation
 - [run_app() Reference](../reference/app/run-app.md) - Function details

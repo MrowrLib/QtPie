@@ -136,7 +136,7 @@ class MyApp(QWidget):
 - Starts the event loop
 - Supports dark/light mode, window config
 
-[Full @entrypoint reference →](../reference/decorators/entry-point.md)
+[Full @entrypoint reference →](../reference/decorators/entrypoint.md)
 
 ---
 
@@ -239,7 +239,7 @@ class MyWidget(QWidget):
     bottom_button: QPushButton = make(QPushButton, "Bottom")
 ```
 
-[Full spacer() reference →](../reference/factories/stretch.md)
+[Full spacer() reference →](../reference/factories/spacer.md)
 
 ### separator()
 

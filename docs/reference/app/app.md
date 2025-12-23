@@ -411,6 +411,6 @@ app = GameApp()
 ## See Also
 
 - [run_app()](run-app.md) - Standalone event loop runner
-- [@entrypoint](../decorators/entry-point.md) - Application entry point decorator
+- [@entrypoint](../decorators/entrypoint.md) - Application entry point decorator
 - [Color Schemes](../styles/color-schemes.md) - Dark/light mode management
 - [SCSS Hot Reload](../../guides/scss.md) - Stylesheet development workflow

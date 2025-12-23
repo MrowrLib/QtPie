@@ -228,5 +228,5 @@ This is the same mechanism used by `App.run()` and `@entrypoint`.
 ## See Also
 
 - [App Class](app.md) - QApplication subclass with lifecycle hooks
-- [@entrypoint](../decorators/entry-point.md) - Declarative entry point decorator
+- [@entrypoint](../decorators/entrypoint.md) - Declarative entry point decorator
 - [App & Entry Points Guide](../../guides/app.md) - Complete guide to application lifecycle
