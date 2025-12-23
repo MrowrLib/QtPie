@@ -6,6 +6,7 @@ from qtpie.decorators.action import action
 from qtpie.decorators.entrypoint import entrypoint
 from qtpie.decorators.menu import menu
 from qtpie.decorators.slot import slot
+from qtpie.decorators.stylesheet import stylesheet
 from qtpie.decorators.widget import widget
 from qtpie.decorators.window import window
 from qtpie.factories.make import make, make_later
@@ -40,6 +41,7 @@ __all__ = [
     "slot",
     "spacer",
     "state",
+    "stylesheet",
     "widget",
     "window",
 ]
