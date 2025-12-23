@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QWidget
 
-from qtpie import widget
+from qtpie import App, widget
 from qtpie.decorators.stylesheet import (
     STYLESHEET_CONFIG_ATTR,
     STYLESHEET_WATCHER_ATTR,
@@ -16,9 +15,6 @@ from qtpie.decorators.stylesheet import (
 )
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
 from qtpie_test import QtDriver
-
-if TYPE_CHECKING:
-    from qtpie import App
 
 
 class TestStylesheetDecoratorConfig:
@@ -209,9 +205,6 @@ class TestStylesheetOnApplication:
         """@stylesheet should work on QApplication subclasses."""
         # Note: We can't actually instantiate a new QApplication in tests
         # since one already exists. We just test that the decorator stores config.
-
-        from qtpie import App
-
         qss_file = tmp_path / "styles.qss"
         qss_file.write_text("QWidget { color: red; }")
 

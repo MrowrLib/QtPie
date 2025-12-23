@@ -27,11 +27,15 @@ def async_qt(qt: QtDriver) -> Iterator[tuple[QtDriver, qasync.QEventLoop]]:
     try:
         yield qt, loop
     finally:
-        # Proper cleanup: process remaining events, then detach loop before Qt dies
+        # Proper cleanup: stop loop, process remaining events, close loop, detach
         if loop.is_running():
             loop.stop()
+        # Process any pending callbacks
         loop.run_until_complete(asyncio.sleep(0))
+        # Detach from asyncio before closing to avoid conflicts
         asyncio.set_event_loop(None)
+        # Close the loop while Qt is still alive
+        loop.close()
 
 
 def process_async(loop: qasync.QEventLoop, duration: float = 0.05) -> None:
