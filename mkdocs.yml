@@ -73,6 +73,7 @@ nav:
       - Grid Layouts: guides/grids.md
       - SCSS Hot Reload: guides/scss.md
       - App & Entry Points: guides/app.md
+      - Async: guides/async.md
       - Testing: guides/testing.md
   - Reference:
       - Decorators:

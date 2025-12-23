@@ -109,22 +109,6 @@ The `@slot` decorator inspects the decorated function:
    - If type args provided: wraps with Qt's `@Slot(*args, **kwargs)`
    - If no args: returns the function unchanged
 
-## Requirements
-
-Async slots require `qasync` to be installed:
-
-```bash
-pip install qasync
-```
-
-If you try to use `@slot` on an async function without qasync, you'll get:
-
-```
-RuntimeError: qasync is required for async slots. Install it with: pip install qasync
-```
-
-QtPie's `@entrypoint` and `run_app()` automatically set up qasync, so async slots work out of the box in most cases.
-
 ## Complete Example
 
 ```python
