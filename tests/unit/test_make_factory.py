@@ -277,3 +277,105 @@ class TestMakeWithSelector:
         qt.track(w)
 
         assert_that(w.label.objectName()).is_equal_to("custom")
+
+
+class TestMakeWithInit:
+    """Tests for make() with init= parameter."""
+
+    def test_init_with_list_passes_positional_args(self, qt: QtDriver) -> None:
+        """init=[...] should pass positional args to constructor."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            label: QLabel = make(QLabel, init=["Hello from init"])
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Hello from init")
+
+    def test_init_with_dict_passes_kwargs(self, qt: QtDriver) -> None:
+        """init={...} should pass kwargs to constructor."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            edit: QLineEdit = make(QLineEdit, init={"placeholderText": "From init"})
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.edit.placeholderText()).is_equal_to("From init")
+
+    def test_init_with_tuple_passes_both(self, qt: QtDriver) -> None:
+        """init=([...], {...}) should pass both args and kwargs."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            label: QLabel = make(QLabel, init=(["Hello"], {"objectName": "custom_name"}))
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Hello")
+        # Note: objectName gets overwritten by decorator, but the kwarg was passed
+
+    def test_init_overrides_signal_detection(self, qt: QtDriver) -> None:
+        """init= kwargs should bypass signal detection."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            # "text" would normally be detected as potential signal since it's a string
+            # But with init=, it should be passed directly to constructor
+            label: QLabel = make(QLabel, init={"text": "Direct text"})
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Direct text")
+
+    def test_init_combines_with_regular_args(self, qt: QtDriver) -> None:
+        """init= should combine with regular positional args."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            # Regular arg "Hello" + init args
+            label: QLabel = make(QLabel, "Hello", init=([], {"objectName": "test"}))
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.text()).is_equal_to("Hello")
+
+    def test_init_with_signal_still_works(self, qt: QtDriver) -> None:
+        """Signals should still work alongside init=."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            button: QPushButton = make(QPushButton, "Click", clicked="on_click", init={"objectName": "test_btn"})
+            clicked: bool = False
+
+            def on_click(self) -> None:
+                self.clicked = True
+
+        w = MyWidget()
+        qt.track(w)
+
+        qt.click(w.button)
+        assert_that(w.clicked).is_true()
+
+
+class TestMakeForwardReference:
+    """Tests for make() with forward reference class names."""
+
+    def test_forward_ref_resolves_class(self, qt: QtDriver) -> None:
+        """make(class_name='ClassName') should resolve the class at runtime."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            label: QLabel = make(class_name="QLabel", init=["Forward ref works!"])
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label).is_instance_of(QLabel)
+        assert_that(w.label.text()).is_equal_to("Forward ref works!")

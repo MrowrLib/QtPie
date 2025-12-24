@@ -13,9 +13,13 @@ GRID_POSITION_METADATA_KEY = "qtpie_grid_position"
 BIND_METADATA_KEY = "qtpie_bind"
 MAKE_LATER_METADATA_KEY = "qtpie_make_later"
 SELECTOR_METADATA_KEY = "qtpie_selector"
+FORWARD_REF_METADATA_KEY = "qtpie_forward_ref"
 
 # Type alias for grid position tuples
 GridTuple = tuple[int, int] | tuple[int, int, int, int]
+
+# Type alias for init parameter
+InitArgs = list[Any] | dict[str, Any] | tuple[list[Any], dict[str, Any]]
 
 
 @dataclass
@@ -24,6 +28,11 @@ class SelectorInfo:
 
     object_name: str | None = None
     classes: list[str] | None = None
+
+
+def is_selector(s: str) -> bool:
+    """Check if string is a CSS selector (starts with # or .)."""
+    return s.startswith("#") or s.startswith(".")
 
 
 def parse_selector(selector: str) -> SelectorInfo:
@@ -67,6 +76,7 @@ def make[T](
     form_label: str | None = None,
     grid: GridTuple | None = None,
     bind: str | dict[str, str] | None = None,
+    init: InitArgs | None = None,
     **kwargs: Any,
 ) -> T: ...
 
@@ -78,17 +88,32 @@ def make[T](
     form_label: str | None = None,
     grid: GridTuple | None = None,
     bind: str | dict[str, str] | None = None,
+    init: InitArgs | None = None,
     **kwargs: Any,
 ) -> T: ...
 
 
-def make[T](
-    __selector_or_class: str | Callable[..., T],
-    __class_type_or_first_arg: Callable[..., T] | Any = None,
-    *args: Any,
+@overload
+def make(
+    *,
+    class_name: str,
     form_label: str | None = None,
     grid: GridTuple | None = None,
     bind: str | dict[str, str] | None = None,
+    init: InitArgs | None = None,
+    **kwargs: Any,
+) -> Any: ...
+
+
+def make[T](
+    __selector_or_class: str | Callable[..., T] | None = None,
+    __class_type_or_first_arg: Callable[..., T] | Any = None,
+    *args: Any,
+    class_name: str | None = None,
+    form_label: str | None = None,
+    grid: GridTuple | None = None,
+    bind: str | dict[str, str] | None = None,
+    init: InitArgs | None = None,
     **kwargs: Any,
 ) -> T:
     """
@@ -101,11 +126,16 @@ def make[T](
                   Examples: "#myid", ".primary", "#btn.primary.large"
         class_type: The widget class to instantiate.
         *args: Positional arguments passed to the constructor.
+        class_name: Forward reference class name (string). Use with init= for args.
         form_label: Label text for form layouts. When set, creates a labeled row.
         grid: Position in grid layout as (row, col) or (row, col, rowspan, colspan).
         bind: Data binding specification. Can be:
               - str: Path to bind to default widget property, e.g. "user.name"
               - dict: Map of widget properties to paths, e.g. {"text": "user.name", "enabled": "user.canEdit"}
+        init: Explicit constructor arguments (use when kwargs conflict with signals).
+              - list: Positional args, e.g. init=[1, 2, 3]
+              - dict: Keyword args, e.g. init={"name": "value"}
+              - tuple[list, dict]: Both, e.g. init=([1, 2], {"name": "value"})
         **kwargs: Keyword arguments - if value is a string or callable,
                   it's treated as a potential signal connection. Otherwise,
                   it's passed to the constructor.
@@ -119,14 +149,17 @@ def make[T](
         button: QPushButton = make(".primary", QPushButton, "Click")
         submit: QPushButton = make("#submit.primary.large", QPushButton, "Submit")
 
-        # With properties
-        edit: QLineEdit = make(QLineEdit, placeholderText="Enter name")
+        # Forward reference (for circular imports)
+        child: "ChildWidget" = make(class_name="ChildWidget", init=["arg1"])
 
         # With signal connections (string = method name)
         button: QPushButton = make(QPushButton, "Click", clicked="on_click")
 
         # With signal connections (callable)
         button: QPushButton = make(QPushButton, clicked=lambda: print("clicked!"))
+
+        # Explicit constructor args (when kwarg names conflict with signals)
+        widget: MyWidget = make(MyWidget, init={"clicked": "not_a_signal"})
 
         # Form layout with label
         name: QLineEdit = make(QLineEdit, form_label="Full Name")
@@ -135,16 +168,8 @@ def make[T](
         btn: QPushButton = make(QPushButton, "7", grid=(1, 0))
         display: QLineEdit = make(QLineEdit, grid=(0, 0, 1, 4))  # spans 4 cols
 
-        # Simple data binding (uses default widget property)
+        # Data binding
         name_edit: QLineEdit = make(QLineEdit, bind="user.name")
-        age_spin: QSpinBox = make(QSpinBox, bind="user.age")
-
-        # Multiple bindings to different properties
-        name_edit: QLineEdit = make(QLineEdit, bind={
-            "text": "user.name",
-            "placeholderText": "user.namePlaceholder",
-            "enabled": "user.canEdit",
-        })
 
     Returns:
         At type-check time: T (the widget type)
@@ -154,30 +179,53 @@ def make[T](
         The type lie (returning T but actually returning field()) is intentional
         to make the API ergonomic while maintaining type safety.
     """
-    # Handle overloaded signature: detect if first arg is a selector string
+    # Handle overloaded signature
     selector_info: SelectorInfo | None = None
-    class_type: Callable[..., T]
+    forward_ref: str | None = None
+    class_type: Callable[..., T] | None = None
     actual_args: tuple[Any, ...]
 
-    if isinstance(__selector_or_class, str):
-        # First arg is a selector string
-        selector_info = parse_selector(__selector_or_class)
-        class_type = cast(Callable[..., T], __class_type_or_first_arg)
-        actual_args = args
-    else:
-        # First arg is the class type
+    # Check for class_name keyword arg (forward reference)
+    if class_name is not None:
+        forward_ref = class_name
+        class_type = None
+        actual_args = ()  # Use init= for constructor args
+    elif isinstance(__selector_or_class, str):
+        # First arg is a string - must be a CSS selector
+        if is_selector(__selector_or_class):
+            selector_info = parse_selector(__selector_or_class)
+            class_type = cast(Callable[..., T], __class_type_or_first_arg)
+            actual_args = args
+        else:
+            raise ValueError(f"Invalid selector: {__selector_or_class!r}. Selectors must start with # or . (e.g., '#id', '.class'). For forward references, use class_name='ClassName'.")
+    elif __selector_or_class is not None:
+        # First arg is the class type - this is the normal case: make(QLabel, ...)
         class_type = __selector_or_class
         if __class_type_or_first_arg is not None:
             actual_args = (__class_type_or_first_arg, *args)
         else:
             actual_args = args
+    else:
+        raise ValueError("make() requires a class type, selector, or class_name='...'.")
+
+    # Parse init parameter into args and kwargs
+    init_args: list[Any] = []
+    init_kwargs: dict[str, Any] = {}
+    if init is not None:
+        if isinstance(init, list):
+            init_args = init
+        elif isinstance(init, dict):
+            init_kwargs = init
+        else:
+            # Must be tuple[list, dict]
+            init_args, init_kwargs = init
 
     # Separate potential signal kwargs from widget property kwargs
     # Only do signal detection for QObject subclasses (widgets, actions, etc.)
     potential_signals: dict[str, str | Callable[..., Any]] = {}
     widget_kwargs: dict[str, Any] = {}
 
-    is_qobject_class = isinstance(class_type, type) and issubclass(class_type, QObject)
+    is_qobject_class = class_type is not None and isinstance(class_type, type) and issubclass(class_type, QObject)
 
     for key, value in kwargs.items():
         if is_qobject_class and (isinstance(value, str) or callable(value)):
@@ -187,8 +235,30 @@ def make[T](
             # Regular property - pass to constructor
             widget_kwargs[key] = value
 
+    # Merge init_kwargs into widget_kwargs (init takes precedence)
+    widget_kwargs.update(init_kwargs)
+
+    # Combine actual_args with init_args (actual_args first, then init_args)
+    combined_args = (*actual_args, *init_args)
+
     def factory_fn() -> T:
-        return cast(T, class_type(*actual_args, **widget_kwargs))
+        if forward_ref is not None:
+            # Resolve forward reference at runtime
+            import inspect
+
+            # Look up in the caller's module globals
+            frame = inspect.currentframe()
+            if frame is not None:
+                frame = frame.f_back
+            while frame is not None:
+                if forward_ref in frame.f_globals:
+                    resolved_class = frame.f_globals[forward_ref]
+                    return cast(T, resolved_class(*combined_args, **widget_kwargs))
+                frame = frame.f_back
+            raise NameError(f"Forward reference {forward_ref!r} could not be resolved")
+        else:
+            assert class_type is not None
+            return cast(T, class_type(*combined_args, **widget_kwargs))
 
     metadata: dict[str, Any] = {}
     if potential_signals:
@@ -201,6 +271,8 @@ def make[T](
         metadata[BIND_METADATA_KEY] = bind
     if selector_info is not None:
         metadata[SELECTOR_METADATA_KEY] = selector_info
+    if forward_ref is not None:
+        metadata[FORWARD_REF_METADATA_KEY] = forward_ref
 
     return field(default_factory=factory_fn, metadata=metadata if metadata else {})  # type: ignore[return-value]
 
