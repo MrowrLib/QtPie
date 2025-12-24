@@ -4,15 +4,15 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        exclude: ^DRAFT*
+        exclude: ^drafting*
       - id: ruff-format
-        exclude: ^DRAFT*
+        exclude: ^drafting*
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.400
     hooks:
       - id: pyright
-        exclude: ^DRAFT*
+        exclude: ^drafting*
 
   - repo: local
     hooks:
@@ -23,4 +23,4 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: false
-        exclude: ^DRAFT*
+        exclude: ^drafting*
