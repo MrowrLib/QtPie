@@ -650,8 +650,6 @@ tests/unit/
 
 ## Future Ideas (Backlog)
 
-- [ ] QML-like declarative syntax (if Python ever gets macros...)
-- [ ] Visual designer integration
 - [ ] State machines for complex UI flows
 - [ ] Drag and drop helpers
 - [ ] Internationalization helpers
@@ -664,18 +662,16 @@ tests/unit/
 
 ## Current Status
 
-| Phase                                  | Status      |
-| -------------------------------------- | ----------- |
-| Phase 1: Core Foundation               | ✅ Complete |
-| Phase 2: Layout Extensions             | ✅ Complete |
-| Phase 3: @window                       | ✅ Complete |
-| Phase 4: @menu/@action                 | ✅ Complete |
-| Phase 5: Data Binding                  | ✅ Complete |
-| Phase 6: Widget Base Class             | ✅ Complete |
-| Phase 7: Pre-built Widgets             | Planned     |
-| Phase 8: Styling                       | ✅ Complete |
-| Phase 9: App Class                     | ✅ Complete |
-| Phase 10: Reactive State & Bindings    | ✅ Complete |
-| Phase 11: Observant Integration        | ✅ Complete |
-
-**Total tests:** 316
+| Phase                               | Status      |
+| ----------------------------------- | ----------- |
+| Phase 1: Core Foundation            | ✅ Complete |
+| Phase 2: Layout Extensions          | ✅ Complete |
+| Phase 3: @window                    | ✅ Complete |
+| Phase 4: @menu/@action              | ✅ Complete |
+| Phase 5: Data Binding               | ✅ Complete |
+| Phase 6: Widget Base Class          | ✅ Complete |
+| Phase 7: Pre-built Widgets          | Planned     |
+| Phase 8: Styling                    | ✅ Complete |
+| Phase 9: App Class                  | ✅ Complete |
+| Phase 10: Reactive State & Bindings | ✅ Complete |
+| Phase 11: Observant Integration     | ✅ Complete |
