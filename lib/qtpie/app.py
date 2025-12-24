@@ -1,13 +1,14 @@
 """App class - a QApplication subclass with lifecycle hooks and qasync support."""
 
 import asyncio
+import signal
 import sys
 from collections.abc import Sequence
 
 import qasync  # type: ignore[import-untyped]
 from qtpy.QtWidgets import QApplication, QWidget
 
-from qtpie.styles.color_scheme import ColorScheme, set_color_scheme
+from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 
 
@@ -37,6 +38,12 @@ def run_app(app: QApplication) -> int:
 
     quit_event = asyncio.Event()
     app.aboutToQuit.connect(quit_event.set)
+
+    # Handle CTRL-C gracefully
+    def handle_sigint(*_: object) -> None:
+        app.quit()
+
+    signal.signal(signal.SIGINT, handle_sigint)
 
     with loop:
         loop.run_until_complete(quit_event.wait())  # pyright: ignore[reportUnknownMemberType]
@@ -109,6 +116,9 @@ class App(QApplication):
             set_color_scheme(ColorScheme.Dark, self)
         elif light_mode:
             set_color_scheme(ColorScheme.Light, self)
+        else:
+            # Apply any pending color scheme set before app creation
+            apply_deferred_color_scheme(self)
 
         # Call lifecycle hooks
         self._call_lifecycle_hooks()

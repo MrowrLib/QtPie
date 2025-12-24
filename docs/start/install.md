@@ -5,6 +5,7 @@
 **Python 3.13 or later** is required. QtPie uses modern Python features including the new type parameter syntax.
 
 **Qt binding**: QtPie works with either:
+
 - **PySide6** (recommended) - Official Qt for Python, LGPL licensed
 - **PyQt6** - Alternative Qt binding, GPL/commercial licensed
 
@@ -20,9 +21,17 @@ QtPie will automatically detect which binding is available. If both are installe
 
     This installs QtPie but NOT a Qt binding. Install one separately:
 
-    ```bash
-    pip install pyside6
-    ```
+    === "PySide6 (recommended)"
+
+        ```bash
+        pip install pyside6
+        ```
+
+    === "PyQt6"
+
+        ```bash
+        pip install pyqt6
+        ```
 
 === "uv"
 
@@ -32,35 +41,39 @@ QtPie will automatically detect which binding is available. If both are installe
 
     Then add a Qt binding:
 
-    ```bash
-    uv add pyside6
-    ```
+    === "PySide6 (recommended)"
+
+        ```bash
+        uv add pyside6
+        ```
+
+    === "PyQt6"
+
+        ```bash
+        uv add pyqt6
+        ```
 
 === "poetry"
 
     ```bash
     poetry add qtpie
-    poetry add pyside6
     ```
 
-### All-in-one install
+    Then add a Qt binding:
 
-If you want QtPie + PySide6 in one command:
+    === "PySide6 (recommended)"
 
-```bash
-pip install qtpie pyside6
-```
+        ```bash
+        poetry add pyside6
+        ```
+
+    === "PyQt6"
+
+        ```bash
+        poetry add pyqt6
+        ```
 
 ## Verify Installation
-
-Run this in a Python shell:
-
-```python
-from qtpie import widget, make
-print("QtPie installed successfully!")
-```
-
-Or test with a working app:
 
 ```python
 from qtpie import entrypoint, widget, make
@@ -85,6 +98,7 @@ A window should appear with "Hello, QtPie!". Success!
 QtPie uses [qtpy](https://github.com/spyder-ide/qtpy) for Qt abstraction, which supports multiple Qt bindings.
 
 **Default behavior**: qtpy automatically selects the first available binding in this order:
+
 1. PySide6
 2. PyQt6
 3. PySide2 (not recommended)

@@ -1,8 +1,7 @@
 """Tests for color scheme helpers."""
 
-from __future__ import annotations
-
 import os
+import sys
 from unittest.mock import patch
 
 from assertpy import assert_that
@@ -40,22 +39,44 @@ class TestSetColorSchemeWithApp:
 
 
 class TestSetColorSchemeWithoutApp:
-    """Tests for set_color_scheme when no app exists (uses env vars)."""
+    """Tests for set_color_scheme when no app exists (stores pending scheme)."""
 
-    def test_set_dark_mode_sets_env_var(self) -> None:
-        """Sets QT_QPA_PLATFORM env var for dark mode when no app exists."""
+    def test_set_dark_mode_stores_pending(self) -> None:
+        """Stores pending color scheme for dark mode when no app exists."""
+        from qtpie.styles.color_scheme import get_configured_color_scheme
+
         with patch.object(QApplication, "instance", return_value=None):
-            # Clear any existing value
+            set_color_scheme(ColorScheme.Dark)
+
+            assert_that(get_configured_color_scheme()).is_equal_to(ColorScheme.Dark)
+
+    def test_set_light_mode_stores_pending(self) -> None:
+        """Stores pending color scheme for light mode when no app exists."""
+        from qtpie.styles.color_scheme import get_configured_color_scheme
+
+        with patch.object(QApplication, "instance", return_value=None):
+            set_color_scheme(ColorScheme.Light)
+
+            assert_that(get_configured_color_scheme()).is_equal_to(ColorScheme.Light)
+
+    def test_set_dark_mode_sets_env_var_on_windows(self) -> None:
+        """Sets QT_QPA_PLATFORM env var for dark mode on Windows."""
+        with (
+            patch.object(QApplication, "instance", return_value=None),
+            patch.object(sys, "platform", "win32"),
+        ):
             os.environ.pop("QT_QPA_PLATFORM", None)
 
             set_color_scheme(ColorScheme.Dark)
 
             assert_that(os.environ.get("QT_QPA_PLATFORM")).is_equal_to("windows:darkmode=2")
 
-    def test_set_light_mode_sets_env_var(self) -> None:
-        """Sets QT_QPA_PLATFORM env var for light mode when no app exists."""
-        with patch.object(QApplication, "instance", return_value=None):
-            # Clear any existing value
+    def test_set_light_mode_sets_env_var_on_windows(self) -> None:
+        """Sets QT_QPA_PLATFORM env var for light mode on Windows."""
+        with (
+            patch.object(QApplication, "instance", return_value=None),
+            patch.object(sys, "platform", "win32"),
+        ):
             os.environ.pop("QT_QPA_PLATFORM", None)
 
             set_color_scheme(ColorScheme.Light)
@@ -73,13 +94,13 @@ class TestEnableDarkMode:
         assert_that(qapp.styleHints().colorScheme()).is_equal_to(Qt.ColorScheme.Dark)
 
     def test_enable_dark_mode_without_app(self) -> None:
-        """Sets env var when no app exists."""
-        with patch.object(QApplication, "instance", return_value=None):
-            os.environ.pop("QT_QPA_PLATFORM", None)
+        """Stores pending scheme when no app exists."""
+        from qtpie.styles.color_scheme import get_configured_color_scheme
 
+        with patch.object(QApplication, "instance", return_value=None):
             enable_dark_mode()
 
-            assert_that(os.environ.get("QT_QPA_PLATFORM")).is_equal_to("windows:darkmode=2")
+            assert_that(get_configured_color_scheme()).is_equal_to(ColorScheme.Dark)
 
 
 class TestEnableLightMode:
@@ -92,10 +113,10 @@ class TestEnableLightMode:
         assert_that(qapp.styleHints().colorScheme()).is_equal_to(Qt.ColorScheme.Light)
 
     def test_enable_light_mode_without_app(self) -> None:
-        """Sets env var when no app exists."""
-        with patch.object(QApplication, "instance", return_value=None):
-            os.environ.pop("QT_QPA_PLATFORM", None)
+        """Stores pending scheme when no app exists."""
+        from qtpie.styles.color_scheme import get_configured_color_scheme
 
+        with patch.object(QApplication, "instance", return_value=None):
             enable_light_mode()
 
-            assert_that(os.environ.get("QT_QPA_PLATFORM")).is_equal_to("windows:darkmode=0")
+            assert_that(get_configured_color_scheme()).is_equal_to(ColorScheme.Light)

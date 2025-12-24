@@ -24,6 +24,10 @@ python hello.py
 
 That's it. A window appears with "Hello, World!". No `QApplication`, no `if __name__ == "__main__"`, no boilerplate.
 
+| Light mode | Dark mode |
+|:--:|:--:|
+| ![Light mode](../images/screenshots/hello-world-light-mode.png){ width="200" } | ![Dark mode](../images/screenshots/hello-world-dark-mode.png){ width="200" } |
+
 **What `@entrypoint` does:**
 - Creates a `QApplication` instance
 - Calls your function to get a widget

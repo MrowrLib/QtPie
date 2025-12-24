@@ -104,3 +104,4 @@ nav:
           - App Class: reference/app/app.md
           - "run_app()": reference/app/run-app.md
   - Examples: examples.md
+  - Qt Resources: qt-resources.md
