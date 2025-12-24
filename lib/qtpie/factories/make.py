@@ -11,7 +11,6 @@ SIGNALS_METADATA_KEY = "qtpie_signals"
 FORM_LABEL_METADATA_KEY = "qtpie_form_label"
 GRID_POSITION_METADATA_KEY = "qtpie_grid_position"
 BIND_METADATA_KEY = "qtpie_bind"
-BIND_PROP_METADATA_KEY = "qtpie_bind_prop"
 MAKE_LATER_METADATA_KEY = "qtpie_make_later"
 
 # Type alias for grid position tuples
@@ -23,8 +22,7 @@ def make[T](
     *args: Any,
     form_label: str | None = None,
     grid: GridTuple | None = None,
-    bind: str | None = None,
-    bind_prop: str | None = None,
+    bind: str | dict[str, str] | None = None,
     **kwargs: Any,
 ) -> T:
     """
@@ -37,8 +35,9 @@ def make[T](
         *args: Positional arguments passed to the constructor.
         form_label: Label text for form layouts. When set, creates a labeled row.
         grid: Position in grid layout as (row, col) or (row, col, rowspan, colspan).
-        bind: Path to bind to an ObservableProxy field, e.g. "proxy.name" or "proxy.address?.city".
-        bind_prop: Explicit widget property to bind. If None, uses the default for the widget type.
+        bind: Data binding specification. Can be:
+              - str: Path to bind to default widget property, e.g. "user.name"
+              - dict: Map of widget properties to paths, e.g. {"text": "user.name", "enabled": "user.canEdit"}
         **kwargs: Keyword arguments - if value is a string or callable,
                   it's treated as a potential signal connection. Otherwise,
                   it's passed to the constructor.
@@ -63,10 +62,16 @@ def make[T](
         btn: QPushButton = make(QPushButton, "7", grid=(1, 0))
         display: QLineEdit = make(QLineEdit, grid=(0, 0, 1, 4))  # spans 4 cols
 
-        # Data binding
-        name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
-        age_spin: QSpinBox = make(QSpinBox, bind="proxy.age")
-        city_edit: QLineEdit = make(QLineEdit, bind="proxy.address?.city")  # optional chaining
+        # Simple data binding (uses default widget property)
+        name_edit: QLineEdit = make(QLineEdit, bind="user.name")
+        age_spin: QSpinBox = make(QSpinBox, bind="user.age")
+
+        # Multiple bindings to different properties
+        name_edit: QLineEdit = make(QLineEdit, bind={
+            "text": "user.name",
+            "placeholderText": "user.namePlaceholder",
+            "enabled": "user.canEdit",
+        })
 
     Returns:
         At type-check time: T (the widget type)
@@ -103,8 +108,6 @@ def make[T](
         metadata[GRID_POSITION_METADATA_KEY] = grid
     if bind is not None:
         metadata[BIND_METADATA_KEY] = bind
-    if bind_prop is not None:
-        metadata[BIND_PROP_METADATA_KEY] = bind_prop
 
     return field(default_factory=factory_fn, metadata=metadata if metadata else {})  # type: ignore[return-value]
 

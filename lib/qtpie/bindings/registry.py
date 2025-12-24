@@ -147,6 +147,16 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
     )
     registry.set_default_prop(QLineEdit, "text")
 
+    # QLineEdit - placeholderText (one-way, no signal)
+    registry.add(
+        BindingKey(QLineEdit, "placeholderText"),
+        BindingAdapter(
+            getter=lambda w: w.placeholderText(),
+            setter=lambda w, v: w.setPlaceholderText(str(v) if v is not None else ""),
+            signal_name=None,
+        ),
+    )
+
     # QLabel - text (one-way, no signal)
     registry.add(
         BindingKey(QLabel, "text"),

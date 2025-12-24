@@ -361,11 +361,11 @@ class TestOptionalChaining:
         assert_that(w.owner_edit.text()).is_equal_to("")
 
 
-class TestExplicitBindProp:
-    """Tests for explicit bind_prop parameter."""
+class TestDictBindings:
+    """Tests for dict-style multi-property bindings."""
 
-    def test_explicit_bind_prop(self, qt: QtDriver) -> None:
-        """Should use explicit bind_prop when specified."""
+    def test_dict_bind_single_property(self, qt: QtDriver) -> None:
+        """Should bind to explicit property via dict syntax."""
 
         @dataclass
         class Model:
@@ -375,7 +375,7 @@ class TestExplicitBindProp:
         class Editor(QWidget, Widget[Model]):
             model: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
-            combo: QComboBox = make(QComboBox, bind="proxy.selected", bind_prop="currentText")
+            combo: QComboBox = make(QComboBox, bind={"currentText": "proxy.selected"})
 
             @override
             def setup(self) -> None:
@@ -387,6 +387,45 @@ class TestExplicitBindProp:
 
         w.proxy.observable(str, "selected").set("Option B")
         assert_that(w.combo.currentText()).is_equal_to("Option B")
+
+    def test_dict_bind_multiple_properties(self, qt: QtDriver) -> None:
+        """Should bind multiple properties to different paths."""
+
+        @dataclass
+        class Model:
+            name: str = "Alice"
+            placeholder: str = "Enter name..."
+            editable: bool = True
+
+        @widget()
+        class Editor(QWidget, Widget[Model]):
+            model: Model = make(Model)
+            proxy: ObservableProxy[Model] = make_later()
+            name_edit: QLineEdit = make(
+                QLineEdit,
+                bind={
+                    "text": "proxy.name",
+                    "placeholderText": "proxy.placeholder",
+                },
+            )
+
+            @override
+            def setup(self) -> None:
+                self.proxy = ObservableProxy(self.model, sync=True)
+
+        w = Editor()
+        qt.track(w)
+
+        # Check initial values
+        assert_that(w.name_edit.text()).is_equal_to("Alice")
+        assert_that(w.name_edit.placeholderText()).is_equal_to("Enter name...")
+
+        # Update via proxy - both properties should update
+        w.proxy.observable(str, "name").set("Bob")
+        assert_that(w.name_edit.text()).is_equal_to("Bob")
+
+        w.proxy.observable(str, "placeholder").set("Type here...")
+        assert_that(w.name_edit.placeholderText()).is_equal_to("Type here...")
 
 
 class TestManualBinding:

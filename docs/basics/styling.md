@@ -90,6 +90,127 @@ QPushButton[class~="primary"]:hover {
 
 The `~=` operator matches if the class list contains the given value.
 
+## Object Name Selectors
+
+Qt Style Sheets support ID selectors using `#objectName` syntax, just like CSS. QtPie automatically sets object names on your widgets, making this styling approach easy to use.
+
+### How QtPie Sets Object Names
+
+QtPie automatically assigns `objectName` to widgets:
+
+1. **Widget classes** get their name from the class name (with "Widget" suffix stripped):
+
+```python
+@widget
+class CounterWidget(QWidget):  # objectName = "Counter"
+    pass
+
+@widget
+class Editor(QWidget):  # objectName = "Editor"
+    pass
+
+@widget(name="CustomName")
+class MyWidget(QWidget):  # objectName = "CustomName"
+    pass
+```
+
+2. **Child widgets** get their name from the field name:
+
+```python
+@widget
+class MyWidget(QWidget):
+    label: QLabel = make(QLabel, "Hello")    # objectName = "label"
+    submit_btn: QPushButton = make(QPushButton, "Submit")  # objectName = "submit_btn"
+```
+
+### Using #objectName in QSS
+
+Target widgets by their object name using the `#` selector:
+
+```css
+/* Style the Counter widget */
+#Counter {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 10px;
+}
+
+/* Style a child widget by field name */
+#label {
+    font-size: 18px;
+    color: #333;
+}
+
+#submit_btn {
+    background-color: #4CAF50;
+    color: white;
+}
+```
+
+### Combining with Type Selectors
+
+For more specific targeting, combine type and ID selectors:
+
+```css
+/* Only QLabel widgets named "label" */
+QLabel#label {
+    font-weight: bold;
+}
+
+/* Only QPushButton widgets named "submit_btn" */
+QPushButton#submit_btn {
+    border-radius: 4px;
+}
+```
+
+### Example: Styling by Object Name
+
+```python
+from qtpie import entrypoint, widget, make
+from qtpy.QtWidgets import QWidget, QLabel, QPushButton
+
+@entrypoint(stylesheet="styles.qss")
+@widget
+class Counter(QWidget):  # objectName = "Counter"
+    label: QLabel = make(QLabel, "Count: 0")      # objectName = "label"
+    button: QPushButton = make(QPushButton, "+1") # objectName = "button"
+```
+
+`styles.qss`:
+
+```css
+#Counter {
+    background-color: #ffffff;
+    padding: 20px;
+}
+
+#label {
+    font-size: 24px;
+    color: #333;
+}
+
+#button {
+    background-color: #007bff;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+}
+
+#button:hover {
+    background-color: #0056b3;
+}
+```
+
+### ID vs Class Selectors
+
+| Selector | Syntax | Use Case |
+|----------|--------|----------|
+| ID (`#`) | `#objectName` | Target a specific widget instance |
+| Class (`[class~=]`) | `[class~="primary"]` | Target widgets sharing a style category |
+
+Use ID selectors when you want to style a specific widget. Use class selectors when multiple widgets should share the same style.
+
 ## Color Schemes
 
 QtPie provides simple helpers for dark and light mode:

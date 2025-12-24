@@ -28,7 +28,6 @@ from qtpy.QtWidgets import (
 from qtpie.decorators._async_wrap import wrap_async_methods
 from qtpie.factories.make import (
     BIND_METADATA_KEY,
-    BIND_PROP_METADATA_KEY,
     FORM_LABEL_METADATA_KEY,
     GRID_POSITION_METADATA_KEY,
     MAKE_LATER_METADATA_KEY,
@@ -608,27 +607,103 @@ def _process_format_binding(
     return True
 
 
-def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
-    """Process data bindings from make() metadata.
+def _process_single_binding(
+    widget: QWidget,
+    widget_instance: QWidget,
+    bind_path: str,
+    bind_prop: str,
+) -> None:
+    """Process a single property binding.
 
     Supports multiple forms of bind paths:
     - Format string: bind="Count: {count}" → computed format binding
     - State field: bind="count" → binds to state(0) field on self
     - Short form: bind="name" or bind="address.city" → uses self.model_observable_proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
-
-    Smart detection order:
-    1. Check if bind path is a format string (contains {})
-    2. Check if bind path (without dots) is a state field on self
-    3. Check if first segment is an ObservableProxy field
-    4. Otherwise, treat as path relative to self.model_observable_proxy
     """
-    # Import here to avoid circular import
-    from qtpie.bindings import bind, get_binding_registry
+    from qtpie.bindings import bind
+
+    # Check 0: Is this a format string binding?
+    if _is_format_string(bind_path):
+        if _process_format_binding(widget, widget_instance, bind_path, bind_prop):
+            return
+        # Fall through if format binding fails
+
+    # Parse path for detection (normalize ?. to . just for splitting)
+    normalized_for_split = bind_path.replace("?.", ".")
+    parts = normalized_for_split.split(".", 1)
+    first_segment = parts[0]
+    has_nested_path = len(parts) > 1
+
+    # Check 1: Is this a state field?
+    # Access the field to trigger observable creation (lazy initialization)
+    try:
+        _ = getattr(widget, first_segment)
+    except AttributeError:
+        pass
+
+    if not has_nested_path:
+        # Simple state field: bind="count"
+        state_observable = get_state_observable(widget, bind_path)
+        if state_observable is not None:
+            bind(state_observable, widget_instance, bind_prop)
+            return
+    else:
+        # Check if first segment is a state field with nested path: bind="dog.name"
+        state_proxy = get_state_proxy(widget, first_segment)
+        if state_proxy is not None:
+            # Get the nested path (everything after the first segment)
+            nested_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
+            if nested_path:
+                observable = state_proxy.observable_for_path(nested_path)
+                bind(observable, widget_instance, bind_prop)
+                return
+
+    # Check 2: Is first segment an ObservableProxy field?
+    potential_proxy = getattr(widget, first_segment, None)
+    if potential_proxy is not None and hasattr(potential_proxy, "observable_for_path"):
+        # Explicit path: first segment is a proxy field (e.g., "other_proxy.name")
+        proxy_field_name = first_segment
+        # Use original path with ?. intact, minus the first segment
+        observable_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
+    else:
+        # Short form: use default "model_observable_proxy" field (e.g., "name" or "address.city")
+        proxy_field_name = "model_observable_proxy"
+        observable_path = bind_path
+
+    # Handle empty observable path (invalid - can't bind to proxy itself)
+    if not observable_path:
+        return
+
+    # Get the proxy from self
+    proxy = getattr(widget, proxy_field_name, None)
+    if proxy is None:
+        # Proxy not yet created - skip silently
+        return
+
+    # Check if proxy has observable_for_path method (is ObservableProxy)
+    if not hasattr(proxy, "observable_for_path"):
+        return
+
+    # Get the observable for the path
+    observable = proxy.observable_for_path(observable_path)
+
+    # Create the binding
+    bind(observable, widget_instance, bind_prop)
+
+
+def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
+    """Process data bindings from make() metadata.
+
+    Supports:
+    - bind="path" → binds to default widget property
+    - bind={"prop": "path", ...} → binds multiple properties
+    """
+    from qtpie.bindings import get_binding_registry
 
     for f in fields(cls):  # type: ignore[arg-type]
-        bind_path = f.metadata.get(BIND_METADATA_KEY)
-        if bind_path is None:
+        bind_spec = f.metadata.get(BIND_METADATA_KEY)
+        if bind_spec is None:
             continue
 
         # Get the widget instance for this field
@@ -636,78 +711,14 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
         if widget_instance is None:
             continue
 
-        # Get the property to bind to
-        bind_prop = f.metadata.get(BIND_PROP_METADATA_KEY)
-        if bind_prop is None:
-            bind_prop = get_binding_registry().get_default_prop(widget_instance)
-
-        # Check 0: Is this a format string binding?
-        if _is_format_string(bind_path):
-            if _process_format_binding(widget, widget_instance, bind_path, bind_prop):
-                continue
-            # Fall through if format binding fails
-
-        # Parse path for detection (normalize ?. to . just for splitting)
-        normalized_for_split = bind_path.replace("?.", ".")
-        parts = normalized_for_split.split(".", 1)
-        first_segment = parts[0]
-        has_nested_path = len(parts) > 1
-
-        # Check 1: Is this a state field?
-        # Access the field to trigger observable creation (lazy initialization)
-        try:
-            _ = getattr(widget, first_segment)
-        except AttributeError:
-            pass
-
-        if not has_nested_path:
-            # Simple state field: bind="count"
-            state_observable = get_state_observable(widget, bind_path)
-            if state_observable is not None:
-                bind(state_observable, widget_instance, bind_prop)
-                continue
+        if isinstance(bind_spec, dict):
+            # Multiple bindings: {"text": "user.name", "enabled": "user.canEdit"}
+            for prop_name, path in cast(dict[str, str], bind_spec).items():
+                _process_single_binding(widget, widget_instance, path, prop_name)
         else:
-            # Check if first segment is a state field with nested path: bind="dog.name"
-            state_proxy = get_state_proxy(widget, first_segment)
-            if state_proxy is not None:
-                # Get the nested path (everything after the first segment)
-                nested_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
-                if nested_path:
-                    observable = state_proxy.observable_for_path(nested_path)
-                    bind(observable, widget_instance, bind_prop)
-                    continue
-
-        # Check 2: Is first segment an ObservableProxy field?
-        potential_proxy = getattr(widget, first_segment, None)
-        if potential_proxy is not None and hasattr(potential_proxy, "observable_for_path"):
-            # Explicit path: first segment is a proxy field (e.g., "other_proxy.name")
-            proxy_field_name = first_segment
-            # Use original path with ?. intact, minus the first segment
-            observable_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
-        else:
-            # Short form: use default "model_observable_proxy" field (e.g., "name" or "address.city")
-            proxy_field_name = "model_observable_proxy"
-            observable_path = bind_path
-
-        # Handle empty observable path (invalid - can't bind to proxy itself)
-        if not observable_path:
-            continue
-
-        # Get the proxy from self
-        proxy = getattr(widget, proxy_field_name, None)
-        if proxy is None:
-            # Proxy not yet created - skip silently
-            continue
-
-        # Check if proxy has observable_for_path method (is ObservableProxy)
-        if not hasattr(proxy, "observable_for_path"):
-            continue
-
-        # Get the observable for the path
-        observable = proxy.observable_for_path(observable_path)
-
-        # Create the binding
-        bind(observable, widget_instance, bind_prop)
+            # Single binding to default property
+            default_prop = get_binding_registry().get_default_prop(widget_instance)
+            _process_single_binding(widget, widget_instance, cast(str, bind_spec), default_prop)
 
 
 def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
