@@ -214,42 +214,21 @@ class TestWindowLifecycleHooks:
         assert_that(calls).is_equal_to(["setup"])
 
     def test_all_lifecycle_hooks_called_in_order(self, qt: QtDriver) -> None:
-        """All lifecycle hooks should be called in the correct order."""
+        """Both lifecycle hooks should be called in the correct order."""
         calls: list[str] = []
 
         @window()
         class MyWindow(QMainWindow):
+            def configure(self) -> None:
+                calls.append("configure")
+
             def setup(self) -> None:
                 calls.append("setup")
-
-            def setup_values(self) -> None:
-                calls.append("setup_values")
-
-            def setup_bindings(self) -> None:
-                calls.append("setup_bindings")
-
-            def setup_styles(self) -> None:
-                calls.append("setup_styles")
-
-            def setup_events(self) -> None:
-                calls.append("setup_events")
-
-            def setup_signals(self) -> None:
-                calls.append("setup_signals")
 
         w = MyWindow()
         qt.track(w)
 
-        assert_that(calls).is_equal_to(
-            [
-                "setup",
-                "setup_values",
-                "setup_bindings",
-                "setup_styles",
-                "setup_events",
-                "setup_signals",
-            ]
-        )
+        assert_that(calls).is_equal_to(["configure", "setup"])
 
     def test_setup_has_access_to_child_widgets(self, qt: QtDriver) -> None:
         """setup() should have access to child widgets."""

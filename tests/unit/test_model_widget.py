@@ -134,8 +134,8 @@ class TestWidgetCustomFactory:
 class TestWidgetMakeLater:
     """Tests for make_later() with Widget[T]."""
 
-    def test_make_later_with_setup(self, qt: QtDriver) -> None:
-        """Should use model set in setup() when make_later() is used."""
+    def test_make_later_with_configure(self, qt: QtDriver) -> None:
+        """Should use model set in configure() when make_later() is used."""
 
         @widget()
         class PersonEditor(QWidget, Widget[Person]):
@@ -143,7 +143,7 @@ class TestWidgetMakeLater:
             name: QLineEdit = make(QLineEdit)
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.model = Person(name="Charlie", age=25)
 
         w = PersonEditor()
@@ -153,15 +153,15 @@ class TestWidgetMakeLater:
         assert_that(w.model.age).is_equal_to(25)
 
     def test_make_later_error_when_not_set(self, qt: QtDriver) -> None:
-        """Should raise error if make_later() is used but model not set in setup()."""
+        """Should raise error if make_later() is used but model not set in configure()."""
 
         @widget()
         class PersonEditor(QWidget, Widget[Person]):
             model: Person = make_later()
             name: QLineEdit = make(QLineEdit)
-            # Note: no setup() method to set model
+            # Note: no configure() method to set model
 
-        with pytest.raises(ValueError, match="make_later.*not set in setup"):
+        with pytest.raises(ValueError, match="make_later.*not set in configure"):
             PersonEditor()
 
 

@@ -68,7 +68,7 @@ def parse_selector(selector: str) -> SelectorInfo:
 
 
 def make[T](
-    class_type: Callable[..., T],
+    cls: Callable[..., T],
     /,
     *args: Any,
     style: str | None = None,
@@ -84,7 +84,7 @@ def make[T](
     This provides a cleaner syntax than field(default_factory=lambda: ...).
 
     Args:
-        class_type: The widget class to instantiate.
+        cls: The widget class to instantiate.
         *args: Positional arguments passed to the constructor.
         style: CSS-like selector for objectName and classes.
                Examples: "#myid", ".primary", "#btn.primary.large"
@@ -159,7 +159,7 @@ def make[T](
     potential_signals: dict[str, str | Callable[..., Any]] = {}
     widget_kwargs: dict[str, Any] = {}
 
-    is_qobject_class = isinstance(class_type, type) and issubclass(class_type, QObject)
+    is_qobject_class = isinstance(cls, type) and issubclass(cls, QObject)
 
     for key, value in kwargs.items():
         if is_qobject_class and (isinstance(value, str) or callable(value)):
@@ -176,7 +176,7 @@ def make[T](
     combined_args = (*args, *init_args)
 
     def factory_fn() -> T:
-        return cast(T, class_type(*combined_args, **widget_kwargs))
+        return cast(T, cls(*combined_args, **widget_kwargs))
 
     metadata: dict[str, Any] = {}
     if potential_signals:

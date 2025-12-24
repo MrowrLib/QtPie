@@ -128,7 +128,7 @@ class TestBasicBinding:
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = DogEditor()
@@ -155,7 +155,7 @@ class TestBasicBinding:
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = DogEditor()
@@ -181,7 +181,7 @@ class TestBasicBinding:
             spin: QSpinBox = make(QSpinBox, bind="proxy.value")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
                 # Track changes to detect infinite loops
                 self.proxy.observable(int, "value").on_change(lambda _: change_count.__setitem__(0, change_count[0] + 1))
@@ -211,7 +211,7 @@ class TestWidgetBindings:
             age_spin: QSpinBox = make(QSpinBox, bind="proxy.age")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -237,7 +237,7 @@ class TestWidgetBindings:
             active_check: QCheckBox = make(QCheckBox, "Active", bind="proxy.active")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -263,7 +263,7 @@ class TestWidgetBindings:
             status_label: QLabel = make(QLabel, bind="proxy.status")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = StatusWidget()
@@ -288,7 +288,7 @@ class TestWidgetBindings:
             slider: QSlider = make(QSlider, bind="proxy.volume")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -319,7 +319,7 @@ class TestNestedPathBinding:
             owner_edit: QLineEdit = make(QLineEdit, bind="proxy.owner.name")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = DogEditor()
@@ -351,7 +351,7 @@ class TestOptionalChaining:
             owner_edit: QLineEdit = make(QLineEdit, bind="proxy.owner?.name")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = DogEditor()
@@ -378,7 +378,7 @@ class TestDictBindings:
             combo: QComboBox = make(QComboBox, bind={"currentText": "proxy.selected"})
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.combo.addItems(["Option A", "Option B", "Option C"])
                 self.proxy = ObservableProxy(self.model, sync=True)
 
@@ -410,7 +410,7 @@ class TestDictBindings:
             )
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -470,7 +470,7 @@ class TestMultipleBindings:
             label: QLabel = make(QLabel, bind="proxy.name")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -542,7 +542,7 @@ class TestShortFormBinding:
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")  # Explicit form
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = DogEditor()
@@ -571,7 +571,7 @@ class TestShortFormBinding:
             cat_name: QLineEdit = make(QLineEdit, bind="cat_proxy.name")  # Explicit
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.cat_proxy = ObservableProxy(self.cat_model, sync=True)
 
         w = PetEditor()
@@ -650,7 +650,7 @@ class TestAllWidgetBindings:
             text_edit: QTextEdit = make(QTextEdit, bind="proxy.content")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -676,7 +676,7 @@ class TestAllWidgetBindings:
             text_edit: QPlainTextEdit = make(QPlainTextEdit, bind="proxy.content")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -702,7 +702,7 @@ class TestAllWidgetBindings:
             price_spin: QDoubleSpinBox = make(QDoubleSpinBox, bind="proxy.price")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -728,7 +728,7 @@ class TestAllWidgetBindings:
             radio: QRadioButton = make(QRadioButton, "Option", bind="proxy.selected")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -754,7 +754,7 @@ class TestAllWidgetBindings:
             dial: QDial = make(QDial, bind="proxy.rotation")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -780,7 +780,7 @@ class TestAllWidgetBindings:
             bar: QProgressBar = make(QProgressBar, bind="proxy.progress")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -806,7 +806,7 @@ class TestAllWidgetBindings:
             date_edit: QDateEdit = make(QDateEdit, bind="proxy.birth_date")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -834,7 +834,7 @@ class TestAllWidgetBindings:
             time_edit: QTimeEdit = make(QTimeEdit, bind="proxy.alarm_time")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -862,7 +862,7 @@ class TestAllWidgetBindings:
             datetime_edit: QDateTimeEdit = make(QDateTimeEdit, bind="proxy.event_time")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -890,7 +890,7 @@ class TestAllWidgetBindings:
             font_combo: QFontComboBox = make(QFontComboBox, bind="proxy.selected_font")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -915,7 +915,7 @@ class TestAllWidgetBindings:
             key_edit: QKeySequenceEdit = make(QKeySequenceEdit, bind="proxy.shortcut")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.proxy = ObservableProxy(self.model, sync=True)
 
         w = Editor()
@@ -943,7 +943,7 @@ class TestAllWidgetBindings:
             list_widget: QListWidget = make(QListWidget, bind="proxy.selected_index")
 
             @override
-            def setup(self) -> None:
+            def configure(self) -> None:
                 self.list_widget.addItems(["Item 1", "Item 2", "Item 3"])
                 self.proxy = ObservableProxy(self.model, sync=True)
 

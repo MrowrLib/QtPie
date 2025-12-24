@@ -256,73 +256,23 @@ class TestWidgetLifecycleHooks:
         assert_that(calls).is_equal_to(["setup"])
 
     def test_all_lifecycle_hooks_called_in_order(self, qt: QtDriver) -> None:
-        """All lifecycle hooks should be called in the correct order."""
+        """Both lifecycle hooks should be called in the correct order."""
         calls: list[str] = []
 
         @widget()
         class MyWidget(QWidget, Widget):
             @override
-            def setup(self) -> None:
-                calls.append("setup")
+            def configure(self) -> None:
+                calls.append("configure")
 
-            @override
-            def setup_values(self) -> None:
-                calls.append("setup_values")
-
-            @override
-            def setup_bindings(self) -> None:
-                calls.append("setup_bindings")
-
-            @override
-            def setup_layout(self, layout: object) -> None:
-                calls.append("setup_layout")
-
-            @override
-            def setup_styles(self) -> None:
-                calls.append("setup_styles")
-
-            @override
-            def setup_events(self) -> None:
-                calls.append("setup_events")
-
-            @override
-            def setup_signals(self) -> None:
-                calls.append("setup_signals")
-
-        w = MyWidget()
-        qt.track(w)
-
-        assert_that(calls).is_equal_to(
-            [
-                "setup",
-                "setup_values",
-                "setup_bindings",
-                "setup_layout",
-                "setup_styles",
-                "setup_events",
-                "setup_signals",
-            ]
-        )
-
-    def test_setup_layout_not_called_when_layout_none(self, qt: QtDriver) -> None:
-        """setup_layout should not be called when layout='none'."""
-        calls: list[str] = []
-
-        @widget(layout="none")
-        class MyWidget(QWidget, Widget):
             @override
             def setup(self) -> None:
                 calls.append("setup")
 
-            @override
-            def setup_layout(self, layout: object) -> None:
-                calls.append("setup_layout")
-
         w = MyWidget()
         qt.track(w)
 
-        # setup_layout should NOT be in the list
-        assert_that(calls).is_equal_to(["setup"])
+        assert_that(calls).is_equal_to(["configure", "setup"])
 
     def test_setup_has_access_to_child_widgets(self, qt: QtDriver) -> None:
         """setup() should have access to child widgets."""

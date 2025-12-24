@@ -247,26 +247,21 @@ def widget[T](
                                     colspan = grid_pos[3] if len(grid_pos) > 3 else 1
                                     _grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
 
-            # Call lifecycle hooks if they exist
-            _call_if_exists(self, "setup")
-            _call_if_exists(self, "setup_values")
-            _call_if_exists(self, "setup_bindings")
+            # Early lifecycle hook (before bindings)
+            _call_if_exists(self, "configure")
 
-            # Process ModelWidget if applicable (after setup, before bindings)
+            # Process ModelWidget if applicable
             _process_model_widget(self, cls)
 
-            # Process data bindings after setup (user creates proxy in setup())
+            # Process data bindings
             _process_bindings(self, cls)
 
             # Process auto-bindings for ModelWidget (by field name)
             if auto_bind:
                 _process_model_widget_auto_bindings(self, cls)
 
-            if self.layout() is not None:
-                _call_if_exists(self, "setup_layout", self.layout())
-            _call_if_exists(self, "setup_styles")
-            _call_if_exists(self, "setup_events")
-            _call_if_exists(self, "setup_signals")
+            # Late lifecycle hook (after bindings)
+            _call_if_exists(self, "setup")
 
         cls.__init__ = new_init  # type: ignore[method-assign]
         return cls
@@ -769,11 +764,11 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
         is_make_later = model_field.metadata.get(MAKE_LATER_METADATA_KEY, False)
 
         if is_make_later:
-            # Check if user set it in setup()
+            # Check if user set it in configure()
             current_value = getattr(widget, "model", None)
             if current_value is None or not hasattr(widget, "model"):
                 raise ValueError(
-                    f"ModelWidget field 'model' was declared with make_later() but not set in setup(). Either set self.model in setup() or use make({cls.__name__}, ...) to provide a factory."
+                    f"ModelWidget field 'model' was declared with make_later() but not set in configure(). Either set self.model in configure() or use make({cls.__name__}, ...) to provide a factory."
                 )
             model_instance = current_value
         else:

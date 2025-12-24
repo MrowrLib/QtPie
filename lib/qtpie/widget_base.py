@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any, cast, get_args, get_origin
 
 from observant import ObservableProxy
-from qtpy.QtWidgets import QLayout, QWidget
+from qtpy.QtWidgets import QWidget
 
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 
@@ -59,32 +59,12 @@ class Widget[T = None]:
         pass
 
     # Lifecycle hooks - override these in subclasses
+    def configure(self) -> None:
+        """Called early, before bindings are processed. Override to configure widgets."""
+        pass
+
     def setup(self) -> None:
-        """Called after widget initialization. Override to set up initial state."""
-        pass
-
-    def setup_values(self) -> None:
-        """Called after setup(). Override to initialize values."""
-        pass
-
-    def setup_bindings(self) -> None:
-        """Called after setup_values(). Override to set up data bindings."""
-        pass
-
-    def setup_layout(self, layout: QLayout) -> None:
-        """Called after setup_bindings() if widget has a layout. Override to customize layout."""
-        pass
-
-    def setup_styles(self) -> None:
-        """Called after setup_layout(). Override to apply styles."""
-        pass
-
-    def setup_events(self) -> None:
-        """Called after setup_styles(). Override to set up event handlers."""
-        pass
-
-    def setup_signals(self) -> None:
-        """Called after setup_events(). Override to connect signals."""
+        """Called after bindings are processed. Override for final setup."""
         pass
 
     # =========================================================================

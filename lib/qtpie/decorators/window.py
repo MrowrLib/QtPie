@@ -149,13 +149,9 @@ def window[T: QMainWindow](
                     if isinstance(menu_instance, QMenu):
                         self.menuBar().addMenu(menu_instance)
 
-            # Call lifecycle hooks if they exist
+            # Lifecycle hooks
+            _call_if_exists(self, "configure")
             _call_if_exists(self, "setup")
-            _call_if_exists(self, "setup_values")
-            _call_if_exists(self, "setup_bindings")
-            _call_if_exists(self, "setup_styles")
-            _call_if_exists(self, "setup_events")
-            _call_if_exists(self, "setup_signals")
 
             # Center on screen (must be done after size is set)
             if center:
