@@ -36,6 +36,8 @@ class Counter(QWidget):
 
 Click the button. State changes. Label updates. That's it.
 
+[Documentation →](https://mrowrlib.github.io/qtpie)
+
 ## Features
 
 - **`state()`** - reactive variables that update the UI
@@ -170,10 +172,6 @@ class MyWidget(QWidget):
         self.setWindowTitle("My App")
         self.label.setStyleSheet("color: red;")
 ```
-
-## Documentation
-
-[https://mrowrlib.github.io/qtpie](https://mrowrlib.github.io/qtpie)
 
 ## License
 
