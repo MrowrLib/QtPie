@@ -190,15 +190,15 @@ class TestParseSelector:
         assert_that(result.classes).is_none()
 
 
-class TestMakeWithSelector:
-    """Tests for make() with CSS selector syntax."""
+class TestMakeWithStyle:
+    """Tests for make() with style= parameter."""
 
-    def test_make_with_objectname_selector(self, qt: QtDriver) -> None:
-        """make('#name', ...) should set objectName."""
+    def test_make_with_objectname_style(self, qt: QtDriver) -> None:
+        """style='#name' should set objectName."""
 
         @widget()
         class MyWidget(QWidget, Widget):
-            label: QLabel = make("#title", QLabel, "Hello")
+            label: QLabel = make(QLabel, "Hello", style="#title")
 
         w = MyWidget()
         qt.track(w)
@@ -206,12 +206,12 @@ class TestMakeWithSelector:
         assert_that(w.label.objectName()).is_equal_to("title")
         assert_that(w.label.text()).is_equal_to("Hello")
 
-    def test_make_with_class_selector(self, qt: QtDriver) -> None:
-        """make('.class', ...) should set classes."""
+    def test_make_with_class_style(self, qt: QtDriver) -> None:
+        """style='.class' should set classes."""
 
         @widget()
         class MyWidget(QWidget, Widget):
-            button: QPushButton = make(".primary", QPushButton, "Click")
+            button: QPushButton = make(QPushButton, "Click", style=".primary")
 
         w = MyWidget()
         qt.track(w)
@@ -223,11 +223,11 @@ class TestMakeWithSelector:
         assert_that(classes).is_equal_to(["primary"])
 
     def test_make_with_objectname_and_classes(self, qt: QtDriver) -> None:
-        """make('#name.class1.class2', ...) should set both."""
+        """style='#name.class1.class2' should set both."""
 
         @widget()
         class MyWidget(QWidget, Widget):
-            submit: QPushButton = make("#submit-btn.primary.large", QPushButton, "Submit")
+            submit: QPushButton = make(QPushButton, "Submit", style="#submit-btn.primary.large")
 
         w = MyWidget()
         qt.track(w)
@@ -236,8 +236,8 @@ class TestMakeWithSelector:
         classes = w.submit.property("class")
         assert_that(classes).is_equal_to(["primary", "large"])
 
-    def test_make_without_selector_uses_field_name(self, qt: QtDriver) -> None:
-        """make(Widget, ...) without selector should use field name as objectName."""
+    def test_make_without_style_uses_field_name(self, qt: QtDriver) -> None:
+        """make(Widget, ...) without style should use field name as objectName."""
 
         @widget()
         class MyWidget(QWidget, Widget):
@@ -248,12 +248,12 @@ class TestMakeWithSelector:
 
         assert_that(w.my_label.objectName()).is_equal_to("my_label")
 
-    def test_make_selector_with_kwargs(self, qt: QtDriver) -> None:
-        """make() with selector should still support signal connections."""
+    def test_make_style_with_kwargs(self, qt: QtDriver) -> None:
+        """make() with style should still support signal connections."""
 
         @widget()
         class MyWidget(QWidget, Widget):
-            button: QPushButton = make("#btn.primary", QPushButton, "Click", clicked="on_click")
+            button: QPushButton = make(QPushButton, "Click", style="#btn.primary", clicked="on_click")
             clicked: bool = False
 
             def on_click(self) -> None:
@@ -266,12 +266,12 @@ class TestMakeWithSelector:
         qt.click(w.button)
         assert_that(w.clicked).is_true()
 
-    def test_make_selector_with_layout_none(self, qt: QtDriver) -> None:
-        """Selector should work even with layout='none'."""
+    def test_make_style_with_layout_none(self, qt: QtDriver) -> None:
+        """style= should work even with layout='none'."""
 
         @widget(layout="none")
         class MyWidget(QWidget, Widget):
-            label: QLabel = make("#custom", QLabel, "Test")
+            label: QLabel = make(QLabel, "Test", style="#custom")
 
         w = MyWidget()
         qt.track(w)
@@ -362,20 +362,3 @@ class TestMakeWithInit:
 
         qt.click(w.button)
         assert_that(w.clicked).is_true()
-
-
-class TestMakeForwardReference:
-    """Tests for make() with forward reference class names."""
-
-    def test_forward_ref_resolves_class(self, qt: QtDriver) -> None:
-        """make(class_name='ClassName') should resolve the class at runtime."""
-
-        @widget()
-        class MyWidget(QWidget, Widget):
-            label: QLabel = make(class_name="QLabel", init=["Forward ref works!"])
-
-        w = MyWidget()
-        qt.track(w)
-
-        assert_that(w.label).is_instance_of(QLabel)
-        assert_that(w.label.text()).is_equal_to("Forward ref works!")
