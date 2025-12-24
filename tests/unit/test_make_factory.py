@@ -4,6 +4,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from qtpie import Widget, make, widget
+from qtpie.factories.make import parse_selector
 from qtpie.testing import QtDriver
 
 
@@ -141,3 +142,138 @@ class TestMakeFactory:
         qt.track(w)
 
         assert_that(w.label.text()).is_equal_to("Clean syntax!")
+
+
+class TestParseSelector:
+    """Tests for the parse_selector function."""
+
+    def test_parse_objectname_only(self) -> None:
+        """#name should parse to objectName only."""
+        result = parse_selector("#hello")
+        assert_that(result.object_name).is_equal_to("hello")
+        assert_that(result.classes).is_none()
+
+    def test_parse_single_class_only(self) -> None:
+        """.class should parse to class only."""
+        result = parse_selector(".primary")
+        assert_that(result.object_name).is_none()
+        assert_that(result.classes).is_equal_to(["primary"])
+
+    def test_parse_multiple_classes(self) -> None:
+        """.class1.class2 should parse to multiple classes."""
+        result = parse_selector(".primary.large")
+        assert_that(result.object_name).is_none()
+        assert_that(result.classes).is_equal_to(["primary", "large"])
+
+    def test_parse_objectname_and_classes(self) -> None:
+        """#name.class1.class2 should parse both."""
+        result = parse_selector("#submit.primary.large")
+        assert_that(result.object_name).is_equal_to("submit")
+        assert_that(result.classes).is_equal_to(["primary", "large"])
+
+    def test_parse_objectname_with_single_class(self) -> None:
+        """#name.class should parse both."""
+        result = parse_selector("#btn.primary")
+        assert_that(result.object_name).is_equal_to("btn")
+        assert_that(result.classes).is_equal_to(["primary"])
+
+    def test_parse_empty_string(self) -> None:
+        """Empty string should return empty SelectorInfo."""
+        result = parse_selector("")
+        assert_that(result.object_name).is_none()
+        assert_that(result.classes).is_none()
+
+    def test_parse_invalid_selector(self) -> None:
+        """String not starting with # or . should return empty SelectorInfo."""
+        result = parse_selector("invalid")
+        assert_that(result.object_name).is_none()
+        assert_that(result.classes).is_none()
+
+
+class TestMakeWithSelector:
+    """Tests for make() with CSS selector syntax."""
+
+    def test_make_with_objectname_selector(self, qt: QtDriver) -> None:
+        """make('#name', ...) should set objectName."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            label: QLabel = make("#title", QLabel, "Hello")
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.objectName()).is_equal_to("title")
+        assert_that(w.label.text()).is_equal_to("Hello")
+
+    def test_make_with_class_selector(self, qt: QtDriver) -> None:
+        """make('.class', ...) should set classes."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            button: QPushButton = make(".primary", QPushButton, "Click")
+
+        w = MyWidget()
+        qt.track(w)
+
+        # objectName defaults to field name when not specified
+        assert_that(w.button.objectName()).is_equal_to("button")
+        # Check class property
+        classes = w.button.property("class")
+        assert_that(classes).is_equal_to(["primary"])
+
+    def test_make_with_objectname_and_classes(self, qt: QtDriver) -> None:
+        """make('#name.class1.class2', ...) should set both."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            submit: QPushButton = make("#submit-btn.primary.large", QPushButton, "Submit")
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.submit.objectName()).is_equal_to("submit-btn")
+        classes = w.submit.property("class")
+        assert_that(classes).is_equal_to(["primary", "large"])
+
+    def test_make_without_selector_uses_field_name(self, qt: QtDriver) -> None:
+        """make(Widget, ...) without selector should use field name as objectName."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            my_label: QLabel = make(QLabel, "Test")
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.my_label.objectName()).is_equal_to("my_label")
+
+    def test_make_selector_with_kwargs(self, qt: QtDriver) -> None:
+        """make() with selector should still support signal connections."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            button: QPushButton = make("#btn.primary", QPushButton, "Click", clicked="on_click")
+            clicked: bool = False
+
+            def on_click(self) -> None:
+                self.clicked = True
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.button.objectName()).is_equal_to("btn")
+        qt.click(w.button)
+        assert_that(w.clicked).is_true()
+
+    def test_make_selector_with_layout_none(self, qt: QtDriver) -> None:
+        """Selector should work even with layout='none'."""
+
+        @widget(layout="none")
+        class MyWidget(QWidget, Widget):
+            label: QLabel = make("#custom", QLabel, "Test")
+
+        w = MyWidget()
+        qt.track(w)
+
+        assert_that(w.label.objectName()).is_equal_to("custom")

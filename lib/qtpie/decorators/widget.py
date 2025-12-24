@@ -31,8 +31,10 @@ from qtpie.factories.make import (
     FORM_LABEL_METADATA_KEY,
     GRID_POSITION_METADATA_KEY,
     MAKE_LATER_METADATA_KEY,
+    SELECTOR_METADATA_KEY,
     SIGNALS_METADATA_KEY,
     GridTuple,
+    SelectorInfo,
 )
 from qtpie.factories.spacer import SPACER_METADATA_KEY, SpacerConfig
 from qtpie.state import get_state_observable, get_state_proxy, is_state_descriptor
@@ -154,6 +156,23 @@ def widget[T](
                     if widget_instance is not None:
                         _connect_signals(self, widget_instance, potential_signals)
 
+            # Set objectName and classes for child widgets from selector or field name
+            type_hints = get_type_hints(cls)
+            for f in fields(cls):  # type: ignore[arg-type]
+                if f.name.startswith("_"):
+                    continue
+                field_type = type_hints.get(f.name)
+                if isinstance(field_type, type) and issubclass(field_type, QWidget):
+                    widget_instance = getattr(self, f.name, None)
+                    if isinstance(widget_instance, QWidget):
+                        selector: SelectorInfo | None = f.metadata.get(SELECTOR_METADATA_KEY)
+                        if selector is not None and selector.object_name is not None:
+                            widget_instance.setObjectName(selector.object_name)
+                        else:
+                            widget_instance.setObjectName(f.name)
+                        if selector is not None and selector.classes is not None:
+                            _set_classes(widget_instance, selector.classes)
+
             # Set object name
             if name:
                 self.setObjectName(name)
@@ -198,7 +217,6 @@ def widget[T](
                 self.setLayout(_layout)
 
                 # Add child widgets to layout
-                type_hints = get_type_hints(cls)
                 for f in fields(cls):  # type: ignore[arg-type]
                     # Private fields are completely ignored
                     if f.name.startswith("_"):

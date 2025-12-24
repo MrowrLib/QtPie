@@ -50,6 +50,41 @@ class MyWidget(QWidget):
 
 The positional arguments after the class type are passed directly to the widget's constructor.
 
+### CSS Selector Syntax
+
+You can optionally pass a CSS-like selector as the first argument to set the widget's `objectName` and/or CSS classes:
+
+```python
+from qtpie import widget, make
+from qtpy.QtWidgets import QLabel, QPushButton, QWidget
+
+@widget
+class MyWidget(QWidget):
+    # Set objectName to "title" (instead of field name "label")
+    label: QLabel = make("#title", QLabel, "Hello")
+
+    # Set class only (objectName defaults to "button")
+    button: QPushButton = make(".primary", QPushButton, "Click")
+
+    # Set both objectName and multiple classes
+    submit: QPushButton = make("#submit-btn.primary.large", QPushButton, "Submit")
+```
+
+The selector syntax:
+- `#name` - sets the widget's `objectName`
+- `.class` - adds a CSS class
+- `#name.class1.class2` - sets both objectName and multiple classes
+
+This enables styling with QSS:
+
+```css
+#title { font-size: 24px; }
+QPushButton[class~="primary"] { background: blue; }
+#submit-btn { font-weight: bold; }
+```
+
+See [Styling](../../basics/styling.md) for more on CSS classes and object name selectors.
+
 ### Setting Properties
 
 Any keyword arguments that aren't signal connections are set as properties on the widget:
@@ -288,13 +323,12 @@ See [Format Expressions](../../data/format.md) for more details.
 
 ### Custom Property Binding
 
-By default, `make()` binds to the standard property for each widget type (e.g., `text` for QLineEdit, `value` for QSpinBox). Use `bind_prop` to bind to a different property:
+By default, `make()` binds to the standard property for each widget type (e.g., `text` for QLineEdit, `value` for QSpinBox). To bind to a different property, use a dict:
 
 ```python
 from dataclasses import dataclass
 from qtpie import widget, make, Widget
 from qtpy.QtWidgets import QComboBox, QWidget
-from observant import ObservableProxy
 
 @dataclass
 class Model:
@@ -304,10 +338,37 @@ class Model:
 class Editor(QWidget, Widget[Model]):
     combo: QComboBox = make(
         QComboBox,
-        bind="proxy.selected",
-        bind_prop="currentText"  # Custom property!
+        bind={"currentText": "selected"}  # Custom property!
     )
 ```
+
+### Multiple Property Bindings
+
+Bind multiple widget properties to different data paths using a dict:
+
+```python
+from dataclasses import dataclass
+from qtpie import widget, make, Widget
+from qtpy.QtWidgets import QLineEdit, QWidget
+
+@dataclass
+class User:
+    name: str = ""
+    name_placeholder: str = "Enter your name..."
+    can_edit: bool = True
+
+@widget
+class Editor(QWidget, Widget[User]):
+    name_edit: QLineEdit = make(
+        QLineEdit,
+        bind={
+            "text": "name",
+            "placeholderText": "name_placeholder",
+        }
+    )
+```
+
+Each key is a widget property, each value is a data path. All bindings are two-way where supported.
 
 ## Form Layouts
 
@@ -390,7 +451,7 @@ QtPie includes default property bindings for many common Qt widgets:
 | QKeySequenceEdit | `keySequence` | Keyboard shortcut editor |
 | QListWidget | `currentRow` | List selection |
 
-These defaults are used when you specify `bind=` without `bind_prop=`.
+These defaults are used when you specify `bind=` as a string.
 
 ## API Reference
 
@@ -400,8 +461,7 @@ def make[T](
     *args: Any,
     form_label: str | None = None,
     grid: GridTuple | None = None,
-    bind: str | None = None,
-    bind_prop: str | None = None,
+    bind: str | dict[str, str] | None = None,
     **kwargs: Any,
 ) -> T
 ```
@@ -412,8 +472,9 @@ def make[T](
 - **\*args**: Positional arguments passed to the widget's constructor
 - **form_label**: Label text for form layouts. Creates a labeled row in form layout
 - **grid**: Position in grid layout as `(row, col)` or `(row, col, rowspan, colspan)`
-- **bind**: Path to bind to, e.g., `"name"`, `"proxy.name"`, `"dog?.owner.name"`, or format expression like `"Count: {count}"`
-- **bind_prop**: Explicit property name to bind. If None, uses the default for the widget type
+- **bind**: Data binding specification:
+    - `str`: Path to bind to default property, e.g., `"name"`, `"user.name"`, `"dog?.name"`, or format expression like `"Count: {count}"`
+    - `dict[str, str]`: Map widget properties to paths, e.g., `{"text": "name", "placeholderText": "hint"}`
 - **\*\*kwargs**: Keyword arguments - string or callable values are treated as signal connections, others are set as widget properties
 
 ### Returns

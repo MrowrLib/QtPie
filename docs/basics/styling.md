@@ -123,6 +123,26 @@ class MyWidget(QWidget):
     submit_btn: QPushButton = make(QPushButton, "Submit")  # objectName = "submit_btn"
 ```
 
+3. **Override with selector syntax** - use CSS selector as first arg to `make()`:
+
+```python
+@widget
+class MyWidget(QWidget):
+    # Set custom objectName
+    label: QLabel = make("#title", QLabel, "Hello")  # objectName = "title"
+
+    # Set classes only (objectName defaults to field name)
+    button: QPushButton = make(".primary", QPushButton, "Click")  # objectName = "button", class = ["primary"]
+
+    # Set both objectName and classes
+    submit: QPushButton = make("#submit-btn.primary.large", QPushButton, "Submit")
+```
+
+The selector syntax mirrors CSS:
+- `#name` sets the objectName
+- `.class` adds a class
+- `#name.class1.class2` sets both
+
 ### Using #objectName in QSS
 
 Target widgets by their object name using the `#` selector:

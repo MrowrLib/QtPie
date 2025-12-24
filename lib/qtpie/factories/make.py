@@ -1,8 +1,8 @@
 """The make() factory function for creating widget instances."""
 
 from collections.abc import Callable
-from dataclasses import field
-from typing import Any, cast
+from dataclasses import dataclass, field
+from typing import Any, cast, overload
 
 from qtpy.QtCore import QObject
 
@@ -12,13 +12,79 @@ FORM_LABEL_METADATA_KEY = "qtpie_form_label"
 GRID_POSITION_METADATA_KEY = "qtpie_grid_position"
 BIND_METADATA_KEY = "qtpie_bind"
 MAKE_LATER_METADATA_KEY = "qtpie_make_later"
+SELECTOR_METADATA_KEY = "qtpie_selector"
 
 # Type alias for grid position tuples
 GridTuple = tuple[int, int] | tuple[int, int, int, int]
 
 
+@dataclass
+class SelectorInfo:
+    """Parsed CSS selector info from make()."""
+
+    object_name: str | None = None
+    classes: list[str] | None = None
+
+
+def parse_selector(selector: str) -> SelectorInfo:
+    """Parse a CSS-like selector string into objectName and classes.
+
+    Examples:
+        "#hello" → SelectorInfo(object_name="hello", classes=None)
+        ".primary" → SelectorInfo(object_name=None, classes=["primary"])
+        "#btn.primary.large" → SelectorInfo(object_name="btn", classes=["primary", "large"])
+        ".primary.large" → SelectorInfo(object_name=None, classes=["primary", "large"])
+    """
+    if not selector or (not selector.startswith("#") and not selector.startswith(".")):
+        return SelectorInfo()
+
+    object_name: str | None = None
+    classes: list[str] = []
+
+    # Split by . but keep track of # for objectName
+    if selector.startswith("#"):
+        # Has objectName
+        rest = selector[1:]  # Remove leading #
+        parts = rest.split(".")
+        object_name = parts[0] if parts[0] else None
+        classes = [p for p in parts[1:] if p]
+    else:
+        # Starts with . - only classes
+        parts = selector.split(".")
+        classes = [p for p in parts if p]
+
+    return SelectorInfo(
+        object_name=object_name,
+        classes=classes if classes else None,
+    )
+
+
+@overload
 def make[T](
-    class_type: Callable[..., T],
+    __selector: str,
+    __class_type: Callable[..., T],
+    *args: Any,
+    form_label: str | None = None,
+    grid: GridTuple | None = None,
+    bind: str | dict[str, str] | None = None,
+    **kwargs: Any,
+) -> T: ...
+
+
+@overload
+def make[T](
+    __class_type: Callable[..., T],
+    *args: Any,
+    form_label: str | None = None,
+    grid: GridTuple | None = None,
+    bind: str | dict[str, str] | None = None,
+    **kwargs: Any,
+) -> T: ...
+
+
+def make[T](
+    __selector_or_class: str | Callable[..., T],
+    __class_type_or_first_arg: Callable[..., T] | Any = None,
     *args: Any,
     form_label: str | None = None,
     grid: GridTuple | None = None,
@@ -31,6 +97,8 @@ def make[T](
     This provides a cleaner syntax than field(default_factory=lambda: ...).
 
     Args:
+        selector: Optional CSS-like selector for objectName and classes.
+                  Examples: "#myid", ".primary", "#btn.primary.large"
         class_type: The widget class to instantiate.
         *args: Positional arguments passed to the constructor.
         form_label: Label text for form layouts. When set, creates a labeled row.
@@ -45,6 +113,11 @@ def make[T](
     Examples:
         # Basic widget creation
         label: QLabel = make(QLabel, "Hello World")
+
+        # With CSS selector (objectName and/or classes)
+        label: QLabel = make("#title", QLabel, "Hello")
+        button: QPushButton = make(".primary", QPushButton, "Click")
+        submit: QPushButton = make("#submit.primary.large", QPushButton, "Submit")
 
         # With properties
         edit: QLineEdit = make(QLineEdit, placeholderText="Enter name")
@@ -81,6 +154,24 @@ def make[T](
         The type lie (returning T but actually returning field()) is intentional
         to make the API ergonomic while maintaining type safety.
     """
+    # Handle overloaded signature: detect if first arg is a selector string
+    selector_info: SelectorInfo | None = None
+    class_type: Callable[..., T]
+    actual_args: tuple[Any, ...]
+
+    if isinstance(__selector_or_class, str):
+        # First arg is a selector string
+        selector_info = parse_selector(__selector_or_class)
+        class_type = cast(Callable[..., T], __class_type_or_first_arg)
+        actual_args = args
+    else:
+        # First arg is the class type
+        class_type = __selector_or_class
+        if __class_type_or_first_arg is not None:
+            actual_args = (__class_type_or_first_arg, *args)
+        else:
+            actual_args = args
+
     # Separate potential signal kwargs from widget property kwargs
     # Only do signal detection for QObject subclasses (widgets, actions, etc.)
     potential_signals: dict[str, str | Callable[..., Any]] = {}
@@ -97,7 +188,7 @@ def make[T](
             widget_kwargs[key] = value
 
     def factory_fn() -> T:
-        return cast(T, class_type(*args, **widget_kwargs))
+        return cast(T, class_type(*actual_args, **widget_kwargs))
 
     metadata: dict[str, Any] = {}
     if potential_signals:
@@ -108,6 +199,8 @@ def make[T](
         metadata[GRID_POSITION_METADATA_KEY] = grid
     if bind is not None:
         metadata[BIND_METADATA_KEY] = bind
+    if selector_info is not None:
+        metadata[SELECTOR_METADATA_KEY] = selector_info
 
     return field(default_factory=factory_fn, metadata=metadata if metadata else {})  # type: ignore[return-value]
 
