@@ -6,7 +6,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget
 
 from qtpie import Widget, make, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 @dataclass

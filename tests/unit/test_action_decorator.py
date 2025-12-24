@@ -11,7 +11,7 @@ from qtpy.QtGui import QAction, QIcon, QKeySequence
 from qtpy.QtWidgets import QApplication, QStyle
 
 from qtpie import action, make
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestActionDecorator:

@@ -4,7 +4,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QGridLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 from qtpie import Widget, make, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestGridLayout:

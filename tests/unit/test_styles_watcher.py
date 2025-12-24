@@ -9,7 +9,7 @@ from qtpy.QtWidgets import QWidget
 
 from qtpie.styles import watch_qss, watch_scss, watch_styles
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scss"
 

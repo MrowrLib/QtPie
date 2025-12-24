@@ -31,7 +31,7 @@ from qtpy.QtWidgets import (
 
 from qtpie import Widget, bind, make, make_later, register_binding, widget
 from qtpie.bindings import get_binding_registry
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestMakeLater:

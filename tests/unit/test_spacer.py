@@ -4,7 +4,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QPushButton, QSpacerItem, QVBoxLayout, QWidget
 
 from qtpie import Widget, make, spacer, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestSpacer:

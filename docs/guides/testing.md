@@ -1,39 +1,45 @@
 # Testing
 
-Testing QtPie widgets is easy with the **qtpie_test** framework - a strongly-typed wrapper around pytest-qt.
+Testing QtPie widgets is easy with **qtpie.testing** - a strongly-typed wrapper around pytest-qt.
 
-## Why qtpie_test?
+## Why qtpie.testing?
 
-pytest-qt is great but has typing issues. Its methods use `*args, **kwargs` which breaks strict type checking. qtpie_test wraps pytest-qt with fully-typed methods that work perfectly with pyright.
+pytest-qt is great but has typing issues. Its methods use `*args, **kwargs` which breaks strict type checking. qtpie.testing wraps pytest-qt with fully-typed methods that work perfectly with pyright.
 
 ```python
 # pytest-qt - no type safety
 qtbot.mouseClick(button, Qt.LeftButton)  # pyright errors
 
-# qtpie_test - fully typed
+# qtpie.testing - fully typed
 qt.click(button)  # clean, typed, works
 ```
 
 ## Setup
 
-Install qtpie_test (it comes with QtPie):
+Install qtpie with the `test` extra:
 
 === "uv"
 
     ```bash
-    uv add qtpie
+    uv add "qtpie[test]"
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add "qtpie[test]"
     ```
 
 === "pip"
 
     ```bash
-    pip install qtpie
+    pip install "qtpie[test]"
     ```
 
 Write tests using pytest. The `qt` fixture is automatically available:
 
 ```python
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 def test_my_widget(qt: QtDriver) -> None:
     # Your test here
@@ -66,7 +72,7 @@ uv run python -m pytest tests/ -v
 Every test gets a `qt: QtDriver` fixture automatically. No imports or configuration needed.
 
 ```python
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 from qtpie import widget, make
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
@@ -519,7 +525,7 @@ class TestMakeFactory:
 ```python
 from assertpy import assert_that
 from qtpie import widget, make, state
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 

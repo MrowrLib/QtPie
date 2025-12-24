@@ -11,7 +11,7 @@ def qt(qtbot: QtBot) -> QtDriver:
     """
     Pytest fixture providing a QtDriver instance.
 
-    This is the main entry point for qtpie_test. Use this fixture
+    This is the main entry point for qtpie.testing. Use this fixture
     in your tests instead of pytest-qt's qtbot directly.
     """
     return QtDriver(qtbot)

@@ -14,8 +14,8 @@ dev = [
   "pyside6>=6.10.1",
   "pytest>=9.0.2",
   "pytest-cov>=7.0.0",
-  "qtpie",
-  "qtpie-test",
+  "pytest-qt>=4.5.0",
+  "qtpie[test]",
   "qtpie_samples",
   "ruff>=0.14.9",
   "twine>=6.2.0",
@@ -24,14 +24,12 @@ dev = [
 
 [tool.uv.sources]
 qtpie = {workspace = true}
-qtpie-test = {workspace = true}
 qtpie_samples = {workspace = true}
 
 [tool.uv.workspace]
 members = [
   "lib",
   "samples",
-  "qtpie_test",
   "tests",
 ]
 

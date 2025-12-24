@@ -14,7 +14,7 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import QApplication, QPushButton, QWidget
 
 from qtpie import make, slot, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 @pytest.fixture

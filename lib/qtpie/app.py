@@ -33,6 +33,8 @@ def run_app(app: QApplication) -> int:
         label.show()
         run_app(app)  # Blocks until app quits
     """
+    from qtpy.QtCore import QTimer
+
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
 
@@ -44,6 +46,11 @@ def run_app(app: QApplication) -> int:
         app.quit()
 
     signal.signal(signal.SIGINT, handle_sigint)
+
+    # Timer to let Python process signals (Qt blocks them otherwise)
+    signal_timer = QTimer()
+    signal_timer.timeout.connect(lambda: None)  # Just let Python run
+    signal_timer.start(100)
 
     with loop:
         loop.run_until_complete(quit_event.wait())  # pyright: ignore[reportUnknownMemberType]

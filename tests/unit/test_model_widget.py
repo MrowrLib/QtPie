@@ -14,7 +14,7 @@ from qtpy.QtWidgets import (
 )
 
 from qtpie import Widget, make, make_later, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 @dataclass

@@ -14,7 +14,7 @@ from qtpie.decorators.stylesheet import (
     stylesheet,
 )
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestStylesheetDecoratorConfig:

@@ -14,7 +14,7 @@ from qtpie.styles import (
     set_classes,
     toggle_class,
 )
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestGetSetClasses:

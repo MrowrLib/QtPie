@@ -190,10 +190,25 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             if asyncio.iscoroutinefunction(func):
                 # Async function - need to run it in the event loop
                 # We'll run it before the main loop
+                import signal
+
                 import qasync  # type: ignore[import-untyped]
+                from qtpy.QtCore import QTimer
 
                 loop = qasync.QEventLoop(app)
                 asyncio.set_event_loop(loop)
+
+                # Handle CTRL-C gracefully
+                def handle_sigint(*_: object) -> None:
+                    app.quit()
+
+                signal.signal(signal.SIGINT, handle_sigint)
+
+                # Timer to let Python process signals
+                signal_timer = QTimer()
+                signal_timer.timeout.connect(lambda: None)
+                signal_timer.start(100)
+
                 with loop:
                     result: Any = loop.run_until_complete(func())  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
                     if isinstance(result, QWidget):

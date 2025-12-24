@@ -292,7 +292,7 @@ The auto-run behavior is disabled when a `QApplication` already exists, making `
 
 ```python
 # test_myapp.py
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 def test_my_app(qt: QtDriver):
     # This works fine - @entrypoint won't auto-run

@@ -447,7 +447,7 @@ When writing tests, the `@entrypoint` decorator won't auto-run because:
 2. pytest-qt creates QApplication already
 
 ```python
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 from my_app import MyApp  # Has @entrypoint, won't auto-run
 
 def test_my_app(qt: QtDriver):

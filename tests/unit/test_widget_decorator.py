@@ -7,7 +7,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from qtpie import Widget, widget
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestWidgetDecorator:

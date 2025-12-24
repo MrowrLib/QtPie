@@ -7,7 +7,7 @@ from qtpy.QtGui import QAction
 from qtpy.QtWidgets import QMenu
 
 from qtpie import action, make, menu, separator
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestMenuDecorator:

@@ -13,7 +13,7 @@ from qtpy.QtWidgets import QMainWindow, QWidget
 
 from qtpie import widget, window
 from qtpie.decorators._async_wrap import wrap_async_methods
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestWrapAsyncMethods:

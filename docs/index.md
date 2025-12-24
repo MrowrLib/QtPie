@@ -8,6 +8,12 @@
     uv add qtpie
     ```
 
+=== "poetry"
+
+    ```bash
+    poetry add qtpie
+    ```
+
 === "pip"
 
     ```bash
@@ -155,6 +161,12 @@ class MyWidget(QWidget):
 
     ```bash
     uv add qtpie
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add qtpie
     ```
 
 === "pip"

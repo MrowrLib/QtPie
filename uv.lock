@@ -6,7 +6,6 @@ requires-python = ">=3.13"
 members = [
     "qtpie",
     "qtpie-samples",
-    "qtpie-test",
     "qtpie-workspace",
     "tests",
 ]
@@ -1024,7 +1023,7 @@ wheels = [
 
 [[package]]
 name = "qtpie"
-version = "0.1.3"
+version = "0.1.5"
 source = { editable = "lib" }
 dependencies = [
     { name = "mrowrpurr-pyscss" },
@@ -1033,13 +1032,22 @@ dependencies = [
     { name = "qtpy" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-qt" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "mrowrpurr-pyscss", specifier = ">=1.4.1" },
     { name = "observant", specifier = ">=0.1.5" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-qt", marker = "extra == 'test'" },
     { name = "qasync", specifier = ">=0.27.1" },
     { name = "qtpy", specifier = ">=2.4.3" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "qtpie-samples"
@@ -1051,21 +1059,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "qtpie", editable = "lib" }]
-
-[[package]]
-name = "qtpie-test"
-version = "0.1.0"
-source = { editable = "qtpie_test" }
-dependencies = [
-    { name = "pytest-qt" },
-    { name = "qtpy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pytest-qt", specifier = ">=4.5.0" },
-    { name = "qtpy", specifier = ">=2.4.3" },
-]
 
 [[package]]
 name = "qtpie-workspace"
@@ -1083,9 +1076,9 @@ dev = [
     { name = "pyside6" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "qtpie" },
+    { name = "pytest-qt" },
+    { name = "qtpie", extra = ["test"] },
     { name = "qtpie-samples" },
-    { name = "qtpie-test" },
     { name = "ruff" },
     { name = "twine" },
     { name = "websockets" },
@@ -1104,9 +1097,9 @@ dev = [
     { name = "pyside6", specifier = ">=6.10.1" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "qtpie", editable = "lib" },
+    { name = "pytest-qt", specifier = ">=4.5.0" },
+    { name = "qtpie", extras = ["test"], editable = "lib" },
     { name = "qtpie-samples", editable = "samples" },
-    { name = "qtpie-test", editable = "qtpie_test" },
     { name = "ruff", specifier = ">=0.14.9" },
     { name = "twine", specifier = ">=6.2.0" },
     { name = "websockets", specifier = ">=15.0.1" },
@@ -1252,16 +1245,14 @@ name = "tests"
 version = "0.1.0"
 source = { virtual = "tests" }
 dependencies = [
-    { name = "qtpie" },
+    { name = "qtpie", extra = ["test"] },
     { name = "qtpie-samples" },
-    { name = "qtpie-test" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "qtpie", editable = "lib" },
+    { name = "qtpie", extras = ["test"], editable = "lib" },
     { name = "qtpie-samples", editable = "samples" },
-    { name = "qtpie-test", editable = "qtpie_test" },
 ]
 
 [[package]]

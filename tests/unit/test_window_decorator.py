@@ -6,7 +6,7 @@ from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QMainWindow, QMenu, QPushButton, QTextEdit
 
 from qtpie import make, window
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestWindowDecorator:

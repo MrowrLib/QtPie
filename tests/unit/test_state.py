@@ -7,7 +7,7 @@ from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QSpinBox, QWidget
 
 from qtpie import make, state, widget
 from qtpie.state import get_state_observable
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 
 class TestStateBasics:

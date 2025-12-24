@@ -142,18 +142,24 @@ See [SCSS Hot Reload](../guides/scss.md) for details.
 
 ### Testing Framework
 
-For testing QtPie apps, install the `qtpie-test` package:
+For testing QtPie apps, install with the `test` extra:
 
 === "uv"
 
     ```bash
-    uv add qtpie-test pytest pytest-qt
+    uv add "qtpie[test]"
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add "qtpie[test]"
     ```
 
 === "pip"
 
     ```bash
-    pip install qtpie-test pytest pytest-qt
+    pip install "qtpie[test]"
     ```
 
 This provides the `QtDriver` test helper. See [Testing Guide](../guides/testing.md).
@@ -187,6 +193,12 @@ You haven't installed a Qt binding. Install PySide6 or PyQt6:
 
     ```bash
     uv add pyside6
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add pyside6
     ```
 
 === "pip"

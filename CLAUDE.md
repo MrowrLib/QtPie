@@ -52,11 +52,10 @@ QtPie/
 │       ├── bindings/      # Data binding (bind, registry)
 │       ├── styles/        # SCSS/QSS, classes, watcher
 │       ├── app.py         # App class, run_app()
-│       └── widget_base.py # Widget[T] base class
-│
-├── qtpie_test/            # Test framework wrapper around pytest-qt
-│   ├── driver.py          # QtDriver - strongly-typed test API
-│   └── plugin.py          # pytest plugin (provides `qt` fixture)
+│       ├── widget_base.py # Widget[T] base class
+│       └── testing/       # Test framework (qtpie.testing)
+│           ├── driver.py  # QtDriver - strongly-typed test API
+│           └── plugin.py  # pytest plugin (provides `qt` fixture)
 │
 ├── samples/               # Example apps using qtpie
 │   └── single_file_apps/  # Single-file app examples
@@ -68,8 +67,7 @@ QtPie/
 ├── DRAFT/                 # OLD drafts - reference only, don't modify
 │
 ├── tech-docs/             # Design documents (historical reference)
-│   ├── DRAFTING_SUMMARY.md   # Feature comparison of drafts
-│   └── QTPIE_TEST_LIBRARY.md # qtpie_test design doc
+│   └── DRAFTING_SUMMARY.md   # Feature comparison of drafts
 │
 ├── TODO.md                # Development roadmap with phases and status
 └── CLAUDE.md              # You are here
@@ -100,15 +98,17 @@ from qtpie import (
 )
 ```
 
-### `qtpie_test` - Test Framework
+### `qtpie.testing` - Test Framework
 
-Strongly-typed wrapper around pytest-qt. Why not just pytest-qt?
+Strongly-typed wrapper around pytest-qt. Install with `uv add "qtpie[test]"`.
+
+Why not just pytest-qt?
 1. pytest-qt uses `*args, **kwargs` everywhere - no type safety
 2. We want helpers specific to qtpie patterns
 3. Better API: `qt.click(button)` vs `qtbot.mouseClick(button, Qt.LeftButton)`
 
 ```python
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 
 def test_something(qt: QtDriver) -> None:
     widget = MyWidget()
@@ -136,7 +136,7 @@ The `tech-docs/DRAFTING_SUMMARY.md` compares features across drafts.
 - **Python 3.13+** - using new type parameter syntax (`def foo[T]()`)
 - **qtpy** - Qt abstraction (works with PySide6 or PyQt6)
 - **PySide6** - the Qt binding we're testing with
-- **pytest + pytest-qt** - testing (wrapped by qtpie_test)
+- **pytest + pytest-qt** - testing (wrapped by qtpie.testing)
 - **assertpy** - fluent assertions
 - **pyright strict** - VERY strict type checking, no compromises
 - **ruff** - linting and formatting
@@ -231,7 +231,7 @@ class CounterWidget(QWidget):
 
 ```python
 from qtpie import widget, make
-from qtpie_test import QtDriver
+from qtpie.testing import QtDriver
 from assertpy import assert_that
 
 def test_counter_increments(qt: QtDriver) -> None:

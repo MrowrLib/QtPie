@@ -1,8 +1,7 @@
 [project]
 dependencies = [
-  "qtpie",
+  "qtpie[test]",
   "qtpie_samples",
-  "qtpie_test",
 ]
 description = "Tests for QtPie"
 name = "tests"
@@ -12,4 +11,3 @@ version = "0.1.0"
 [tool.uv.sources]
 qtpie = {workspace = true}
 qtpie_samples = {workspace = true}
-qtpie_test = {workspace = true}
