@@ -1,6 +1,12 @@
-# QtPie
+# ![Qt Pie](docs/images/QtPie%2064.png) Qt Pie
 
-**Tasty way to build Qt apps**
+*Tasty way to build Qt apps*
+
+```bash
+pip install qtpie
+```
+
+**Declarative. Reactive. Delightful.**
 
 ```python
 from qtpie import entrypoint, make, state, widget
@@ -10,23 +16,25 @@ from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 @entrypoint
 @widget
 class Counter(QWidget):
+
+    # Tracked state - changes update the UI
     count: int = state(0)
+
+    # Updates automatically when count changes
     label: QLabel = make(QLabel, bind="Count: {count}")
+
+    # Calls increment() when clicked
     button: QPushButton = make(QPushButton, "+1", clicked="increment")
 
     def increment(self) -> None:
         self.count += 1
 ```
 
+| Light mode | Dark mode |
+|:--:|:--:|
+| ![Light mode](docs/images/screenshots/hello-world-light-mode.png) | ![Dark mode](docs/images/screenshots/hello-world-dark-mode.png) |
+
 Click the button. State changes. Label updates. That's it.
-
-**Declarative. Reactive. Delightful.**
-
-## Install
-
-```bash
-pip install qtpie
-```
 
 ## Features
 
