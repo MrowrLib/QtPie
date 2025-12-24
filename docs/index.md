@@ -2,9 +2,17 @@
 
 <p style="font-size: 1.5em; margin-top: -0.5em;">Tasty way to build Qt apps</p>
 
-```bash
-pip install qtpie
-```
+=== "uv"
+
+    ```bash
+    uv add qtpie
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
 
 **Declarative. Reactive. Delightful.**
 
@@ -143,9 +151,17 @@ class MyWidget(QWidget):
 
 ## Get Started
 
-```bash
-pip install qtpie
-```
+=== "uv"
+
+    ```bash
+    uv add qtpie
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
 
 ```python
 from qtpie import entrypoint, make, widget

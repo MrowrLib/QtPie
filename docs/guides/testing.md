@@ -18,9 +18,17 @@ qt.click(button)  # clean, typed, works
 
 Install qtpie_test (it comes with QtPie):
 
-```bash
-pip install qtpie
-```
+=== "uv"
+
+    ```bash
+    uv add qtpie
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
 
 Write tests using pytest. The `qt` fixture is automatically available:
 

@@ -13,26 +13,6 @@ QtPie will automatically detect which binding is available. If both are installe
 
 ## Install QtPie
 
-=== "pip"
-
-    ```bash
-    pip install qtpie
-    ```
-
-    This installs QtPie but NOT a Qt binding. Install one separately:
-
-    === "PySide6 (recommended)"
-
-        ```bash
-        pip install pyside6
-        ```
-
-    === "PyQt6"
-
-        ```bash
-        pip install pyqt6
-        ```
-
 === "uv"
 
     ```bash
@@ -51,6 +31,26 @@ QtPie will automatically detect which binding is available. If both are installe
 
         ```bash
         uv add pyqt6
+        ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
+
+    This installs QtPie but NOT a Qt binding. Install one separately:
+
+    === "PySide6 (recommended)"
+
+        ```bash
+        pip install pyside6
+        ```
+
+    === "PyQt6"
+
+        ```bash
+        pip install pyqt6
         ```
 
 === "poetry"
@@ -144,9 +144,17 @@ See [SCSS Hot Reload](../guides/scss.md) for details.
 
 For testing QtPie apps, install the `qtpie-test` package:
 
-```bash
-pip install qtpie-test pytest pytest-qt
-```
+=== "uv"
+
+    ```bash
+    uv add qtpie-test pytest pytest-qt
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie-test pytest pytest-qt
+    ```
 
 This provides the `QtDriver` test helper. See [Testing Guide](../guides/testing.md).
 
@@ -175,9 +183,17 @@ See [Reactive State](../data/state.md) for details.
 
 You haven't installed a Qt binding. Install PySide6 or PyQt6:
 
-```bash
-pip install pyside6
-```
+=== "uv"
+
+    ```bash
+    uv add pyside6
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install pyside6
+    ```
 
 ### "Could not find QtPie"
 
