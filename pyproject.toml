@@ -1,12 +1,7 @@
 [project]
-dependencies = [
-  "observant>=0.1.6",
-]
-description = "Tasty way to build Qt apps 🍰"
-name = "qtpie-project"
-readme = "README.md"
+name = "qtpie-workspace"
 requires-python = ">=3.13"
-version = "0.1.0"
+version = "0.0.0"
 
 [dependency-groups]
 dev = [
@@ -23,6 +18,7 @@ dev = [
   "qtpie-test",
   "qtpie_samples",
   "ruff>=0.14.9",
+  "twine>=6.2.0",
   "websockets>=15.0.1",
 ]
 
