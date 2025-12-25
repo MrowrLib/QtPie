@@ -46,6 +46,10 @@ class _DropdownPopup(QFrame):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
 
+    def set_model(self, model: QSortFilterProxyModel) -> None:
+        """Set the model for the list view."""
+        self.list_view.setModel(model)
+
 
 @widget(layout="vertical", margins=0, classes=["filterable-dropdown"])
 class FilterableDropdown(QWidget):
@@ -68,7 +72,7 @@ class FilterableDropdown(QWidget):
     def setup(self) -> None:
         # Wire up the models
         self._proxy.setSourceModel(self._model)
-        self._popup.list_view.setModel(self._proxy)
+        self._popup.set_model(self._proxy)
 
         # Install event filter for keyboard navigation
         self.line_edit.installEventFilter(self)
