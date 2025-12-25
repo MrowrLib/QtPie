@@ -35,14 +35,14 @@ class TestFilterableDropdownBasics:
 
         dropdown.set_placeholder_text("Search...")
 
-        assert_that(dropdown.line_edit.placeholderText()).is_equal_to("Search...")
+        assert_that(dropdown.placeholder_text()).is_equal_to("Search...")
 
     def test_current_text(self, qt: QtDriver) -> None:
         """Should return current text from line edit."""
         dropdown = FilterableDropdown()
         qt.track(dropdown)
 
-        dropdown.line_edit.setText("Hello")
+        dropdown.set_text("Hello")
 
         assert_that(dropdown.current_text()).is_equal_to("Hello")
 
@@ -53,7 +53,7 @@ class TestFilterableDropdownBasics:
 
         dropdown.set_text("World")
 
-        assert_that(dropdown.line_edit.text()).is_equal_to("World")
+        assert_that(dropdown.current_text()).is_equal_to("World")
 
     def test_clear(self, qt: QtDriver) -> None:
         """Should clear the line edit."""
@@ -76,7 +76,7 @@ class TestFilterableDropdownFiltering:
         dropdown.set_items(["Apple", "Apricot", "Banana"])
 
         # Type lowercase "ap", should match "Apple" and "Apricot" (case-insensitive)
-        QTest.keyClicks(dropdown.line_edit, "ap")
+        QTest.keyClicks(dropdown._line_edit, "ap")  # pyright: ignore[reportPrivateUsage]
 
         assert_that(dropdown.filtered_count).is_equal_to(2)
 
@@ -86,10 +86,10 @@ class TestFilterableDropdownFiltering:
         qt.track(dropdown)
         dropdown.set_items(["Apple", "Apricot", "Banana", "Cherry"])
 
-        QTest.keyClicks(dropdown.line_edit, "a")
+        QTest.keyClicks(dropdown._line_edit, "a")  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.filtered_count).is_equal_to(3)  # Apple, Apricot, Banana
 
-        QTest.keyClicks(dropdown.line_edit, "p")  # Now "ap"
+        QTest.keyClicks(dropdown._line_edit, "p")  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.filtered_count).is_equal_to(2)  # Apple, Apricot
 
     def test_empty_filter_shows_all(self, qt: QtDriver) -> None:
@@ -109,7 +109,7 @@ class TestFilterableDropdownPopup:
         dropdown = FilterableDropdown()
         qt.track(dropdown)
 
-        assert_that(dropdown.popup.isVisible()).is_false()
+        assert_that(dropdown.is_popup_visible()).is_false()
 
     def test_popup_shows_on_typing(self, qt: QtDriver) -> None:
         """Popup should show when user types and there are matches."""
@@ -118,9 +118,9 @@ class TestFilterableDropdownPopup:
         dropdown.set_items(["Apple", "Banana"])
         dropdown.show()
 
-        QTest.keyClicks(dropdown.line_edit, "a")
+        QTest.keyClicks(dropdown._line_edit, "a")  # pyright: ignore[reportPrivateUsage]
 
-        assert_that(dropdown.popup.isVisible()).is_true()
+        assert_that(dropdown.is_popup_visible()).is_true()
 
     def test_popup_hides_on_escape(self, qt: QtDriver) -> None:
         """Escape key should hide the popup."""
@@ -130,13 +130,13 @@ class TestFilterableDropdownPopup:
         dropdown.show()
 
         # Show popup by typing
-        QTest.keyClicks(dropdown.line_edit, "a")
-        assert_that(dropdown.popup.isVisible()).is_true()
+        QTest.keyClicks(dropdown._line_edit, "a")  # pyright: ignore[reportPrivateUsage]
+        assert_that(dropdown.is_popup_visible()).is_true()
 
         # Press escape
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Escape)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Escape)  # pyright: ignore[reportPrivateUsage]
 
-        assert_that(dropdown.popup.isVisible()).is_false()
+        assert_that(dropdown.is_popup_visible()).is_false()
 
     def test_popup_hides_when_no_matches(self, qt: QtDriver) -> None:
         """Popup should hide when filter returns no matches."""
@@ -145,9 +145,9 @@ class TestFilterableDropdownPopup:
         dropdown.set_items(["Apple", "Banana"])
         dropdown.show()
 
-        QTest.keyClicks(dropdown.line_edit, "xyz")
+        QTest.keyClicks(dropdown._line_edit, "xyz")  # pyright: ignore[reportPrivateUsage]
 
-        assert_that(dropdown.popup.isVisible()).is_false()
+        assert_that(dropdown.is_popup_visible()).is_false()
 
     def test_show_popup_method(self, qt: QtDriver) -> None:
         """show_popup() should programmatically show the popup."""
@@ -158,7 +158,7 @@ class TestFilterableDropdownPopup:
 
         dropdown.show_popup()
 
-        assert_that(dropdown.popup.isVisible()).is_true()
+        assert_that(dropdown.is_popup_visible()).is_true()
 
     def test_hide_popup_method(self, qt: QtDriver) -> None:
         """hide_popup() should programmatically hide the popup."""
@@ -170,7 +170,7 @@ class TestFilterableDropdownPopup:
         dropdown.show_popup()
         dropdown.hide_popup()
 
-        assert_that(dropdown.popup.isVisible()).is_false()
+        assert_that(dropdown.is_popup_visible()).is_false()
 
 
 class TestFilterableDropdownKeyboardNavigation:
@@ -186,10 +186,10 @@ class TestFilterableDropdownKeyboardNavigation:
         dropdown.show_popup()
         assert_that(dropdown.current_index).is_equal_to(0)
 
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Down)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Down)  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.current_index).is_equal_to(1)
 
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Down)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Down)  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.current_index).is_equal_to(2)
 
     def test_up_arrow_navigates_backward(self, qt: QtDriver) -> None:
@@ -202,7 +202,7 @@ class TestFilterableDropdownKeyboardNavigation:
         dropdown.show_popup()
         dropdown.current_index = 2
 
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Up)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Up)  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.current_index).is_equal_to(1)
 
     def test_navigation_wraps_around(self, qt: QtDriver) -> None:
@@ -216,11 +216,11 @@ class TestFilterableDropdownKeyboardNavigation:
 
         # Go past last item
         dropdown.current_index = 2
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Down)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Down)  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.current_index).is_equal_to(0)
 
         # Go before first item
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Up)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Up)  # pyright: ignore[reportPrivateUsage]
         assert_that(dropdown.current_index).is_equal_to(2)
 
     def test_enter_selects_current_item(self, qt: QtDriver) -> None:
@@ -231,11 +231,11 @@ class TestFilterableDropdownKeyboardNavigation:
         dropdown.show()
 
         dropdown.show_popup()
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Down)  # Select "Banana"
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Return)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Down)  # pyright: ignore[reportPrivateUsage]
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Return)  # pyright: ignore[reportPrivateUsage]
 
         assert_that(dropdown.current_text()).is_equal_to("Banana")
-        assert_that(dropdown.popup.isVisible()).is_false()
+        assert_that(dropdown.is_popup_visible()).is_false()
 
 
 class TestFilterableDropdownSignals:
@@ -252,7 +252,7 @@ class TestFilterableDropdownSignals:
         dropdown.item_selected.connect(selected_items.append)
 
         dropdown.show_popup()
-        QTest.keyClick(dropdown.line_edit, Qt.Key.Key_Return)
+        QTest.keyClick(dropdown._line_edit, Qt.Key.Key_Return)  # pyright: ignore[reportPrivateUsage]
 
         assert_that(selected_items).is_equal_to(["Apple"])
 
