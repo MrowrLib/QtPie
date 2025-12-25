@@ -268,23 +268,6 @@ class TestCompileTranslations:
         assert_that((tmp_path / "de.ts").exists()).is_true()
         assert_that((tmp_path / "fr.ts").exists()).is_true()
 
-    def test_respects_prefix(self, tmp_path: Path) -> None:
-        """Prefix is added to output filenames."""
-        entries = [
-            TranslationEntry(
-                context="Test",
-                source="Hello",
-                disambiguation=None,
-                note=None,
-                translations={"fr": "Bonjour"},
-            )
-        ]
-
-        output_files = compile_translations(entries, tmp_path, prefix="myapp_")
-
-        assert_that(output_files).is_length(1)
-        assert_that((tmp_path / "myapp_fr.ts").exists()).is_true()
-
     def test_respects_language_filter(self, tmp_path: Path) -> None:
         """Only specified languages are compiled."""
         entries = [

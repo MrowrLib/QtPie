@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from qtpy.QtCore import QObject
 
-from qtpie.translations.translatable import resolve_translatable
+from qtpie.translations.translatable import Translatable, resolve_translatable
 
 # Metadata keys used to store info for the @widget decorator
 SIGNALS_METADATA_KEY = "qtpie_signals"
@@ -177,11 +177,28 @@ def make[T](
     # Combine args with init_args
     combined_args = (*args, *init_args)
 
+    # Track which kwargs have Translatable values for binding registration
+    translatable_kwargs: dict[str, Translatable] = {k: v for k, v in widget_kwargs.items() if isinstance(v, Translatable)}
+
     def factory_fn() -> T:
         # Resolve any Translatable markers in args and kwargs
         resolved_args: tuple[Any, ...] = tuple(resolve_translatable(arg) for arg in combined_args)
         resolved_kwargs: dict[str, Any] = {k: resolve_translatable(v) for k, v in widget_kwargs.items()}
-        return cast(T, cls(*resolved_args, **resolved_kwargs))
+        instance = cast(T, cls(*resolved_args, **resolved_kwargs))
+
+        # Register translation bindings for hot-reload support
+        if translatable_kwargs and isinstance(instance, QObject):
+            from qtpie.translations.store import register_binding
+
+            for prop_name, translatable in translatable_kwargs.items():
+                register_binding(
+                    instance,
+                    prop_name,
+                    translatable.text,
+                    translatable.disambiguation,
+                )
+
+        return instance
 
     metadata: dict[str, Any] = {}
     if potential_signals:

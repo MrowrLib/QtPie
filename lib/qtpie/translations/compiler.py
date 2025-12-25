@@ -1,10 +1,120 @@
 """Compiler that generates Qt .ts files from translation entries."""
 
+import shutil
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement
 
 from qtpie.translations.parser import TranslationEntry
+
+
+def _find_lrelease() -> str | None:
+    """
+    Find the lrelease tool for compiling .ts to .qm.
+
+    Checks in order:
+    1. pyside6-lrelease (PySide6)
+    2. lrelease (Qt native, works with PyQt6)
+
+    Returns:
+        Path to lrelease executable, or None if not found.
+    """
+    # Try PySide6's bundled lrelease
+    pyside_lrelease = shutil.which("pyside6-lrelease")
+    if pyside_lrelease:
+        return pyside_lrelease
+
+    # Try Qt's native lrelease (for PyQt6 or standalone Qt)
+    native_lrelease = shutil.which("lrelease")
+    if native_lrelease:
+        return native_lrelease
+
+    # Try running via PySide6 module (fallback)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "PySide6.scripts.pyside_tool", "lrelease", "--help"],
+            capture_output=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return f"{sys.executable} -m PySide6.scripts.pyside_tool lrelease"
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return None
+
+
+def compile_qm(ts_path: Path | str, qm_path: Path | str | None = None) -> Path:
+    """
+    Compile a .ts file to .qm binary format.
+
+    Supports both PySide6 (pyside6-lrelease) and PyQt6 (lrelease).
+
+    Args:
+        ts_path: Path to .ts file
+        qm_path: Optional output path for .qm file. Defaults to same name as ts.
+
+    Returns:
+        Path to generated .qm file
+
+    Raises:
+        FileNotFoundError: If lrelease tool is not available
+        RuntimeError: If compilation fails
+    """
+    ts_path = Path(ts_path)
+    if qm_path is None:
+        qm_path = ts_path.with_suffix(".qm")
+    else:
+        qm_path = Path(qm_path)
+
+    lrelease = _find_lrelease()
+    if lrelease is None:
+        msg = "lrelease not found. Install PySide6 (includes pyside6-lrelease) or Qt tools (provides lrelease)."
+        raise FileNotFoundError(msg)
+
+    # Build command - handle the module-based invocation
+    if " -m " in lrelease:
+        # It's a "python -m ..." style command
+        parts = lrelease.split()
+        cmd = [*parts, str(ts_path), "-qm", str(qm_path)]
+    else:
+        cmd = [lrelease, str(ts_path), "-qm", str(qm_path)]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        error_msg = result.stderr or result.stdout or "Unknown error"
+        msg = f"lrelease failed: {error_msg}"
+        raise RuntimeError(msg)
+
+    return qm_path
+
+
+def compile_all_qm(ts_files: list[Path], output_dir: Path | None = None) -> list[Path]:
+    """
+    Compile multiple .ts files to .qm format.
+
+    Args:
+        ts_files: List of .ts file paths
+        output_dir: Optional output directory. If None, .qm files are placed
+                   next to their .ts files.
+
+    Returns:
+        List of paths to generated .qm files
+    """
+    qm_files: list[Path] = []
+
+    for ts_path in ts_files:
+        if output_dir:
+            qm_path = output_dir / ts_path.with_suffix(".qm").name
+        else:
+            qm_path = None
+
+        qm_files.append(compile_qm(ts_path, qm_path))
+
+    return qm_files
 
 
 def _escape_xml(text: str) -> str:
@@ -115,7 +225,6 @@ def compile_translations(
     output_dir: Path,
     *,
     languages: list[str] | None = None,
-    prefix: str = "",
 ) -> list[Path]:
     """
     Compile translation entries to .ts files.
@@ -124,7 +233,6 @@ def compile_translations(
         entries: List of TranslationEntry objects
         output_dir: Directory to write .ts files
         languages: Optional list of languages to compile (default: all found)
-        prefix: Optional prefix for output filenames (e.g., "myapp_")
 
     Returns:
         List of paths to generated .ts files
@@ -138,7 +246,7 @@ def compile_translations(
 
     for lang in sorted(target_languages & all_languages):
         ts_content = compile_to_ts(entries, lang)
-        output_path = output_dir / f"{prefix}{lang}.ts"
+        output_path = output_dir / f"{lang}.ts"
         output_path.write_text(ts_content, encoding="utf-8")
         output_files.append(output_path)
 

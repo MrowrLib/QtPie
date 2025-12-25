@@ -11,6 +11,7 @@ dependencies = [
   "mrowrpurr-pyscss>=1.4.1",
   "qasync>=0.27.1",
   "pyyaml>=6.0",
+  "typer>=0.12",
 ]
 description = "Tasty way to build Qt apps"
 keywords = ["qt", "pyside6", "pyqt", "gui", "declarative", "reactive", "desktop", "ui", "widgets", "framework"]
@@ -29,7 +30,7 @@ Homepage = "https://mrowrlib.github.io/qtpie"
 Repository = "https://github.com/MrowrLib/QtPie"
 
 [project.scripts]
-yaml-to-tr = "qtpie.translations.cli:main"
+qtpie = "qtpie.cli.main:main"
 
 [project.entry-points.pytest11]
 qtpie = "qtpie.testing.plugin"

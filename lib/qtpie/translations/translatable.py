@@ -8,6 +8,25 @@ from qtpy.QtCore import QCoreApplication
 # Context variable set by @widget decorator
 _translation_context: ContextVar[str] = ContextVar("translation_context", default="")
 
+# Flag to use in-memory store instead of QTranslator
+_use_memory_store: bool = False
+
+
+def enable_memory_store(enabled: bool = True) -> None:
+    """Enable or disable in-memory translation store.
+
+    When enabled, translations are looked up from the in-memory store
+    (loaded from YAML) instead of Qt's QTranslator. This is used for
+    development hot-reload.
+    """
+    global _use_memory_store
+    _use_memory_store = enabled
+
+
+def is_memory_store_enabled() -> bool:
+    """Check if in-memory store is enabled."""
+    return _use_memory_store
+
 
 @dataclass(frozen=True)
 class Translatable:
@@ -34,6 +53,13 @@ class Translatable:
         if not ctx:
             return self.text
 
+        if _use_memory_store:
+            # Use in-memory store (dev mode with hot-reload)
+            from qtpie.translations.store import lookup
+
+            return lookup(ctx, self.text, self.disambiguation)
+
+        # Use Qt's QTranslator (production mode with .qm files)
         return QCoreApplication.translate(ctx, self.text, self.disambiguation)
 
 
