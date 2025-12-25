@@ -1023,7 +1023,7 @@ wheels = [
 
 [[package]]
 name = "qtpie"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "lib" }
 dependencies = [
     { name = "mrowrpurr-pyscss" },

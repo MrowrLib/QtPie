@@ -53,7 +53,7 @@ class EntryConfig:
     scss_search_paths: tuple[str, ...] = field(default_factory=tuple)
     window: type[QWidget] | None = None
     translations: str | None = None
-    language: str = "en"
+    language: str | None = None  # None = use system locale
     watch_translations: bool = False
 
 
@@ -94,6 +94,16 @@ def _compile_scss_to_string(scss_path: str, search_paths: list[str]) -> str:
     return cast(str, compiler.compile(str(scss_file)))  # pyright: ignore[reportUnknownMemberType]
 
 
+def _get_system_language() -> str:
+    """Get the system language code from Qt's locale detection."""
+    from qtpy.QtCore import QLocale
+
+    # QLocale.system().name() returns e.g. "fr_FR", "de_DE", "en_US"
+    # Extract just the language part (first 2 chars)
+    locale_name = QLocale.system().name()
+    return locale_name.split("_")[0] if "_" in locale_name else locale_name
+
+
 def _apply_translations(config: EntryConfig) -> TranslationWatcher | None:
     """
     Apply translations based on config.
@@ -103,6 +113,7 @@ def _apply_translations(config: EntryConfig) -> TranslationWatcher | None:
     - QRC paths (e.g., ":/translations/app.yml")
     - .yml/.yaml files (YAML format, parsed into memory)
     - .qm files (Qt binary format, loaded via QTranslator)
+    - Automatic system locale detection when language is not specified
 
     Returns a watcher if watch_translations=True and path is watchable, otherwise None.
     """
@@ -116,6 +127,9 @@ def _apply_translations(config: EntryConfig) -> TranslationWatcher | None:
     translations_path = config.translations
     is_qm_file = translations_path.endswith(".qm")
     is_watchable = can_watch_path(translations_path)
+
+    # Resolve language - use system locale if not specified
+    language = config.language if config.language is not None else _get_system_language()
 
     # Handle .qm files (Qt binary translation format)
     if is_qm_file:
@@ -138,14 +152,14 @@ def _apply_translations(config: EntryConfig) -> TranslationWatcher | None:
     if config.watch_translations:
         if is_watchable:
             # Set up watcher - it handles initial load (filesystem paths only)
-            return TranslationWatcher(Path(translations_path), config.language)
+            return TranslationWatcher(Path(translations_path), language)
         else:
             # QRC path - can't watch, just load once
             logging.getLogger("qtpie").info(f"watch_translations ignored for QRC path: {translations_path}")
 
     # One-shot load (no watching) - works for both filesystem and QRC
     enable_memory_store(True)
-    set_language(config.language)
+    set_language(language)
     load_translations_from_yaml(translations_path)
 
     return None
@@ -331,7 +345,7 @@ def entrypoint[T](
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | None = ...,
-    language: str = ...,
+    language: str | None = ...,
     watch_translations: bool = ...,
 ) -> type[T]: ...
 
@@ -349,7 +363,7 @@ def entrypoint[T](
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | None = ...,
-    language: str = ...,
+    language: str | None = ...,
     watch_translations: bool = ...,
 ) -> Callable[..., T]: ...
 
@@ -367,7 +381,7 @@ def entrypoint[T](
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | None = ...,
-    language: str = ...,
+    language: str | None = ...,
     watch_translations: bool = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
@@ -384,7 +398,7 @@ def entrypoint(
     scss_search_paths: list[str] | None = None,
     window: type[QWidget] | None = None,
     translations: str | None = None,
-    language: str = "en",
+    language: str | None = None,
     watch_translations: bool = False,
 ) -> Any:
     """
@@ -412,7 +426,7 @@ def entrypoint(
             If not provided, the SCSS file's parent folder is used.
         window: A widget class to instantiate as the main window.
         translations: Path to YAML translation file.
-        language: Language code for translations (default: "en").
+        language: Language code for translations. If None (default), uses system locale.
         watch_translations: If True, hot-reload translations on file changes.
 
     Examples:

@@ -237,12 +237,14 @@ LoginDialog:
 ```python
 @entrypoint(
     translations="translations.yml",  # Path to YAML file
-    language="fr",                     # Language code
+    language="fr",                     # Language code (optional)
 )
 @widget
 class MyApp(QWidget):
     ...
 ```
+
+If `language` is not specified, QtPie automatically detects the system locale using `QLocale.system()`.
 
 ### Hot-Reload for Development
 
@@ -555,8 +557,8 @@ tr["%n file(s)"](count)         # Plural form with count
 
 ```python
 @entrypoint(
-    translations="path/to/file.yml",  # YAML file path
-    language="fr",                     # Language code (default: "en")
+    translations="path/to/file.yml",  # YAML file path (or QRC path)
+    language="fr",                     # Language code (default: system locale)
     watch_translations=True,           # Enable hot-reload (default: False)
 )
 ```
