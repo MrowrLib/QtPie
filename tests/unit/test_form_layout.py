@@ -136,13 +136,13 @@ class TestFormLayout:
         assert field_item is not None
         assert_that(field_item.widget()).is_same_as(w.name)
 
-    def test_form_skips_private_fields(self, qt: QtDriver) -> None:
-        """Private fields should not be added to form layout."""
+    def test_form_includes_single_underscore_fields(self, qt: QtDriver) -> None:
+        """Single underscore fields ARE added to form layout."""
 
         @widget(layout="form")
         class MyForm(QWidget, Widget):
             name: QLineEdit = make(QLineEdit, form_label="Name")
-            _helper: QLabel = make(QLabel, "Hidden")
+            _helper: QLabel = make(QLabel, "Helper")
 
         w = MyForm()
         qt.track(w)
@@ -150,5 +150,22 @@ class TestFormLayout:
         layout = w.layout()
         assert isinstance(layout, QFormLayout)
 
-        # Only one row (the public field)
+        # Both fields should be in the layout
+        assert_that(layout.rowCount()).is_equal_to(2)
+
+    def test_form_skips_excluded_fields(self, qt: QtDriver) -> None:
+        """Fields like _foo_ should NOT be added to form layout."""
+
+        @widget(layout="form")
+        class MyForm(QWidget, Widget):
+            name: QLineEdit = make(QLineEdit, form_label="Name")
+            _excluded_: QLabel = make(QLabel, "Excluded")
+
+        w = MyForm()
+        qt.track(w)
+
+        layout = w.layout()
+        assert isinstance(layout, QFormLayout)
+
+        # Only one row (excluded field not added)
         assert_that(layout.rowCount()).is_equal_to(1)

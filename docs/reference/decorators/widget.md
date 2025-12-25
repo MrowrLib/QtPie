@@ -374,15 +374,32 @@ class MyWidget(QWidget):
     # Layout order: first → second → third
 ```
 
-### Private Fields
+### Field Naming Conventions
 
-Fields starting with `_` are **not** added to the layout:
+QtPie uses underscore conventions to control field behavior:
+
+| Field | Layout | objectName | Auto-bind |
+|-------|--------|------------|-----------|
+| `foo` | ✅ Added | `foo` | to `foo` |
+| `_foo` | ✅ Added | `_foo` | to `foo` (strips `_`) |
+| `_foo_` | ❌ Excluded | `_foo_` | ❌ None |
+
+**Private fields (`_foo`)** are included in the layout but auto-bind with the underscore stripped. Useful for encapsulation while keeping widgets in the layout:
+
+```python
+@widget()
+class MyWidget(QWidget, Widget[Person]):
+    _name: QLineEdit = make(QLineEdit)  # Added to layout, binds to record.name
+    _age: QSpinBox = make(QSpinBox)      # Added to layout, binds to record.age
+```
+
+**Excluded fields (`_foo_`)** start AND end with `_`. They are NOT added to the layout and do not auto-bind:
 
 ```python
 @widget()
 class MyWidget(QWidget):
     visible: QLabel = make(QLabel, "Visible")
-    _internal: QLabel = make(QLabel, "Internal")
+    _internal_: QLabel = make(QLabel, "Internal")
     # Only 'visible' is added to layout
 ```
 

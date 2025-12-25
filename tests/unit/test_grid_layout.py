@@ -147,13 +147,13 @@ class TestGridLayout:
         assert item is not None
         assert_that(item.widget()).is_same_as(w.positioned)
 
-    def test_grid_skips_private_fields(self, qt: QtDriver) -> None:
-        """Private fields should not be added to grid layout."""
+    def test_grid_includes_single_underscore_fields(self, qt: QtDriver) -> None:
+        """Single underscore fields ARE added to grid layout."""
 
         @widget(layout="grid")
         class MyGrid(QWidget, Widget):
             btn: QPushButton = make(QPushButton, "Public", grid=(0, 0))
-            _helper: QLabel = make(QLabel, "Hidden", grid=(0, 1))
+            _helper: QLabel = make(QLabel, "Helper", grid=(0, 1))
 
         w = MyGrid()
         qt.track(w)
@@ -161,7 +161,24 @@ class TestGridLayout:
         layout = w.layout()
         assert isinstance(layout, QGridLayout)
 
-        # Only one widget (public)
+        # Both widgets should be in the layout
+        assert_that(layout.count()).is_equal_to(2)
+
+    def test_grid_skips_excluded_fields(self, qt: QtDriver) -> None:
+        """Fields like _foo_ should NOT be added to grid layout."""
+
+        @widget(layout="grid")
+        class MyGrid(QWidget, Widget):
+            btn: QPushButton = make(QPushButton, "Public", grid=(0, 0))
+            _excluded_: QLabel = make(QLabel, "Excluded", grid=(0, 1))
+
+        w = MyGrid()
+        qt.track(w)
+
+        layout = w.layout()
+        assert isinstance(layout, QGridLayout)
+
+        # Only one widget (excluded field not added)
         assert_that(layout.count()).is_equal_to(1)
 
     def test_grid_calculator_example(self, qt: QtDriver) -> None:

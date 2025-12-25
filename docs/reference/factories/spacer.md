@@ -285,25 +285,20 @@ class MyWidget(QWidget):
 
 The labels are evenly distributed with equal spacing between them.
 
-## Private Fields
+## Field Naming Conventions
 
-Don't use underscore prefix for spacer fields - they'll be completely ignored:
+Spacers follow the standard QtPie underscore conventions:
 
-```python
-@widget(layout="vertical")
-class MyWidget(QWidget):
-    header: QLabel = make(QLabel, "Header")
-    _gap: QSpacerItem = spacer(1)  # ❌ Won't work! Underscores are ignored
-    footer: QLabel = make(QLabel, "Footer")
-```
-
-Use a regular field name:
+- `foo` and `_foo` - Added to layout
+- `_foo_` - **Excluded** from layout
 
 ```python
 @widget(layout="vertical")
 class MyWidget(QWidget):
     header: QLabel = make(QLabel, "Header")
-    gap: QSpacerItem = spacer(1)  # ✅ Works
+    gap: QSpacerItem = spacer(1)       # ✅ Added to layout
+    _gap: QSpacerItem = spacer(1)      # ✅ Also added (private but included)
+    _gap_: QSpacerItem = spacer(1)     # ❌ NOT added (excluded)
     footer: QLabel = make(QLabel, "Footer")
 ```
 

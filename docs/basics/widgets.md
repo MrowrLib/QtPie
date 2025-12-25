@@ -216,18 +216,44 @@ class MyWidget(QWidget):
 
 This sets a `class` property on the widget that can be used in QSS selectors. See the [Styling](styling.md) guide for details.
 
-## Private Fields
+## Field Naming Conventions
 
-Fields starting with `_` are not added to the layout:
+QtPie uses underscore conventions to control field behavior:
+
+| Field | Layout | Auto-bind |
+|-------|--------|-----------|
+| `foo` | ✅ Added | to `foo` |
+| `_foo` | ✅ Added | to `foo` (strips `_`) |
+| `_foo_` | ❌ Excluded | ❌ None |
+
+### Private Fields (`_foo`)
+
+Fields starting with `_` are **included** in the layout and auto-bind with the underscore stripped:
+
+```python
+@widget
+class MyWidget(QWidget, Widget[Person]):
+    # Added to layout, auto-binds to record.name
+    _name: QLineEdit = make(QLineEdit)
+
+    # Added to layout, auto-binds to record.age
+    _age: QSpinBox = make(QSpinBox)
+```
+
+This is useful when you want encapsulation (pyright will warn about external access) but still want the widget in the layout.
+
+### Excluded Fields (`_foo_`)
+
+Fields that start AND end with `_` are **excluded** from the layout and do not auto-bind:
 
 ```python
 @widget
 class MyWidget(QWidget):
     public: QLabel = make(QLabel, "Visible")
-    _hidden: QLabel = make(QLabel, "Not in layout")
+    _excluded_: QLabel = make(QLabel, "Not in layout")
 ```
 
-Only `public` will be added to the layout. `_hidden` still exists as an attribute but you control its placement.
+Only `public` will be added to the layout. `_excluded_` still exists as an attribute but you control its placement manually.
 
 ## Non-Widget Fields
 

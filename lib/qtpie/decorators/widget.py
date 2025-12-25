@@ -48,6 +48,39 @@ LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 UNDO_CONFIG_METADATA_KEY = "_qtpie_undo_config"
 
 
+def _is_excluded_field(field_name: str) -> bool:
+    """Check if a field should be excluded from layout and auto-binding.
+
+    Fields that start AND end with underscore (`_foo_`) are excluded.
+    This provides a convention for fields that exist but opt out of magic.
+    """
+    return field_name.startswith("_") and field_name.endswith("_")
+
+
+def _get_bind_name(field_name: str) -> str | None:
+    """Get the name to use for auto-binding.
+
+    - Excluded fields (`_foo_`): return None (no auto-bind)
+    - Single underscore (`_foo`): return `foo` (strip leading underscore)
+    - No underscore (`foo`): return `foo`
+    """
+    if _is_excluded_field(field_name):
+        return None
+    if field_name.startswith("_"):
+        return field_name[1:]
+    return field_name
+
+
+def _should_add_to_layout(field_name: str) -> bool:
+    """Check if a field should be added to the layout.
+
+    - Excluded fields (`_foo_`): False
+    - Single underscore (`_foo`): True
+    - No underscore (`foo`): True
+    """
+    return not _is_excluded_field(field_name)
+
+
 @overload
 @dataclass_transform()
 def widget[T](
@@ -175,8 +208,6 @@ def widget[T](
             # Set objectName and classes for child widgets from selector or field name
             type_hints = get_type_hints(cls)
             for f in fields(cls):  # type: ignore[arg-type]
-                if f.name.startswith("_"):
-                    continue
                 field_type = type_hints.get(f.name)
                 if isinstance(field_type, type) and issubclass(field_type, QWidget):
                     widget_instance = getattr(self, f.name, None)
@@ -185,6 +216,7 @@ def widget[T](
                         if selector is not None and selector.object_name is not None:
                             widget_instance.setObjectName(selector.object_name)
                         else:
+                            # Use field name as objectName (including any underscores)
                             widget_instance.setObjectName(f.name)
                         if selector is not None and selector.classes is not None:
                             _set_classes(widget_instance, selector.classes)
@@ -241,8 +273,8 @@ def widget[T](
 
                 # Add child widgets to layout
                 for f in fields(cls):  # type: ignore[arg-type]
-                    # Private fields are completely ignored
-                    if f.name.startswith("_"):
+                    # Fields like _foo_ (start AND end with _) are excluded from layout
+                    if not _should_add_to_layout(f.name):
                         continue
 
                     # Handle spacer() fields
@@ -899,8 +931,10 @@ def _process_record_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> Non
     type_hints = get_type_hints(cls)
 
     for f in fields(cls):  # type: ignore[arg-type]
-        # Skip private fields
-        if f.name.startswith("_"):
+        # Get the bind name (handles _foo -> foo, _foo_ -> None)
+        bind_name = _get_bind_name(f.name)
+        if bind_name is None:
+            # Excluded fields (_foo_) don't auto-bind
             continue
 
         # Skip record and record_observable_proxy fields
@@ -911,8 +945,9 @@ def _process_record_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> Non
         if f.metadata.get(BIND_METADATA_KEY) is not None:
             continue
 
-        # Check if this field name matches a record attribute
-        if not hasattr(record, f.name):
+        # Check if the bind name matches a record attribute
+        # For _name fields, we check for "name" on the record
+        if not hasattr(record, bind_name):
             continue
 
         # Check if this is a QWidget field
@@ -926,8 +961,9 @@ def _process_record_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> Non
             continue
 
         # Get the observable for this record property
+        # Use bind_name (e.g., "name" for field "_name")
         try:
-            observable = proxy.observable_for_path(f.name)
+            observable = proxy.observable_for_path(bind_name)
         except Exception:
             # Property might not be observable
             continue

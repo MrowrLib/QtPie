@@ -127,30 +127,74 @@ class TestWidgetDecorator:
         assert layout is not None
         assert_that(layout.count()).is_equal_to(1)
 
-    def test_private_fields_not_added_to_layout(self, qt: QtDriver) -> None:
-        """Fields starting with _ should not be added to layout."""
+    def test_single_underscore_fields_added_to_layout(self, qt: QtDriver) -> None:
+        """Fields starting with _ ARE added to layout (only __ are excluded)."""
 
         @widget()
         class MyWidget(QWidget, Widget):
             label: QLabel = field(default_factory=QLabel)
-            _hidden: QLabel = field(default_factory=QLabel)
+            _semi_private: QLabel = field(default_factory=QLabel)
 
         w = MyWidget()
         qt.track(w)
 
-        # Public field should exist
+        # Both fields should exist
         assert_that(w.label).is_instance_of(QLabel)
+        assert_that(hasattr(w, "_semi_private")).is_true()
 
-        # Private field should exist (accessed via hasattr to satisfy both linters)
-        assert_that(hasattr(w, "_hidden")).is_true()
+        # Both should be in the layout (single underscore is now included)
+        layout = w.layout()
+        assert layout is not None
+        assert_that(layout.count()).is_equal_to(2)
 
-        # Only the public one should be in the layout
+    def test_excluded_fields_not_added_to_layout(self, qt: QtDriver) -> None:
+        """Fields like _foo_ (start AND end with _) are excluded from layout."""
+
+        @widget()
+        class MyWidget(QWidget, Widget):
+            label: QLabel = field(default_factory=QLabel)
+            _excluded_: QLabel = field(default_factory=QLabel)
+
+        w = MyWidget()
+        qt.track(w)
+
+        # Both fields should exist
+        assert_that(w.label).is_instance_of(QLabel)
+        assert_that(hasattr(w, "_excluded_")).is_true()
+
+        # Only the non-excluded one should be in the layout
         layout = w.layout()
         assert layout is not None
         assert_that(layout.count()).is_equal_to(1)
         item0 = layout.itemAt(0)
         assert item0 is not None
         assert_that(item0.widget()).is_same_as(w.label)
+
+    def test_underscore_field_naming_convention(self, qt: QtDriver) -> None:
+        """Test the underscore naming convention for fields.
+
+        - `foo`: added to layout, binds to 'foo'
+        - `_foo`: added to layout, binds to 'foo' (private but included)
+        - `_foo_`: NOT added to layout, no auto-bind (excluded)
+        """
+
+        @widget()
+        class TestWidget(QWidget, Widget):
+            public: QLabel = field(default_factory=QLabel)
+            _private: QLabel = field(default_factory=QLabel)
+            _excluded_: QLabel = field(default_factory=QLabel)
+
+        w = TestWidget()
+
+        # All fields exist
+        assert_that(w.public).is_instance_of(QLabel)
+        assert_that(hasattr(w, "_private")).is_true()
+        assert_that(hasattr(w, "_excluded_")).is_true()
+
+        # Only public and _private are in layout (not _excluded_)
+        layout = w.layout()
+        assert layout is not None
+        assert_that(layout.count()).is_equal_to(2)
 
     def test_widget_with_layout_none_has_no_layout(self, qt: QtDriver) -> None:
         """layout='none' should not create any layout."""

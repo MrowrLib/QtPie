@@ -143,18 +143,22 @@ wide: QLineEdit = make(QLineEdit, grid=(2, 0, 1, 3))
 big: QPushButton = make(QPushButton, "Big", grid=(0, 0, 2, 2))
 ```
 
-## Private Fields Are Skipped
+## Field Naming Conventions
 
-Private fields (starting with `_`) are never added to layouts, even with a `grid` parameter:
+Fields follow the standard QtPie underscore conventions:
+
+- `foo` and `_foo` - Added to the grid
+- `_foo_` - **Excluded** from the grid (starts AND ends with `_`)
 
 ```python
 @widget(layout="grid")
 class MyGrid(QWidget):
-    btn: QPushButton = make(QPushButton, "Visible", grid=(0, 0))
-    _helper: QLabel = make(QLabel, "Hidden", grid=(0, 1))  # Not added to layout
+    btn: QPushButton = make(QPushButton, "Visible", grid=(0, 0))     # In grid
+    _private: QLabel = make(QLabel, "Private", grid=(0, 1))          # In grid
+    _excluded_: QLabel = make(QLabel, "Hidden", grid=(0, 2))         # NOT in grid
 ```
 
-This is useful for widgets you manage manually.
+Use `_foo_` naming for widgets you manage manually.
 
 ## See Also
 

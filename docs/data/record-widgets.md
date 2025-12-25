@@ -32,12 +32,22 @@ When you use `Widget[T]`:
 2. **Proxy is auto-created** - An [ObservableProxy[T]](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wraps the record
 3. **Fields auto-bind by name** - Widget fields bind to record properties with the same name
 
+### Field Naming Conventions
+
+Auto-binding respects the underscore naming convention:
+
+| Field | Binds to |
+|-------|----------|
+| `name` | `record.name` |
+| `_name` | `record.name` (strips leading `_`) |
+| `_name_` | ❌ No auto-bind (excluded field) |
+
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    name: QLineEdit = make(QLineEdit)  # binds to record.name
-    age: QSpinBox = make(QSpinBox)      # binds to record.age
-    # extra_widget: QLabel - won't auto-bind (no matching record field)
+    name: QLineEdit = make(QLineEdit)   # binds to record.name
+    _age: QSpinBox = make(QSpinBox)     # binds to record.age (strips _)
+    _excluded_: QLabel = make(QLabel)   # no auto-bind
 
 editor = PersonEditor()
 

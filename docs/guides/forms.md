@@ -151,22 +151,26 @@ class PersonForm(QWidget):
 
 Rearrange the field declarations to change the form order.
 
-## Private Fields Are Skipped
+## Field Naming Conventions
 
-Fields starting with `_` are not added to the form layout:
+Fields follow the standard QtPie underscore conventions:
+
+- `foo` and `_foo` - Added to the form
+- `_foo_` - **Excluded** from the form (starts AND ends with `_`)
 
 ```python
 @widget(layout="form")
 class MyForm(QWidget):
-    name: QLineEdit = make(QLineEdit, form_label="Name")
-    _helper_label: QLabel = make(QLabel, "Helper")  # exists but not in form
+    name: QLineEdit = make(QLineEdit, form_label="Name")      # In form
+    _age: QSpinBox = make(QSpinBox, form_label="Age")          # In form (private)
+    _helper_: QLabel = make(QLabel, "Helper")                  # NOT in form
 
     def setup(self) -> None:
-        # You can position _helper_label manually
-        self._helper_label.move(10, 10)
+        # You can position _helper_ manually
+        pass
 ```
 
-This is useful for widgets you want to position manually or use internally.
+Use `_foo_` naming for widgets you want to position manually or use internally.
 
 ## Combining with Other Features
 

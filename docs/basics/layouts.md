@@ -263,18 +263,23 @@ class MyWidget(QWidget):
     third: QLabel = make(QLabel, "3")   # Added third
 ```
 
-## Private Fields
+## Field Naming Conventions
 
-Fields starting with `_` are **not added** to layouts:
+QtPie uses underscore conventions to control layout inclusion:
+
+- `foo` - Added to layout
+- `_foo` - Added to layout (private, but still included)
+- `_foo_` - **Excluded** from layout (starts AND ends with `_`)
 
 ```python
 @widget()
 class MyWidget(QWidget):
-    visible: QLabel = make(QLabel, "Visible")
-    _helper: QLabel = make(QLabel, "Not in layout")  # exists but not in layout
+    visible: QLabel = make(QLabel, "Visible")      # Added to layout
+    _private: QLabel = make(QLabel, "Private")     # Added to layout
+    _excluded_: QLabel = make(QLabel, "Excluded")  # NOT in layout
 ```
 
-This is useful for helper widgets you'll position manually.
+Use `_foo_` naming for helper widgets you'll position manually.
 
 ## Non-Widget Fields
 
