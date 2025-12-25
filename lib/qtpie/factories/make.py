@@ -6,6 +6,8 @@ from typing import Any, cast
 
 from qtpy.QtCore import QObject
 
+from qtpie.translations.translatable import resolve_translatable
+
 # Metadata keys used to store info for the @widget decorator
 SIGNALS_METADATA_KEY = "qtpie_signals"
 FORM_LABEL_METADATA_KEY = "qtpie_form_label"
@@ -176,7 +178,10 @@ def make[T](
     combined_args = (*args, *init_args)
 
     def factory_fn() -> T:
-        return cast(T, cls(*combined_args, **widget_kwargs))
+        # Resolve any Translatable markers in args and kwargs
+        resolved_args: tuple[Any, ...] = tuple(resolve_translatable(arg) for arg in combined_args)
+        resolved_kwargs: dict[str, Any] = {k: resolve_translatable(v) for k, v in widget_kwargs.items()}
+        return cast(T, cls(*resolved_args, **resolved_kwargs))
 
     metadata: dict[str, Any] = {}
     if potential_signals:

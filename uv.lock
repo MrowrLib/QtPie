@@ -1028,6 +1028,7 @@ source = { editable = "lib" }
 dependencies = [
     { name = "mrowrpurr-pyscss" },
     { name = "observant" },
+    { name = "pyyaml" },
     { name = "qasync" },
     { name = "qtpy" },
 ]
@@ -1044,6 +1045,7 @@ requires-dist = [
     { name = "observant", specifier = ">=0.1.5" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-qt", marker = "extra == 'test'" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "qasync", specifier = ">=0.27.1" },
     { name = "qtpy", specifier = ">=2.4.3" },
 ]

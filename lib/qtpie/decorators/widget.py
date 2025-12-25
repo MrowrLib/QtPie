@@ -38,6 +38,7 @@ from qtpie.factories.make import (
 )
 from qtpie.factories.spacer import SPACER_METADATA_KEY, SpacerConfig
 from qtpie.state import get_state_observable, get_state_proxy, is_state_descriptor
+from qtpie.translations.translatable import set_translation_context
 
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
@@ -134,6 +135,9 @@ def widget[T](
         def new_init(self: QWidget, *args: object, **kwargs: object) -> None:
             # Initialize QWidget base class first
             QWidget.__init__(self)
+
+            # Set translation context for tr[] markers in make() factories
+            set_translation_context(cls.__name__)
 
             # Manually set dataclass fields (with default_factory support)
             for f in fields(cls):  # type: ignore[arg-type]

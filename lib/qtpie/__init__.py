@@ -19,6 +19,7 @@ from qtpie.styles import (
     enable_light_mode,
     set_color_scheme,
 )
+from qtpie.translations import tr
 from qtpie.widget_base import ModelWidget, Widget
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "spacer",
     "state",
     "stylesheet",
+    "tr",
     "widget",
     "window",
 ]
