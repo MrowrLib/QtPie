@@ -1,5 +1,6 @@
 """In-memory translation store for development hot-reload."""
 
+from collections.abc import Callable
 from pathlib import Path
 from weakref import ref
 
@@ -24,6 +25,11 @@ _translation_bindings: list[tuple[ref[QObject], str, str, str | None]] = []
 
 # Loaded YAML paths (for reloading)
 _loaded_paths: list[Path] = []
+
+# Format binding callbacks: (translatable_source, disambiguation, callback to recompute)
+# The callback takes the resolved format string and recomputes the formatted value
+FormatBindingCallback = Callable[[str], None]
+_format_bindings: list[tuple[ref[QObject], str, str | None, FormatBindingCallback]] = []
 
 
 def set_language(language: str) -> None:
@@ -111,8 +117,57 @@ def lookup(
                     return result[0] if result else source
                 return result
 
+    # Fallback: try @default context (for :global: translations)
+    if context != "@default":
+        return lookup("@default", source, disambiguation)
+
     # No translation found - return source
     return source
+
+
+def lookup_plural(
+    context: str,
+    source: str,
+    n: int,
+    disambiguation: str | None = None,
+) -> str:
+    """
+    Look up plural translation for the current language.
+
+    Args:
+        context: Translation context (usually class name)
+        source: Source text to translate
+        n: Count for plural form selection
+        disambiguation: Optional disambiguation string
+
+    Returns:
+        Translated plural text with %n replaced, or source text if no translation.
+    """
+    key: TranslationKey = (context, source, disambiguation)
+
+    if key in _translations:
+        lang_translations = _translations[key]
+        if _current_language in lang_translations:
+            result = lang_translations[_current_language]
+            if isinstance(result, list) and result:
+                # Select plural form based on count
+                # Simple rule: index 0 for n==1, index 1 for n!=1
+                # (works for English, French, etc. - not all languages)
+                form_index = 0 if n == 1 else min(1, len(result) - 1)
+                return result[form_index].replace("%n", str(n))
+            elif isinstance(result, str):
+                return result.replace("%n", str(n))
+
+    # Fallback: try without disambiguation
+    if disambiguation is not None:
+        return lookup_plural(context, source, n, None)
+
+    # Fallback: try @default context
+    if context != "@default":
+        return lookup_plural("@default", source, n, disambiguation)
+
+    # No translation found - return source with %n replaced
+    return source.replace("%n", str(n))
 
 
 def register_binding(
@@ -133,6 +188,27 @@ def register_binding(
     _translation_bindings.append((ref(widget), property_name, source, disambiguation))
 
 
+def register_format_binding(
+    widget: QObject,
+    source: str,
+    disambiguation: str | None,
+    callback: FormatBindingCallback,
+) -> None:
+    """
+    Register a format binding for later retranslation.
+
+    This is used for bind=tr["Count: {count}"] where the format string
+    needs to be re-resolved when translations change.
+
+    Args:
+        widget: The widget (used for weak reference to track lifetime)
+        source: Source text of the Translatable
+        disambiguation: Optional disambiguation
+        callback: Function to call with the resolved format string
+    """
+    _format_bindings.append((ref(widget), source, disambiguation, callback))
+
+
 def retranslate_all(context: str | None = None) -> None:
     """
     Re-apply all translations.
@@ -145,14 +221,15 @@ def retranslate_all(context: str | None = None) -> None:
     """
     from qtpie.translations.translatable import get_translation_context
 
+    # Get context for lookups
+    ctx = context or get_translation_context()
+
+    # Process simple property bindings
     live_bindings: list[tuple[ref[QObject], str, str, str | None]] = []
 
     for widget_ref, prop, source, disambiguation in _translation_bindings:
         widget = widget_ref()
         if widget is not None:
-            # Get the context for this lookup
-            # For now, use the global context (set by @widget decorator)
-            ctx = context or get_translation_context()
             translated = lookup(ctx, source, disambiguation)
             widget.setProperty(prop, translated)
             live_bindings.append((widget_ref, prop, source, disambiguation))
@@ -160,10 +237,26 @@ def retranslate_all(context: str | None = None) -> None:
     # Clean up dead references
     _translation_bindings[:] = live_bindings
 
+    # Process format bindings (bind=tr["Count: {count}"])
+    live_format_bindings: list[tuple[ref[QObject], str, str | None, FormatBindingCallback]] = []
+
+    for widget_ref, source, disambiguation, callback in _format_bindings:
+        widget = widget_ref()
+        if widget is not None:
+            # Re-resolve the format string with new translation
+            translated_format = lookup(ctx, source, disambiguation)
+            # Call the callback with the new format string
+            callback(translated_format)
+            live_format_bindings.append((widget_ref, source, disambiguation, callback))
+
+    # Clean up dead references
+    _format_bindings[:] = live_format_bindings
+
 
 def clear_bindings() -> None:
     """Clear all translation bindings. Useful for tests."""
     _translation_bindings.clear()
+    _format_bindings.clear()
 
 
 def clear_translations() -> None:
@@ -173,5 +266,10 @@ def clear_translations() -> None:
 
 
 def get_binding_count() -> int:
-    """Get number of registered bindings. Useful for tests."""
-    return len(_translation_bindings)
+    """Get number of registered bindings (both simple and format). Useful for tests."""
+    return len(_translation_bindings) + len(_format_bindings)
+
+
+def get_format_binding_count() -> int:
+    """Get number of registered format bindings. Useful for tests."""
+    return len(_format_bindings)

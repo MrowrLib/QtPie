@@ -34,10 +34,35 @@ class Translatable:
 
     Used with tr["text"] syntax. The actual translation happens
     when the make() factory runs, using the context set by @widget.
+
+    For plurals, call the Translatable with a count:
+        tr["%n file(s)"](5)  # Returns "5 files"
     """
 
     text: str
     disambiguation: str | None = None
+
+    def __call__(self, n: int, context: str | None = None) -> str:
+        """Resolve with plural count.
+
+        Args:
+            n: The count for plural form selection.
+            context: Optional translation context override.
+
+        Returns:
+            The translated plural string with %n replaced by count.
+        """
+        ctx = context or _translation_context.get()
+        if not ctx:
+            return self.text.replace("%n", str(n))
+
+        if _use_memory_store:
+            from qtpie.translations.store import lookup_plural
+
+            return lookup_plural(ctx, self.text, n, self.disambiguation)
+
+        # Use Qt's QTranslator (production mode with .qm files)
+        return QCoreApplication.translate(ctx, self.text, self.disambiguation, n)
 
     def resolve(self, context: str | None = None) -> str:
         """Resolve this translatable to actual translated text.

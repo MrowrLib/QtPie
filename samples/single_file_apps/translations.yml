@@ -1,0 +1,11 @@
+:global:
+  CLICK_ME:
+    en: "Click me"
+    es: "Haga clic en mí"
+    fr: "Cliquez moi"
+
+  COUNTER_TEXT:
+    :note: This string includes a variable placeholder {count} that will be replaced at runtime.
+    en: "Count: {count}"
+    es: "Cuenta: {count}"
+    fr: "Compte : {count}"

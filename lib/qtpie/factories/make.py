@@ -5,8 +5,29 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from qtpy.QtCore import QObject
+from qtpy.QtWidgets import (
+    QAbstractButton,
+    QAction,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QMenu,
+)
 
 from qtpie.translations.translatable import Translatable, resolve_translatable
+
+# Type alias for bind parameter - can be Translatable for translated format strings
+BindSpec = str | dict[str, str] | Translatable | None
+
+# Map widget types to property name for first positional string arg
+_FIRST_ARG_PROPERTY: dict[type, str] = {
+    QLabel: "text",
+    QAbstractButton: "text",  # QPushButton, QCheckBox, QRadioButton, QToolButton
+    QGroupBox: "title",
+    QLineEdit: "text",
+    QAction: "text",
+    QMenu: "title",
+}
 
 # Metadata keys used to store info for the @widget decorator
 SIGNALS_METADATA_KEY = "qtpie_signals"
@@ -76,7 +97,7 @@ def make[T](
     style: str | None = None,
     form_label: str | None = None,
     grid: GridTuple | None = None,
-    bind: str | dict[str, str] | None = None,
+    bind: BindSpec = None,
     init: InitArgs | None = None,
     **kwargs: Any,
 ) -> T:
@@ -95,6 +116,7 @@ def make[T](
         bind: Data binding specification. Can be:
               - str: Path to bind to default widget property, e.g. "user.name"
               - dict: Map of widget properties to paths, e.g. {"text": "user.name", "enabled": "user.canEdit"}
+              - Translatable: tr[] for translated format strings, e.g. bind=tr["Count: {count}"]
         init: Explicit constructor arguments (use when kwargs conflict with signals).
               - list: Positional args, e.g. init=[1, 2, 3]
               - dict: Keyword args, e.g. init={"name": "value"}
@@ -131,6 +153,9 @@ def make[T](
         # Data binding
         name_edit: QLineEdit = make(QLineEdit, bind="user.name")
 
+        # Translated format binding (hot-reloads with translation changes)
+        count_label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+
     Returns:
         At type-check time: T (the widget type)
         At runtime: a dataclass field with default_factory
@@ -164,7 +189,10 @@ def make[T](
     is_qobject_class = isinstance(cls, type) and issubclass(cls, QObject)
 
     for key, value in kwargs.items():
-        if is_qobject_class and (isinstance(value, str) or callable(value)):
+        # Translatable is callable (for plurals) but is NOT a signal
+        if isinstance(value, Translatable):
+            widget_kwargs[key] = value
+        elif is_qobject_class and (isinstance(value, str) or callable(value)):
             # Could be a signal connection - store for later verification
             potential_signals[key] = value
         else:
@@ -180,6 +208,22 @@ def make[T](
     # Track which kwargs have Translatable values for binding registration
     translatable_kwargs: dict[str, Translatable] = {k: v for k, v in widget_kwargs.items() if isinstance(v, Translatable)}
 
+    # Track translatable positional args (index -> Translatable)
+    translatable_args: dict[int, Translatable] = {i: arg for i, arg in enumerate(combined_args) if isinstance(arg, Translatable)}
+
+    # Figure out property name for first positional arg (only for known widgets)
+    first_arg_property: str | None = None
+    if isinstance(cls, type):
+        for widget_type, prop_name in _FIRST_ARG_PROPERTY.items():
+            if issubclass(cls, widget_type):
+                first_arg_property = prop_name
+                break
+
+    # Error if positional tr[] used on unknown widget type
+    if 0 in translatable_args and first_arg_property is None:
+        cls_name = getattr(cls, "__name__", str(cls))
+        raise TypeError(f"tr[] as positional arg not supported for {cls_name}. Use keyword arg: make({cls_name}, text=tr[...]) or similar.")
+
     def factory_fn() -> T:
         # Resolve any Translatable markers in args and kwargs
         resolved_args: tuple[Any, ...] = tuple(resolve_translatable(arg) for arg in combined_args)
@@ -187,13 +231,24 @@ def make[T](
         instance = cast(T, cls(*resolved_args, **resolved_kwargs))
 
         # Register translation bindings for hot-reload support
-        if translatable_kwargs and isinstance(instance, QObject):
+        if isinstance(instance, QObject):
             from qtpie.translations.store import register_binding
 
+            # Register kwarg bindings (property name is explicit)
             for prop_name, translatable in translatable_kwargs.items():
                 register_binding(
                     instance,
                     prop_name,
+                    translatable.text,
+                    translatable.disambiguation,
+                )
+
+            # Register positional arg bindings (first arg maps to known property)
+            if first_arg_property and 0 in translatable_args:
+                translatable = translatable_args[0]
+                register_binding(
+                    instance,
+                    first_arg_property,
                     translatable.text,
                     translatable.disambiguation,
                 )

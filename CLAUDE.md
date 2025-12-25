@@ -179,6 +179,32 @@ Note: Use `python -m pytest` instead of just `pytest` due to workspace editable 
 
 ---
 
+## ⚠️ CRITICAL: BEFORE ANNOUNCING ANY FEATURE AS DONE ⚠️
+
+**YOU MUST RUN ALL THREE CHECKS ON THE ENTIRE PROJECT BEFORE SAYING A FEATURE IS COMPLETE:**
+
+```bash
+# 1. Ruff (linting) - ENTIRE PROJECT
+uv run ruff check lib/qtpie/ tests/
+
+# 2. Pyright (type checking) - ENTIRE PROJECT
+uv run pyright lib/qtpie/ tests/unit/
+
+# 3. Pytest (tests) - ENTIRE PROJECT
+uv run python -m pytest tests/ -v
+```
+
+**ALL THREE MUST PASS WITH ZERO ERRORS BEFORE YOU ANNOUNCE COMPLETION.**
+
+- Do NOT run checks on just the files you modified
+- Do NOT skip ruff because "pyright passed"
+- Do NOT skip any of these checks for any reason
+- Do NOT announce a feature as done until all three pass
+
+If ANY check fails, fix it FIRST, then re-run ALL checks again.
+
+---
+
 ## Design Principles
 
 1. **Declarative over imperative** - define what, not how

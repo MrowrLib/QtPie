@@ -649,7 +649,7 @@ tests/unit/
 ---
 
 ## Future Ideas (Backlog)
-
+uv run qtpie tr
 - [ ] State machines for complex UI flows
 - [ ] Drag and drop helpers
 - [ ] Internationalization helpers

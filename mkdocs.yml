@@ -74,6 +74,7 @@ nav:
       - Form Layouts: guides/forms.md
       - Grid Layouts: guides/grids.md
       - SCSS Hot Reload: guides/scss.md
+      - Translations: guides/translations.md
       - App & Entry Points: guides/app.md
       - Async: guides/async.md
       - Testing: guides/testing.md

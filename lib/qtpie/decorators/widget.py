@@ -38,7 +38,7 @@ from qtpie.factories.make import (
 )
 from qtpie.factories.spacer import SPACER_METADATA_KEY, SpacerConfig
 from qtpie.state import get_state_observable, get_state_proxy, is_state_descriptor
-from qtpie.translations.translatable import set_translation_context
+from qtpie.translations.translatable import Translatable, set_translation_context
 
 LayoutType = Literal["vertical", "horizontal", "form", "grid", "none"]
 
@@ -501,6 +501,7 @@ def _process_format_binding(
     widget_instance: QWidget,
     format_string: str,
     bind_prop: str,
+    translatable: Translatable | None = None,
 ) -> bool:
     """Process a format string binding like 'Count: {count}' or '{count + 5}'.
 
@@ -510,6 +511,14 @@ def _process_format_binding(
     - Format specs: {price:.2f}, {price * 1.1:.2f}
     - self reference: {self.count + 5}
     - Widget[T] model fields: {name}, {age}
+    - Translatable format strings with hot-reload support
+
+    Args:
+        widget: The parent widget containing the binding source
+        widget_instance: The child widget to bind to
+        format_string: The format string to use
+        bind_prop: The property to bind on widget_instance
+        translatable: Optional Translatable for hot-reload support
 
     Returns True if binding was successful, False otherwise.
     """
@@ -560,6 +569,9 @@ def _process_format_binding(
     # Check if this is a Widget[T] with a model_observable_proxy
     widget_proxy = getattr(widget, "model_observable_proxy", None) if is_widget_subclass(type(widget)) else None
 
+    # Use a mutable container for format_string so hot-reload can update it
+    current_format: list[str] = [format_string]
+
     # Build the compute function
     def compute() -> str:
         # Build context with current values (use ROOT names for getattr)
@@ -583,11 +595,11 @@ def _process_format_binding(
                 value = None
             context[root_name] = value
 
-        # Process each field and build the result
+        # Process each field and build the result using current format string
         result_parts: list[str] = []
 
         formatter = string.Formatter()
-        for literal_text, field_name, format_spec, _ in formatter.parse(format_string):
+        for literal_text, field_name, format_spec, _ in formatter.parse(current_format[0]):
             result_parts.append(literal_text)
 
             if field_name is not None and field_name != "":
@@ -621,6 +633,22 @@ def _process_format_binding(
     for obs in all_observables:
         obs.on_change(on_any_change)
 
+    # Register for translation hot-reload if this is a Translatable binding
+    if translatable is not None:
+        from qtpie.translations.store import register_format_binding
+
+        def on_translation_change(new_format: str) -> None:
+            # Update the format string and recompute
+            current_format[0] = new_format
+            setter(widget_instance, compute())
+
+        register_format_binding(
+            widget_instance,
+            translatable.text,
+            translatable.disambiguation,
+            on_translation_change,
+        )
+
     return True
 
 
@@ -629,11 +657,13 @@ def _process_single_binding(
     widget_instance: QWidget,
     bind_path: str,
     bind_prop: str,
+    translatable: Translatable | None = None,
 ) -> None:
     """Process a single property binding.
 
     Supports multiple forms of bind paths:
     - Format string: bind="Count: {count}" → computed format binding
+    - Translatable: bind=tr["Count: {count}"] → translated format binding with hot-reload
     - State field: bind="count" → binds to state(0) field on self
     - Short form: bind="name" or bind="address.city" → uses self.model_observable_proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
@@ -642,7 +672,7 @@ def _process_single_binding(
 
     # Check 0: Is this a format string binding?
     if _is_format_string(bind_path):
-        if _process_format_binding(widget, widget_instance, bind_path, bind_prop):
+        if _process_format_binding(widget, widget_instance, bind_path, bind_prop, translatable):
             return
         # Fall through if format binding fails
 
@@ -715,8 +745,10 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
     Supports:
     - bind="path" → binds to default widget property
     - bind={"prop": "path", ...} → binds multiple properties
+    - bind=tr["format"] → translated format binding with hot-reload
     """
     from qtpie.bindings import get_binding_registry
+    from qtpie.translations.translatable import get_translation_context
 
     for f in fields(cls):  # type: ignore[arg-type]
         bind_spec = f.metadata.get(BIND_METADATA_KEY)
@@ -732,6 +764,13 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
             # Multiple bindings: {"text": "user.name", "enabled": "user.canEdit"}
             for prop_name, path in cast(dict[str, str], bind_spec).items():
                 _process_single_binding(widget, widget_instance, path, prop_name)
+        elif isinstance(bind_spec, Translatable):
+            # Translated format binding: bind=tr["Count: {count}"]
+            # Resolve the translation to get the format string
+            context = get_translation_context()
+            format_string = bind_spec.resolve(context)
+            default_prop = get_binding_registry().get_default_prop(widget_instance)
+            _process_single_binding(widget, widget_instance, format_string, default_prop, bind_spec)
         else:
             # Single binding to default property
             default_prop = get_binding_registry().get_default_prop(widget_instance)

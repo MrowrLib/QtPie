@@ -147,6 +147,97 @@ class TestBindingRegistry:
         # Should have registered two bindings (text and toolTip)
         assert_that(get_binding_count()).is_equal_to(2)
 
+    def test_positional_tr_arg_registers_binding(self, qt: QtDriver) -> None:
+        """tr[] as positional arg registers binding for text property."""
+        clear_bindings()
+
+        @widget()
+        class TestWidget(QWidget, Widget):
+            button: QPushButton = make(QPushButton, tr["Click me"])
+
+        w = TestWidget()
+        qt.track(w)
+
+        # Should have registered one binding (text from positional arg)
+        assert_that(get_binding_count()).is_equal_to(1)
+
+    def test_positional_tr_arg_retranslates(self, qt: QtDriver) -> None:
+        """tr[] as positional arg can be retranslated."""
+        clear_bindings()
+
+        yaml_content = """
+TestWidget:
+  "Click me":
+    fr: Cliquez-moi
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("en")
+
+            @widget()
+            class TestWidget(QWidget, Widget):
+                button: QPushButton = make(QPushButton, tr["Click me"])
+
+            w = TestWidget()
+            qt.track(w)
+
+            # Initially shows source text
+            assert_that(w.button.text()).is_equal_to("Click me")
+
+            # Change to French and retranslate
+            set_language("fr")
+            retranslate_all()
+
+            assert_that(w.button.text()).is_equal_to("Cliquez-moi")
+        finally:
+            yaml_path.unlink()
+
+    def test_positional_tr_on_unknown_widget_raises_error(self) -> None:
+        """tr[] as positional arg on unknown widget type raises TypeError."""
+        import pytest
+        from qtpy.QtCore import QObject
+
+        class CustomWidget(QObject):
+            pass
+
+        with pytest.raises(TypeError, match="tr\\[\\] as positional arg not supported"):
+            make(CustomWidget, tr["Hello"])
+
+    def test_tr_plural_returns_correct_form(self) -> None:
+        """tr[](count) returns correct plural form."""
+        yaml_content = """
+TestContext:
+  "%n file(s)":
+    en: ["%n file", "%n files"]
+    fr: ["%n fichier", "%n fichiers"]
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+
+            from qtpie.translations.translatable import set_translation_context
+
+            set_translation_context("TestContext")
+
+            # English
+            set_language("en")
+            assert_that(tr["%n file(s)"](1)).is_equal_to("1 file")
+            assert_that(tr["%n file(s)"](5)).is_equal_to("5 files")
+
+            # French
+            set_language("fr")
+            assert_that(tr["%n file(s)"](1)).is_equal_to("1 fichier")
+            assert_that(tr["%n file(s)"](5)).is_equal_to("5 fichiers")
+        finally:
+            yaml_path.unlink()
+
 
 class TestRetranslation:
     """Tests for retranslating widgets."""
@@ -321,5 +412,154 @@ TestWidget:
 
             # Should use French translation from memory store
             assert_that(w.label.text()).is_equal_to("Salut")
+        finally:
+            yaml_path.unlink()
+
+
+class TestTranslatableFormatBinding:
+    """Tests for tr[] used in bind= parameter for format bindings."""
+
+    def setup_method(self) -> None:
+        """Reset store state before each test."""
+        clear_bindings()
+        clear_translations()
+        enable_memory_store(True)
+
+    def teardown_method(self) -> None:
+        """Reset store state after each test."""
+        clear_bindings()
+        clear_translations()
+        enable_memory_store(False)
+
+    def test_tr_in_bind_resolves_format_string(self, qt: QtDriver) -> None:
+        """bind=tr[] resolves the translation and formats it."""
+        from qtpie.state import state
+
+        yaml_content = """
+TestWidget:
+  "Count: {count}":
+    fr: "Compteur : {count}"
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("fr")
+
+            @widget()
+            class TestWidget(QWidget, Widget):
+                count: int = state(42)
+                label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+
+            w = TestWidget()
+            qt.track(w)
+
+            # Should use French translation with value formatted
+            assert_that(w.label.text()).is_equal_to("Compteur : 42")
+        finally:
+            yaml_path.unlink()
+
+    def test_tr_in_bind_updates_on_state_change(self, qt: QtDriver) -> None:
+        """bind=tr[] updates when state changes."""
+        from qtpie.state import state
+
+        yaml_content = """
+TestWidget:
+  "Count: {count}":
+    fr: "Compteur : {count}"
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("fr")
+
+            @widget()
+            class TestWidget(QWidget, Widget):
+                count: int = state(0)
+                label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+
+            w = TestWidget()
+            qt.track(w)
+
+            assert_that(w.label.text()).is_equal_to("Compteur : 0")
+
+            # Change the count
+            w.count = 10
+            assert_that(w.label.text()).is_equal_to("Compteur : 10")
+        finally:
+            yaml_path.unlink()
+
+    def test_tr_in_bind_hot_reloads_translation(self, qt: QtDriver) -> None:
+        """bind=tr[] updates when translation changes (hot-reload)."""
+        from qtpie.state import state
+
+        yaml_content_en = """
+TestWidget:
+  "Count: {count}":
+    en: "Count: {count}"
+    fr: "Compteur : {count}"
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content_en)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("en")
+
+            @widget()
+            class TestWidget(QWidget, Widget):
+                count: int = state(5)
+                label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+
+            w = TestWidget()
+            qt.track(w)
+
+            # Initially English
+            assert_that(w.label.text()).is_equal_to("Count: 5")
+
+            # Change to French and retranslate
+            set_language("fr")
+            retranslate_all()
+
+            # Now should show French, still with the same value
+            assert_that(w.label.text()).is_equal_to("Compteur : 5")
+        finally:
+            yaml_path.unlink()
+
+    def test_tr_in_bind_registers_format_binding(self, qt: QtDriver) -> None:
+        """bind=tr[] registers a format binding for hot-reload."""
+        from qtpie.state import state
+        from qtpie.translations.store import get_format_binding_count
+
+        yaml_content = """
+TestWidget:
+  "Count: {count}":
+    fr: "Compteur : {count}"
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = Path(f.name)
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("fr")
+            clear_bindings()  # Clear before creating widget
+
+            @widget()
+            class TestWidget(QWidget, Widget):
+                count: int = state(0)
+                label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+
+            w = TestWidget()
+            qt.track(w)
+
+            # Should have registered one format binding
+            assert_that(get_format_binding_count()).is_equal_to(1)
         finally:
             yaml_path.unlink()
