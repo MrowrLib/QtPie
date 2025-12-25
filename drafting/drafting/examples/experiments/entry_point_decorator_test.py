@@ -8,12 +8,12 @@ F = TypeVar("F", bound=Callable[[], None])
 
 
 @overload
-def entry_point(func: F) -> F: ...
+def entrypoint(func: F) -> F: ...
 @overload
-def entry_point() -> Callable[[F], F]: ...
+def entrypoint() -> Callable[[F], F]: ...
 
 
-def entry_point(func: Optional[F] = None) -> Union[F, Callable[[F], F]]:
+def entrypoint(func: Optional[F] = None) -> Union[F, Callable[[F], F]]:
     def decorator(f: F) -> F:
         @functools.wraps(f)
         def wrapper() -> None:
@@ -29,7 +29,7 @@ def entry_point(func: Optional[F] = None) -> Union[F, Callable[[F], F]]:
         return decorator(func)
 
 
-@entry_point
+@entrypoint
 def main():
     label = QLabel("Hello, World!")
     label.setWindowTitle("Simple App")

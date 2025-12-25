@@ -13,7 +13,7 @@ This document catalogs **all ideas** from the various QtPie drafts, providing de
    - [@window](#window-decorator)
    - [@menu](#menu-decorator)
    - [@action](#action-decorator)
-   - [@entry_point](#entry_point-decorator)
+   - [@entrypoint](#entrypoint-decorator)
 3. [Widget Factory Functions](#widget-factory-functions)
    - [make()](#make)
    - [make_widget()](#make_widget)
@@ -92,11 +92,13 @@ QtPie aims to bring **declarative, dataclass-based UI development** to Qt/PySide
 **Purpose:** Transform a class into a Qt widget with automatic dataclass conversion, layout setup, and lifecycle hooks.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/decorators/widget.py`
 - `DRAFT/other_drafting/qtpie/widget.py`
 - `DRAFT/drafting/qtpie/decorators/widget.py`
 
 **Signature:**
+
 ```python
 @widget(
     name: str | None = None,              # Object name for QSS
@@ -109,6 +111,7 @@ QtPie aims to bring **declarative, dataclass-based UI development** to Qt/PySide
 ```
 
 **Example:**
+
 ```python
 @widget(name="AnimalEditor", classes=["card", "shadow"], layout="vertical")
 class AnimalWidget(QWidget, ModelWidget[Animal]):
@@ -125,6 +128,7 @@ class AnimalWidget(QWidget, ModelWidget[Animal]):
 ```
 
 **Lifecycle Hooks (called in order):**
+
 1. `setup()` - General initialization
 2. `setup_values()` - Set initial values
 3. `setup_bindings()` - Configure data bindings
@@ -135,12 +139,14 @@ class AnimalWidget(QWidget, ModelWidget[Animal]):
 8. `setup_signals()` - Connect signals
 
 **Pros:**
+
 - Dramatically reduces boilerplate
 - Consistent initialization order
 - Type-safe with `@dataclass_transform()`
 - Automatic layout population
 
 **Cons:**
+
 - Magic can be confusing for Qt newcomers
 - Order of field declaration matters for layout
 - Debugging initialization issues can be tricky
@@ -154,6 +160,7 @@ class AnimalWidget(QWidget, ModelWidget[Animal]):
 **File:** `DRAFT/drafting/qtpie/decorators/widget.py`
 
 **Example:**
+
 ```python
 @widget_class(layout="horizontal")
 class ExistingWidget(QWidget):
@@ -163,10 +170,12 @@ class ExistingWidget(QWidget):
 ```
 
 **Pros:**
+
 - Works with existing class hierarchies
 - More control over initialization
 
 **Cons:**
+
 - Less magic = more manual setup
 - Two decorators to remember
 
@@ -179,10 +188,12 @@ class ExistingWidget(QWidget):
 **Purpose:** Transform a class into a `QMainWindow` with title, icon, size, and automatic menu bar setup.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/decorators/window.py`
 - `DRAFT/other_drafting/qtpie/window.py`
 
 **Signature:**
+
 ```python
 @window(
     name: str | None = None,
@@ -194,6 +205,7 @@ class ExistingWidget(QWidget):
 ```
 
 **Example:**
+
 ```python
 @window(title="Animal Manager", icon=":/icons/app.png", size=(800, 600))
 class MainWindow(QMainWindow, Widget):
@@ -206,15 +218,18 @@ class MainWindow(QMainWindow, Widget):
 ```
 
 **Features:**
+
 - Auto-sets `central_widget` if field exists
 - Auto-adds `QMenu` fields to menu bar
 - Same lifecycle hooks as `@widget`
 
 **Pros:**
+
 - Consistent with `@widget` pattern
 - Menus declared as fields, auto-registered
 
 **Cons:**
+
 - Limited to `QMainWindow` (no `QDialog` variant yet)
 
 ---
@@ -226,11 +241,13 @@ class MainWindow(QMainWindow, Widget):
 **File:** `DRAFT/other_drafting/qtpie/menu.py`
 
 **Signature:**
+
 ```python
 @menu(text: str | None = None)
 ```
 
 **Example:**
+
 ```python
 @menu("File")
 class FileMenu(QMenu):
@@ -243,16 +260,19 @@ class FileMenu(QMenu):
 ```
 
 **Features:**
+
 - Child `QAction` fields auto-added via `addAction()`
 - Child `QMenu` fields auto-added via `addMenu()`
 - Preserves field order for menu item order
 
 **Pros:**
+
 - Declarative menu definition
 - Nested menus as nested classes
 - Type-safe action references
 
 **Cons:**
+
 - Separators require workaround (dummy actions)
 - No built-in support for dynamic menus
 
@@ -267,6 +287,7 @@ class FileMenu(QMenu):
 **File:** `DRAFT/other_drafting/qtpie/action.py`
 
 **Signature:**
+
 ```python
 @action(
     text: str | None = None,
@@ -277,6 +298,7 @@ class FileMenu(QMenu):
 ```
 
 **Example:**
+
 ```python
 @action("Open File", shortcut="Ctrl+O", tooltip="Open an existing file", icon=QStyle.StandardPixmap.SP_DialogOpenButton)
 class OpenAction(QAction, Action):
@@ -287,30 +309,34 @@ class OpenAction(QAction, Action):
 ```
 
 **Icon Sources:**
+
 - `str` - File path, loaded as `QIcon`
 - `QPixmap` / `QIcon` - Used directly
 - `QStyle.StandardPixmap` - System icon from app style
 
 **Pros:**
+
 - Declarative action definition
 - Multiple icon source types
 - Auto-connects to `action()` method
 
 **Cons:**
+
 - Requires `Action` base class mixin
 - Icon loading happens at init time
 
 ---
 
-### @entry_point Decorator
+### @entrypoint Decorator
 
 **Purpose:** Wrap a function to auto-create `QApplication` and run the event loop.
 
-**File:** `DRAFT/drafting/examples/experiments/entry_point_decorator_test.py`
+**File:** `DRAFT/drafting/examples/experiments/entrypoint_decorator_test.py`
 
 **Example:**
+
 ```python
-@entry_point
+@entrypoint
 def main():
     label = QLabel("Hello, World!")
     label.setWindowTitle("Simple App")
@@ -321,10 +347,12 @@ if __name__ == "__main__":
 ```
 
 **Pros:**
+
 - Great for quick scripts and examples
 - Reduces boilerplate for simple apps
 
 **Cons:**
+
 - Limited control over `QApplication` configuration
 - Not suitable for complex apps
 
@@ -339,11 +367,13 @@ if __name__ == "__main__":
 **Purpose:** Create widget instances as dataclass field defaults with optional binding and signal connections.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/factories/make.py`
 - `DRAFT/drafting/qtpie/factories/dataclass_factories/make.py`
 - `DRAFT/drafting/qtpie/factories/attribute_factories/make.py`
 
 **Signature:**
+
 ```python
 def make(
     class_type: Callable[..., T],
@@ -355,6 +385,7 @@ def make(
 ```
 
 **Examples:**
+
 ```python
 # Basic widget creation
 label: QLabel = make(QLabel, "Hello World")
@@ -384,17 +415,20 @@ txt_age: QLineEdit = make(
 ```
 
 **How Signal Detection Works:**
+
 - If a kwarg value is a `str` or `callable`, it's treated as a potential signal connection
 - At widget init time, the decorator checks if the attribute has a `.connect()` method
 - If yes, it's a signal - connect it
 - If no, it's a property - set it via setter method
 
 **Pros:**
+
 - Very concise syntax
 - Combines creation, binding, and signals in one call
 - Type-safe (returns `T`)
 
 **Cons:**
+
 - Signal detection heuristic can be wrong (string properties vs signal names)
 - "Type lie" - returns `field()` at runtime but claims to return `T`
 
@@ -407,6 +441,7 @@ txt_age: QLineEdit = make(
 **File:** `DRAFT/more_recent_drafting/qtpie/qtpie/factories/make_widget.py`
 
 **Signature:**
+
 ```python
 def make_widget(
     widget_class: type[W],
@@ -419,11 +454,13 @@ def make_widget(
 ```
 
 **Widget Options:**
+
 - `str` - Object name only: `"myButton"`
 - `list[str]` - Classes only: `["btn-primary", "large"]`
 - `tuple[str, list[str]]` - Both: `("myButton", ["btn-primary"])`
 
 **Example:**
+
 ```python
 btn_save: QPushButton = make_widget(
     QPushButton,
@@ -434,10 +471,12 @@ btn_save: QPushButton = make_widget(
 ```
 
 **Pros:**
+
 - Explicit class support
 - Clear separation of styling from behavior
 
 **Cons:**
+
 - More verbose than `make()`
 - Tuple syntax can be confusing
 
@@ -464,9 +503,11 @@ btn: QPushButton = make((QPushButton, "myButton", ["btn-primary"]), "Click")
 ```
 
 **Pros:**
+
 - Compact inline styling
 
 **Cons:**
+
 - Less readable
 - Type hints harder to express
 
@@ -487,10 +528,12 @@ btn: QPushButton = make((QPushButton, "myButton", ["btn-primary"]), "Click")
 **Purpose:** Create a widget for use in a `QFormLayout` with a label.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/factories/make_widget.py`
 - `DRAFT/other_drafting/qtpie/make_widget.py`
 
 **Signature:**
+
 ```python
 def make_form_row(
     form_field_name: str,     # Label text
@@ -501,6 +544,7 @@ def make_form_row(
 ```
 
 **Example:**
+
 ```python
 @widget(layout="form")
 class UserForm(QWidget, Widget):
@@ -510,6 +554,7 @@ class UserForm(QWidget, Widget):
 ```
 
 **How it works:**
+
 - Sets `form_field_name` as a Qt property on the widget
 - When the `@widget` decorator processes the layout, it reads this property
 - Uses it as the label in `QFormLayout.addRow(label, widget)`
@@ -521,10 +566,12 @@ class UserForm(QWidget, Widget):
 **Purpose:** Create a widget with explicit grid position for `QGridLayout`.
 
 **Files:**
+
 - `DRAFT/drafting/qtpie/factories/attribute_factories/grid_item.py`
 - `DRAFT/drafting/qtpie/factories/dataclass_factories/grid_item.py`
 
 **GridPosition:**
+
 ```python
 @dataclass(frozen=True)
 class GridPosition:
@@ -535,6 +582,7 @@ class GridPosition:
 ```
 
 **Example:**
+
 ```python
 @widget(layout="grid")
 class CalculatorWidget(QWidget, Widget):
@@ -547,11 +595,13 @@ class CalculatorWidget(QWidget, Widget):
 ```
 
 **Pros:**
+
 - Explicit positioning
 - Supports row/column spans
 - Clean declarative syntax
 
 **Cons:**
+
 - Verbose for simple grids
 - Position values can get out of sync with visual layout
 
@@ -564,6 +614,7 @@ class CalculatorWidget(QWidget, Widget):
 **Purpose:** Connect Qt widgets to reactive data models via the `observant` library.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/types.py` - `WidgetModel`, `ModelWidget`
 - `DRAFT/more_recent_drafting/qtpie/qtpie/bindings/bind.py`
 - `C:/Code/mrowr/MrowrLib/observant.py/observant/` - The reactive library
@@ -604,6 +655,7 @@ class ModelWidget(Widget, Generic[T]):
 ```
 
 **Usage:**
+
 ```python
 @dataclass
 class User:
@@ -631,10 +683,12 @@ editor.set_model(User(name="Alice", email="alice@example.com"))
 **Purpose:** Register how to bind different widget types to observables.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/bindings/registry.py`
 - `DRAFT/other_drafting/qtpie/bindings.py`
 
 **Signature:**
+
 ```python
 def register_binding(
     widget_type: type[TWidget],
@@ -649,6 +703,7 @@ def register_binding(
 ```
 
 **Example:**
+
 ```python
 # Built-in registrations
 register_binding(
@@ -680,6 +735,7 @@ register_binding(
 ```
 
 **Default Bindings Provided:**
+
 - `QLineEdit.text`
 - `QLabel.text` (one-way, no signal)
 - `QTextEdit.text`
@@ -695,6 +751,7 @@ register_binding(
 **File:** `DRAFT/more_recent_drafting/qtpie/qtpie/bindings/bind.py`
 
 **How it works:**
+
 ```python
 def bind(observable: IObservable[TValue], widget: QWidget, prop: str = "text") -> None:
     adapter = get_binding_registry().get(widget, prop)
@@ -726,11 +783,13 @@ def bind(observable: IObservable[TValue], widget: QWidget, prop: str = "text") -
 ```
 
 **Pros:**
+
 - Automatic bidirectional sync
 - Lock prevents infinite loops
 - Initial value sync
 
 **Cons:**
+
 - No batching of rapid changes
 - Memory leak potential if not cleaned up
 
@@ -743,6 +802,7 @@ def bind(observable: IObservable[TValue], widget: QWidget, prop: str = "text") -
 **File:** `DRAFT/more_recent_drafting/qtpie/qtpie/types.py` (uses `ObservableProxy.observable_for_path()`)
 
 **Syntax:**
+
 ```python
 # Simple nesting
 txt_city: QLineEdit = make(QLineEdit, bind="address.city")
@@ -755,17 +815,20 @@ txt_zip: QLineEdit = make(QLineEdit, bind="user?.address?.zip_code")
 ```
 
 **How it works:**
+
 - Parses path into segments: `"address?.city"` → `[("address", True), ("city", False)]`
 - Creates nested `ObservableProxy` for each level
 - Subscribes to parent changes to update when structure changes
 - Returns `None` if any optional segment is `None`
 
 **Pros:**
+
 - Elegant nested data binding
 - Safe navigation with `?.`
 - Reactive to parent object changes
 
 **Cons:**
+
 - Complex implementation
 - Performance overhead for deep paths
 - Debugging can be difficult
@@ -779,6 +842,7 @@ txt_zip: QLineEdit = make(QLineEdit, bind="user?.address?.zip_code")
 **Purpose:** Add/remove CSS-like classes on Qt widgets for QSS styling.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/styles/style_class.py`
 - `DRAFT/other_drafting/qtpie/styles.py`
 - `DRAFT/drafting/qtpie/styles/classes.py`
@@ -817,26 +881,28 @@ class QtStyleClass:
 ```
 
 **QSS Usage:**
+
 ```scss
 /* Target widgets with class "primary" */
 QPushButton[class~="primary"] {
-    background-color: #007bff;
-    color: white;
+  background-color: #007bff;
+  color: white;
 }
 
 /* Target widgets with class "danger" */
 QPushButton[class~="danger"] {
-    background-color: #dc3545;
+  background-color: #dc3545;
 }
 
 /* Multiple classes */
 QWidget[class~="card"][class~="shadow"] {
-    border: 1px solid #ddd;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 ```
 
 **Widget Base Class Methods:**
+
 ```python
 class Widget:
     def add_class(self, class_name: str) -> None: ...
@@ -846,11 +912,13 @@ class Widget:
 ```
 
 **Pros:**
+
 - Familiar CSS-like pattern
 - Dynamic class changes reapply styles
 - Multiple classes per widget
 
 **Cons:**
+
 - QSS attribute selector syntax is verbose (`[class~="name"]`)
 - Performance cost of unpolish/polish on every change
 
@@ -861,6 +929,7 @@ class Widget:
 **Purpose:** Use Qt object names for #id-style selectors in QSS.
 
 **Automatic Naming:**
+
 ```python
 @widget(name="UserEditor")  # Explicit
 class UserEditor(QWidget, Widget): ...
@@ -871,13 +940,14 @@ class AnimalWidget(QWidget, Widget):  # objectName = "Animal" (strips "Widget" s
 ```
 
 **QSS Usage:**
+
 ```scss
 #UserEditor {
-    background-color: white;
+  background-color: white;
 }
 
 #saveButton {
-    font-weight: bold;
+  font-weight: bold;
 }
 ```
 
@@ -888,10 +958,12 @@ class AnimalWidget(QWidget, Widget):  # objectName = "Animal" (strips "Widget" s
 **Purpose:** Write styles in SCSS, compile to QSS, hot-reload during development.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/styles/stylesheet.py`
 - `DRAFT/other_drafting/qtpie/styles.py`
 
 **Configuration:**
+
 ```python
 app = App(name="My App", dark_mode=True)
 app.set_styles(
@@ -903,6 +975,7 @@ app.set_styles(
 ```
 
 **How it works:**
+
 ```python
 @dataclass
 class StylesheetWatcher:
@@ -930,17 +1003,20 @@ class StylesheetWatcher:
 ```
 
 **SCSS Features Supported:**
+
 - Variables: `$primary-color: #007bff;`
 - Nesting: `QPushButton { &:hover { ... } }`
 - Imports: `@import "variables";`
 - Mixins: `@mixin card { ... }`
 
 **Pros:**
+
 - Real SCSS with variables, nesting, mixins
 - Live reload for rapid iteration
 - Compiled output for production
 
 **Cons:**
+
 - Requires `sass` or `scss` Python package
 - Some CSS features don't work in QSS
 - File watcher can miss rapid changes
@@ -954,6 +1030,7 @@ class StylesheetWatcher:
 **Purpose:** Child widgets declared as fields are automatically added to the parent's layout.
 
 **How it works:**
+
 ```python
 # In @widget decorator's __init__:
 if add_widgets_to_layout:
@@ -976,6 +1053,7 @@ if add_widgets_to_layout:
 ```
 
 **Field Order = Layout Order:**
+
 ```python
 @widget(layout="vertical")
 class MyWidget(QWidget, Widget):
@@ -985,6 +1063,7 @@ class MyWidget(QWidget, Widget):
 ```
 
 **Skipping Fields:**
+
 - Prefix with `_` to exclude from layout: `_helper: QTimer = make(QTimer)`
 - Exception: `_stretch` fields add stretch to box layouts
 
@@ -1006,6 +1085,7 @@ class GridPosition:
 ```
 
 **Example:**
+
 ```python
 @widget(layout="grid")
 class LoginForm(QWidget, Widget):
@@ -1030,6 +1110,7 @@ class LoginForm(QWidget, Widget):
 **Two approaches:**
 
 **1. Using `make_form_row()`:**
+
 ```python
 @widget(layout="form")
 class UserForm(QWidget, Widget):
@@ -1038,6 +1119,7 @@ class UserForm(QWidget, Widget):
 ```
 
 **2. Using object name as label:**
+
 ```python
 @widget(layout="form")
 class UserForm(QWidget, Widget):
@@ -1046,6 +1128,7 @@ class UserForm(QWidget, Widget):
 ```
 
 **Auto-adds "form" class:**
+
 ```python
 if layout == "form":
     QtStyleClass.add_class(self, "form")
@@ -1070,6 +1153,7 @@ class MyWidget(QWidget, Widget):
 ```
 
 **Implementation:**
+
 ```python
 elif issubclass(field_type, int) and field.name.startswith("_stretch"):
     stretch = getattr(self, field.name, 0)
@@ -1088,6 +1172,7 @@ elif issubclass(field_type, int) and field.name.startswith("_stretch"):
 **File:** `DRAFT/more_recent_drafting/qtpie/qtpie/decorators/widget.py`
 
 **Syntax:**
+
 ```python
 # Method name as string
 btn: QPushButton = make(QPushButton, "Click", clicked="on_button_clicked")
@@ -1104,6 +1189,7 @@ slider: QSlider = make(
 ```
 
 **How it works:**
+
 ```python
 # In make():
 for key, value in kwargs.items():
@@ -1130,11 +1216,13 @@ for attr_name, handler in potential_signals.items():
 ```
 
 **Pros:**
+
 - Very concise
 - Keeps signal connections near widget definition
 - Supports both method names and lambdas
 
 **Cons:**
+
 - Heuristic can fail (string properties vs signals)
 - Error messages may be confusing if method not found
 
@@ -1147,6 +1235,7 @@ for attr_name, handler in potential_signals.items():
 **File:** `DRAFT/other_drafting/qtpie/signal_typing.py`
 
 **Protocols:**
+
 ```python
 class BoolSignalHandler(Protocol):
     def __call__(self, checked: bool) -> None: ...
@@ -1159,6 +1248,7 @@ class IntSignalHandler(Protocol):
 ```
 
 **Cast Helpers:**
+
 ```python
 def as_bool_handler(func: Callable[[bool], None]) -> BoolSignalHandler:
     return cast(BoolSignalHandler, func)
@@ -1171,6 +1261,7 @@ def as_int_handler(func: Callable[[int], None]) -> IntSignalHandler:
 ```
 
 **Usage:**
+
 ```python
 # Without helper - Pylance may complain
 button.clicked.connect(lambda checked: self.on_click(checked))
@@ -1183,10 +1274,12 @@ timer.timeout.connect(as_void_handler(self.on_timeout))
 ```
 
 **Pros:**
+
 - Satisfies strict type checkers
 - Self-documenting signal signatures
 
 **Cons:**
+
 - Extra verbosity
 - Might hide real type errors
 
@@ -1235,6 +1328,7 @@ class App(QApplication):
 ```
 
 **Usage:**
+
 ```python
 app = App(name="Animal Manager", version="1.0.0", dark_mode=True)
 app.set_styles(watch=True, scss_path="./styles.scss", qss_path="./styles.qss")
@@ -1251,6 +1345,7 @@ app.run()
 **Purpose:** Start the application event loop with async support.
 
 **Files:**
+
 - `DRAFT/more_recent_drafting/qtpie/qtpie/startup.py`
 - `DRAFT/other_drafting/qtpie/run_app.py`
 
@@ -1278,6 +1373,7 @@ def run_app(
 ```
 
 **Features:**
+
 - Integrates Qt event loop with asyncio via `qasync`
 - Enables `async/await` in Qt applications
 - Proper cleanup on quit
@@ -1307,6 +1403,7 @@ def run_app(
 ```
 
 **Usage:**
+
 ```python
 run_app(
     app,
@@ -1328,6 +1425,7 @@ run_app(
 **File:** `DRAFT/other_drafting/qtpie/tabbed_docks_main_window.py`
 
 **Features:**
+
 - Tab-based dock organization with closable/movable tabs
 - Drag-to-undock: drag a tab outside the tab bar to float it
 - Auto-hide title bars when docks are tabified
@@ -1363,6 +1461,7 @@ class TabbedDocksMainWindow(QMainWindow):
 ```
 
 **Drag-to-undock implementation:**
+
 ```python
 def eventFilter(self, watched: QObject, event: QEvent) -> bool:
     if isinstance(watched, QTabBar):
@@ -1407,6 +1506,7 @@ def get_dock_manager(main_window: QMainWindow) -> IDockManager:
 ```
 
 **Usage:**
+
 ```python
 class MyMainWindow(QMainWindow):
     def __init__(self):
@@ -1418,11 +1518,13 @@ class MyMainWindow(QMainWindow):
 ```
 
 **Pros:**
+
 - Doesn't require inheritance
 - Clear interface
 - Testable
 
 **Cons:**
+
 - Requires forwarding event methods
 
 ---
@@ -1434,6 +1536,7 @@ class MyMainWindow(QMainWindow):
 **File:** `DRAFT/other_drafting/qtpie/widgets/dock_title_bar.py`
 
 **Features:**
+
 - Double-click maximizes/restores floating dock
 - Drag to move
 - Windows 11-style close button (red on hover)
@@ -1495,6 +1598,7 @@ def colored_svg(svg_path: str, color: QColor, size: QSize) -> QPixmap:
 ```
 
 **Usage:**
+
 ```python
 # For themeable icons that respect app color scheme
 icon = colored_svg(":/icons/save.svg", QColor("#ffffff"), QSize(24, 24))
@@ -1505,11 +1609,13 @@ icon = colored_svg(":/icons/save.svg", palette.color(QPalette.ColorRole.Text), Q
 ```
 
 **Pros:**
+
 - Single SVG works with any color scheme
 - Runtime color changes
 - Standard SVG `currentColor` convention
 
 **Cons:**
+
 - Requires SVGs using `currentColor`
 - Re-renders on every call (consider caching)
 
@@ -1534,6 +1640,7 @@ def center_on_screen(widget: QWidget):
 ```
 
 **Usage:**
+
 ```python
 window = MainWindow()
 window.show()
@@ -1569,6 +1676,7 @@ def write_file(path: str, content: str) -> None:
 **File:** `DRAFT/other_drafting/qtpie/widgets/filterable_dropdown.py`
 
 **Features:**
+
 - Type to filter options
 - Keyboard navigation (Up/Down/Enter/Escape)
 - Popup closes on outside click
@@ -1593,6 +1701,7 @@ class FilterableDropdown(QWidget, Widget):
 ```
 
 **Usage:**
+
 ```python
 dropdown = FilterableDropdown()
 dropdown.set_items(["Apple", "Banana", "Cherry", "Date", "Elderberry"])
@@ -1658,12 +1767,12 @@ class WidgetFactoryProperties:
 
 **Comparison with Field Metadata:**
 
-| Approach | WidgetFactoryProperties | Field Metadata |
-|----------|------------------------|----------------|
-| Storage | Qt property on widget | dataclass field metadata |
-| Access | Any code with widget reference | Only during @widget init |
-| Non-dataclass widgets | ✅ Works | ❌ Doesn't work |
-| Type safety | Less (dynamic property) | More (typed dict) |
+| Approach              | WidgetFactoryProperties        | Field Metadata           |
+| --------------------- | ------------------------------ | ------------------------ |
+| Storage               | Qt property on widget          | dataclass field metadata |
+| Access                | Any code with widget reference | Only during @widget init |
+| Non-dataclass widgets | ✅ Works                       | ❌ Doesn't work          |
+| Type safety           | Less (dynamic property)        | More (typed dict)        |
 
 ---
 
@@ -1696,6 +1805,7 @@ def configure_qtpie(
 ```
 
 **Potential settings:**
+
 - `dataclass_transformer` - Whether `@widget` applies `@dataclass`
 - `default_layout` - Default layout type
 - `auto_object_names` - Whether to auto-generate object names
@@ -1810,64 +1920,64 @@ class Action:
 
 ## Comprehensive Feature Matrix
 
-| Feature | other_drafting | more_recent_drafting | drafting |
-|---------|---------------|---------------------|----------|
-| **Decorators** | | | |
-| `@widget` | ✅ | ✅ | ✅ |
-| `@widget_class` | ❌ | ❌ | ✅ |
-| `@window` | ✅ | ✅ | ❌ |
-| `@menu` | ✅ | ❌ | ❌ |
-| `@action` | ✅ | ❌ | ❌ |
-| `@entry_point` | ❌ | ❌ | ✅ |
-| **Factories** | | | |
-| `make()` | ✅ | ✅ | ✅ |
-| `make_widget()` | ✅ | ✅ | ❌ |
-| `make_form_row()` | ✅ | ✅ | ✅ |
-| `grid_item()` | ❌ | ❌ | ✅ |
-| Tuple syntax | ❌ | ❌ | ✅ |
-| **Data Binding** | | | |
-| Observable integration | ✅ (basic) | ✅ (full) | ❌ |
-| Binding registry | ✅ | ✅ | ❌ |
-| `bind=` in make() | ❌ | ✅ | ❌ |
-| Nested path binding | ❌ | ✅ | ❌ |
-| Optional chaining (`?.`) | ❌ | ✅ | ❌ |
-| **Layout** | | | |
-| Horizontal/Vertical | ✅ | ✅ | ✅ |
-| Form layout | ✅ | ✅ | ✅ |
-| Grid layout | ❌ | ❌ | ✅ |
-| Auto-population | ✅ | ✅ | ✅ |
-| Stretch support | ✅ | ✅ | ❌ |
-| **Styling** | | | |
-| CSS classes | ✅ | ✅ | ✅ |
-| Object names | ✅ | ✅ | ✅ |
-| SCSS compilation | ✅ | ✅ | ❌ |
-| Live reload | ✅ | ✅ | ❌ |
-| **Signals** | | | |
-| Signal in make() | ❌ | ✅ | ❌ |
-| Signal typing utils | ✅ | ❌ | ❌ |
-| **Infrastructure** | | | |
-| App class | ❌ | ✅ | ❌ |
-| run_app() | ✅ | ✅ | ❌ |
-| Async support | ✅ | ✅ | ❌ |
-| Development mode | ✅ | ❌ | ❌ |
-| **Dock System** | | | |
-| TabbedDocksMainWindow | ✅ | ❌ | ❌ |
-| DockManager | ✅ | ❌ | ❌ |
-| DockTitleBar | ✅ | ❌ | ❌ |
-| **Utilities** | | | |
-| Colored SVG | ✅ | ❌ | ❌ |
-| Screen centering | ✅ | ❌ | ❌ |
-| **Widgets** | | | |
-| FilterableDropdown | ✅ | ❌ | ❌ |
-| AutoHeightTextEdit | ✅ | ❌ | ❌ |
-| **Metadata** | | | |
-| WidgetFactoryProperties | ❌ | ❌ | ✅ |
-| Field metadata | ❌ | ✅ | ❌ |
-| Global config | ❌ | ❌ | ✅ |
-| **Dependencies** | | | |
-| Uses `attrs` | ✅ | ❌ | ❌ |
-| Uses `observant` | ✅ | ✅ | ❌ |
-| Uses `qasync` | ✅ | ✅ | ❌ |
+| Feature                  | other_drafting | more_recent_drafting | drafting |
+| ------------------------ | -------------- | -------------------- | -------- |
+| **Decorators**           |                |                      |          |
+| `@widget`                | ✅             | ✅                   | ✅       |
+| `@widget_class`          | ❌             | ❌                   | ✅       |
+| `@window`                | ✅             | ✅                   | ❌       |
+| `@menu`                  | ✅             | ❌                   | ❌       |
+| `@action`                | ✅             | ❌                   | ❌       |
+| `@entrypoint`            | ❌             | ❌                   | ✅       |
+| **Factories**            |                |                      |          |
+| `make()`                 | ✅             | ✅                   | ✅       |
+| `make_widget()`          | ✅             | ✅                   | ❌       |
+| `make_form_row()`        | ✅             | ✅                   | ✅       |
+| `grid_item()`            | ❌             | ❌                   | ✅       |
+| Tuple syntax             | ❌             | ❌                   | ✅       |
+| **Data Binding**         |                |                      |          |
+| Observable integration   | ✅ (basic)     | ✅ (full)            | ❌       |
+| Binding registry         | ✅             | ✅                   | ❌       |
+| `bind=` in make()        | ❌             | ✅                   | ❌       |
+| Nested path binding      | ❌             | ✅                   | ❌       |
+| Optional chaining (`?.`) | ❌             | ✅                   | ❌       |
+| **Layout**               |                |                      |          |
+| Horizontal/Vertical      | ✅             | ✅                   | ✅       |
+| Form layout              | ✅             | ✅                   | ✅       |
+| Grid layout              | ❌             | ❌                   | ✅       |
+| Auto-population          | ✅             | ✅                   | ✅       |
+| Stretch support          | ✅             | ✅                   | ❌       |
+| **Styling**              |                |                      |          |
+| CSS classes              | ✅             | ✅                   | ✅       |
+| Object names             | ✅             | ✅                   | ✅       |
+| SCSS compilation         | ✅             | ✅                   | ❌       |
+| Live reload              | ✅             | ✅                   | ❌       |
+| **Signals**              |                |                      |          |
+| Signal in make()         | ❌             | ✅                   | ❌       |
+| Signal typing utils      | ✅             | ❌                   | ❌       |
+| **Infrastructure**       |                |                      |          |
+| App class                | ❌             | ✅                   | ❌       |
+| run_app()                | ✅             | ✅                   | ❌       |
+| Async support            | ✅             | ✅                   | ❌       |
+| Development mode         | ✅             | ❌                   | ❌       |
+| **Dock System**          |                |                      |          |
+| TabbedDocksMainWindow    | ✅             | ❌                   | ❌       |
+| DockManager              | ✅             | ❌                   | ❌       |
+| DockTitleBar             | ✅             | ❌                   | ❌       |
+| **Utilities**            |                |                      |          |
+| Colored SVG              | ✅             | ❌                   | ❌       |
+| Screen centering         | ✅             | ❌                   | ❌       |
+| **Widgets**              |                |                      |          |
+| FilterableDropdown       | ✅             | ❌                   | ❌       |
+| AutoHeightTextEdit       | ✅             | ❌                   | ❌       |
+| **Metadata**             |                |                      |          |
+| WidgetFactoryProperties  | ❌             | ❌                   | ✅       |
+| Field metadata           | ❌             | ✅                   | ❌       |
+| Global config            | ❌             | ❌                   | ✅       |
+| **Dependencies**         |                |                      |          |
+| Uses `attrs`             | ✅             | ❌                   | ❌       |
+| Uses `observant`         | ✅             | ✅                   | ❌       |
+| Uses `qasync`            | ✅             | ✅                   | ❌       |
 
 ---
 
@@ -1900,7 +2010,7 @@ class Action:
 2. **Pre-built widgets** - FilterableDropdown, AutoHeightTextEdit
 3. **Colored SVG utility** - For themeable icons
 4. **Screen utilities** - Centering, etc.
-5. **`@entry_point`** - For quick scripts
+5. **`@entrypoint`** - For quick scripts
 6. **Development mode** - Explicit dev vs prod
 
 ### Architecture Decisions
@@ -1964,4 +2074,4 @@ qtpie/
 
 ---
 
-*This document serves as the comprehensive reference for building the final QtPie library. Each feature has been analyzed for its merits and potential issues. The next step is to implement these features with proper test coverage, starting with the core decorators and factories.*
+_This document serves as the comprehensive reference for building the final QtPie library. Each feature has been analyzed for its merits and potential issues. The next step is to implement these features with proper test coverage, starting with the core decorators and factories._

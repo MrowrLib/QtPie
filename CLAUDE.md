@@ -7,6 +7,7 @@
 ### The Problem
 
 Qt is powerful but verbose. A simple widget requires:
+
 - Manual `__init__` with `super().__init__()`
 - Manual layout creation and widget adding
 - Manual signal/slot connections
@@ -47,7 +48,7 @@ class MyWidget(QWidget):
 QtPie/
 ├── lib/
 │   └── qtpie/             # THE LIBRARY - this is what we're building
-│       ├── decorators/    # @widget, @window, @menu, @action, @entry_point
+│       ├── decorators/    # @widget, @window, @menu, @action, @entrypoint
 │       ├── factories/     # make(), stretch(), separator()
 │       ├── bindings/      # Data binding (bind, registry)
 │       ├── styles/        # SCSS/QSS, classes, watcher
@@ -84,7 +85,7 @@ What users import:
 ```python
 from qtpie import (
     # Decorators
-    widget, window, menu, action, entry_point,
+    widget, window, menu, action, entrypoint,
     # Factories
     make, make_later, stretch, separator,
     # Base classes
@@ -103,6 +104,7 @@ from qtpie import (
 Strongly-typed wrapper around pytest-qt. Install with `uv add "qtpie[test]"`.
 
 Why not just pytest-qt?
+
 1. pytest-qt uses `*args, **kwargs` everywhere - no type safety
 2. We want helpers specific to qtpie patterns
 3. Better API: `qt.click(button)` vs `qtbot.mouseClick(button, Qt.LeftButton)`
@@ -124,6 +126,7 @@ def test_something(qt: QtDriver) -> None:
 Contains **old experimental implementations**. Don't modify these - they're reference material.
 
 When stuck, check the drafts for inspiration:
+
 - `DRAFT/**/widget.py` - various @widget implementations
 - `DRAFT/**/make.py` - various make() implementations
 
@@ -290,9 +293,9 @@ class PersonEditor(QWidget, Widget[Person]):
 ### App entry point
 
 ```python
-from qtpie import entry_point, widget, make
+from qtpie import entrypoint, widget, make
 
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Hello!")

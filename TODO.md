@@ -391,7 +391,7 @@ tests/unit/
 ### Accomplished
 
 - [x] `App` class extending QApplication with lifecycle hooks
-- [x] `@entry_point` decorator for main functions and classes
+- [x] `@entrypoint` decorator for main functions and classes
 - [x] Async support with qasync event loop
 - [x] `run_app()` standalone function for non-App usage
 - [x] `dark_mode` and `light_mode` parameters
@@ -406,26 +406,26 @@ tests/unit/
 ### API Design
 
 ```python
-from qtpie import App, entry_point, run_app
+from qtpie import App, entrypoint, run_app
 
 # Simplest - function returning a widget
-@entry_point
+@entrypoint
 def main():
     return QLabel("Hello World!")
 
 # With configuration
-@entry_point(dark_mode=True, title="My App", size=(800, 600))
+@entrypoint(dark_mode=True, title="My App", size=(800, 600))
 def main():
     return MyWidget()
 
 # On a @widget class
-@entry_point
+@entrypoint
 @widget
 class MyApp(QWidget):
     label: QLabel = make(QLabel, "Hello!")
 
 # App subclass with lifecycle hooks
-@entry_point
+@entrypoint
 class MyApp(App):
     def setup(self):
         self.load_stylesheet("styles.qss")
@@ -444,18 +444,18 @@ run_app(app)
 
 ```
 lib/qtpie/
-├── __init__.py              # Added: App, entry_point, run_app
+├── __init__.py              # Added: App, entrypoint, run_app
 ├── app.py                   # NEW: App class and run_app()
 └── decorators/
-    └── entry_point.py       # NEW: @entry_point decorator
+    └── entrypoint.py       # NEW: @entrypoint decorator
 
 tests/
 ├── conftest.py              # qapp_cls fixture override
 ├── unit/
 │   ├── test_app.py          # App class tests
-│   └── test_entry_point.py  # @entry_point unit tests
+│   └── test_entrypoint.py  # @entrypoint unit tests
 └── e2e/
-    └── test_entry_point_e2e.py  # subprocess E2E tests
+    └── test_entrypoint_e2e.py  # subprocess E2E tests
 ```
 
 ---
@@ -649,7 +649,9 @@ tests/unit/
 ---
 
 ## Future Ideas (Backlog)
+
 uv run qtpie tr
+
 - [ ] State machines for complex UI flows
 - [ ] Drag and drop helpers
 - [ ] Internationalization helpers
