@@ -1,10 +1,13 @@
 """YAML parser for translation files."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 import yaml
+
+from qtpie.translations.loader import read_file_content
 
 
 @dataclass
@@ -119,16 +122,30 @@ def parse_yaml(content: str) -> list[TranslationEntry]:
     return entries
 
 
-def parse_yaml_files(paths: list[Path]) -> list[TranslationEntry]:
+def parse_yaml_files(paths: Sequence[Path | str] | Path | str) -> list[TranslationEntry]:
     """
     Parse multiple YAML files and deep merge them.
 
     Files are merged in order, with later files overriding earlier ones.
+    Supports both filesystem paths and QRC paths (e.g., ":/translations/app.yml").
+
+    Args:
+        paths: Single path or list of paths. Can be Path objects (filesystem)
+               or strings (filesystem or QRC paths starting with ":/" ).
     """
+    # Normalize to list of strings
+    if isinstance(paths, (str, Path)):
+        path_list: list[str] = [str(paths)]
+    else:
+        path_list = [str(p) for p in paths]
+
     merged: dict[str, Any] = {}
 
-    for path in paths:
-        content = path.read_text(encoding="utf-8")
+    for path in path_list:
+        content = read_file_content(path)
+        if content is None:
+            continue
+
         loaded = yaml.safe_load(content)
         if isinstance(loaded, dict):
             data = cast(dict[str, Any], loaded)

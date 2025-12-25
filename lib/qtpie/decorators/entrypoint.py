@@ -98,27 +98,55 @@ def _apply_translations(config: EntryConfig) -> TranslationWatcher | None:
     """
     Apply translations based on config.
 
-    Returns a watcher if watch_translations=True, otherwise None.
+    Supports:
+    - Filesystem paths (Path or string)
+    - QRC paths (e.g., ":/translations/app.yml")
+    - .yml/.yaml files (YAML format, parsed into memory)
+    - .qm files (Qt binary format, loaded via QTranslator)
+
+    Returns a watcher if watch_translations=True and path is watchable, otherwise None.
     """
+    import logging
+
+    from qtpie.translations.loader import can_watch_path
+
     if not config.translations:
         return None
 
-    from pathlib import Path
+    translations_path = config.translations
+    is_qm_file = translations_path.endswith(".qm")
+    is_watchable = can_watch_path(translations_path)
 
+    # Handle .qm files (Qt binary translation format)
+    if is_qm_file:
+        from qtpy.QtCore import QCoreApplication, QTranslator
+
+        translator = QTranslator()
+        if translator.load(translations_path):
+            app = QCoreApplication.instance()
+            if app is not None:
+                app.installTranslator(translator)
+
+        if config.watch_translations and not is_watchable:
+            logging.getLogger("qtpie").info(f"watch_translations ignored for QRC path: {translations_path}")
+        return None
+
+    # Handle YAML files
     from qtpie.translations.store import load_translations_from_yaml, set_language
     from qtpie.translations.translatable import enable_memory_store
 
-    translations_path = Path(config.translations)
-
     if config.watch_translations:
-        # Set up watcher - it handles initial load
-        return TranslationWatcher(translations_path, config.language)
+        if is_watchable:
+            # Set up watcher - it handles initial load (filesystem paths only)
+            return TranslationWatcher(Path(translations_path), config.language)
+        else:
+            # QRC path - can't watch, just load once
+            logging.getLogger("qtpie").info(f"watch_translations ignored for QRC path: {translations_path}")
 
-    # One-shot load (no watching)
-    if translations_path.exists():
-        enable_memory_store(True)
-        set_language(config.language)
-        load_translations_from_yaml(translations_path)
+    # One-shot load (no watching) - works for both filesystem and QRC
+    enable_memory_store(True)
+    set_language(config.language)
+    load_translations_from_yaml(translations_path)
 
     return None
 

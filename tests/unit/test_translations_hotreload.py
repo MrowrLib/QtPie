@@ -8,6 +8,7 @@ from qtpy.QtWidgets import QLabel, QPushButton, QWidget
 
 from qtpie import Widget, make, tr, widget
 from qtpie.testing import QtDriver
+from qtpie.translations.loader import can_watch_path, is_qrc_path, read_file_content
 from qtpie.translations.store import (
     clear_bindings,
     clear_translations,
@@ -563,3 +564,86 @@ TestWidget:
             assert_that(get_format_binding_count()).is_equal_to(1)
         finally:
             yaml_path.unlink()
+
+
+class TestQRCPathHelpers:
+    """Tests for QRC path detection and loading utilities."""
+
+    def test_is_qrc_path_detects_qrc_paths(self) -> None:
+        """is_qrc_path correctly identifies QRC paths."""
+        assert_that(is_qrc_path(":/translations/app.yml")).is_true()
+        assert_that(is_qrc_path(":/app.qm")).is_true()
+        assert_that(is_qrc_path(":/")).is_true()
+
+    def test_is_qrc_path_rejects_filesystem_paths(self) -> None:
+        """is_qrc_path correctly rejects filesystem paths."""
+        assert_that(is_qrc_path("/path/to/file.yml")).is_false()
+        assert_that(is_qrc_path("relative/path.yml")).is_false()
+        assert_that(is_qrc_path("C:\\path\\file.yml")).is_false()
+        assert_that(is_qrc_path("")).is_false()
+
+    def test_can_watch_path_for_filesystem(self) -> None:
+        """can_watch_path returns True for filesystem paths."""
+        assert_that(can_watch_path("/path/to/file.yml")).is_true()
+        assert_that(can_watch_path("relative/path.yml")).is_true()
+
+    def test_can_watch_path_for_qrc(self) -> None:
+        """can_watch_path returns False for QRC paths."""
+        assert_that(can_watch_path(":/translations/app.yml")).is_false()
+        assert_that(can_watch_path(":/app.qm")).is_false()
+
+    def test_read_file_content_from_filesystem(self) -> None:
+        """read_file_content reads from filesystem."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write("test: content")
+            path = Path(f.name)
+
+        try:
+            content = read_file_content(path)
+            assert_that(content).is_equal_to("test: content")
+        finally:
+            path.unlink()
+
+    def test_read_file_content_returns_none_for_missing_file(self) -> None:
+        """read_file_content returns None for non-existent files."""
+        content = read_file_content("/nonexistent/path/file.yml")
+        assert_that(content).is_none()
+
+    def test_read_file_content_returns_none_for_missing_qrc(self) -> None:
+        """read_file_content returns None for non-existent QRC paths."""
+        content = read_file_content(":/nonexistent/file.yml")
+        assert_that(content).is_none()
+
+
+class TestLoadTranslationsFromStringPath:
+    """Tests for loading translations from string paths (for QRC compatibility)."""
+
+    def setup_method(self) -> None:
+        """Reset store state before each test."""
+        clear_bindings()
+        clear_translations()
+        enable_memory_store(True)
+
+    def teardown_method(self) -> None:
+        """Reset store state after each test."""
+        clear_bindings()
+        clear_translations()
+        enable_memory_store(False)
+
+    def test_load_from_string_path(self) -> None:
+        """load_translations_from_yaml works with string paths."""
+        yaml_content = """
+TestWidget:
+  Hello:
+    fr: Bonjour
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
+            f.write(yaml_content)
+            yaml_path = f.name  # String path, not Path object
+
+        try:
+            load_translations_from_yaml(yaml_path)
+            set_language("fr")
+            assert_that(lookup("TestWidget", "Hello")).is_equal_to("Bonjour")
+        finally:
+            Path(yaml_path).unlink()

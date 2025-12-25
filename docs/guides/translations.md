@@ -410,6 +410,34 @@ if translator.load("i18n/fr.qm"):
 # Now tr[] uses the .qm file
 ```
 
+### Loading from QRC Resources
+
+Both YAML and .qm files can be loaded from Qt Resource Collection (QRC) paths:
+
+```python
+@entrypoint(
+    translations=":/translations/app.yml",  # QRC path
+    language="fr",
+)
+@widget
+class MyApp(QWidget):
+    ...
+```
+
+Or for .qm files:
+
+```python
+@entrypoint(
+    translations=":/i18n/fr.qm",  # QRC path to compiled translations
+    language="fr",
+)
+@widget
+class MyApp(QWidget):
+    ...
+```
+
+**Note:** `watch_translations=True` has no effect for QRC paths since embedded resources cannot be watched for changes. A log message will indicate when watching is skipped.
+
 ### With QtPie's App Class
 
 ```python

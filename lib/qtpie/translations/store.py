@@ -1,6 +1,6 @@
 """In-memory translation store for development hot-reload."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from weakref import ref
 
@@ -23,8 +23,8 @@ _current_language: str = "en"
 # We store source_text instead of Translatable to avoid circular import
 _translation_bindings: list[tuple[ref[QObject], str, str, str | None]] = []
 
-# Loaded YAML paths (for reloading)
-_loaded_paths: list[Path] = []
+# Loaded YAML paths (for reloading) - can be Path or str (for QRC paths)
+_loaded_paths: list[Path | str] = []
 
 # Format binding callbacks: (translatable_source, disambiguation, callback to recompute)
 # The callback takes the resolved format string and recomputes the formatted value
@@ -43,20 +43,24 @@ def get_language() -> str:
     return _current_language
 
 
-def load_translations_from_yaml(paths: list[Path] | Path) -> None:
+def load_translations_from_yaml(paths: Sequence[Path | str] | Path | str) -> None:
     """
     Load translations from YAML file(s) into memory.
 
     Args:
         paths: Single path or list of paths to YAML files.
+               Can be Path objects or strings (including QRC paths like ":/translations/app.yml").
                Multiple files are deep-merged.
     """
     global _loaded_paths
 
-    if isinstance(paths, Path):
-        paths = [paths]
+    # Normalize to list
+    if isinstance(paths, (str, Path)):
+        path_list: list[Path | str] = [paths]
+    else:
+        path_list = list(paths)
 
-    _loaded_paths = list(paths)
+    _loaded_paths = path_list
     _translations.clear()
 
     entries = parse_yaml_files(paths)
