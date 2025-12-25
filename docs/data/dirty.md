@@ -242,7 +242,7 @@ class UserEditor(QWidget, Widget[User]):
 
 ## See Also
 
-- [Model Widgets](model-widgets.md) - Learn about `Widget[T]` and the proxy
+- [Record Widgets](record-widgets.md) - Learn about `Widget[T]` and the proxy
 - [Save & Load](save-load.md) - Persist changes to models
 - [Validation](validation.md) - Validate before saving
 - [Observant Integration](../guides/observant.md) - Understanding the reactive layer

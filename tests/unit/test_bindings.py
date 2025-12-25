@@ -123,13 +123,13 @@ class TestBasicBinding:
 
         @widget()
         class DogEditor(QWidget, Widget[Dog]):
-            model: Dog = make(Dog)
+            record: Dog = make(Dog)
             proxy: ObservableProxy[Dog] = make_later()
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = DogEditor()
         qt.track(w)
@@ -150,20 +150,20 @@ class TestBasicBinding:
 
         @widget()
         class DogEditor(QWidget, Widget[Dog]):
-            model: Dog = make(Dog)
+            record: Dog = make(Dog)
             proxy: ObservableProxy[Dog] = make_later()
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = DogEditor()
         qt.track(w)
 
         # Widget → Model
         w.name_edit.setText("Max")
-        assert_that(w.model.name).is_equal_to("Max")
+        assert_that(w.record.name).is_equal_to("Max")
 
     def test_no_infinite_loop(self, qt: QtDriver) -> None:
         """Changes should not cause infinite loops."""
@@ -176,13 +176,13 @@ class TestBasicBinding:
 
         @widget()
         class CounterWidget(QWidget, Widget[Counter]):
-            model: Counter = make(Counter)
+            record: Counter = make(Counter)
             proxy: ObservableProxy[Counter] = make_later()
             spin: QSpinBox = make(QSpinBox, bind="proxy.value")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
                 # Track changes to detect infinite loops
                 self.proxy.observable(int, "value").on_change(lambda _: change_count.__setitem__(0, change_count[0] + 1))
 
@@ -206,13 +206,13 @@ class TestWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             age_spin: QSpinBox = make(QSpinBox, bind="proxy.age")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -221,7 +221,7 @@ class TestWidgetBindings:
         assert_that(w.age_spin.value()).is_equal_to(25)
 
         w.age_spin.setValue(30)
-        assert_that(w.model.age).is_equal_to(30)
+        assert_that(w.record.age).is_equal_to(30)
 
     def test_checkbox_binding(self, qt: QtDriver) -> None:
         """QCheckBox should bind to bool values."""
@@ -232,13 +232,13 @@ class TestWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             active_check: QCheckBox = make(QCheckBox, "Active", bind="proxy.active")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -247,7 +247,7 @@ class TestWidgetBindings:
         assert_that(w.active_check.isChecked()).is_true()
 
         w.active_check.setChecked(False)
-        assert_that(w.model.active).is_false()
+        assert_that(w.record.active).is_false()
 
     def test_label_one_way_binding(self, qt: QtDriver) -> None:
         """QLabel should support one-way binding (model → widget only)."""
@@ -258,13 +258,13 @@ class TestWidgetBindings:
 
         @widget()
         class StatusWidget(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             status_label: QLabel = make(QLabel, bind="proxy.status")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = StatusWidget()
         qt.track(w)
@@ -283,13 +283,13 @@ class TestWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             slider: QSlider = make(QSlider, bind="proxy.volume")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -314,13 +314,13 @@ class TestNestedPathBinding:
 
         @widget()
         class DogEditor(QWidget, Widget[Dog]):
-            model: Dog = make(Dog)
+            record: Dog = make(Dog)
             proxy: ObservableProxy[Dog] = make_later()
             owner_edit: QLineEdit = make(QLineEdit, bind="proxy.owner.name")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = DogEditor()
         qt.track(w)
@@ -346,13 +346,13 @@ class TestOptionalChaining:
 
         @widget()
         class DogEditor(QWidget, Widget[Dog]):
-            model: Dog = make(Dog)
+            record: Dog = make(Dog)
             proxy: ObservableProxy[Dog] = make_later()
             owner_edit: QLineEdit = make(QLineEdit, bind="proxy.owner?.name")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = DogEditor()
         qt.track(w)
@@ -373,14 +373,14 @@ class TestDictBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             combo: QComboBox = make(QComboBox, bind={"currentText": "proxy.selected"})
 
             @override
             def configure(self) -> None:
                 self.combo.addItems(["Option A", "Option B", "Option C"])
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -399,7 +399,7 @@ class TestDictBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             name_edit: QLineEdit = make(
                 QLineEdit,
@@ -411,7 +411,7 @@ class TestDictBindings:
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -463,7 +463,7 @@ class TestMultipleBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             edit1: QLineEdit = make(QLineEdit, bind="proxy.name")
             edit2: QLineEdit = make(QLineEdit, bind="proxy.name")
@@ -471,7 +471,7 @@ class TestMultipleBindings:
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -486,7 +486,7 @@ class TestShortFormBinding:
     """Tests for short form bind syntax (bind='name' instead of bind='proxy.name')."""
 
     def test_short_form_simple_property(self, qt: QtDriver) -> None:
-        """bind='name' should work as shorthand for bind='model_observable_proxy.name'."""
+        """bind='name' should work as shorthand for bind='record_observable_proxy.name'."""
 
         @dataclass
         class Dog:
@@ -500,15 +500,15 @@ class TestShortFormBinding:
         qt.track(w)
 
         # Model → Widget
-        w.model_observable_proxy.observable(str, "name").set("Buddy")
+        w.record_observable_proxy.observable(str, "name").set("Buddy")
         assert_that(w.name_edit.text()).is_equal_to("Buddy")
 
         # Widget → Model
         w.name_edit.setText("Max")
-        assert_that(w.model.name).is_equal_to("Max")
+        assert_that(w.record.name).is_equal_to("Max")
 
     def test_short_form_nested_path(self, qt: QtDriver) -> None:
-        """bind='address.city' should work as shorthand for bind='model_observable_proxy.address.city'."""
+        """bind='address.city' should work as shorthand for bind='record_observable_proxy.address.city'."""
 
         @dataclass
         class Address:
@@ -525,7 +525,7 @@ class TestShortFormBinding:
         w = PersonEditor()
         qt.track(w)
 
-        w.model_observable_proxy.observable_for_path("address.city").set("New York")
+        w.record_observable_proxy.observable_for_path("address.city").set("New York")
         assert_that(w.city_edit.text()).is_equal_to("New York")
 
     def test_explicit_proxy_still_works(self, qt: QtDriver) -> None:
@@ -537,13 +537,13 @@ class TestShortFormBinding:
 
         @widget()
         class DogEditor(QWidget, Widget[Dog]):
-            model: Dog = make(Dog)
+            record: Dog = make(Dog)
             proxy: ObservableProxy[Dog] = make_later()
             name_edit: QLineEdit = make(QLineEdit, bind="proxy.name")  # Explicit form
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = DogEditor()
         qt.track(w)
@@ -567,7 +567,7 @@ class TestShortFormBinding:
             cat_model: Cat = make(Cat)
             cat_proxy: ObservableProxy[Cat] = make_later()
 
-            dog_name: QLineEdit = make(QLineEdit, bind="name")  # Short → model_observable_proxy.name
+            dog_name: QLineEdit = make(QLineEdit, bind="name")  # Short → record_observable_proxy.name
             cat_name: QLineEdit = make(QLineEdit, bind="cat_proxy.name")  # Explicit
 
             @override
@@ -577,8 +577,8 @@ class TestShortFormBinding:
         w = PetEditor()
         qt.track(w)
 
-        # Dog uses short form (via auto-created model_observable_proxy)
-        w.model_observable_proxy.observable(str, "name").set("Buddy")
+        # Dog uses short form (via auto-created record_observable_proxy)
+        w.record_observable_proxy.observable(str, "name").set("Buddy")
         assert_that(w.dog_name.text()).is_equal_to("Buddy")
 
         # Cat uses explicit proxy
@@ -607,7 +607,7 @@ class TestShortFormBinding:
         assert_that(w.owner_edit.text()).is_equal_to("")
 
     def test_short_form_with_widget_base_class(self, qt: QtDriver) -> None:
-        """Short form should work with Widget[T] auto-created model_observable_proxy."""
+        """Short form should work with Widget[T] auto-created record_observable_proxy."""
 
         @dataclass
         class Dog:
@@ -623,14 +623,14 @@ class TestShortFormBinding:
         w = DogEditor()
         qt.track(w)
 
-        # model_observable_proxy is auto-created by Widget[Dog]
-        assert_that(w.model_observable_proxy).is_not_none()
+        # record_observable_proxy is auto-created by Widget[Dog]
+        assert_that(w.record_observable_proxy).is_not_none()
 
-        w.model_observable_proxy.observable(str, "name").set("Rex")
+        w.record_observable_proxy.observable(str, "name").set("Rex")
         assert_that(w.name_edit.text()).is_equal_to("Rex")
 
         w.age_spin.setValue(5)
-        assert_that(w.model.age).is_equal_to(5)
+        assert_that(w.record.age).is_equal_to(5)
 
 
 class TestAllWidgetBindings:
@@ -645,13 +645,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             text_edit: QTextEdit = make(QTextEdit, bind="proxy.content")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -660,7 +660,7 @@ class TestAllWidgetBindings:
         assert_that(w.text_edit.toPlainText()).is_equal_to("Hello World")
 
         w.text_edit.setPlainText("Updated")
-        assert_that(w.model.content).is_equal_to("Updated")
+        assert_that(w.record.content).is_equal_to("Updated")
 
     def test_plain_text_edit_binding(self, qt: QtDriver) -> None:
         """QPlainTextEdit should bind to text property."""
@@ -671,13 +671,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             text_edit: QPlainTextEdit = make(QPlainTextEdit, bind="proxy.content")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -686,7 +686,7 @@ class TestAllWidgetBindings:
         assert_that(w.text_edit.toPlainText()).is_equal_to("Plain text")
 
         w.text_edit.setPlainText("Changed")
-        assert_that(w.model.content).is_equal_to("Changed")
+        assert_that(w.record.content).is_equal_to("Changed")
 
     def test_double_spinbox_binding(self, qt: QtDriver) -> None:
         """QDoubleSpinBox should bind to float values."""
@@ -697,13 +697,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             price_spin: QDoubleSpinBox = make(QDoubleSpinBox, bind="proxy.price")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -712,7 +712,7 @@ class TestAllWidgetBindings:
         assert_that(w.price_spin.value()).is_equal_to(19.99)
 
         w.price_spin.setValue(29.99)
-        assert_that(w.model.price).is_equal_to(29.99)
+        assert_that(w.record.price).is_equal_to(29.99)
 
     def test_radio_button_binding(self, qt: QtDriver) -> None:
         """QRadioButton should bind to bool (checked) property."""
@@ -723,13 +723,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             radio: QRadioButton = make(QRadioButton, "Option", bind="proxy.selected")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -738,7 +738,7 @@ class TestAllWidgetBindings:
         assert_that(w.radio.isChecked()).is_true()
 
         w.radio.setChecked(False)
-        assert_that(w.model.selected).is_false()
+        assert_that(w.record.selected).is_false()
 
     def test_dial_binding(self, qt: QtDriver) -> None:
         """QDial should bind to int value."""
@@ -749,13 +749,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             dial: QDial = make(QDial, bind="proxy.rotation")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -764,7 +764,7 @@ class TestAllWidgetBindings:
         assert_that(w.dial.value()).is_equal_to(50)
 
         w.dial.setValue(75)
-        assert_that(w.model.rotation).is_equal_to(75)
+        assert_that(w.record.rotation).is_equal_to(75)
 
     def test_progress_bar_binding(self, qt: QtDriver) -> None:
         """QProgressBar should bind one-way (model → widget only)."""
@@ -775,13 +775,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             bar: QProgressBar = make(QProgressBar, bind="proxy.progress")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -801,13 +801,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             date_edit: QDateEdit = make(QDateEdit, bind="proxy.birth_date")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -818,7 +818,7 @@ class TestAllWidgetBindings:
 
         new_date = QDate(1990, 1, 1)
         w.date_edit.setDate(new_date)
-        assert_that(w.model.birth_date).is_equal_to(new_date)
+        assert_that(w.record.birth_date).is_equal_to(new_date)
 
     def test_time_edit_binding(self, qt: QtDriver) -> None:
         """QTimeEdit should bind to QTime values."""
@@ -829,13 +829,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             time_edit: QTimeEdit = make(QTimeEdit, bind="proxy.alarm_time")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -846,7 +846,7 @@ class TestAllWidgetBindings:
 
         new_time = QTime(8, 0, 0)
         w.time_edit.setTime(new_time)
-        assert_that(w.model.alarm_time).is_equal_to(new_time)
+        assert_that(w.record.alarm_time).is_equal_to(new_time)
 
     def test_datetime_edit_binding(self, qt: QtDriver) -> None:
         """QDateTimeEdit should bind to QDateTime values."""
@@ -857,13 +857,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             datetime_edit: QDateTimeEdit = make(QDateTimeEdit, bind="proxy.event_time")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -874,7 +874,7 @@ class TestAllWidgetBindings:
 
         new_dt = QDateTime(QDate(2025, 1, 1), QTime(0, 0, 0))
         w.datetime_edit.setDateTime(new_dt)
-        assert_that(w.model.event_time).is_equal_to(new_dt)
+        assert_that(w.record.event_time).is_equal_to(new_dt)
 
     def test_font_combo_box_binding(self, qt: QtDriver) -> None:
         """QFontComboBox should bind to QFont values."""
@@ -885,13 +885,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             font_combo: QFontComboBox = make(QFontComboBox, bind="proxy.selected_font")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -910,13 +910,13 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             key_edit: QKeySequenceEdit = make(QKeySequenceEdit, bind="proxy.shortcut")
 
             @override
             def configure(self) -> None:
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -927,7 +927,7 @@ class TestAllWidgetBindings:
 
         new_seq = QKeySequence("Ctrl+N")
         w.key_edit.setKeySequence(new_seq)
-        assert_that(w.model.shortcut.toString()).is_equal_to(new_seq.toString())
+        assert_that(w.record.shortcut.toString()).is_equal_to(new_seq.toString())
 
     def test_list_widget_binding(self, qt: QtDriver) -> None:
         """QListWidget should bind currentRow to int values."""
@@ -938,14 +938,14 @@ class TestAllWidgetBindings:
 
         @widget()
         class Editor(QWidget, Widget[Model]):
-            model: Model = make(Model)
+            record: Model = make(Model)
             proxy: ObservableProxy[Model] = make_later()
             list_widget: QListWidget = make(QListWidget, bind="proxy.selected_index")
 
             @override
             def configure(self) -> None:
                 self.list_widget.addItems(["Item 1", "Item 2", "Item 3"])
-                self.proxy = ObservableProxy(self.model, sync=True)
+                self.proxy = ObservableProxy(self.record, sync=True)
 
         w = Editor()
         qt.track(w)
@@ -954,4 +954,4 @@ class TestAllWidgetBindings:
         assert_that(w.list_widget.currentRow()).is_equal_to(1)
 
         w.list_widget.setCurrentRow(2)
-        assert_that(w.model.selected_index).is_equal_to(2)
+        assert_that(w.record.selected_index).is_equal_to(2)

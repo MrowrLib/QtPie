@@ -505,6 +505,6 @@ class UserForm(QWidget):
 - **[Getting Started](start/hello-world.md)** - Build your first QtPie app
 - **[Reactive State](data/state.md)** - Deep dive into `state()`
 - **[Format Expressions](data/format.md)** - All format binding features
-- **[Model Widgets](data/model-widgets.md)** - `Widget[T]` pattern
+- **[Record Widgets](data/record-widgets.md)** - `Widget[T]` pattern
 - **[Validation](data/validation.md)** - Form validation in detail
 - **[Windows & Menus](guides/windows-menus.md)** - Building desktop apps

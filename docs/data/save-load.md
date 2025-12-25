@@ -206,7 +206,7 @@ See [Dirty Tracking](dirty.md) for more details.
 
 ## See Also
 
-- [Model Widgets](model-widgets.md) - Understanding `Widget[T]`
+- [Record Widgets](record-widgets.md) - Understanding `Widget[T]`
 - [Dirty Tracking](dirty.md) - Track which fields changed
 - [Validation](validation.md) - Validate before saving
 - [Observant Integration](../guides/observant.md) - Understanding the reactive layer

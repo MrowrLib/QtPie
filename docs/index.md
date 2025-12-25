@@ -134,7 +134,7 @@ class PersonEditor(QWidget, Widget[Person]):
     age: QSpinBox = make(QSpinBox)      # binds to model.age
 ```
 
-[Learn more →](data/model-widgets.md)
+[Learn more →](data/record-widgets.md)
 
 ---
 

@@ -255,4 +255,4 @@ def register_binding[TWidget: QObject, TValue](
 - [bind()](bind.md) - Manual binding function
 - [make()](../factories/make.md) - Factory function with `bind` and `bind_prop` parameters
 - [Widget[T]](widget-base.md) - Base class for model-bound widgets
-- [Data Binding Guide](../../data/model-widgets.md) - Complete guide to data binding
+- [Data Binding Guide](../../data/record-widgets.md) - Complete guide to data binding

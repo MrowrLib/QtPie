@@ -170,7 +170,7 @@ class UserEditor(QWidget, Widget[User]):
 
 ## See Also
 
-- [Model Widgets](model-widgets.md) - Understanding `Widget[T]`
+- [Record Widgets](record-widgets.md) - Understanding `Widget[T]`
 - [Dirty Tracking](dirty.md) - Detect unsaved changes
 - [Validation](validation.md) - Validate field values
 - [@widget decorator](../reference/decorators/widget.md) - Full decorator API

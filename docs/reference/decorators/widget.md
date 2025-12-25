@@ -142,7 +142,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 editor = PersonEditor()
 editor.name.setText("Alice")
-print(editor.model.name)  # "Alice" - auto-synced!
+print(editor.record.name)  # "Alice" - auto-synced!
 ```
 
 **Example with auto_bind=False:**
@@ -155,12 +155,12 @@ class PersonEditor(QWidget, Widget[Person]):
 
 editor = PersonEditor()
 editor.name.setText("Bob")
-print(editor.model.name)  # "" - no auto-binding
+print(editor.record.name)  # "" - no auto-binding
 editor.age.setValue(30)
-print(editor.model.age)   # 30 - explicit bind works
+print(editor.record.age)   # 30 - explicit bind works
 ```
 
-See [Model Widgets](../../data/model-widgets.md) for more details.
+See [Record Widgets](../../data/record-widgets.md) for more details.
 
 ### undo
 
@@ -266,9 +266,9 @@ class MyWidget(QWidget, Widget[Person]):
     name_label: QLabel = make(QLabel)
 
     def setup_bindings(self) -> None:
-        # model/model_observable_proxy are auto-created for Widget[T]
+        # model/record_observable_proxy are auto-created for Widget[T]
         # Custom binding logic here
-        bind(self.model_observable_proxy.observable(str, "name"), self.name_label, "text")
+        bind(self.record_observable_proxy.observable(str, "name"), self.name_label, "text")
 ```
 
 ### setup_layout(layout: QLayout)
@@ -420,7 +420,7 @@ class Person:
 )
 class PersonEditor(QWidget, Widget[Person]):
     # Model (auto-created if not specified)
-    model: Person = make(Person, name="Alice", age=30)
+    record: Person = make(Person, name="Alice", age=30)
 
     # Form fields (auto-bind to model.name and model.age)
     name: QLineEdit = make(QLineEdit)
@@ -434,24 +434,24 @@ class PersonEditor(QWidget, Widget[Person]):
     undo_btn: QPushButton = make(QPushButton, "Undo", clicked=lambda: self.undo("name"))
 
     def setup(self) -> None:
-        print(f"Editing: {self.model.name}")
+        print(f"Editing: {self.record.name}")
 
     def setup_layout(self, layout: QLayout) -> None:
         layout.setSpacing(10)
 
     def save(self) -> None:
-        print(f"Saving {self.model.name}, age {self.model.age}")
+        print(f"Saving {self.record.name}, age {self.record.age}")
 
 # Usage
 editor = PersonEditor()
 editor.name.setText("Bob")  # Auto-syncs to model.name
-print(editor.model.name)     # "Bob"
+print(editor.record.name)     # "Bob"
 ```
 
 ## See Also
 
 - [Widgets](../../basics/widgets.md) - Basic widget usage guide
 - [Layouts](../../basics/layouts.md) - Layout types and customization
-- [Model Widgets](../../data/model-widgets.md) - Working with `Widget[T]`
+- [Record Widgets](../../data/record-widgets.md) - Working with `Widget[T]`
 - [Data Binding](../../reference/bindings/bind.md) - Manual binding reference
 - [make()](../../reference/factories/make.md) - Widget factory function

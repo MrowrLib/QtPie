@@ -1,10 +1,10 @@
-# Model Widgets
+# Record Widgets
 
-Model widgets bind Qt input widgets to data models automatically. They eliminate boilerplate by using the `Widget[T]` base class with automatic field name matching.
+Record widgets bind Qt input widgets to data records automatically. They eliminate boilerplate by using the `Widget[T]` base class with automatic field name matching.
 
 ## Basic Usage
 
-Create a model widget by inheriting from `Widget[T]` where `T` is your data model type:
+Create a record widget by inheriting from `Widget[T]` where `T` is your data record type:
 
 ```python
 from dataclasses import dataclass
@@ -18,48 +18,48 @@ class Person:
 
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
-    age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
+    name: QLineEdit = make(QLineEdit)  # auto-binds to record.name
+    age: QSpinBox = make(QSpinBox)      # auto-binds to record.age
 ```
 
-That's it! Widget fields automatically bind to model properties with matching names. Changes flow both ways: widget → model and model → widget.
+That's it! Widget fields automatically bind to record properties with matching names. Changes flow both ways: widget → record and record → widget.
 
 ## How Auto-Binding Works
 
 When you use `Widget[T]`:
 
-1. **Model is auto-created** - A `T()` instance is created automatically
-2. **Proxy is auto-created** - An [ObservableProxy[T]](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wraps the model
-3. **Fields auto-bind by name** - Widget fields bind to model properties with the same name
+1. **Record is auto-created** - A `T()` instance is created automatically
+2. **Proxy is auto-created** - An [ObservableProxy[T]](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wraps the record
+3. **Fields auto-bind by name** - Widget fields bind to record properties with the same name
 
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    name: QLineEdit = make(QLineEdit)  # binds to model.name
-    age: QSpinBox = make(QSpinBox)      # binds to model.age
-    # extra_widget: QLabel - won't auto-bind (no matching model field)
+    name: QLineEdit = make(QLineEdit)  # binds to record.name
+    age: QSpinBox = make(QSpinBox)      # binds to record.age
+    # extra_widget: QLabel - won't auto-bind (no matching record field)
 
 editor = PersonEditor()
 
-# Use the auto-created model and model_observable_proxy
-print(editor.model.name)  # ""
-print(editor.model_observable_proxy)       # ObservableProxy[Person]
+# Use the auto-created record and record_observable_proxy
+print(editor.record.name)  # ""
+print(editor.record_observable_proxy)       # ObservableProxy[Person]
 
 # Changes sync both ways
 editor.name.setText("Alice")
-print(editor.model.name)  # "Alice"
+print(editor.record.name)  # "Alice"
 
-editor.model_observable_proxy.observable(int, "age").set(30)
+editor.record_observable_proxy.observable(int, "age").set(30)
 print(editor.age.value())  # 30
 ```
 
-## model and model_observable_proxy Attributes
+## record and record_observable_proxy Attributes
 
 Every `Widget[T]` has two attributes:
 
-### model: T
+### record: T
 
-The underlying data model instance. This is a plain dataclass (or any object):
+The underlying data record instance. This is a plain dataclass (or any object):
 
 ```python
 @widget
@@ -67,19 +67,19 @@ class DogEditor(QWidget, Widget[Dog]):
     name: QLineEdit = make(QLineEdit)
 
 editor = DogEditor()
-print(editor.model)  # Dog(name="", breed="")
-print(type(editor.model))  # <class 'Dog'>
+print(editor.record)  # Dog(name="", breed="")
+print(type(editor.record))  # <class 'Dog'>
 ```
 
-### model_observable_proxy: ObservableProxy[T]
+### record_observable_proxy: ObservableProxy[T]
 
-An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system:
+An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the record that enables reactive bindings. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system:
 
 ```python
 editor = DogEditor()
 
-# Access model fields through proxy observables
-name_obs = editor.model_observable_proxy.observable(str, "name")
+# Access record fields through proxy observables
+name_obs = editor.record_observable_proxy.observable(str, "name")
 name_obs.on_change(lambda value: print(f"Name changed to: {value}"))
 
 # Setting through proxy triggers observers
@@ -89,16 +89,16 @@ name_obs.set("Buddy")  # prints: "Name changed to: Buddy"
 print(editor.name.text())  # "Buddy"
 ```
 
-## Custom Model Initialization
+## Custom Record Initialization
 
 ### Using make()
 
-Provide initial values by using `make()` with your model type:
+Provide initial values by using `make()` with your record type:
 
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make(Person, name="Bob", age=25)
+    record: Person = make(Person, name="Bob", age=25)
     name: QLineEdit = make(QLineEdit)
     age: QSpinBox = make(QSpinBox)
 
@@ -114,14 +114,14 @@ For dynamic initialization in the `setup()` hook:
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make_later()
+    record: Person = make_later()
     name: QLineEdit = make(QLineEdit)
 
     def setup(self) -> None:
         # Load from database, file, etc.
-        self.model = load_person_from_db()
+        self.record = load_person_from_db()
 
-editor = PersonEditor()  # model is set during initialization
+editor = PersonEditor()  # record is set during initialization
 ```
 
 **Important**: If you use `make_later()`, you MUST set the field in `setup()`. Otherwise, you'll get a `ValueError`.
@@ -138,7 +138,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 editor = PersonEditor()
 editor.name.setText("Alice")
-print(editor.model.name)  # "" (no binding occurred)
+print(editor.record.name)  # "" (no binding occurred)
 ```
 
 With `auto_bind=False`, you must use explicit `bind=` parameters:
@@ -151,7 +151,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 editor = PersonEditor()
 editor.name_input.setText("Alice")
-print(editor.model.name)  # "Alice" (explicit binding works)
+print(editor.record.name)  # "Alice" (explicit binding works)
 ```
 
 ## Explicit Bindings Override Auto-Binding
@@ -161,21 +161,21 @@ If a field has an explicit `bind=` parameter, it takes precedence over auto-bind
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    # This field has a different name but explicitly binds to model.name
+    # This field has a different name but explicitly binds to record.name
     full_name: QLineEdit = make(QLineEdit, bind="name")
 
-    # Display-only label also bound to model.name
+    # Display-only label also bound to record.name
     name_display: QLabel = make(QLabel, bind="Name: {name}")
 
 editor = PersonEditor()
 editor.full_name.setText("Alice")
-print(editor.model.name)        # "Alice"
+print(editor.record.name)        # "Alice"
 print(editor.name_display.text())  # "Name: Alice"
 ```
 
-## Changing Models at Runtime
+## Changing Records at Runtime
 
-Use `set_model()` to switch to a different model instance:
+Use `set_record()` to switch to a different record instance:
 
 ```python
 @widget
@@ -188,7 +188,7 @@ print(editor.name.text())  # ""
 
 # Switch to a different person
 new_person = Person(name="Charlie", age=40)
-editor.set_model(new_person)
+editor.set_record(new_person)
 
 print(editor.name.text())  # "Charlie"
 print(editor.age.value())  # 40
@@ -205,12 +205,12 @@ class SimpleWidget(QWidget, Widget):
     input: QLineEdit = make(QLineEdit)
 
 widget = SimpleWidget()
-# No model or proxy attributes
-print(hasattr(widget, "model"))  # False
-print(hasattr(widget, "model_observable_proxy"))  # False
+# No record or proxy attributes
+print(hasattr(widget, "record"))  # False
+print(hasattr(widget, "record_observable_proxy"))  # False
 ```
 
-This is useful when you don't need model binding but want to use the lifecycle hooks from `Widget`.
+This is useful when you don't need record binding but want to use the lifecycle hooks from `Widget`.
 
 ## Supported Widget Types
 
@@ -221,14 +221,14 @@ Auto-binding works with all registered widget types:
 | `QLineEdit` | `text` | Two-way |
 | `QTextEdit` | `text` | Two-way |
 | `QPlainTextEdit` | `text` | Two-way |
-| `QLabel` | `text` | One-way (model → widget) |
+| `QLabel` | `text` | One-way (record → widget) |
 | `QSpinBox` | `value` (int) | Two-way |
 | `QDoubleSpinBox` | `value` (float) | Two-way |
 | `QCheckBox` | `checked` (bool) | Two-way |
 | `QRadioButton` | `checked` (bool) | Two-way |
 | `QSlider` | `value` (int) | Two-way |
 | `QDial` | `value` (int) | Two-way |
-| `QProgressBar` | `value` (int) | One-way (model → widget) |
+| `QProgressBar` | `value` (int) | One-way (record → widget) |
 | `QComboBox` | `currentText` | Two-way |
 | `QDateEdit` | `date` (QDate) | Two-way |
 | `QTimeEdit` | `time` (QTime) | Two-way |
@@ -254,8 +254,8 @@ class Person:
 
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    # Custom initial model
-    model: Person = make(Person, name="Alice", age=30, active=True)
+    # Custom initial record
+    record: Person = make(Person, name="Alice", age=30, active=True)
 
     # Auto-bound fields (by matching names)
     name: QLineEdit = make(QLineEdit)
@@ -265,20 +265,20 @@ class PersonEditor(QWidget, Widget[Person]):
 # Use it
 editor = PersonEditor()
 
-# Initial values from custom model
+# Initial values from custom record
 print(editor.name.text())       # "Alice"
 print(editor.age.value())       # 30
 print(editor.active.isChecked()) # True
 
 # Changes sync automatically
 editor.name.setText("Bob")
-print(editor.model.name)        # "Bob"
+print(editor.record.name)        # "Bob"
 
 editor.age.setValue(25)
-print(editor.model.age)         # 25
+print(editor.record.age)         # 25
 
 # Change via proxy
-editor.model_observable_proxy.observable(bool, "active").set(False)
+editor.record_observable_proxy.observable(bool, "active").set(False)
 print(editor.active.isChecked()) # False
 ```
 
@@ -286,9 +286,9 @@ print(editor.active.isChecked()) # False
 
 - [Reactive State](state.md) - Using `state()` for reactive properties
 - [Format Expressions](format.md) - Binding with format strings
-- [Validation](validation.md) - Adding validators to model fields
+- [Validation](validation.md) - Adding validators to record fields
 - [Dirty Tracking](dirty.md) - Tracking which fields changed
-- [Undo & Redo](undo.md) - Enabling undo/redo on model fields
-- [Save & Load](save-load.md) - Saving and loading model data
+- [Undo & Redo](undo.md) - Enabling undo/redo on record fields
+- [Save & Load](save-load.md) - Saving and loading record data
 - [Widget[T] Reference](../reference/bindings/widget-base.md) - Full API reference
 - [Observant Integration](../guides/observant.md) - Understanding the reactive layer

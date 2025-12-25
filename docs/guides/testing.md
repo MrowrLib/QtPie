@@ -320,9 +320,9 @@ def test_multi_var_format(qt: QtDriver) -> None:
     assert w.label.text() == "5 + 20 = 25"
 ```
 
-## Testing Model Widgets
+## Testing Record Widgets
 
-Test Widget[T] with model/model_observable_proxy.
+Test Widget[T] with model/record_observable_proxy.
 
 ```python
 def test_model_widget(qt: QtDriver) -> None:
@@ -342,12 +342,12 @@ def test_model_widget(qt: QtDriver) -> None:
     qt.track(w)
 
     # Model -> Widget
-    w.model_observable_proxy.observable(str, "name").set("Buddy")
+    w.record_observable_proxy.observable(str, "name").set("Buddy")
     assert w.name_edit.text() == "Buddy"
 
     # Widget -> Model
     w.age_spin.setValue(3)
-    assert w.model.age == 3
+    assert w.record.age == 3
 ```
 
 ## Testing Lifecycle Hooks
@@ -672,6 +672,6 @@ w.on_click()
 ## See Also
 
 - [Reactive State](../data/state.md) - Testing state() fields
-- [Model Widgets](../data/model-widgets.md) - Testing Widget[T]
+- [Record Widgets](../data/record-widgets.md) - Testing Widget[T]
 - [Signals](../basics/signals.md) - Signal connection patterns
 - [Format Expressions](../data/format.md) - Testing format bindings

@@ -206,7 +206,7 @@ class Editor(QWidget, Widget[Person]):
     age_spin: QSpinBox = make(QSpinBox, bind="age")
 ```
 
-These bind to the auto-created `model_observable_proxy` under the hood.
+These bind to the auto-created `record_observable_proxy` under the hood.
 
 ### Nested Property Binding
 

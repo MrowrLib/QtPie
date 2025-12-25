@@ -37,7 +37,7 @@ The field is uninitialized until you set it in `setup()`.
 
 ## Common Use Case: Secondary ObservableProxy
 
-**Note:** For `Widget[T]` classes, QtPie automatically creates `model` and `model_observable_proxy` - you don't need `make_later()` for the default case.
+**Note:** For `Widget[T]` classes, QtPie automatically creates `model` and `record_observable_proxy` - you don't need `make_later()` for the default case.
 
 Use `make_later()` when you need a **secondary** proxy for a different model:
 
@@ -57,7 +57,7 @@ class Owner:
 
 @widget()
 class DogEditor(QWidget, Widget[Dog]):
-    # model and model_observable_proxy for Dog are auto-created
+    # model and record_observable_proxy for Dog are auto-created
     name_edit: QLineEdit = make(QLineEdit, bind="name")  # binds to Dog
 
     # Secondary model needs make_later() for its proxy
@@ -81,12 +81,12 @@ When using `Widget[T]`, you can defer model initialization:
 ```python
 @widget()
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make_later()  # Will be set in setup()
+    record: Person = make_later()  # Will be set in setup()
     name: QLineEdit = make(QLineEdit)
 
     def setup(self) -> None:
         # Custom model initialization
-        self.model = Person(name="Charlie", age=25)
+        self.record = Person(name="Charlie", age=25)
 ```
 
 ### Error Handling
@@ -96,7 +96,7 @@ If you use `make_later()` for the model but **forget** to set it in `setup()`, Q
 ```python
 @widget()
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make_later()
+    record: Person = make_later()
     name: QLineEdit = make(QLineEdit)
     # Oops! No setup() method
 
@@ -126,7 +126,7 @@ class Cat:
 
 @widget()
 class PetEditor(QWidget, Widget[Dog]):
-    # Dog's model/model_observable_proxy are auto-created
+    # Dog's model/record_observable_proxy are auto-created
     dog_name: QLineEdit = make(QLineEdit, bind="name")  # binds to Dog
 
     # Cat needs manual proxy setup

@@ -64,7 +64,7 @@ nav:
   - Data & Forms:
       - Reactive State: data/state.md
       - Format Expressions: data/format.md
-      - Model Widgets: data/model-widgets.md
+      - Record Widgets: data/record-widgets.md
       - Validation: data/validation.md
       - Dirty Tracking: data/dirty.md
       - Undo & Redo: data/undo.md

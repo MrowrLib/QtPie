@@ -297,6 +297,6 @@ For labels and read-only text, format expressions are perfect. For input widgets
 ## See Also
 
 - [Reactive State](state.md) - Using `state()` to create reactive fields
-- [Model Widgets](model-widgets.md) - Working with `Widget[T]` for form binding
+- [Record Widgets](record-widgets.md) - Working with `Widget[T]` for form binding
 - [make()](../reference/factories/make.md) - The `bind` parameter in detail
 - [Observant Integration](../guides/observant.md) - Understanding the reactive layer

@@ -309,7 +309,7 @@ class PersonEditor(QWidget, Widget[Person]):
     name: QLineEdit = make(QLineEdit, bind="name")
 ```
 
-[Full Widget[T] reference →](../reference/bindings/widget-base.md) | [Model Widgets guide →](../data/model-widgets.md)
+[Full Widget[T] reference →](../reference/bindings/widget-base.md) | [Record Widgets guide →](../data/record-widgets.md)
 
 ---
 
@@ -486,5 +486,5 @@ Now that you understand the core concepts, explore:
 - **[Widgets](../basics/widgets.md)** - Deep dive into @widget
 - **[Layouts](../basics/layouts.md)** - Vertical, horizontal, form, grid layouts
 - **[Reactive State](../data/state.md)** - Master state() and format expressions
-- **[Model Widgets](../data/model-widgets.md)** - Build forms with Widget[T]
+- **[Record Widgets](../data/record-widgets.md)** - Build forms with Widget[T]
 - **[Styling](../basics/styling.md)** - CSS classes and SCSS support

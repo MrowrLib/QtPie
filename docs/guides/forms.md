@@ -88,7 +88,7 @@ class DogEditor(QWidget, Widget[Dog]):
 
 The `name` and `age` fields automatically bind to the model. When you edit the form, the `info` label updates in real-time.
 
-See [Model Widgets](../data/model-widgets.md) for more on data binding.
+See [Record Widgets](../data/record-widgets.md) for more on data binding.
 
 ## Fields Without Labels
 
@@ -290,7 +290,7 @@ class UserProfileEditor(QWidget, Widget[User]):
 ## See Also
 
 - [Layouts](../basics/layouts.md) - Overview of all layout types
-- [Model Widgets](../data/model-widgets.md) - Binding forms to data models
+- [Record Widgets](../data/record-widgets.md) - Binding forms to data models
 - [Validation](../data/validation.md) - Validating form input
 - [Styling](../basics/styling.md) - Styling forms with CSS
 - [Grid Layouts Guide](grids.md) - For more complex positioning needs

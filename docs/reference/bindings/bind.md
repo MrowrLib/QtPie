@@ -299,7 +299,7 @@ class DogEditor(QWidget, Widget[Dog]):
 
     def setup_bindings(self) -> None:
         # Manual binding - verbose!
-        bind(self.model_observable_proxy.observable(str, "name"), self.name_edit)
+        bind(self.record_observable_proxy.observable(str, "name"), self.name_edit)
 ```
 
 ### Do This
@@ -319,7 +319,7 @@ class DogEditor(QWidget, Widget[Dog]):
     name_edit: QLineEdit = make(QLineEdit, bind="name")
 ```
 
-Much cleaner! The `Widget[Dog]` base class creates the `model_observable_proxy` automatically, and `bind="name"` expands to `bind="model_observable_proxy.name"` behind the scenes.
+Much cleaner! The `Widget[Dog]` base class creates the `record_observable_proxy` automatically, and `bind="name"` expands to `bind="record_observable_proxy.name"` behind the scenes.
 
 ## API Reference
 
@@ -349,6 +349,6 @@ None. The function sets up the binding as a side effect.
 
 - [make()](../factories/make.md) - Preferred way to create bindings with `bind` parameter
 - [register_binding()](register.md) - Register custom widget bindings
-- [Widget[T]](widget-base.md) - Base class that auto-creates `model_observable_proxy` for model editing
+- [Widget[T]](widget-base.md) - Base class that auto-creates `record_observable_proxy` for model editing
 - [Reactive State](../../data/state.md) - Reactive state with `state()` function
-- [Model Widgets](../../data/model-widgets.md) - Using `Widget[T]` for forms
+- [Record Widgets](../../data/record-widgets.md) - Using `Widget[T]` for forms

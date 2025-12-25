@@ -414,5 +414,5 @@ State is powered by [Observant](https://mrowrlib.github.io/observant.py/)'s [Obs
 - [make()](make.md) - Widget factory with bind parameter
 - [Reactive State guide](../../data/state.md) - Detailed guide with more examples
 - [Format Expressions guide](../../data/format.md) - Deep dive into format bindings
-- [Model Widgets](../../data/model-widgets.md) - Widget[T] for form editing
+- [Record Widgets](../../data/record-widgets.md) - Widget[T] for form editing
 - [Observant Integration](../../guides/observant.md) - Understanding the reactive layer

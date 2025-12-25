@@ -224,7 +224,7 @@ errors = self.validation_for("password").get()
 
 ## See Also
 
-- [Model Widgets](model-widgets.md) - Understanding `Widget[T]`
+- [Record Widgets](record-widgets.md) - Understanding `Widget[T]`
 - [Dirty Tracking](dirty.md) - Detect unsaved changes
 - [Save & Load](save-load.md) - Persisting form data
 - [Reactive State](state.md) - Observable state management

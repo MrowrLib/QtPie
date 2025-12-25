@@ -1,4 +1,4 @@
-"""Widget base class - optional mixin with model binding support."""
+"""Widget base class - optional mixin with record binding support."""
 
 from collections.abc import Callable
 from typing import Any, cast, get_args, get_origin
@@ -11,50 +11,50 @@ from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 
 class Widget[T = None]:
     """
-    Base class for widgets with optional model binding.
+    Base class for widgets with optional record binding.
 
     Widget can be used in two ways:
 
-    1. **Without type parameter** - Just a mixin, no model binding:
+    1. **Without type parameter** - Just a mixin, no record binding:
        ```python
        @widget()
        class SimpleWidget(QWidget, Widget):
            label: QLabel = make(QLabel, "Hello")
        ```
 
-    2. **With type parameter** - Enables automatic model binding:
+    2. **With type parameter** - Enables automatic record binding:
        ```python
        @widget()
        class DogEditor(QWidget, Widget[Dog]):
-           name: QLineEdit = make(QLineEdit)  # auto-binds to model.name
-           age: QSpinBox = make(QSpinBox)      # auto-binds to model.age
+           name: QLineEdit = make(QLineEdit)  # auto-binds to record.name
+           age: QSpinBox = make(QSpinBox)      # auto-binds to record.age
        ```
 
     When a type parameter is provided:
-    - Model is auto-created as `T()` by default
-    - Custom model via `model: Dog = make(Dog, name="Buddy")`
-    - Manual setup via `model: Dog = make_later()` + set in `setup()`
-    - `ObservableProxy` is auto-created wrapping the model
-    - Widget fields auto-bind to model properties by matching names
+    - Record is auto-created as `T()` by default
+    - Custom record via `record: Dog = make(Dog, name="Buddy")`
+    - Manual setup via `record: Dog = make_later()` + set in `setup()`
+    - `ObservableProxy` is auto-created wrapping the record
+    - Widget fields auto-bind to record properties by matching names
     """
 
     # Type hints for IDE - actual fields are created by @widget decorator
-    model: T
-    model_observable_proxy: ObservableProxy[T]
+    record: T
+    record_observable_proxy: ObservableProxy[T]
 
-    def set_model(self, model: T) -> None:
+    def set_record(self, record: T) -> None:
         """
-        Set a new model and rebind all widgets.
+        Set a new record and rebind all widgets.
 
-        This allows changing the model after widget creation.
+        This allows changing the record after widget creation.
         """
-        self.model = model
-        self.model_observable_proxy = ObservableProxy(model, sync=True)
+        self.record = record
+        self.record_observable_proxy = ObservableProxy(record, sync=True)
         # Rebind widgets - this is called by the decorator
-        self._rebind_model_widgets()
+        self._rebind_record_widgets()
 
-    def _rebind_model_widgets(self) -> None:
-        """Rebind all auto-bound widgets to the new model. Called internally."""
+    def _rebind_record_widgets(self) -> None:
+        """Rebind all auto-bound widgets to the new record. Called internally."""
         # This will be implemented by the @widget decorator processing
         pass
 
@@ -89,12 +89,12 @@ class Widget[T = None]:
             cast(QWidget, self).setStyleSheet(stylesheet)
 
     # =========================================================================
-    # Validation - delegate to self.model_observable_proxy
+    # Validation - delegate to self.record_observable_proxy
     # =========================================================================
 
     def add_validator(self, field: str, validator: Callable[[Any], str | None]) -> None:
         """
-        Add a validator to a model field.
+        Add a validator to a record field.
 
         Args:
             field: The field name to validate.
@@ -105,7 +105,7 @@ class Widget[T = None]:
             self.add_validator("name", lambda v: "Required" if not v else None)
             self.add_validator("age", lambda v: "Must be 18+" if v < 18 else None)
         """
-        self.model_observable_proxy.add_validator(field, validator)
+        self.record_observable_proxy.add_validator(field, validator)
 
     def is_valid(self) -> Any:
         """
@@ -117,7 +117,7 @@ class Widget[T = None]:
         Example:
             self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
         """
-        return self.model_observable_proxy.is_valid()
+        return self.record_observable_proxy.is_valid()
 
     def validation_for(self, field: str) -> Any:
         """
@@ -132,7 +132,7 @@ class Widget[T = None]:
         Example:
             self.validation_for("email").on_change(self.show_email_errors)
         """
-        return self.model_observable_proxy.validation_for(field)
+        return self.record_observable_proxy.validation_for(field)
 
     def validation_errors(self) -> Any:
         """
@@ -146,10 +146,10 @@ class Widget[T = None]:
             for field, messages in errors.items():
                 print(f"{field}: {', '.join(messages)}")
         """
-        return self.model_observable_proxy.validation_errors()
+        return self.record_observable_proxy.validation_errors()
 
     # =========================================================================
-    # Dirty Tracking - delegate to self.model_observable_proxy
+    # Dirty Tracking - delegate to self.record_observable_proxy
     # =========================================================================
 
     def is_dirty(self) -> bool:
@@ -163,7 +163,7 @@ class Widget[T = None]:
             if self.is_dirty():
                 self.status.setText("Modified")
         """
-        return self.model_observable_proxy.is_dirty()
+        return self.record_observable_proxy.is_dirty()
 
     def dirty_fields(self) -> set[str]:
         """
@@ -176,20 +176,20 @@ class Widget[T = None]:
             for field in self.dirty_fields():
                 print(f"Modified: {field}")
         """
-        return self.model_observable_proxy.dirty_fields()
+        return self.record_observable_proxy.dirty_fields()
 
     def reset_dirty(self) -> None:
         """
         Reset dirty state, making current values the new baseline.
 
         Example:
-            self.save_to(self.model)
+            self.save_to(self.record)
             self.reset_dirty()  # Mark all fields as clean
         """
-        self.model_observable_proxy.reset_dirty()
+        self.record_observable_proxy.reset_dirty()
 
     # =========================================================================
-    # Undo/Redo - delegate to self.model_observable_proxy
+    # Undo/Redo - delegate to self.record_observable_proxy
     # =========================================================================
 
     def undo(self, field: str) -> None:
@@ -206,7 +206,7 @@ class Widget[T = None]:
             if self.can_undo("name"):
                 self.undo("name")
         """
-        self.model_observable_proxy.undo(field)
+        self.record_observable_proxy.undo(field)
 
     def redo(self, field: str) -> None:
         """
@@ -222,7 +222,7 @@ class Widget[T = None]:
             if self.can_redo("name"):
                 self.redo("name")
         """
-        self.model_observable_proxy.redo(field)
+        self.record_observable_proxy.redo(field)
 
     def can_undo(self, field: str) -> bool:
         """
@@ -237,7 +237,7 @@ class Widget[T = None]:
         Example:
             self.undo_btn.setEnabled(self.can_undo("name"))
         """
-        return self.model_observable_proxy.can_undo(field)
+        return self.record_observable_proxy.can_undo(field)
 
     def can_redo(self, field: str) -> bool:
         """
@@ -252,26 +252,26 @@ class Widget[T = None]:
         Example:
             self.redo_btn.setEnabled(self.can_redo("name"))
         """
-        return self.model_observable_proxy.can_redo(field)
+        return self.record_observable_proxy.can_redo(field)
 
     # =========================================================================
-    # Save/Load - delegate to self.model_observable_proxy
+    # Save/Load - delegate to self.record_observable_proxy
     # =========================================================================
 
     def save_to(self, target: T) -> None:
         """
-        Save the current proxy state to a model instance.
+        Save the current proxy state to a record instance.
 
         This copies all field values from the proxy to the target.
 
         Args:
-            target: The model instance to save to.
+            target: The record instance to save to.
 
         Example:
-            self.save_to(self.model)  # Save back to original model
-            self.save_to(new_user)    # Save to a different instance
+            self.save_to(self.record)  # Save back to original record
+            self.save_to(new_user)     # Save to a different instance
         """
-        self.model_observable_proxy.save_to(target)
+        self.record_observable_proxy.save_to(target)
 
     def load_dict(self, data: dict[str, Any]) -> None:
         """
@@ -283,7 +283,7 @@ class Widget[T = None]:
         Example:
             self.load_dict({"name": "Alice", "age": 30})
         """
-        self.model_observable_proxy.load_dict(data)
+        self.record_observable_proxy.load_dict(data)
 
 
 def get_model_type_from_widget[T](cls: type[Widget[T]]) -> type[T] | None:

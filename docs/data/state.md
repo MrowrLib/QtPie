@@ -378,7 +378,7 @@ You don't need to understand this to use it. Just remember:
 ## See Also
 
 - [Format Expressions](format.md) - More on format string bindings
-- [Model Widgets](model-widgets.md) - `Widget[T]` for form editing
+- [Record Widgets](record-widgets.md) - `Widget[T]` for form editing
 - [Signals](../basics/signals.md) - Connecting buttons and actions
 - [`make()`](../reference/factories/make.md) - Widget factory with bind parameter
 - [Observant Integration](../guides/observant.md) - Understanding the reactive layer

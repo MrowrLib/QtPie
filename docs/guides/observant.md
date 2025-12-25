@@ -127,7 +127,7 @@ Use Observant directly when you need:
 ## See Also
 
 - [Reactive State](../data/state.md) - Using `state()` for reactive fields
-- [Model Widgets](../data/model-widgets.md) - Using `Widget[T]` for forms
+- [Record Widgets](../data/record-widgets.md) - Using `Widget[T]` for forms
 - [Validation](../data/validation.md) - Field validation
 - [Dirty Tracking](../data/dirty.md) - Change detection
 - [Undo & Redo](../data/undo.md) - History management

@@ -1,13 +1,13 @@
 # Widget[T] Base Class
 
-The `Widget[T]` base class is the foundation of model-driven widgets in QtPie. It provides automatic model binding, validation, dirty tracking, undo/redo, and save/load functionality.
+The `Widget[T]` base class is the foundation of model-driven widgets in QtPie. It provides automatic record binding, validation, dirty tracking, undo/redo, and save/load functionality.
 
 ## Overview
 
 `Widget[T]` can be used in two ways:
 
-1. **Without type parameter** - Just a mixin, no model binding
-2. **With type parameter** - Enables automatic model binding and reactive features
+1. **Without type parameter** - Just a mixin, no record binding
+2. **With type parameter** - Enables automatic record binding and reactive features
 
 ```python
 from dataclasses import dataclass
@@ -27,17 +27,17 @@ class Person:
 
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    name: QLineEdit = make(QLineEdit)  # Auto-binds to model.name
-    age: QSpinBox = make(QSpinBox)      # Auto-binds to model.age
+    name: QLineEdit = make(QLineEdit)  # Auto-binds to record.name
+    age: QSpinBox = make(QSpinBox)      # Auto-binds to record.age
 ```
 
-## Model & Observable Proxy Attributes
+## Record & Observable Proxy Attributes
 
 When using `Widget[T]`, two key attributes are automatically created:
 
-### `model: T`
+### `record: T`
 
-The underlying data model. This is the source of truth for your data.
+The underlying data record. This is the source of truth for your data.
 
 ```python
 @widget
@@ -45,8 +45,8 @@ class PersonEditor(QWidget, Widget[Person]):
     name: QLineEdit = make(QLineEdit)
 
 w = PersonEditor()
-print(w.model.name)  # Access model directly
-w.model.name = "Bob"  # Direct assignment (won't trigger UI update)
+print(w.record.name)  # Access model directly
+w.record.name = "Bob"  # Direct assignment (won't trigger UI update)
 ```
 
 **Model Creation:**
@@ -60,7 +60,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
 w = PersonEditor()
 # model = Person() automatically created
-assert w.model.name == ""
+assert w.record.name == ""
 ```
 
 **Custom Model:**
@@ -70,11 +70,11 @@ Use `make()` to provide a custom initial model:
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make(Person, name="Alice", age=30)
+    record: Person = make(Person, name="Alice", age=30)
     name: QLineEdit = make(QLineEdit)
 
 w = PersonEditor()
-assert w.model.name == "Alice"
+assert w.record.name == "Alice"
 ```
 
 **Deferred Initialization:**
@@ -84,14 +84,14 @@ Use `make_later()` for manual setup:
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make_later()
+    record: Person = make_later()
     name: QLineEdit = make(QLineEdit)
 
     def setup(self) -> None:
-        self.model = Person(name="Charlie", age=25)
+        self.record = Person(name="Charlie", age=25)
 ```
 
-### `model_observable_proxy: ObservableProxy[T]`
+### `record_observable_proxy: ObservableProxy[T]`
 
 An [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/) wrapper around the model that enables reactive bindings. Changes to the proxy automatically update bound widgets, and widget changes update the proxy. See [Observant](https://mrowrlib.github.io/observant.py/) ([PyPI](https://pypi.org/project/observant/)) for more on the underlying reactive system.
 
@@ -103,13 +103,13 @@ class PersonEditor(QWidget, Widget[Person]):
 w = PersonEditor()
 
 # Changes via proxy trigger UI updates
-w.model_observable_proxy.observable(str, "name").set("Alice")
+w.record_observable_proxy.observable(str, "name").set("Alice")
 assert w.name.text() == "Alice"
 
 # Widget changes update the proxy (and model)
 w.name.setText("Bob")
-assert w.model_observable_proxy.observable(str, "name").get() == "Bob"
-assert w.model.name == "Bob"
+assert w.record_observable_proxy.observable(str, "name").get() == "Bob"
+assert w.record.name == "Bob"
 ```
 
 ## Automatic Binding
@@ -137,9 +137,9 @@ w = PersonEditor()
 
 # Two-way binding works automatically:
 w.name.setText("Alice")
-assert w.model.name == "Alice"
+assert w.record.name == "Alice"
 
-w.model_observable_proxy.observable(int, "age").set(30)
+w.record_observable_proxy.observable(int, "age").set(30)
 assert w.age.value() == 30
 ```
 
@@ -156,18 +156,18 @@ class PersonEditor(QWidget, Widget[Person]):
 w = PersonEditor()
 
 w.name.setText("Alice")
-assert w.model.name == ""  # No binding occurred
+assert w.record.name == ""  # No binding occurred
 
 w.age.setValue(30)
-assert w.model.age == 30  # Explicit binding works
+assert w.record.age == 30  # Explicit binding works
 ```
 
-## set_model()
+## set_record()
 
 Change the model after widget creation and rebind all widgets.
 
 ```python
-def set_model(self, model: T) -> None
+def set_record(self, record: T) -> None
 ```
 
 **Example:**
@@ -183,15 +183,15 @@ assert w.name.text() == ""
 
 # Switch to a different person
 new_person = Person(name="Alice", age=30)
-w.set_model(new_person)
+w.set_record(new_person)
 
-assert w.model == new_person
-assert w.model.name == "Alice"
+assert w.record == new_person
+assert w.record.name == "Alice"
 ```
 
 ## Validation Methods
 
-Validation is powered by the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). All validation methods delegate to `self.model_observable_proxy`.
+Validation is powered by the underlying [ObservableProxy](https://mrowrlib.github.io/observant.py/api_reference/observable_proxy/). All validation methods delegate to `self.record_observable_proxy`.
 
 ### add_validator()
 
@@ -407,7 +407,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
     def save(self) -> None:
         # Save to database...
-        self.save_to(self.model)
+        self.save_to(self.record)
         self.reset_dirty()  # Mark as clean after save
 
 w = PersonEditor()
@@ -428,7 +428,7 @@ class PersonEditor(QWidget, Widget[Person]):
 
     def setup_bindings(self) -> None:
         # Show status when dirty state changes
-        self.model_observable_proxy.is_dirty_observable().on_change(self.update_status)
+        self.record_observable_proxy.is_dirty_observable().on_change(self.update_status)
 
     def update_status(self, dirty: bool) -> None:
         if dirty:
@@ -482,10 +482,10 @@ class TextEditor(QWidget, Widget[Document]):
 w = TextEditor()
 
 w.content.setText("Alice")
-assert w.model_observable_proxy.observable(str, "content").get() == "Alice"
+assert w.record_observable_proxy.observable(str, "content").get() == "Alice"
 
 w.undo("content")
-assert w.model_observable_proxy.observable(str, "content").get() == ""  # Reverted
+assert w.record_observable_proxy.observable(str, "content").get() == ""  # Reverted
 ```
 
 ### redo()
@@ -510,10 +510,10 @@ w = TextEditor()
 
 w.content.setText("Alice")
 w.undo("content")
-assert w.model_observable_proxy.observable(str, "content").get() == ""
+assert w.record_observable_proxy.observable(str, "content").get() == ""
 
 w.redo("content")
-assert w.model_observable_proxy.observable(str, "content").get() == "Alice"  # Restored
+assert w.record_observable_proxy.observable(str, "content").get() == "Alice"  # Restored
 ```
 
 ### can_undo()
@@ -539,7 +539,7 @@ class TextEditor(QWidget, Widget[Document]):
 
     def setup_bindings(self) -> None:
         # Update button state when undo availability changes
-        self.model_observable_proxy.observable(str, "content").on_change(self.update_undo_btn)
+        self.record_observable_proxy.observable(str, "content").on_change(self.update_undo_btn)
 
     def update_undo_btn(self, _: str) -> None:
         self.undo_btn.setEnabled(self.can_undo("content"))
@@ -580,7 +580,7 @@ class TextEditor(QWidget, Widget[Document]):
     redo_btn: QPushButton = make(QPushButton, "Redo", clicked="do_redo")
 
     def setup_bindings(self) -> None:
-        self.model_observable_proxy.observable(str, "content").on_change(self.update_redo_btn)
+        self.record_observable_proxy.observable(str, "content").on_change(self.update_redo_btn)
 
     def update_redo_btn(self, _: str) -> None:
         self.redo_btn.setEnabled(self.can_redo("content"))
@@ -616,7 +616,7 @@ class TextEditor(QWidget, Widget[Document]):
 
     def setup_bindings(self) -> None:
         # Update button states when content changes
-        self.model_observable_proxy.observable(str, "content").on_change(self.update_buttons)
+        self.record_observable_proxy.observable(str, "content").on_change(self.update_buttons)
         self.update_buttons("")  # Initial state
 
     def update_buttons(self, _: str) -> None:
@@ -661,9 +661,9 @@ w.name.setText("Alice")
 w.age.setValue(30)
 
 # Save back to original model
-w.save_to(w.model)
-assert w.model.name == "Alice"
-assert w.model.age == 30
+w.save_to(w.record)
+assert w.record.name == "Alice"
+assert w.record.age == 30
 
 # Save to a different instance
 new_person = Person()
@@ -677,7 +677,7 @@ assert new_person.age == 30
 ```python
 @widget
 class PersonEditor(QWidget, Widget[Person]):
-    model: Person = make_later()  # Set externally
+    record: Person = make_later()  # Set externally
 
     name: QLineEdit = make(QLineEdit)
     age: QSpinBox = make(QSpinBox)
@@ -689,7 +689,7 @@ class PersonEditor(QWidget, Widget[Person]):
     def edit(self, person: Person) -> None:
         """Start editing a person."""
         self.original_model = person
-        self.set_model(Person(name=person.name, age=person.age))  # Work on copy
+        self.set_record(Person(name=person.name, age=person.age))  # Work on copy
 
     def save(self) -> None:
         """Save changes back to original."""
@@ -856,10 +856,10 @@ class UserEditor(QWidget, Widget[User]):
         self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
 
         # Show dirty status
-        self.model_observable_proxy.is_dirty_observable().on_change(self.update_status)
+        self.record_observable_proxy.is_dirty_observable().on_change(self.update_status)
 
         # Update undo/redo buttons
-        self.model_observable_proxy.observable(str, "name").on_change(self.update_undo_buttons)
+        self.record_observable_proxy.observable(str, "name").on_change(self.update_undo_buttons)
 
     def update_status(self, dirty: bool) -> None:
         if dirty:
@@ -873,9 +873,9 @@ class UserEditor(QWidget, Widget[User]):
 
     def save(self) -> None:
         if self.is_valid().get():
-            self.save_to(self.model)
+            self.save_to(self.record)
             self.reset_dirty()
-            print(f"Saved: {self.model}")
+            print(f"Saved: {self.record}")
 
     def do_undo(self) -> None:
         if self.can_undo("name"):
@@ -889,7 +889,7 @@ class UserEditor(QWidget, Widget[User]):
 ## See Also
 
 - [Data Binding with bind()](bind.md) - Manual binding function
-- [Model Widgets Guide](../../data/model-widgets.md) - Using Widget[T] in practice
+- [Record Widgets Guide](../../data/record-widgets.md) - Using Widget[T] in practice
 - [Validation Guide](../../data/validation.md) - Building validated forms
 - [Dirty Tracking Guide](../../data/dirty.md) - Tracking unsaved changes
 - [Undo & Redo Guide](../../data/undo.md) - Implementing undo/redo

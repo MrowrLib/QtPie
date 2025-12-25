@@ -97,9 +97,9 @@ def widget[T](
         classes: CSS-like classes for styling.
         layout: The layout type - "vertical", "horizontal", or "none".
                 Defaults to "vertical".
-        auto_bind: If True (default), Widget[T] fields with names matching model
+        auto_bind: If True (default), Widget[T] fields with names matching record
                    properties are automatically bound. Set to False to disable.
-        undo: If True, enable undo/redo for Widget[T] model fields.
+        undo: If True, enable undo/redo for Widget[T] record fields.
         undo_max: Maximum undo steps to store (default: unlimited).
         undo_debounce_ms: Debounce time for undo recording (useful for text input).
 
@@ -132,9 +132,16 @@ def widget[T](
         # Store undo config on class for _process_model_widget to use
         setattr(cls, UNDO_CONFIG_METADATA_KEY, undo_config)
 
+        # Find the Qt base class to initialize (QFrame, QWidget, etc.)
+        qt_base_class: type[QWidget] = QWidget
+        for base in cls.__bases__:
+            if issubclass(base, QWidget):
+                qt_base_class = base
+                break
+
         def new_init(self: QWidget, *args: object, **kwargs: object) -> None:
-            # Initialize QWidget base class first
-            QWidget.__init__(self)
+            # Initialize the Qt base class first (QFrame, QWidget, etc.)
+            qt_base_class.__init__(self)
 
             # Set translation context for tr[] markers in make() factories
             set_translation_context(cls.__name__)
@@ -254,15 +261,15 @@ def widget[T](
             # Early lifecycle hook (before bindings)
             _call_if_exists(self, "configure")
 
-            # Process ModelWidget if applicable
-            _process_model_widget(self, cls)
+            # Process Widget[T] record if applicable
+            _process_record_widget(self, cls)
 
             # Process data bindings
             _process_bindings(self, cls)
 
-            # Process auto-bindings for ModelWidget (by field name)
+            # Process auto-bindings for Widget[T] (by field name)
             if auto_bind:
-                _process_model_widget_auto_bindings(self, cls)
+                _process_record_widget_auto_bindings(self, cls)
 
             # Late lifecycle hook (after bindings)
             _call_if_exists(self, "setup")
@@ -385,7 +392,7 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
     Handles:
     - Simple state: "count" → [state observable]
     - Nested state: "dog.name" → [nested observable, top-level state observable]
-    - Widget[T] model fields: "name" → [proxy observable for "name"]
+    - Widget[T] record fields: "name" → [proxy observable for "name"]
     """
     from qtpie.widget_base import is_widget_subclass
 
@@ -407,9 +414,9 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
         if obs is not None:
             return [obs]
 
-        # Try Widget[T] model_observable_proxy field
+        # Try Widget[T] record_observable_proxy field
         if is_widget_subclass(type(widget)):
-            proxy = getattr(widget, "model_observable_proxy", None)
+            proxy = getattr(widget, "record_observable_proxy", None)
             if proxy is not None and hasattr(proxy, "observable_for_path"):
                 try:
                     return [proxy.observable_for_path(field_path)]
@@ -433,9 +440,9 @@ def _get_observables_for_field(widget: QWidget, field_path: str) -> list[Any]:
                 result.append(state_proxy.observable_for_path(nested_path))
             return result
 
-        # Try Widget[T] model_observable_proxy for nested paths like "address.city"
+        # Try Widget[T] record_observable_proxy for nested paths like "address.city"
         if is_widget_subclass(type(widget)):
-            proxy = getattr(widget, "model_observable_proxy", None)
+            proxy = getattr(widget, "record_observable_proxy", None)
             if proxy is not None and hasattr(proxy, "observable_for_path"):
                 try:
                     result.append(proxy.observable_for_path(field_path))
@@ -510,7 +517,7 @@ def _process_format_binding(
     - Expressions: {count + 5}, {name.upper()}, {x if x > 0 else 'none'}
     - Format specs: {price:.2f}, {price * 1.1:.2f}
     - self reference: {self.count + 5}
-    - Widget[T] model fields: {name}, {age}
+    - Widget[T] record fields: {name}, {age}
     - Translatable format strings with hot-reload support
 
     Args:
@@ -566,8 +573,8 @@ def _process_format_binding(
     if adapter is None or adapter.setter is None:
         return False
 
-    # Check if this is a Widget[T] with a model_observable_proxy
-    widget_proxy = getattr(widget, "model_observable_proxy", None) if is_widget_subclass(type(widget)) else None
+    # Check if this is a Widget[T] with a record_observable_proxy
+    widget_proxy = getattr(widget, "record_observable_proxy", None) if is_widget_subclass(type(widget)) else None
 
     # Use a mutable container for format_string so hot-reload can update it
     current_format: list[str] = [format_string]
@@ -580,7 +587,7 @@ def _process_format_binding(
         # Add all variable values to context using root names
         for root_name in root_names:
             # For Widget[T], prefer proxy fields over widget attributes
-            # This allows {name} to mean model.name even when there's a QLineEdit named "name"
+            # This allows {name} to mean record.name even when there's a QLineEdit named "name"
             if widget_proxy is not None:
                 try:
                     context[root_name] = widget_proxy.observable(object, root_name).get()
@@ -665,7 +672,7 @@ def _process_single_binding(
     - Format string: bind="Count: {count}" → computed format binding
     - Translatable: bind=tr["Count: {count}"] → translated format binding with hot-reload
     - State field: bind="count" → binds to state(0) field on self
-    - Short form: bind="name" or bind="address.city" → uses self.model_observable_proxy
+    - Short form: bind="name" or bind="address.city" → uses self.record_observable_proxy
     - Explicit form: bind="other_proxy.name" → uses self.other_proxy
     """
     from qtpie.bindings import bind
@@ -714,8 +721,8 @@ def _process_single_binding(
         # Use original path with ?. intact, minus the first segment
         observable_path = bind_path.split(".", 1)[1] if "." in bind_path else ""
     else:
-        # Short form: use default "model_observable_proxy" field (e.g., "name" or "address.city")
-        proxy_field_name = "model_observable_proxy"
+        # Short form: use default "record_observable_proxy" field (e.g., "name" or "address.city")
+        proxy_field_name = "record_observable_proxy"
         observable_path = bind_path
 
     # Handle empty observable path (invalid - can't bind to proxy itself)
@@ -777,8 +784,8 @@ def _process_bindings(widget: QWidget, cls: type[Any]) -> None:
             _process_single_binding(widget, widget_instance, cast(str, bind_spec), default_prop)
 
 
-def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
-    """Process Widget[T] initialization - create model and proxy if type param provided."""
+def _process_record_widget(widget: QWidget, cls: type[Any]) -> None:
+    """Process Widget[T] initialization - create record and proxy if type param provided."""
     # Import here to avoid circular import
     from qtpie.widget_base import (
         get_model_type_from_widget,
@@ -789,44 +796,44 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
     if not is_widget_subclass(cls):
         return
 
-    # Only do model binding if type parameter was provided (Widget[Dog] vs Widget)
+    # Only do record binding if type parameter was provided (Widget[Dog] vs Widget)
     if not has_model_type_param(cls):
         return
 
-    # Check if model field exists
-    model_field = None
+    # Check if record field exists
+    record_field = None
     for f in fields(cls):  # type: ignore[arg-type]
-        if f.name == "model":
-            model_field = f
+        if f.name == "record":
+            record_field = f
             break
 
-    model_instance = None
+    record_instance = None
 
-    if model_field is not None:
-        # User defined a model field
-        is_make_later = model_field.metadata.get(MAKE_LATER_METADATA_KEY, False)
+    if record_field is not None:
+        # User defined a record field
+        is_make_later = record_field.metadata.get(MAKE_LATER_METADATA_KEY, False)
 
         if is_make_later:
             # Check if user set it in configure()
-            current_value = getattr(widget, "model", None)
-            if current_value is None or not hasattr(widget, "model"):
+            current_value = getattr(widget, "record", None)
+            if current_value is None or not hasattr(widget, "record"):
                 raise ValueError(
-                    f"ModelWidget field 'model' was declared with make_later() but not set in configure(). Either set self.model in configure() or use make({cls.__name__}, ...) to provide a factory."
+                    f"Widget field 'record' was declared with make_later() but not set in configure(). Either set self.record in configure() or use make({cls.__name__}, ...) to provide a factory."
                 )
-            model_instance = current_value
+            record_instance = current_value
         else:
             # User used make() - get the created instance
-            model_instance = getattr(widget, "model", None)
+            record_instance = getattr(widget, "record", None)
     else:
-        # No model field defined - auto-create T()
-        model_type = get_model_type_from_widget(cls)
-        if model_type is None:
-            raise ValueError(f"Cannot determine model type for {cls.__name__}. Ensure the class inherits from Widget[YourModelType].")
-        model_instance = model_type()
-        widget.model = model_instance  # type: ignore[attr-defined]
+        # No record field defined - auto-create T()
+        record_type = get_model_type_from_widget(cls)
+        if record_type is None:
+            raise ValueError(f"Cannot determine record type for {cls.__name__}. Ensure the class inherits from Widget[YourRecordType].")
+        record_instance = record_type()
+        widget.record = record_instance  # type: ignore[attr-defined]
 
-    # Create proxy from model
-    if model_instance is not None:
+    # Create proxy from record
+    if record_instance is not None:
         from observant import ObservableProxy
 
         # Get undo config from class metadata
@@ -835,13 +842,13 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
         undo_max = undo_config.get("undo_max")
         undo_debounce_ms = undo_config.get("undo_debounce_ms")
 
-        proxy = ObservableProxy(model_instance, sync=True, undo=undo_enabled)
-        widget.model_observable_proxy = proxy  # type: ignore[attr-defined]
+        proxy = ObservableProxy(record_instance, sync=True, undo=undo_enabled)
+        widget.record_observable_proxy = proxy  # type: ignore[attr-defined]
 
         # Apply per-field undo config if specified
         if undo_enabled and (undo_max is not None or undo_debounce_ms is not None):
-            # Get all field names from the model
-            for f in fields(model_instance):  # type: ignore[arg-type]
+            # Get all field names from the record
+            for f in fields(record_instance):  # type: ignore[arg-type]
                 config_kwargs: dict[str, Any] = {"enabled": True}
                 if undo_max is not None:
                     config_kwargs["undo_max"] = undo_max
@@ -850,8 +857,8 @@ def _process_model_widget(widget: QWidget, cls: type[Any]) -> None:
                 proxy.set_undo_config(f.name, **config_kwargs)
 
 
-def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None:
-    """Auto-bind widget fields to model properties by matching names."""
+def _process_record_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None:
+    """Auto-bind widget fields to record properties by matching names."""
     # Import here to avoid circular import
     from qtpie.bindings import bind, get_binding_registry
     from qtpie.widget_base import has_model_type_param, is_widget_subclass
@@ -863,14 +870,14 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
     if not has_model_type_param(cls):
         return
 
-    # Get model_observable_proxy
-    proxy = getattr(widget, "model_observable_proxy", None)
+    # Get record_observable_proxy
+    proxy = getattr(widget, "record_observable_proxy", None)
     if proxy is None:
         return
 
-    # Get model to check for attribute names
-    model = getattr(widget, "model", None)
-    if model is None:
+    # Get record to check for attribute names
+    record = getattr(widget, "record", None)
+    if record is None:
         return
 
     # Get type hints for field types
@@ -881,16 +888,16 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
         if f.name.startswith("_"):
             continue
 
-        # Skip model and model_observable_proxy fields
-        if f.name in ("model", "model_observable_proxy"):
+        # Skip record and record_observable_proxy fields
+        if f.name in ("record", "record_observable_proxy"):
             continue
 
         # Skip fields that already have explicit bind=
         if f.metadata.get(BIND_METADATA_KEY) is not None:
             continue
 
-        # Check if this field name matches a model attribute
-        if not hasattr(model, f.name):
+        # Check if this field name matches a record attribute
+        if not hasattr(record, f.name):
             continue
 
         # Check if this is a QWidget field
@@ -903,7 +910,7 @@ def _process_model_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> None
         if widget_instance is None:
             continue
 
-        # Get the observable for this model property
+        # Get the observable for this record property
         try:
             observable = proxy.observable_for_path(f.name)
         except Exception:
