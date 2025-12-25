@@ -29,6 +29,7 @@ from qtpie.decorators._async_wrap import wrap_async_methods
 from qtpie.factories.make import (
     BIND_METADATA_KEY,
     FORM_LABEL_METADATA_KEY,
+    GET_APP_METADATA_KEY,
     GRID_POSITION_METADATA_KEY,
     MAKE_LATER_METADATA_KEY,
     SELECTOR_METADATA_KEY,
@@ -55,6 +56,7 @@ def widget[T](
     name: str | None = ...,
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
+    margins: int | tuple[int, int, int, int] | None = ...,
     auto_bind: bool = ...,
     undo: bool = ...,
     undo_max: int | None = ...,
@@ -70,6 +72,7 @@ def widget[T](
     name: str | None = ...,
     classes: list[str] | None = ...,
     layout: LayoutType = ...,
+    margins: int | tuple[int, int, int, int] | None = ...,
     auto_bind: bool = ...,
     undo: bool = ...,
     undo_max: int | None = ...,
@@ -84,6 +87,7 @@ def widget[T](
     name: str | None = None,
     classes: list[str] | None = None,
     layout: LayoutType = "vertical",
+    margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
     undo: bool = False,
     undo_max: int | None = None,
@@ -97,6 +101,7 @@ def widget[T](
         classes: CSS-like classes for styling.
         layout: The layout type - "vertical", "horizontal", or "none".
                 Defaults to "vertical".
+        margins: Layout margins. Either an int (all sides) or tuple (left, top, right, bottom).
         auto_bind: If True (default), Widget[T] fields with names matching record
                    properties are automatically bound. Set to False to disable.
         undo: If True, enable undo/redo for Widget[T] record fields.
@@ -227,6 +232,13 @@ def widget[T](
             if _layout is not None:
                 self.setLayout(_layout)
 
+                # Apply margins if specified
+                if margins is not None:
+                    if isinstance(margins, int):
+                        _layout.setContentsMargins(margins, margins, margins, margins)
+                    else:
+                        _layout.setContentsMargins(*margins)
+
                 # Add child widgets to layout
                 for f in fields(cls):  # type: ignore[arg-type]
                     # Private fields are completely ignored
@@ -270,6 +282,9 @@ def widget[T](
             # Process auto-bindings for Widget[T] (by field name)
             if auto_bind:
                 _process_record_widget_auto_bindings(self, cls)
+
+            # Process get_app() fields
+            _process_get_app_fields(self, cls)
 
             # Late lifecycle hook (after bindings)
             _call_if_exists(self, "setup")
@@ -926,6 +941,34 @@ def _process_record_widget_auto_bindings(widget: QWidget, cls: type[Any]) -> Non
         except Exception:
             # Binding might fail for some widget types
             pass
+
+
+def _process_get_app_fields(widget: QWidget, cls: type[Any]) -> None:
+    """Process get_app() fields - set app instance and connect signals."""
+    from qtpy.QtWidgets import QApplication
+
+    for f in fields(cls):  # type: ignore[arg-type]
+        app_signals: dict[str, str] | None = f.metadata.get(GET_APP_METADATA_KEY)
+        if app_signals is None:
+            continue
+
+        # Get the app instance
+        app = QApplication.instance()
+        if app is None:
+            continue
+
+        # Set the field to the app instance
+        setattr(widget, f.name, app)
+
+        # Connect signals
+        for signal_name, method_name in app_signals.items():
+            signal = getattr(app, signal_name, None)
+            if signal is None:
+                continue
+            method = getattr(widget, method_name, None)
+            if method is None:
+                continue
+            signal.connect(method)
 
 
 def _create_spacer(

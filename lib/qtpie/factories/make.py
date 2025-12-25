@@ -35,6 +35,7 @@ FORM_LABEL_METADATA_KEY = "qtpie_form_label"
 GRID_POSITION_METADATA_KEY = "qtpie_grid_position"
 BIND_METADATA_KEY = "qtpie_bind"
 MAKE_LATER_METADATA_KEY = "qtpie_make_later"
+GET_APP_METADATA_KEY = "qtpie_get_app"
 SELECTOR_METADATA_KEY = "qtpie_selector"
 
 # Type alias for grid position tuples
@@ -289,3 +290,23 @@ def make_later() -> Any:
     in setup(), an error will be raised.
     """
     return field(init=False, metadata={MAKE_LATER_METADATA_KEY: True})
+
+
+def get_app(**signals: str) -> Any:
+    """
+    Get the QApplication instance with optional signal connections.
+
+    Use this to declaratively connect to app-level signals.
+
+    Example:
+        @widget()
+        class MyWidget(QWidget):
+            _app: QApplication = get_app(focusChanged="_on_focus_changed")
+
+            def _on_focus_changed(self, old: QWidget, new: QWidget) -> None:
+                ...
+
+    The app instance is set during widget initialization and signals
+    are connected to the specified methods.
+    """
+    return field(init=False, metadata={GET_APP_METADATA_KEY: signals})

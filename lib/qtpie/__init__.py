@@ -9,7 +9,7 @@ from qtpie.decorators.slot import slot
 from qtpie.decorators.stylesheet import stylesheet
 from qtpie.decorators.widget import widget
 from qtpie.decorators.window import window
-from qtpie.factories.make import make, make_later
+from qtpie.factories.make import get_app, make, make_later
 from qtpie.factories.separator import separator
 from qtpie.factories.spacer import spacer
 from qtpie.screen import center_on_screen
@@ -34,6 +34,7 @@ __all__ = [
     "enable_dark_mode",
     "enable_light_mode",
     "entrypoint",
+    "get_app",
     "make",
     "make_later",
     "menu",
