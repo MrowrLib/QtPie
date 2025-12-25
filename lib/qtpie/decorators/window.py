@@ -14,6 +14,7 @@ from qtpy.QtWidgets import QMainWindow, QMenu, QWidget
 
 from qtpie.decorators._async_wrap import wrap_async_methods
 from qtpie.factories.make import SIGNALS_METADATA_KEY
+from qtpie.screen import center_on_screen
 
 
 @overload
@@ -155,7 +156,7 @@ def window[T: QMainWindow](
 
             # Center on screen (must be done after size is set)
             if center:
-                _center_on_screen(self)
+                center_on_screen(self)
 
         cls.__init__ = new_init  # type: ignore[method-assign]
         return cls
@@ -199,13 +200,3 @@ def _call_if_exists(obj: object, method_name: str, *args: object) -> None:
     method = getattr(obj, method_name, None)
     if method is not None and callable(method):
         method(*args)
-
-
-def _center_on_screen(widget: QWidget) -> None:
-    """Center a widget on its current screen."""
-    screen = widget.screen()
-    screen_geometry = screen.availableGeometry()
-    window_geometry = widget.frameGeometry()
-    x = screen_geometry.x() + (screen_geometry.width() - window_geometry.width()) // 2
-    y = screen_geometry.y() + (screen_geometry.height() - window_geometry.height()) // 2
-    widget.move(x, y)

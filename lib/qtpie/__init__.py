@@ -12,6 +12,7 @@ from qtpie.decorators.window import window
 from qtpie.factories.make import make, make_later
 from qtpie.factories.separator import separator
 from qtpie.factories.spacer import spacer
+from qtpie.screen import center_on_screen
 from qtpie.state import state
 from qtpie.styles import (
     ColorScheme,
@@ -29,6 +30,7 @@ __all__ = [
     "Widget",
     "action",
     "bind",
+    "center_on_screen",
     "enable_dark_mode",
     "enable_light_mode",
     "entrypoint",
