@@ -470,9 +470,9 @@ class MyApp(App):
     de: Abbrechen
 
 Counter:
-  "Count: {0}":
-    fr: "Compteur : {0}"
-    de: "Zähler: {0}"
+  "Count: {count}":
+    fr: "Compteur : {count}"
+    de: "Zähler: {count}"
 
   Increment:
     fr: Incrémenter
@@ -497,17 +497,16 @@ from qtpy.QtWidgets import QWidget, QLabel, QPushButton
 @widget
 class Counter(QWidget):
     count: int = state(0)
-    label: QLabel = make(QLabel, text=tr["Count: {0}"])
-    inc_btn: QPushButton = make(QPushButton, text=tr["Increment"], clicked="increment")
-    reset_btn: QPushButton = make(QPushButton, text=tr["Reset"], clicked="reset")
+    # bind=tr[] automatically updates when count OR translation changes
+    label: QLabel = make(QLabel, bind=tr["Count: {count}"])
+    inc_btn: QPushButton = make(QPushButton, tr["Increment"], clicked="increment")
+    reset_btn: QPushButton = make(QPushButton, tr["Reset"], clicked="reset")
 
     def increment(self) -> None:
-        self.count += 1
-        self.label.setText(self.tr("Count: {0}").format(self.count))
+        self.count += 1  # Label auto-updates!
 
     def reset(self) -> None:
-        self.count = 0
-        self.label.setText(self.tr("Count: {0}").format(self.count))
+        self.count = 0  # Label auto-updates!
 ```
 
 ---
@@ -521,6 +520,7 @@ from qtpie import tr
 
 tr["source"]                    # Basic
 tr["source", "disambiguation"]  # With disambiguation
+tr["%n file(s)"](count)         # Plural form with count
 ```
 
 ### `@entrypoint` Options
