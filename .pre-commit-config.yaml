@@ -1,18 +1,15 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0  # pin to a specific Ruff version
+    rev: v0.14.0 # pin to a specific Ruff version
     hooks:
       - id: ruff-check
         args: [--fix]
-        exclude: ^drafting*
       - id: ruff-format
-        exclude: ^drafting*
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.400
     hooks:
       - id: pyright
-        exclude: ^drafting*
 
   - repo: local
     hooks:
@@ -23,4 +20,3 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: false
-        exclude: ^drafting*
