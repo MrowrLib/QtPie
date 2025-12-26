@@ -35,9 +35,9 @@ class _DropdownListView(QListView):
 class _DropdownPopup(QFrame):
     """Floating popup containing the filtered list."""
 
-    item_clicked = Signal(QModelIndex)
+    item_clicked = Signal(int)  # Emits row index
 
-    _list_view: _DropdownListView = make(_DropdownListView, clicked="item_clicked")
+    _list_view: _DropdownListView = make(_DropdownListView, clicked="_on_list_clicked")
 
     def setup(self) -> None:
         # Make it a floating tooltip-style window
@@ -50,10 +50,32 @@ class _DropdownPopup(QFrame):
         """Set the model for the list view."""
         self._list_view.setModel(model)
 
-    def update_selection(self, index: QModelIndex) -> None:
-        """Update the current selection and scroll to it."""
-        self._list_view.setCurrentIndex(index)
-        self._list_view.scrollTo(index)
+    def _on_list_clicked(self, index: QModelIndex) -> None:
+        """Convert QModelIndex to row and emit."""
+        self.item_clicked.emit(index.row())
+
+    def count(self) -> int:
+        """Get the number of items in the list."""
+        model = self._list_view.model()
+        return model.rowCount() if model else 0
+
+    def select_index(self, index: int) -> None:
+        """Select the item at the given index and scroll to it."""
+        model = self._list_view.model()
+        if model:
+            model_index = model.index(index, 0)
+            self._list_view.setCurrentIndex(model_index)
+            self._list_view.scrollTo(model_index)
+
+    def get_value_at(self, index: int) -> str | None:
+        """Get the display text at the given index."""
+        model = self._list_view.model()
+        if not model:
+            return None
+        model_index = model.index(index, 0)
+        if not model_index.isValid():
+            return None
+        return model.data(model_index, Qt.ItemDataRole.DisplayRole)
 
 
 @widget(layout="vertical", margins=0, classes=["filterable-dropdown"])
@@ -85,7 +107,7 @@ class FilterableDropdown(QWidget):
     @property
     def filtered_count(self) -> int:
         """Get the number of items currently matching the filter."""
-        return self._proxy.rowCount()
+        return self._popup_.count()
 
     @property
     def current_index(self) -> int:
@@ -96,7 +118,7 @@ class FilterableDropdown(QWidget):
     def current_index(self, value: int) -> None:
         """Set the currently selected index in the filtered list."""
         self._current_index = value
-        self._update_selection()
+        self._popup_.select_index(value)
 
     def set_items(self, items: list[str]) -> None:
         """Set the list of items to filter from."""
@@ -136,9 +158,9 @@ class FilterableDropdown(QWidget):
 
     def select_current(self) -> None:
         """Select the currently highlighted item."""
-        index = self._proxy.index(self._current_index, 0)
-        if index.isValid():
-            self._on_item_clicked(index)
+        value = self._popup_.get_value_at(self._current_index)
+        if value:
+            self._select_value(value)
 
     @override
     def focusInEvent(self, event: QFocusEvent) -> None:
@@ -147,16 +169,21 @@ class FilterableDropdown(QWidget):
 
     def _on_text_edited(self, text: str) -> None:
         self._proxy.setFilterFixedString(text)
-        if self._proxy.rowCount() > 0:
+        if self._popup_.count() > 0:
             self._show_popup()
         else:
             self._popup_.hide()
 
-    def _on_item_clicked(self, index: QModelIndex) -> None:
-        text: str = self._proxy.data(index, Qt.ItemDataRole.DisplayRole)
-        self._line_edit.setText(text)
+    def _on_item_clicked(self, row: int) -> None:
+        value = self._popup_.get_value_at(row)
+        if value:
+            self._select_value(value)
+
+    def _select_value(self, value: str) -> None:
+        """Select a value and emit the signal."""
+        self._line_edit.setText(value)
         self._popup_.hide()
-        self.item_selected.emit(text)
+        self.item_selected.emit(value)
 
     def _show_popup(self) -> None:
         if not self._popup_.isVisible():
@@ -165,7 +192,7 @@ class FilterableDropdown(QWidget):
             self._popup_.setFixedWidth(self._line_edit.width())
             self._popup_.show()
         self._current_index = 0
-        self._update_selection()
+        self._popup_.select_index(0)
 
     def _on_focus_changed(self, old: QWidget | None, now: QWidget | None) -> None:
         if not self._popup_.isVisible():
@@ -185,7 +212,7 @@ class FilterableDropdown(QWidget):
         if event.type() == QEvent.Type.MouseButtonPress:
             if self._popup_.isVisible():
                 self._popup_.hide()
-            elif self._proxy.rowCount() > 0:
+            elif self._popup_.count() > 0:
                 self._show_popup()
             return False
 
@@ -208,20 +235,14 @@ class FilterableDropdown(QWidget):
             return True
 
         if key == Qt.Key.Key_Return and self._popup_.isVisible():
-            index = self._proxy.index(self._current_index, 0)
-            if index.isValid():
-                self._on_item_clicked(index)
+            self.select_current()
             return True
 
         return super().eventFilter(obj, event)
 
     def _navigate(self, direction: int) -> None:
-        row_count = self._proxy.rowCount()
-        if row_count == 0:
+        count = self._popup_.count()
+        if count == 0:
             return
-        self._current_index = (self._current_index + direction) % row_count
-        self._update_selection()
-
-    def _update_selection(self) -> None:
-        index = self._proxy.index(self._current_index, 0)
-        self._popup_.update_selection(index)
+        self._current_index = (self._current_index + direction) % count
+        self._popup_.select_index(self._current_index)
