@@ -297,7 +297,7 @@ class Dog:
 class DogEditor(QWidget, Widget[Dog]):
     name_edit: QLineEdit = make(QLineEdit)
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Manual binding - verbose!
         bind(self.record_observable_proxy.observable(str, "name"), self.name_edit)
 ```

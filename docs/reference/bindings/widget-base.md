@@ -426,7 +426,7 @@ class PersonEditor(QWidget, Widget[Person]):
     name: QLineEdit = make(QLineEdit)
     status: QLabel = make(QLabel)
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Show status when dirty state changes
         self.record_observable_proxy.is_dirty_observable().on_change(self.update_status)
 
@@ -537,7 +537,7 @@ class TextEditor(QWidget, Widget[Document]):
     content: QLineEdit = make(QLineEdit)
     undo_btn: QPushButton = make(QPushButton, "Undo", clicked="do_undo")
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Update button state when undo availability changes
         self.record_observable_proxy.observable(str, "content").on_change(self.update_undo_btn)
 
@@ -579,7 +579,7 @@ class TextEditor(QWidget, Widget[Document]):
     content: QLineEdit = make(QLineEdit)
     redo_btn: QPushButton = make(QPushButton, "Redo", clicked="do_redo")
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         self.record_observable_proxy.observable(str, "content").on_change(self.update_redo_btn)
 
     def update_redo_btn(self, _: str) -> None:
@@ -614,7 +614,7 @@ class TextEditor(QWidget, Widget[Document]):
     undo_btn: QPushButton = make(QPushButton, "Undo", clicked="do_undo")
     redo_btn: QPushButton = make(QPushButton, "Redo", clicked="do_redo")
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Update button states when content changes
         self.record_observable_proxy.observable(str, "content").on_change(self.update_buttons)
         self.update_buttons("")  # Initial state
@@ -753,9 +753,9 @@ class UserEditor(QWidget, Widget[User]):
         self.reset_dirty()  # Mark as clean since we just loaded
 ```
 
-## Lifecycle Hooks
+## Lifecycle Hook
 
-`Widget[T]` provides several lifecycle hooks you can override to customize initialization:
+Override `setup()` to customize initialization after fields are ready:
 
 ```python
 @widget
@@ -765,42 +765,7 @@ class MyWidget(QWidget, Widget[Person]):
     def setup(self) -> None:
         """Called after widget initialization. Set up initial state."""
         pass
-
-    def setup_values(self) -> None:
-        """Called after setup(). Initialize values."""
-        pass
-
-    def setup_bindings(self) -> None:
-        """Called after setup_values(). Set up data bindings."""
-        pass
-
-    def setup_layout(self, layout: QLayout) -> None:
-        """Called after setup_bindings() if widget has a layout."""
-        pass
-
-    def setup_styles(self) -> None:
-        """Called after setup_layout(). Apply styles."""
-        pass
-
-    def setup_events(self) -> None:
-        """Called after setup_styles(). Set up event handlers."""
-        pass
-
-    def setup_signals(self) -> None:
-        """Called after setup_events(). Connect signals."""
-        pass
 ```
-
-**Execution Order:**
-
-1. `__init__()` - Widget fields created
-2. `setup()`
-3. `setup_values()`
-4. `setup_bindings()`
-5. `setup_layout(layout)` (if layout exists)
-6. `setup_styles()`
-7. `setup_events()`
-8. `setup_signals()`
 
 ## Complete Example: User Form
 
@@ -843,7 +808,6 @@ class UserEditor(QWidget, Widget[User]):
             lambda v: "Invalid email" if v and "@" not in v else None
         )
 
-    def setup_bindings(self) -> None:
         # Show validation errors
         self.validation_for("name").on_change(
             lambda errors: self.name_error.setText(", ".join(errors))

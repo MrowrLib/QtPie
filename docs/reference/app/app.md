@@ -6,7 +6,7 @@ The `App` class is a `QApplication` subclass with lifecycle hooks and async supp
 
 `App` extends `QApplication` with:
 
-- **Lifecycle hooks** - `setup()`, `setup_styles()`, `create_window()`
+- **Lifecycle hooks** - `setup()`, `create_window()`
 - **Dark/light mode support** - Built-in color scheme management
 - **Stylesheet loading** - Easy QSS/SCSS file loading
 - **qasync integration** - Async/await support out of the box
@@ -54,10 +54,6 @@ class MyApp(App):
     def setup(self) -> None:
         # Called after App initialization
         print("App is ready!")
-
-    @override
-    def setup_styles(self) -> None:
-        # Called after setup()
         self.load_stylesheet("styles.qss")
 
     @override
@@ -104,17 +100,6 @@ class MyApp(App):
         self.config = load_config()
 ```
 
-### setup_styles()
-
-Called after `setup()`. Use for loading stylesheets:
-
-```python
-class MyApp(App):
-    @override
-    def setup_styles(self) -> None:
-        self.load_stylesheet("resources/styles.qss")
-```
-
 ### create_window()
 
 Called by `@entrypoint` to create the main window. Return a `QWidget` to show:
@@ -130,8 +115,7 @@ class MyApp(App):
 
 1. `App.__init__()` runs (color scheme applied, QApplication initialized)
 2. `setup()` called
-3. `setup_styles()` called
-4. `create_window()` called (only when used with `@entrypoint`)
+3. `create_window()` called (only when used with `@entrypoint`)
 
 ## Methods
 
@@ -158,7 +142,7 @@ def load_stylesheet(
 ```python
 class MyApp(App):
     @override
-    def setup_styles(self) -> None:
+    def setup(self) -> None:
         # Load QSS file
         self.load_stylesheet("styles/main.qss")
 
@@ -249,7 +233,7 @@ When you run this file directly (`python my_app.py`):
 
 1. `@entrypoint` detects it's the main module
 2. Creates an instance of `MyApp`
-3. Calls lifecycle hooks (`setup`, `setup_styles`)
+3. Calls `setup()` lifecycle hook
 4. Calls `create_window()` to get the main window
 5. Shows the window
 6. Starts the event loop
@@ -286,9 +270,6 @@ class MyApp(App):
     @override
     def setup(self) -> None:
         print(f"Starting {self.applicationName()} v{self.applicationVersion()}")
-
-    @override
-    def setup_styles(self) -> None:
         self.load_stylesheet("resources/dark-theme.qss")
 
     @override
@@ -323,9 +304,6 @@ class MyApp(App):
     def setup(self) -> None:
         # App-level initialization
         self.config = load_app_config()
-
-    @override
-    def setup_styles(self) -> None:
         self.load_stylesheet("resources/styles.qss")
 
     @override
@@ -392,9 +370,6 @@ class GameApp(App):
         # Load game resources
         self.load_assets()
         self.init_audio()
-
-    @override
-    def setup_styles(self) -> None:
         self.load_stylesheet("game-ui.qss")
 
     def load_assets(self) -> None:

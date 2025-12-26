@@ -97,7 +97,7 @@ class TextEditor(QWidget, Widget[Document]):
     undo_btn: QPushButton = make(QPushButton, "Undo", clicked="do_undo")
     redo_btn: QPushButton = make(QPushButton, "Redo", clicked="do_redo")
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Update button states whenever content changes
         self.model_observable_proxy.observable(str, "content").on_change(self.update_buttons)
         self.update_buttons()

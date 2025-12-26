@@ -77,7 +77,7 @@ class Counter(QWidget):
 class PersonEditor(QWidget, Widget[Person]):
     name: QLineEdit = make(QLineEdit)
 
-    def setup_bindings(self) -> None:
+    def setup(self) -> None:
         # Get observable for a field
         name_obs = self.model_observable_proxy.observable(str, "name")
 

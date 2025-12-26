@@ -276,13 +276,12 @@ class MyWidget(QWidget):
 
 Only the `QLabel` and `QPushButton` are added to the layout. The `int` and `str` fields are just regular attributes.
 
-## Lifecycle Hooks
+## Lifecycle Hook
 
-Override these methods to hook into the widget lifecycle:
+Override `setup()` to hook into the widget lifecycle:
 
 ```python
 from typing import override
-from qtpy.QtWidgets import QLayout
 
 @widget
 class MyWidget(QWidget):
@@ -290,51 +289,9 @@ class MyWidget(QWidget):
 
     @override
     def setup(self):
-        # Called first - after fields initialized, before layout
+        # Called after fields initialized
         self.label.setText("Modified in setup")
-
-    @override
-    def setup_values(self):
-        # Called after setup - for initializing data
-        pass
-
-    @override
-    def setup_bindings(self):
-        # Called after setup_values - for manual data bindings
-        pass
-
-    @override
-    def setup_layout(self, layout: QLayout):
-        # Called after widgets added to layout
-        # NOT called if layout="none"
-        pass
-
-    @override
-    def setup_styles(self):
-        # Called after layout - for styling
-        pass
-
-    @override
-    def setup_events(self):
-        # Called after styles - for event filters
-        pass
-
-    @override
-    def setup_signals(self):
-        # Called last - for additional signal connections
-        pass
 ```
-
-The hooks are called in this order:
-1. `setup()`
-2. `setup_values()`
-3. `setup_bindings()`
-4. `setup_layout()` (if layout exists)
-5. `setup_styles()`
-6. `setup_events()`
-7. `setup_signals()`
-
-Most of the time, you only need `setup()`.
 
 ## Accessing Child Widgets
 

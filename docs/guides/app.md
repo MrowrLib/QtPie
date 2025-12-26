@@ -162,11 +162,7 @@ class MyApp(App):
     def setup(self):
         """Called after App initialization."""
         print("App is ready!")
-        # Set up services, load config, etc.
-
-    @override
-    def setup_styles(self):
-        """Called during initialization for stylesheets."""
+        # Set up services, load config, load stylesheets, etc.
         self.load_stylesheet("styles.qss")
 
     @override
@@ -178,11 +174,10 @@ class MyApp(App):
 Hook order:
 1. `__init__` - App initialization
 2. `setup()` - General setup
-3. `setup_styles()` - Load stylesheets
 
 When using `@entrypoint`, it also calls:
-4. `create_window()` - Creates and shows the window
-5. Event loop starts
+3. `create_window()` - Creates and shows the window
+4. Event loop starts
 
 ### App Constructor
 
@@ -320,7 +315,7 @@ class QuickApp(QWidget):
 ```
 
 ### Use `App` class when:
-- Need lifecycle hooks (`setup()`, `setup_styles()`)
+- Need the `setup()` lifecycle hook
 - Want to manage app state centrally
 - Building larger applications with services/config
 - Need custom QApplication subclass behavior

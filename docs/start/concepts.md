@@ -313,9 +313,9 @@ class PersonEditor(QWidget, Widget[Person]):
 
 ---
 
-## Lifecycle Hooks
+## Lifecycle Hook
 
-QtPie calls these methods at specific points during widget initialization. Override them to customize behavior:
+Override `setup()` to customize initialization after fields are ready:
 
 ```python
 @widget
@@ -323,51 +323,7 @@ class MyWidget(QWidget):
     def setup(self) -> None:
         """Called after all fields are initialized."""
         print("Widget ready!")
-
-    def setup_values(self) -> None:
-        """Called after setup(). Initialize field values here."""
-        pass
-
-    def setup_bindings(self) -> None:
-        """Called after setup_values(). Set up data bindings."""
-        pass
-
-    def setup_layout(self, layout: QLayout) -> None:
-        """Called after bindings (if widget has a layout). Customize layout."""
-        layout.setSpacing(10)
-
-    def setup_styles(self) -> None:
-        """Called after layout. Apply styles."""
-        pass
-
-    def setup_events(self) -> None:
-        """Called after styles. Set up event handlers."""
-        pass
-
-    def setup_signals(self) -> None:
-        """Called after events. Connect additional signals."""
-        pass
 ```
-
-**Execution order:**
-1. `__init__()` - Fields initialized
-2. `setup()` - First hook
-3. `setup_values()` - Initialize values
-4. `setup_bindings()` - Manual bindings
-5. Widget[T] model/model_observable_proxy creation
-6. Data bindings processed
-7. Widget[T] auto-bindings
-8. `setup_layout()` - Layout customization
-9. `setup_styles()` - Styling
-10. `setup_events()` - Event handlers
-11. `setup_signals()` - Signal connections
-
-**Common use cases:**
-- `setup()` - Create proxies, initialize state
-- `setup_values()` - Set initial widget values
-- `setup_bindings()` - Manual bind() calls
-- `setup_layout()` - Adjust spacing, margins
-- `setup_styles()` - Apply stylesheets
 
 ---
 

@@ -366,35 +366,15 @@ class FileMenu(QMenu):
 
 ## Lifecycle Hooks
 
-All three decorators support lifecycle hooks:
+All three decorators support the `setup()` hook:
 
-### Window Hooks
+### Window Hook
 
 ```python
 @window(title="My App")
 class MainWindow(QMainWindow):
     def setup(self) -> None:
         """Called after all fields are initialized"""
-        pass
-
-    def setup_values(self) -> None:
-        """Called after setup()"""
-        pass
-
-    def setup_bindings(self) -> None:
-        """Called after setup_values()"""
-        pass
-
-    def setup_styles(self) -> None:
-        """Called after setup_bindings()"""
-        pass
-
-    def setup_events(self) -> None:
-        """Called after setup_styles()"""
-        pass
-
-    def setup_signals(self) -> None:
-        """Called after setup_events()"""
         pass
 ```
 

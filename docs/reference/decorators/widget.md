@@ -218,14 +218,9 @@ class TextEditor(QWidget, Widget[Document]):
     # Undo snapshot only recorded 500ms after user stops typing
 ```
 
-## Lifecycle Hooks
+## Lifecycle Hook
 
-The `@widget` decorator calls these methods (if defined) during initialization, in this order:
-
-### setup()
-
-**Called:** After widget construction, before bindings
-**Use for:** General initialization, setting up non-widget state
+Override `setup()` to customize initialization after fields are ready:
 
 ```python
 @widget()
@@ -235,108 +230,6 @@ class MyWidget(QWidget):
     def setup(self) -> None:
         # Widget fields are accessible here
         self.label.setText("Modified in setup")
-```
-
-### setup_values()
-
-**Called:** After `setup()`, before bindings
-**Use for:** Initializing field values, loading data
-
-```python
-@widget()
-class MyWidget(QWidget):
-    count: int = 0
-    label: QLabel = make(QLabel)
-
-    def setup_values(self) -> None:
-        self.count = 42
-        self.label.setText(f"Count: {self.count}")
-```
-
-### setup_bindings()
-
-**Called:** After `setup_values()`, before auto-bindings are processed
-**Use for:** Custom data bindings
-
-```python
-from qtpie import bind
-
-@widget()
-class MyWidget(QWidget, Widget[Person]):
-    name_label: QLabel = make(QLabel)
-
-    def setup_bindings(self) -> None:
-        # model/record_observable_proxy are auto-created for Widget[T]
-        # Custom binding logic here
-        bind(self.record_observable_proxy.observable(str, "name"), self.name_label, "text")
-```
-
-### setup_layout(layout: QLayout)
-
-**Called:** After layout is created and widgets are added (only if `layout != "none"`)
-**Use for:** Customizing layout properties
-
-```python
-@widget(layout="vertical")
-class MyWidget(QWidget):
-    label: QLabel = make(QLabel, "Hello")
-
-    def setup_layout(self, layout: QLayout) -> None:
-        # layout is the QVBoxLayout created by @widget
-        if isinstance(layout, QVBoxLayout):
-            layout.setSpacing(20)
-            layout.setContentsMargins(10, 10, 10, 10)
-```
-
-### setup_styles()
-
-**Called:** After layout setup
-**Use for:** Applying dynamic styles, setting styleSheets
-
-```python
-@widget()
-class MyWidget(QWidget):
-    def setup_styles(self) -> None:
-        self.setStyleSheet("background-color: #f0f0f0;")
-```
-
-### setup_events()
-
-**Called:** After style setup
-**Use for:** Installing event filters, handling custom events
-
-```python
-@widget()
-class MyWidget(QWidget):
-    def setup_events(self) -> None:
-        self.installEventFilter(self)
-
-    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        # Handle events
-        return super().eventFilter(obj, event)
-```
-
-### setup_signals()
-
-**Called:** Last, after all other setup
-**Use for:** Connecting additional signals not handled by `make()`
-
-```python
-@widget()
-class MyWidget(QWidget):
-    button: QPushButton = make(QPushButton, "Click")
-
-    def setup_signals(self) -> None:
-        # make() already handles clicked="method_name"
-        # This is for additional signal connections
-        self.button.pressed.connect(self.on_pressed)
-        self.button.released.connect(self.on_released)
-
-    def on_pressed(self) -> None:
-        print("Button pressed")
-
-    def on_released(self) -> None:
-        print("Button released")
 ```
 
 ## Async closeEvent
@@ -452,9 +345,8 @@ class PersonEditor(QWidget, Widget[Person]):
 
     def setup(self) -> None:
         print(f"Editing: {self.record.name}")
-
-    def setup_layout(self, layout: QLayout) -> None:
-        layout.setSpacing(10)
+        if self.layout():
+            self.layout().setSpacing(10)
 
     def save(self) -> None:
         print(f"Saving {self.record.name}, age {self.record.age}")

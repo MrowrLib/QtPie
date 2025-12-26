@@ -63,7 +63,7 @@ class App(QApplication):
     A QApplication subclass with lifecycle hooks and qasync integration.
 
     Features:
-    - Lifecycle hooks: setup(), setup_styles(), create_window()
+    - Lifecycle hooks: setup(), create_window()
     - Dark/light mode support
     - Stylesheet loading
     - qasync event loop for async/await support
@@ -136,21 +136,11 @@ class App(QApplication):
         if type(self).setup is not App.setup:
             self.setup()
 
-        if type(self).setup_styles is not App.setup_styles:
-            self.setup_styles()
-
     def setup(self) -> None:
         """
         Lifecycle hook called after App initialization.
 
         Override this method in subclasses to perform custom setup.
-        """
-
-    def setup_styles(self) -> None:
-        """
-        Lifecycle hook for setting up stylesheets.
-
-        Override this method in subclasses to load stylesheets.
         """
 
     def create_window(self) -> QWidget | None:

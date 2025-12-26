@@ -151,7 +151,7 @@ from qtpie import App
 from qtpie.styles import watch_scss
 
 class MyApp(App):
-    def setup_styles(self) -> None:
+    def setup(self) -> None:
         # Apply to entire app (self is QApplication)
         self.watcher = watch_scss(
             target=self,
@@ -456,4 +456,4 @@ variables.write_text("$bg: pink;")
 
 - [Styling Basics](../basics/styling.md) - CSS classes and selectors
 - [Color Schemes](../reference/styles/color-schemes.md) - Dark/light mode
-- [App & Entry Points](app.md) - Using App.setup_styles()
+- [App & Entry Points](app.md) - Using App.setup()

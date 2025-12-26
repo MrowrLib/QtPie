@@ -201,16 +201,9 @@ class MyWindow(QMainWindow):
 # Only visible_menu appears in menu bar
 ```
 
-## Lifecycle Hooks
+## Lifecycle Hook
 
-These methods are called automatically during initialization if they exist:
-
-1. `setup()`
-2. `setup_values()`
-3. `setup_bindings()`
-4. `setup_styles()`
-5. `setup_events()`
-6. `setup_signals()`
+Override `setup()` to customize initialization:
 
 ```python
 @window
@@ -220,29 +213,9 @@ class MyWindow(QMainWindow):
     def setup(self) -> None:
         # Called after fields are initialized
         self.central_widget.setText("Modified in setup")
-
-    def setup_values(self) -> None:
-        # Set initial values
-        pass
-
-    def setup_bindings(self) -> None:
-        # Set up data bindings
-        pass
-
-    def setup_styles(self) -> None:
-        # Apply styles
-        pass
-
-    def setup_events(self) -> None:
-        # Install event filters
-        pass
-
-    def setup_signals(self) -> None:
-        # Connect additional signals
-        pass
 ```
 
-All hooks have access to fully initialized child widgets.
+The hook has access to fully initialized child widgets.
 
 ## Async closeEvent
 
