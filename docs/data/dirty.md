@@ -18,15 +18,10 @@ class User:
 
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit)
-    email: QLineEdit = make(QLineEdit)
+    name: QLineEdit = make(QLineEdit, textChanged="update_status")
+    email: QLineEdit = make(QLineEdit, textChanged="update_status")
     save: QPushButton = make(QPushButton, "Save", clicked="on_save")
     status: QLabel = make(QLabel)
-
-    def setup(self) -> None:
-        # Update status when fields change
-        self.name.textChanged.connect(self.update_status)
-        self.email.textChanged.connect(self.update_status)
 
     def update_status(self) -> None:
         if self.is_dirty():
@@ -35,7 +30,7 @@ class UserEditor(QWidget, Widget[User]):
             self.status.setText("No changes")
 
     def on_save(self) -> None:
-        self.save_to(self.model)
+        self.save_to(self.record)
         self.reset_dirty()  # Mark as clean after save
         self.status.setText("Saved!")
 ```
@@ -145,21 +140,15 @@ class DocumentEditor(QWidget, Widget[Document]):
 ```python
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit)
-    email: QLineEdit = make(QLineEdit)
+    name: QLineEdit = make(QLineEdit, textChanged="update_save_button")
+    email: QLineEdit = make(QLineEdit, textChanged="update_save_button")
     save: QPushButton = make(QPushButton, "Save", clicked="on_save")
-
-    def setup(self) -> None:
-        # Disable save button when nothing changed
-        self.name.textChanged.connect(self.update_save_button)
-        self.email.textChanged.connect(self.update_save_button)
-        self.update_save_button()
 
     def update_save_button(self) -> None:
         self.save.setEnabled(self.is_dirty())
 
     def on_save(self) -> None:
-        self.save_to(self.model)
+        self.save_to(self.record)
         self.reset_dirty()
         self.update_save_button()
 ```
@@ -169,13 +158,9 @@ class UserEditor(QWidget, Widget[User]):
 ```python
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit)
-    email: QLineEdit = make(QLineEdit)
+    name: QLineEdit = make(QLineEdit, textChanged="show_changes")
+    email: QLineEdit = make(QLineEdit, textChanged="show_changes")
     status: QLabel = make(QLabel)
-
-    def setup(self) -> None:
-        self.name.textChanged.connect(self.show_changes)
-        self.email.textChanged.connect(self.show_changes)
 
     def show_changes(self) -> None:
         if not self.is_dirty():
@@ -216,7 +201,7 @@ class UserEditor(QWidget, Widget[User]):
 
     def on_save(self) -> None:
         # Save proxy values to model
-        self.save_to(self.model)
+        self.save_to(self.record)
 
         # Mark as clean - nothing dirty anymore
         self.reset_dirty()

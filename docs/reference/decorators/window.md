@@ -306,7 +306,7 @@ from qtpie import window, make
 )
 class EditorWindow(QMainWindow):
     # Central widget
-    central_widget: QTextEdit = make(QTextEdit)
+    central_widget: QTextEdit = make(QTextEdit, textChanged="mark_dirty")
 
     # Menus
     file_menu: QMenu = field(default_factory=lambda: QMenu("&File"))
@@ -318,7 +318,6 @@ class EditorWindow(QMainWindow):
     def setup(self) -> None:
         # Configure after initialization
         self.statusBar().showMessage("Ready")
-        self.central_widget.textChanged.connect(self.mark_dirty)
 
     def mark_dirty(self) -> None:
         self.unsaved_changes = True
