@@ -18,30 +18,32 @@ class User:
 
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit, textChanged="update_status")
-    email: QLineEdit = make(QLineEdit, textChanged="update_status")
+    name: QLineEdit = make(QLineEdit)
+    email: QLineEdit = make(QLineEdit)
     save: QPushButton = make(QPushButton, "Save", clicked="on_save")
-    status: QLabel = make(QLabel)
+    status: QLabel = make(QLabel, "No changes")
 
-    def update_status(self) -> None:
-        if self.is_dirty():
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        # Called automatically when dirty state changes!
+        if is_dirty:
             self.status.setText(f"Modified: {', '.join(self.dirty_fields())}")
+            self.save.setEnabled(True)
         else:
             self.status.setText("No changes")
+            self.save.setEnabled(False)
 
     def on_save(self) -> None:
         self.save_to(self.record)
-        self.reset_dirty()  # Mark as clean after save
-        self.status.setText("Saved!")
+        self.reset_dirty()  # Triggers on_dirty_changed(False)
 ```
 
 ---
 
-## The Three Methods
+## The Methods
 
 ### `is_dirty()` - Has Anything Changed?
 
-Returns `True` if any field has been modified since the widget was created (or since the last `reset_dirty()`).
+Returns an observable `True`/`False` indicating if any field has been modified. Can be used directly as a bool or observed for changes.
 
 ```python
 @widget
@@ -49,16 +51,35 @@ class UserEditor(QWidget, Widget[User]):
     name: QLineEdit = make(QLineEdit)
 
 w = UserEditor()
-print(w.is_dirty())  # False - nothing changed yet
 
-w.name.setText("Alice")
-print(w.is_dirty())  # True - name was modified
+# Use directly as bool
+if w.is_dirty():
+    print("Has changes")
+
+# Or observe changes
+w.is_dirty().on_change(lambda dirty: print(f"Dirty: {dirty}"))
 ```
 
 **Use cases:**
 - Enable/disable "Save" button
 - Show "unsaved changes" indicator
 - Prompt before closing window
+
+### `on_dirty_changed(is_dirty: bool)` - React to Changes
+
+Override this method to react when dirty state changes. Called automatically by the `@widget` decorator.
+
+```python
+@widget
+class UserEditor(QWidget, Widget[User]):
+    name: QLineEdit = make(QLineEdit)
+    save: QPushButton = make(QPushButton, "Save")
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        self.save.setEnabled(is_dirty)
+```
+
+This is the **recommended** approach - no manual signal connections needed!
 
 ### `dirty_fields()` - Which Fields Changed?
 
@@ -140,17 +161,16 @@ class DocumentEditor(QWidget, Widget[Document]):
 ```python
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit, textChanged="update_save_button")
-    email: QLineEdit = make(QLineEdit, textChanged="update_save_button")
+    name: QLineEdit = make(QLineEdit)
+    email: QLineEdit = make(QLineEdit)
     save: QPushButton = make(QPushButton, "Save", clicked="on_save")
 
-    def update_save_button(self) -> None:
-        self.save.setEnabled(self.is_dirty())
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        self.save.setEnabled(is_dirty)
 
     def on_save(self) -> None:
         self.save_to(self.record)
-        self.reset_dirty()
-        self.update_save_button()
+        self.reset_dirty()  # Triggers on_dirty_changed(False)
 ```
 
 ### Show Modified Fields
@@ -158,17 +178,16 @@ class UserEditor(QWidget, Widget[User]):
 ```python
 @widget
 class UserEditor(QWidget, Widget[User]):
-    name: QLineEdit = make(QLineEdit, textChanged="show_changes")
-    email: QLineEdit = make(QLineEdit, textChanged="show_changes")
-    status: QLabel = make(QLabel)
+    name: QLineEdit = make(QLineEdit)
+    email: QLineEdit = make(QLineEdit)
+    status: QLabel = make(QLabel, "No changes")
 
-    def show_changes(self) -> None:
-        if not self.is_dirty():
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        if is_dirty:
+            fields = sorted(self.dirty_fields())
+            self.status.setText(f"Modified: {', '.join(fields)}")
+        else:
             self.status.setText("No changes")
-            return
-
-        fields = self.dirty_fields()
-        self.status.setText(f"Modified: {', '.join(sorted(fields))}")
 ```
 
 ---

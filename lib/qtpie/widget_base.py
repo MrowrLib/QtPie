@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any, cast, get_args, get_origin
 
 from observant import ObservableProxy
+from observant.interfaces.observable import IObservable
 from qtpy.QtWidgets import QWidget
 
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
@@ -107,14 +108,38 @@ class Widget[T = None]:
         """
         self.record_observable_proxy.add_validator(field, validator)
 
-    def is_valid(self) -> Any:
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """
+        Called when the validation state changes.
+
+        Override this method to react to validation state changes.
+        This is automatically wired up by the @widget decorator.
+
+        Args:
+            is_valid: True if all fields are valid, False if any field has errors.
+
+        Example:
+            def on_valid_changed(self, is_valid: bool) -> None:
+                self.save_button.setEnabled(is_valid)
+                self.error_label.setVisible(not is_valid)
+        """
+        pass
+
+    def is_valid(self) -> IObservable[bool]:
         """
         Get an observable indicating whether all fields are valid.
 
+        Can be used directly as a bool: `if self.is_valid(): ...`
+        Or observed for changes: `self.is_valid().on_change(callback)`
+
         Returns:
-            IObservable that emits True when all validators pass, False otherwise.
+            Observable that emits True when all validators pass, False otherwise.
 
         Example:
+            if self.is_valid():
+                self.save()
+
+            # Or listen for changes
             self.is_valid().on_change(lambda valid: self.save_btn.setEnabled(valid))
         """
         return self.record_observable_proxy.is_valid()
@@ -152,18 +177,41 @@ class Widget[T = None]:
     # Dirty Tracking - delegate to self.record_observable_proxy
     # =========================================================================
 
-    def is_dirty(self) -> bool:
+    def is_dirty(self) -> IObservable[bool]:
         """
-        Check whether any field has been modified.
+        Get an observable indicating whether any field has been modified.
+
+        Can be used directly as a bool: `if self.is_dirty(): ...`
+        Or observed for changes: `self.is_dirty().on_change(callback)`
 
         Returns:
-            True if any field is dirty, False otherwise.
+            Observable that emits True if any field is dirty, False otherwise.
 
         Example:
             if self.is_dirty():
                 self.status.setText("Modified")
+
+            # Or listen for changes
+            self.is_dirty().on_change(lambda dirty: self.save.setEnabled(dirty))
         """
         return self.record_observable_proxy.is_dirty()
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """
+        Called when the dirty state changes.
+
+        Override this method to react to dirty state changes.
+        This is automatically wired up by the @widget decorator.
+
+        Args:
+            is_dirty: True if any field is dirty, False if all fields are clean.
+
+        Example:
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                self.save_button.setEnabled(is_dirty)
+                self.status.setText("Modified" if is_dirty else "Saved")
+        """
+        pass
 
     def dirty_fields(self) -> set[str]:
         """

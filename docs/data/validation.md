@@ -9,7 +9,7 @@ When you use `Widget[T]`, you get built-in validation capabilities through the u
 ```python
 from dataclasses import dataclass
 from qtpy.QtWidgets import QWidget, QLineEdit, QLabel
-from qtpie import widget, make, Widget
+from qtpie import widget, make, Widget, state
 
 @dataclass
 class User:
@@ -20,17 +20,24 @@ class User:
 class UserEditor(QWidget, Widget[User]):
     name: QLineEdit = make(QLineEdit)
     email: QLineEdit = make(QLineEdit)
-    error_label: QLabel = make(QLabel)
+
+    errors: str = state("")
+    error_label: QLabel = make(QLabel, bind="{errors}")
 
     def setup(self) -> None:
         # Add validation rules
         self.add_validator("name", lambda v: "Name required" if not v else None)
         self.add_validator("email", self._validate_email)
 
-        # React to validation changes
-        self.is_valid().on_change(lambda valid: self.error_label.setText(
-            "" if valid else "Please fix errors"
-        ))
+    def on_valid_changed(self, is_valid: bool) -> None:
+        # Called automatically when validation state changes
+        if is_valid:
+            self.errors = ""
+        else:
+            all_errors = []
+            for msgs in self.validation_errors().values():
+                all_errors.extend(msgs)
+            self.errors = ", ".join(all_errors)
 
     def _validate_email(self, value: str) -> str | None:
         if not value:
@@ -78,11 +85,12 @@ Get an observable that tracks overall validity.
 **Returns:** `IObservable[bool]` - True when all fields pass validation
 
 ```python
-# Enable/disable submit button based on validity
-self.is_valid().on_change(lambda valid: self.submit_btn.setEnabled(valid))
+# Preferred: Override on_valid_changed hook (auto-wired by @widget)
+def on_valid_changed(self, is_valid: bool) -> None:
+    self.submit_btn.setEnabled(is_valid)
 
-# Check current validity
-if self.is_valid().get():
+# Or use as a simple bool check
+if self.is_valid():
     print("Form is valid!")
 ```
 
@@ -96,15 +104,10 @@ Get validation errors for a specific field.
 **Returns:** `IObservable[list[str]]` - List of error messages (empty if valid)
 
 ```python
-# Show errors for one field
-def show_name_errors() -> None:
+# Access field errors in on_valid_changed
+def on_valid_changed(self, is_valid: bool) -> None:
     errors = self.validation_for("name").get()
-    if errors:
-        self.name_error_label.setText(errors[0])
-    else:
-        self.name_error_label.setText("")
-
-self.validation_for("name").on_change(show_name_errors)
+    self.name_error = errors[0] if errors else ""
 ```
 
 ### `validation_errors()`
@@ -130,7 +133,7 @@ if name_errors:
 ```python
 from dataclasses import dataclass
 from qtpy.QtWidgets import QWidget, QLineEdit, QSpinBox, QLabel, QPushButton
-from qtpie import widget, make, Widget
+from qtpie import widget, make, Widget, state
 
 @dataclass
 class User:
@@ -145,10 +148,15 @@ class RegistrationForm(QWidget, Widget[User]):
     age: QSpinBox = make(QSpinBox)
     email: QLineEdit = make(QLineEdit)
 
-    # Error displays
-    name_error: QLabel = make(QLabel, classes=["error"])
-    age_error: QLabel = make(QLabel, classes=["error"])
-    email_error: QLabel = make(QLabel, classes=["error"])
+    # Error state - reactive strings bound to labels
+    name_error: str = state("")
+    age_error: str = state("")
+    email_error: str = state("")
+
+    # Error displays with reactive binding
+    name_error_label: QLabel = make(QLabel, bind="{name_error}", classes=["error"])
+    age_error_label: QLabel = make(QLabel, bind="{age_error}", classes=["error"])
+    email_error_label: QLabel = make(QLabel, bind="{email_error}", classes=["error"])
 
     # Submit button
     submit: QPushButton = make(QPushButton, "Submit", clicked="on_submit")
@@ -158,14 +166,6 @@ class RegistrationForm(QWidget, Widget[User]):
         self.add_validator("name", lambda v: "Name required" if not v else None)
         self.add_validator("age", lambda v: "Must be 18+" if v < 18 else None)
         self.add_validator("email", self._validate_email)
-
-        # Show field-specific errors in real-time
-        self.validation_for("name").on_change(self._update_name_error)
-        self.validation_for("age").on_change(self._update_age_error)
-        self.validation_for("email").on_change(self._update_email_error)
-
-        # Enable/disable submit based on overall validity
-        self.is_valid().on_change(lambda valid: self.submit.setEnabled(valid))
 
         # Initially disable submit
         self.submit.setEnabled(False)
@@ -177,26 +177,23 @@ class RegistrationForm(QWidget, Widget[User]):
             return "Invalid email format"
         return None
 
-    def _update_name_error(self) -> None:
-        errors = self.validation_for("name").get()
-        self.name_error.setText(errors[0] if errors else "")
+    def on_valid_changed(self, is_valid: bool) -> None:
+        # Called automatically when validation state changes!
+        self.submit.setEnabled(is_valid)
 
-    def _update_age_error(self) -> None:
-        errors = self.validation_for("age").get()
-        self.age_error.setText(errors[0] if errors else "")
+        # Update field-specific error messages
+        name_errors = self.validation_for("name").get()
+        age_errors = self.validation_for("age").get()
+        email_errors = self.validation_for("email").get()
 
-    def _update_email_error(self) -> None:
-        errors = self.validation_for("email").get()
-        self.email_error.setText(errors[0] if errors else "")
+        self.name_error = name_errors[0] if name_errors else ""
+        self.age_error = age_errors[0] if age_errors else ""
+        self.email_error = email_errors[0] if email_errors else ""
 
     def on_submit(self) -> None:
-        # Double-check validity (should always be true if button is enabled)
-        if self.is_valid().get():
-            print(f"Submitting: {self.model.name}, {self.model.age}, {self.model.email}")
-            # Save back to model
-            self.save_to(self.model)
-        else:
-            print("Form has errors - should not reach here!")
+        if self.is_valid():
+            print(f"Submitting: {self.record.name}, {self.record.age}, {self.record.email}")
+            self.save_to(self.record)
 ```
 
 ## Validation Timing

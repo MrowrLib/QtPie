@@ -892,6 +892,16 @@ def _process_record_widget(widget: QWidget, cls: type[Any]) -> None:
         proxy = ObservableProxy(record_instance, sync=True, undo=undo_enabled)
         widget.record_observable_proxy = proxy  # type: ignore[attr-defined]
 
+        # Wire up on_dirty_changed hook
+        on_dirty_changed = getattr(widget, "on_dirty_changed", None)
+        if on_dirty_changed is not None:
+            proxy.is_dirty().on_change(on_dirty_changed)
+
+        # Wire up on_valid_changed hook
+        on_valid_changed = getattr(widget, "on_valid_changed", None)
+        if on_valid_changed is not None:
+            proxy.is_valid().on_change(on_valid_changed)
+
         # Apply per-field undo config if specified
         if undo_enabled and (undo_max is not None or undo_debounce_ms is not None):
             # Get all field names from the record

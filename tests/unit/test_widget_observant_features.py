@@ -1,6 +1,7 @@
 """Tests for Widget[T] Observant integration (validation, dirty, undo, save/load)."""
 
 from dataclasses import dataclass
+from typing import override
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox, QWidget
@@ -147,6 +148,57 @@ class TestWidgetValidation:
         assert_that(name_errors).contains("Required")
         assert_that(email_errors).contains("Invalid")
 
+    def test_on_valid_changed_hook(self, qt: QtDriver) -> None:
+        """on_valid_changed should be called when validation state changes."""
+
+        valid_states: list[bool] = []
+
+        @widget
+        class UserEditor(QWidget, Widget[User]):
+            name: QLineEdit = make(QLineEdit)
+
+            @override
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        w = UserEditor()
+        qt.track(w)
+
+        # Add validator - initially invalid
+        w.add_validator("name", lambda v: "Required" if not v else None)
+        assert_that(valid_states).is_equal_to([False])
+
+        # Make valid
+        w.name.setText("Alice")
+        assert_that(valid_states).is_equal_to([False, True])
+
+        # Make invalid again
+        w.name.setText("")
+        assert_that(valid_states).is_equal_to([False, True, False])
+
+    def test_on_valid_changed_can_update_ui(self, qt: QtDriver) -> None:
+        """on_valid_changed can be used to enable/disable save button."""
+
+        @widget
+        class UserEditor(QWidget, Widget[User]):
+            name: QLineEdit = make(QLineEdit)
+            save_enabled: bool = True
+
+            @override
+            def on_valid_changed(self, is_valid: bool) -> None:
+                self.save_enabled = is_valid
+
+        w = UserEditor()
+        qt.track(w)
+
+        # Add validator - becomes invalid
+        w.add_validator("name", lambda v: "Required" if not v else None)
+        assert_that(w.save_enabled).is_false()
+
+        # Make valid
+        w.name.setText("Alice")
+        assert_that(w.save_enabled).is_true()
+
 
 class TestWidgetDirtyTracking:
     """Tests for Widget[T] dirty tracking delegate methods."""
@@ -206,6 +258,75 @@ class TestWidgetDirtyTracking:
 
         w.reset_dirty()
         assert_that(w.is_dirty()).is_false()
+
+    def test_is_dirty_returns_observable(self, qt: QtDriver) -> None:
+        """is_dirty should return an observable that can be listened to."""
+
+        @widget
+        class UserEditor(QWidget, Widget[User]):
+            name: QLineEdit = make(QLineEdit)
+
+        w = UserEditor()
+        qt.track(w)
+
+        # Track changes via callback
+        dirty_states: list[bool] = []
+        w.is_dirty().on_change(lambda d: dirty_states.append(d))
+
+        # Make dirty
+        w.name.setText("Alice")
+        assert_that(dirty_states).is_equal_to([True])
+
+        # Reset
+        w.reset_dirty()
+        assert_that(dirty_states).is_equal_to([True, False])
+
+    def test_on_dirty_changed_hook(self, qt: QtDriver) -> None:
+        """on_dirty_changed should be called when dirty state changes."""
+
+        dirty_states: list[bool] = []
+
+        @widget
+        class UserEditor(QWidget, Widget[User]):
+            name: QLineEdit = make(QLineEdit)
+
+            @override
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        w = UserEditor()
+        qt.track(w)
+
+        # Make dirty
+        w.name.setText("Alice")
+        assert_that(dirty_states).is_equal_to([True])
+
+        # Reset
+        w.reset_dirty()
+        assert_that(dirty_states).is_equal_to([True, False])
+
+    def test_on_dirty_changed_can_update_ui(self, qt: QtDriver) -> None:
+        """on_dirty_changed can be used to enable/disable save button."""
+
+        @widget
+        class UserEditor(QWidget, Widget[User]):
+            name: QLineEdit = make(QLineEdit)
+            save_enabled: bool = False
+
+            @override
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                self.save_enabled = is_dirty
+
+        w = UserEditor()
+        qt.track(w)
+
+        assert_that(w.save_enabled).is_false()
+
+        w.name.setText("Alice")
+        assert_that(w.save_enabled).is_true()
+
+        w.reset_dirty()
+        assert_that(w.save_enabled).is_false()
 
 
 class TestWidgetUndo:
