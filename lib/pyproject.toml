@@ -11,6 +11,9 @@ version = "0.1.0"
 [project.optional-dependencies]
 test = ["pytest", "pytest-qt"]
 
+[project.entry-points.pytest11]
+qtpie = "qtpie.testing.plugin"
+
 [build-system]
 build-backend = "hatchling.build"
 requires = ["hatchling"]

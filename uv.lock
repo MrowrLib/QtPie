@@ -333,6 +333,12 @@ wheels = [
 name = "tests"
 version = "0.1.0"
 source = { virtual = "tests" }
+dependencies = [
+    { name = "qtpie", extra = ["test"] },
+]
+
+[package.metadata]
+requires-dist = [{ name = "qtpie", extras = ["test"], editable = "lib" }]
 
 [[package]]
 name = "typing-extensions"
