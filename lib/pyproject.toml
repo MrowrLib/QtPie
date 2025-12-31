@@ -1,0 +1,19 @@
+[project]
+dependencies = [
+  "qtpy>=2.4.3",
+]
+description = "Add your description here"
+name = "qtpie"
+readme = "README.md"
+requires-python = ">=3.13"
+version = "0.1.0"
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-qt"]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["qtpie", "observant"]

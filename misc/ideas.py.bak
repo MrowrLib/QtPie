@@ -66,6 +66,11 @@ class MyWidget(Widget):
     # Some text label which shows the name and age (updates automatically)
     _label: QLabel = new(bind="{_name}, {_age} years old")
 
+    def __setup__(self) -> None:
+        # This method would be called after initialization to set up any additional
+        # logic or connections if needed.
+        pass
+
     @override
     def on_dirty_changed(self) -> None: ...
 
@@ -109,3 +114,19 @@ class MyWidgetMVVM(Widget[MyViewModel]):
 
     def on_click(self) -> None:
         print(f"Hello, {self.view_model.name}!")
+
+
+# What if you want to inherit from a specific QWidget subclass?
+
+
+@widget
+class MyCustomWidget(QPushButton, WidgetBase):
+    pass
+
+
+# Or even with the generic...
+
+
+@widget
+class MyCustomWidgetGeneric(QPushButton, Widget[MyViewModel]):
+    pass
