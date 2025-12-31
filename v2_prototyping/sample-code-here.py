@@ -43,19 +43,25 @@ def widget(cls: Any) -> Any:
     return cls
 
 
+# Maybe this should give the same features of Widget[T] and it basically dynamically
+# creates the view model class for you based on the Variable definitions.
 @widget
 class MyWidget(Widget):
     # Just a simple string variable, changes to it are reactive in the UI
-    _name: Variable[str] = new()
+    _name: Variable[str] = new(
+        validate=["_non_empty", "_is_capitalized"]
+    )  # or could have validate=["common_module_of_validations.non_empty", ...]
 
     # An integer variable automatically represented by a slider in the UI
-    _age: Variable[int, QSlider] = new(min=0, max=120, step=1, default=25)
+    _age: Variable[int, QSlider] = new(
+        min=0, max=120, step=1, default=25, validate="_non_negative"
+    )
 
     # A single line edit for editing the name variable
     _name_edit: QLineEdit = new(bind=_name)
 
     # A button that prints a greeting when clicked
-    _greet_button: QPushButton = new(clicked="on_click")
+    _greet_button: QPushButton = new(clicked="_on_click")
 
     # Some text label which shows the name and age (updates automatically)
     _label: QLabel = new(bind="{_name}, {_age} years old")
@@ -66,7 +72,22 @@ class MyWidget(Widget):
     @override
     def on_valid_changed(self) -> None: ...
 
-    def on_click(self) -> None:
+    def _non_negative(self, value: int) -> str | None:
+        if value < 0:
+            return "Value must be non-negative"
+        return None
+
+    def _non_empty(self, value: str) -> str | None:
+        if not value:
+            return "Value cannot be empty"
+        return None
+
+    def _is_capitalized(self, value: str) -> str | None:
+        if not value[0].isupper():
+            return "Value must start with a capital letter"
+        return None
+
+    def _on_click(self) -> None:
         print(f"Hello, {self._name}!")
 
 
