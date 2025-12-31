@@ -16,15 +16,18 @@ class QtDriver:
     def __init__(self, qtbot: QtBot) -> None:
         self._qtbot = qtbot
 
-    def track(self, *widgets: QWidget) -> None:
+    def track[W: QWidget](self, widget: W) -> W:
         """
-        Track widgets for automatic cleanup after the test.
+        Track a widget for automatic cleanup after the test.
 
         Args:
-            *widgets: One or more widgets to track.
+            widget: The widget to track.
+
+        Returns:
+            The same widget, for chaining.
         """
-        for widget in widgets:
-            self._qtbot.addWidget(widget)
+        self._qtbot.addWidget(widget)
+        return widget
 
     def click(
         self,
