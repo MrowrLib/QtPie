@@ -17,7 +17,7 @@ class TestVariableWithNewFields:
             _name: Variable[str] = new("default")
 
         obj = MyClass()
-        assert_that(obj._name).is_equal_to("default")
+        assert_that(obj._name.value).is_equal_to("default")
 
     def test_variable_set_and_get(self) -> None:
         """Variable can be set and retrieved."""
@@ -27,8 +27,19 @@ class TestVariableWithNewFields:
             _count: Variable[int] = new(0)
 
         obj = MyClass()
-        obj._count = 42
-        assert_that(obj._count).is_equal_to(42)
+        obj._count.value = 42
+        assert_that(obj._count.value).is_equal_to(42)
+
+    def test_variable_direct_assignment(self) -> None:
+        """Direct assignment sets the value."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(0)
+
+        obj = MyClass()
+        obj._count = 42  # Direct assignment (pyright doesn't understand descriptors)  # pyright: ignore[reportAttributeAccessIssue]
+        assert_that(obj._count.value).is_equal_to(42)
 
     def test_variable_per_instance(self) -> None:
         """Each instance has its own value."""
@@ -40,11 +51,11 @@ class TestVariableWithNewFields:
         a = MyClass()
         b = MyClass()
 
-        a._value = 10
-        b._value = 20
+        a._value.value = 10
+        b._value.value = 20
 
-        assert_that(a._value).is_equal_to(10)
-        assert_that(b._value).is_equal_to(20)
+        assert_that(a._value.value).is_equal_to(10)
+        assert_that(b._value.value).is_equal_to(20)
 
     def test_variable_is_reactive(self) -> None:
         """Variable changes trigger callbacks."""
@@ -56,13 +67,24 @@ class TestVariableWithNewFields:
         obj = MyClass()
         received: list[str] = []
 
-        # Access the underlying observable via the class descriptor
-        MyClass._name.observable(obj).on_change(lambda v: received.append(v))
+        # Access the observable via the Variable instance
+        obj._name.observable.on_change(lambda v: received.append(v))
 
-        obj._name = "hello"
-        obj._name = "world"
+        obj._name.value = "hello"
+        obj._name.value = "world"
 
         assert_that(received).is_equal_to(["hello", "world"])
+
+    def test_variable_returns_variable_instance(self) -> None:
+        """Accessing a Variable field returns a Variable instance."""
+
+        @new_fields
+        class MyClass:
+            _name: Variable[str] = new("test")
+
+        obj = MyClass()
+        assert_that(obj._name).is_instance_of(Variable)
+        assert_that(obj._name.value).is_equal_to("test")
 
 
 class TestNewWithNonVariableTypes:
@@ -111,11 +133,11 @@ class TestNewWithNonVariableTypes:
             _counter: Counter = new(start=10)
 
         obj = MyClass()
-        assert_that(obj._name).is_equal_to("test")
+        assert_that(obj._name.value).is_equal_to("test")
         assert_that(obj._counter.value).is_equal_to(10)
 
-        obj._name = "updated"
-        assert_that(obj._name).is_equal_to("updated")
+        obj._name.value = "updated"
+        assert_that(obj._name.value).is_equal_to("updated")
 
 
 class TestVariablePrimitiveDefaults:
@@ -129,7 +151,7 @@ class TestVariablePrimitiveDefaults:
             _name: Variable[str] = new("hello")
 
         obj = MyClass()
-        assert_that(obj._name).is_equal_to("hello")
+        assert_that(obj._name.value).is_equal_to("hello")
 
     def test_int_default(self) -> None:
         """new(42) works without default= for ints."""
@@ -139,7 +161,7 @@ class TestVariablePrimitiveDefaults:
             _count: Variable[int] = new(42)
 
         obj = MyClass()
-        assert_that(obj._count).is_equal_to(42)
+        assert_that(obj._count.value).is_equal_to(42)
 
     def test_float_default(self) -> None:
         """new(3.14) works without default= for floats."""
@@ -149,7 +171,7 @@ class TestVariablePrimitiveDefaults:
             _ratio: Variable[float] = new(3.14)
 
         obj = MyClass()
-        assert_that(obj._ratio).is_equal_to(3.14)
+        assert_that(obj._ratio.value).is_equal_to(3.14)
 
     def test_bool_default(self) -> None:
         """new(True) works without default= for bools."""
@@ -159,7 +181,7 @@ class TestVariablePrimitiveDefaults:
             _enabled: Variable[bool] = new(True)
 
         obj = MyClass()
-        assert_that(obj._enabled).is_true()
+        assert_that(obj._enabled.value).is_true()
 
     def test_default_kwarg_still_works(self) -> None:
         """default= kwarg still works for backwards compatibility."""
@@ -169,7 +191,7 @@ class TestVariablePrimitiveDefaults:
             _value: Variable[int] = new(default=99)
 
         obj = MyClass()
-        assert_that(obj._value).is_equal_to(99)
+        assert_that(obj._value.value).is_equal_to(99)
 
 
 class TestNewFieldsIdempotent:
@@ -184,5 +206,5 @@ class TestNewFieldsIdempotent:
             _value: Variable[int] = new(0)
 
         obj = MyClass()
-        obj._value = 5
-        assert_that(obj._value).is_equal_to(5)
+        obj._value.value = 5
+        assert_that(obj._value.value).is_equal_to(5)

@@ -129,8 +129,8 @@ class TestWidgetWithVariables:
             _label: QLabel = new("Hello")
 
         w = qt.track(MyWidget())
-        w._count = 42
-        assert_that(w._count).is_equal_to(42)
+        w._count = 42  # Direct assignment works
+        assert_that(w._count.value).is_equal_to(42)
 
     def test_variables_not_added_to_layout(self, qt: QtDriver) -> None:
         """Variable fields are not added to layout (not QWidgets)."""

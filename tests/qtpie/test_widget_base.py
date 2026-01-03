@@ -36,8 +36,8 @@ class TestWidgetBaseWithMockWidget:
             _name: Variable[str] = new("")
 
         obj = MyWidget()
-        obj._name = "hello"
-        assert_that(obj._name).is_equal_to("hello")
+        obj._name.value = "hello"
+        assert_that(obj._name.value).is_equal_to("hello")
 
     def test_variable_reactive_without_decorator(self) -> None:
         """Variable fields are reactive without explicit @new_fields."""
@@ -50,10 +50,10 @@ class TestWidgetBaseWithMockWidget:
 
         obj = MyWidget()
         received: list[int] = []
-        MyWidget._count.observable(obj).on_change(lambda v: received.append(v))
+        obj._count.observable.on_change(lambda v: received.append(v))
 
-        obj._count = 1
-        obj._count = 2
+        obj._count.value = 1
+        obj._count.value = 2
 
         assert_that(received).is_equal_to([1, 2])
 
@@ -67,10 +67,10 @@ class TestWidgetBaseWithMockWidget:
             _value: Variable[int] = new(0)
 
             def __setup__(self) -> None:
-                self._value = 42
+                self._value.value = 42
 
         obj = MyWidget()
-        assert_that(obj._value).is_equal_to(42)
+        assert_that(obj._value.value).is_equal_to(42)
 
     def test_non_variable_fields_instantiated(self) -> None:
         """Non-Variable new() fields are instantiated."""
@@ -99,8 +99,8 @@ class TestWidgetBaseWithRealQt:
             _title: Variable[str] = new("default")
 
         widget = qt.track(MyWidget())
-        widget._title = "Hello Qt!"
-        assert_that(widget._title).is_equal_to("Hello Qt!")
+        widget._title.value = "Hello Qt!"
+        assert_that(widget._title.value).is_equal_to("Hello Qt!")
 
     def test_qlistview_subclass(self, qt: QtDriver) -> None:
         """WidgetBase works with QListView (the intended use case)."""
@@ -109,10 +109,10 @@ class TestWidgetBaseWithRealQt:
             _items: Variable[list[str]] = new([])
 
             def __setup__(self) -> None:
-                self._items = ["one", "two", "three"]
+                self._items.value = ["one", "two", "three"]
 
         view = qt.track(MyListView())
-        assert_that(view._items).is_equal_to(["one", "two", "three"])
+        assert_that(view._items.value).is_equal_to(["one", "two", "three"])
 
     def test_setup_runs_after_qt_init(self, qt: QtDriver) -> None:
         """__setup__ runs after Qt widget is fully initialized."""
@@ -140,13 +140,13 @@ class TestWidgetBaseWithRealQt:
                 self._button.clicked.connect(self._on_click)
 
             def _on_click(self) -> None:
-                self._clicked_count += 1
+                self._clicked_count.value += 1
 
         w = qt.track(MyWidget())
         assert_that(w._label.text()).is_equal_to("Hello")
         assert_that(w._button.text()).is_equal_to("Click me")
-        assert_that(w._clicked_count).is_equal_to(0)
+        assert_that(w._clicked_count.value).is_equal_to(0)
 
         # Simulate click
         qt.click(w._button)
-        assert_that(w._clicked_count).is_equal_to(1)
+        assert_that(w._clicked_count.value).is_equal_to(1)
