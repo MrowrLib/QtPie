@@ -1,6 +1,6 @@
 """Variable - Per-instance reactive state in QtPie widgets."""
 
-from typing import Any, overload
+from typing import Any, cast, overload
 
 from observant import Observable
 
@@ -13,6 +13,8 @@ class Variable[T]:
         print(self._name.value)         # get value
         self._name.observable.on_change(callback)  # subscribe
         bind(self._name).to(widget)     # bind to widget
+        if self._name.is_dirty:         # check dirty state
+        self._name.reset_dirty()        # mark as clean
     """
 
     def __init__(self, observable: Observable[T]) -> None:
@@ -32,6 +34,15 @@ class Variable[T]:
     def observable(self) -> Observable[T]:
         """Get the underlying Observable for subscriptions."""
         return self._observable
+
+    @property
+    def is_dirty(self) -> Observable[bool]:
+        """Dirty state - usable as bool or Observable."""
+        return self._observable.is_dirty
+
+    def reset_dirty(self) -> None:
+        """Mark current value as clean."""
+        self._observable.reset_dirty()
 
 
 class _VariableDescriptor[T]:
@@ -54,18 +65,17 @@ class _VariableDescriptor[T]:
             return self  # type: ignore[return-value]
 
         # Get or create per-instance Variable in _qtpie.variables
-        qtpie_state = obj.__dict__.get("_qtpie")
-        if qtpie_state is None:
-            # Lazily create state if accessed before __init__
-            from .widget import QtPieState
+        from .widget import QtPieState
 
-            qtpie_state = QtPieState(obj)  # type: ignore[arg-type]
-            obj.__dict__["_qtpie"] = qtpie_state
+        if not hasattr(obj, "_qtpie"):
+            # Lazily create state if accessed before __init__
+            obj._qtpie = QtPieState(obj)  # type: ignore[arg-type, attr-defined]
+        qtpie_state = cast(QtPieState, obj._qtpie)  # type: ignore[attr-defined]
 
         if self._name not in qtpie_state.variables:
             observable: Observable[T] = Observable(self._default)
             var: Variable[T] = Variable(observable)
-            qtpie_state.variables[self._name] = var
+            qtpie_state.register_variable(self._name, var)
 
         return qtpie_state.variables[self._name]
 
@@ -77,12 +87,11 @@ class _VariableDescriptor[T]:
         """Allow direct assignment: self._name = value sets .value."""
         if isinstance(value, Variable):
             # Edge case: assigning a Variable directly (shouldn't normally happen)
-            qtpie_state = obj.__dict__.get("_qtpie")
-            if qtpie_state is None:
-                from .widget import QtPieState
+            from .widget import QtPieState
 
-                qtpie_state = QtPieState(obj)  # type: ignore[arg-type]
-                obj.__dict__["_qtpie"] = qtpie_state
+            if not hasattr(obj, "_qtpie"):
+                obj._qtpie = QtPieState(obj)  # type: ignore[arg-type, attr-defined]
+            qtpie_state = cast(QtPieState, obj._qtpie)  # type: ignore[attr-defined]
             qtpie_state.variables[self._name] = value
         else:
             # Normal case: self._name = "hello" → sets the value

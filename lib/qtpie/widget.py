@@ -40,34 +40,83 @@ class _QtPieConfig:
 class QtPieState:
     """Instance-level QtPie state."""
 
-    __slots__ = ("variables", "_view_model", "_widget")
+    __slots__ = ("variables", "_view_model", "_widget", "_was_dirty", "_check_dirty")
 
     def __init__(self, widget: Widget) -> None:
         self._widget = widget
         self.variables: dict[str, Variable[Any]] = {}
         self._view_model: QtPieViewModel | None = None
+        self._was_dirty: bool = False
+        self._check_dirty: Callable[[bool], None] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
         if self._view_model is None:
-            self._view_model = QtPieViewModel(self._widget)
+            self._view_model = QtPieViewModel(self)
         return self._view_model
+
+    @property
+    def is_dirty(self) -> bool:
+        """Check if any Variable has changed from its clean state."""
+        return any(var.is_dirty for var in self.variables.values())
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        return {name for name, var in self.variables.items() if var.is_dirty}
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean."""
+        for var in self.variables.values():
+            var.reset_dirty()
+
+    def enable_dirty_hook(self) -> None:
+        """Enable the on_dirty_changed hook (called after __setup__)."""
+
+        def check_dirty_transition(_: bool) -> None:
+            is_now_dirty = self.is_dirty
+            if self._was_dirty != is_now_dirty:
+                self._was_dirty = is_now_dirty
+                hook = getattr(self._widget, "on_dirty_changed", None)
+                if hook is not None:
+                    hook(is_now_dirty)
+
+        self._check_dirty = check_dirty_transition
+
+    def register_variable(self, name: str, var: Variable[Any]) -> None:
+        """Register a Variable and wire up dirty hook if enabled."""
+        self.variables[name] = var
+        if self._check_dirty is not None:
+            var.is_dirty.on_change(self._check_dirty)
 
 
 class QtPieViewModel:
     """Auto-generated view model containing only Variable fields."""
 
-    __slots__ = ("_widget",)
+    __slots__ = ("_state",)
 
-    def __init__(self, widget: Widget) -> None:
-        object.__setattr__(self, "_widget", widget)
+    def __init__(self, state: QtPieState) -> None:
+        self._state = state
 
     def __getattr__(self, name: str) -> Variable[Any]:
-        widget: Widget = object.__getattribute__(self, "_widget")
         # Get variable names from class config
-        if name in type(widget)._qtpie.variable_names:
-            return getattr(widget, name)
+        if name in type(self._state._widget)._qtpie_config.variable_names:
+            return getattr(self._state._widget, name)
         raise AttributeError(f"ViewModel has no attribute {name!r}")
+
+    @property
+    def is_dirty(self) -> bool:
+        """Check if any Variable has changed from its clean state."""
+        return self._state.is_dirty
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        return self._state.dirty_fields
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean."""
+        self._state.reset_dirty()
 
 
 class Widget(QWidget):
@@ -88,21 +137,23 @@ class Widget(QWidget):
             _label: QLabel = new("Hello")
     """
 
-    # Class-level config namespace
-    _qtpie: _QtPieConfig
+    # Class-level config
+    _qtpie_config: _QtPieConfig
+    # Instance-level state (set during __init__)
+    _qtpie: QtPieState
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
         # Create fresh config for this subclass
-        cls._qtpie = _QtPieConfig()
+        cls._qtpie_config = _QtPieConfig()
 
         # Collect fields and variable names
         for name, value in list(cls.__dict__.items()):
             if isinstance(value, NewField):
-                cls._qtpie.fields[name] = value
+                cls._qtpie_config.fields[name] = value
             elif isinstance(value, _VariableDescriptor):
-                cls._qtpie.variable_names.append(name)
+                cls._qtpie_config.variable_names.append(name)
 
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
@@ -110,12 +161,9 @@ class Widget(QWidget):
     @property
     def view_model(self) -> QtPieViewModel:
         """Access only the Variable fields of this widget."""
-        # Instance _qtpie shadows the class _qtpie (config)
-        state = self.__dict__.get("_qtpie")
-        if state is None:
-            state = QtPieState(self)
-            self.__dict__["_qtpie"] = state
-        return state.view_model
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.view_model
 
 
 @overload
@@ -157,8 +205,8 @@ def widget(
 
     def decorator(cls: type[Widget]) -> type[Widget]:
         # Store layout config
-        cls._qtpie.layout = layout
-        cls._qtpie.margins = margins
+        cls._qtpie_config.layout = layout
+        cls._qtpie_config.margins = margins
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(cls)
@@ -173,13 +221,13 @@ def widget(
 
 def _wrap_init_for_layout(cls: type[Widget]) -> None:
     """Wrap __init__ to create layout, add child widgets, and call __setup__."""
-    if cls._qtpie.init_wrapped:
+    if cls._qtpie_config.init_wrapped:
         return
 
     original_init = cls.__init__
 
     # Capture config at decoration time
-    config = cls._qtpie
+    config = cls._qtpie_config
 
     def wrapped_init(self: Widget, *args: Any, **kwargs: Any) -> None:
         # Call original __init__ (which instantiates fields via new_fields)
@@ -217,8 +265,15 @@ def _wrap_init_for_layout(cls: type[Widget]) -> None:
         if setup_method is not None:
             setup_method()
 
+        # Enable on_dirty_changed hook (subscribes to future Variable changes)
+        state = getattr(self, "_qtpie", None)
+        if not isinstance(state, QtPieState):
+            state = QtPieState(self)
+            self._qtpie = state  # type: ignore[assignment]
+        state.enable_dirty_hook()
+
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
-    cls._qtpie.init_wrapped = True
+    cls._qtpie_config.init_wrapped = True
 
 
 def _create_layout(layout_type: LayoutType) -> QLayout | None:
