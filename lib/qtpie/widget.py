@@ -1,8 +1,13 @@
 # pyright: reportPrivateUsage=false
 """Widget - QWidget container with automatic layout."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
+
+if TYPE_CHECKING:
+    from .variable import Variable
 
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -16,6 +21,53 @@ from PySide6.QtWidgets import (
 from .layout import LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
+from .variable import _VariableDescriptor
+
+
+class _QtPieConfig:
+    """Class-level QtPie configuration."""
+
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped")
+
+    def __init__(self) -> None:
+        self.layout: LayoutType = "vertical"
+        self.margins: int | tuple[int, int, int, int] | None = None
+        self.fields: dict[str, NewField] = {}
+        self.variable_names: list[str] = []
+        self.init_wrapped: bool = False
+
+
+class QtPieState:
+    """Instance-level QtPie state."""
+
+    __slots__ = ("variables", "_view_model", "_widget")
+
+    def __init__(self, widget: Widget) -> None:
+        self._widget = widget
+        self.variables: dict[str, Variable[Any]] = {}
+        self._view_model: QtPieViewModel | None = None
+
+    @property
+    def view_model(self) -> QtPieViewModel:
+        if self._view_model is None:
+            self._view_model = QtPieViewModel(self._widget)
+        return self._view_model
+
+
+class QtPieViewModel:
+    """Auto-generated view model containing only Variable fields."""
+
+    __slots__ = ("_widget",)
+
+    def __init__(self, widget: Widget) -> None:
+        object.__setattr__(self, "_widget", widget)
+
+    def __getattr__(self, name: str) -> Variable[Any]:
+        widget: Widget = object.__getattribute__(self, "_widget")
+        # Get variable names from class config
+        if name in type(widget)._qtpie.variable_names:
+            return getattr(widget, name)
+        raise AttributeError(f"ViewModel has no attribute {name!r}")
 
 
 class Widget(QWidget):
@@ -36,22 +88,34 @@ class Widget(QWidget):
             _label: QLabel = new("Hello")
     """
 
-    # Class-level config (set by @widget decorator)
-    _qtpie_layout: LayoutType = "vertical"
-    _qtpie_margins: int | tuple[int, int, int, int] | None = None
-    _qtpie_fields: dict[str, NewField]
+    # Class-level config namespace
+    _qtpie: _QtPieConfig
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
-        # Collect NewField instances BEFORE new_fields processes them
-        cls._qtpie_fields = {}
+        # Create fresh config for this subclass
+        cls._qtpie = _QtPieConfig()
+
+        # Collect fields and variable names
         for name, value in list(cls.__dict__.items()):
             if isinstance(value, NewField):
-                cls._qtpie_fields[name] = value
+                cls._qtpie.fields[name] = value
+            elif isinstance(value, _VariableDescriptor):
+                cls._qtpie.variable_names.append(name)
 
-        # Apply @new_fields to handle Variable and non-Variable instantiation
+        # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
+
+    @property
+    def view_model(self) -> QtPieViewModel:
+        """Access only the Variable fields of this widget."""
+        # Instance _qtpie shadows the class _qtpie (config)
+        state = self.__dict__.get("_qtpie")
+        if state is None:
+            state = QtPieState(self)
+            self.__dict__["_qtpie"] = state
+        return state.view_model
 
 
 @overload
@@ -92,9 +156,9 @@ def widget(
     """
 
     def decorator(cls: type[Widget]) -> type[Widget]:
-        # Store layout config on the class
-        cls._qtpie_layout = layout
-        cls._qtpie_margins = margins
+        # Store layout config
+        cls._qtpie.layout = layout
+        cls._qtpie.margins = margins
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(cls)
@@ -102,68 +166,59 @@ def widget(
         return cls
 
     if cls is not None:
-        # Called as @widget without parentheses
         return decorator(cls)
 
-    # Called as @widget(...) with arguments
     return decorator
 
 
 def _wrap_init_for_layout(cls: type[Widget]) -> None:
     """Wrap __init__ to create layout, add child widgets, and call __setup__."""
-    if getattr(cls, "_qtpie_layout_wrapped", False):
+    if cls._qtpie.init_wrapped:
         return
 
     original_init = cls.__init__
 
     # Capture config at decoration time
-    layout_type: LayoutType = cls._qtpie_layout
-    margins_config: int | tuple[int, int, int, int] | None = cls._qtpie_margins
-    fields_config: dict[str, NewField] = cls._qtpie_fields
+    config = cls._qtpie
 
     def wrapped_init(self: Widget, *args: Any, **kwargs: Any) -> None:
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
 
         # Set up layout if configured
-        if layout_type is not None:
-            # Create the layout
-            qt_layout = _create_layout(layout_type)
+        if config.layout is not None:
+            qt_layout = _create_layout(config.layout)
             if qt_layout is not None:
                 self.setLayout(qt_layout)
 
                 # Apply margins
-                if margins_config is not None:
-                    if isinstance(margins_config, int):
-                        qt_layout.setContentsMargins(margins_config, margins_config, margins_config, margins_config)
+                if config.margins is not None:
+                    if isinstance(config.margins, int):
+                        qt_layout.setContentsMargins(config.margins, config.margins, config.margins, config.margins)
                     else:
-                        qt_layout.setContentsMargins(*margins_config)
+                        qt_layout.setContentsMargins(*config.margins)
 
                 # Add child widgets to layout (in field definition order)
-                for name, field in fields_config.items():
-                    # Skip if marked for exclusion
+                for name, field in config.fields.items():
                     if field.exclude_from_layout:
                         continue
 
-                    # Get the instantiated widget
                     widget_instance = getattr(self, name, None)
                     if widget_instance is None:
                         continue
 
-                    # Only add QWidget instances
                     if not isinstance(widget_instance, QWidget):
                         continue
 
-                    # Add to layout based on layout type
-                    _add_to_layout(qt_layout, widget_instance, layout_type)
+                    _add_to_layout(qt_layout, widget_instance, config.layout)
 
-        # Call __setup__ hook if defined (after layout is ready)
+        # Call __setup__ hook if defined
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
-    cls._qtpie_layout_wrapped = True  # type: ignore[attr-defined]
+    cls._qtpie.init_wrapped = True
 
 
 def _create_layout(layout_type: LayoutType) -> QLayout | None:
@@ -184,10 +239,6 @@ def _add_to_layout(layout: QLayout, widget_instance: QWidget, layout_type: Layou
     if layout_type in ("vertical", "horizontal"):
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "form":
-        # For form layout, add without label for now
-        # (labels will be supported via new() metadata later)
         layout.addRow(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "grid":
-        # For grid layout, auto-position for now
-        # (explicit positions will be supported via new() metadata later)
         layout.addWidget(widget_instance)  # type: ignore[union-attr]

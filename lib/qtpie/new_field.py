@@ -30,7 +30,7 @@ class NewField:
         origin = get_origin(self.field_type)
         if origin is Variable or self.field_type is Variable:
             default = self._get_variable_default()
-            setattr(owner, name, create_variable_descriptor(default))
+            setattr(owner, name, create_variable_descriptor(default, name))
             return
 
         # Handle layout kwarg for QWidget types only
