@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, cast, get_origin, overload
+from typing import TYPE_CHECKING, Any, cast, get_origin, overload, override
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
@@ -180,16 +180,40 @@ class RecordVariable[T]:
     Has properly typed `observable` that returns `ObservableProxy[T]`
     instead of the union type, so pyright understands field access.
 
+    Supports direct field access: self.record.name = "x" forwards to the proxy.
+
     Same interface as Variable[T] but specialized for records.
     """
 
+    __slots__ = ("_wrapper",)
+
     def __init__(self, wrapper: ObservableProxy[T]) -> None:
-        self._wrapper: ObservableProxy[T] = wrapper
+        object.__setattr__(self, "_wrapper", wrapper)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to the underlying proxy.
+
+        Returns the actual value (not Observable) for field access.
+        Use .observable.field for the Observable itself.
+        """
+        result = getattr(self._wrapper, name)
+        # Unwrap Observable to return actual value
+        if isinstance(result, Observable):
+            return cast(Any, result.get())
+        return result
+
+    @override
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Forward attribute setting to the underlying proxy."""
+        if name == "_wrapper":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._wrapper, name, value)
 
     @property
     def value(self) -> T:
         """Get the current value."""
-        return self._wrapper.unwrap()
+        return cast(T, self._wrapper.unwrap())
 
     @value.setter
     def value(self, val: T) -> None:
@@ -205,7 +229,7 @@ class RecordVariable[T]:
     @property
     def is_dirty(self) -> Observable[bool]:
         """Dirty state - usable as bool or Observable."""
-        return self._wrapper.is_dirty
+        return cast(Observable[bool], self._wrapper.is_dirty)
 
     def reset_dirty(self) -> None:
         """Mark current value as clean."""
@@ -214,6 +238,10 @@ class RecordVariable[T]:
     def on_change(self, callback: Any) -> None:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
+
+    def __call__(self) -> RecordVariable[T]:
+        """Call syntax: self.record().is_dirty returns RecordVariable for state access."""
+        return self
 
     # Descriptor protocol for pyright - assignment accepts T or RecordVariable[T]
     if TYPE_CHECKING:

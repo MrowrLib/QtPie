@@ -1,8 +1,10 @@
-# pyright: reportPrivateUsage=false
+# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+# pyright: reportUnknownMemberType=false, reportCallIssue=false
 """Tests for Widget[T] with record support."""
 
 from dataclasses import dataclass
 
+import pytest
 from assertpy import assert_that
 from PySide6.QtWidgets import QLabel
 
@@ -48,15 +50,14 @@ class TestWidgetRecord:
         assert_that(w._qtpie_config.record_type).is_equal_to(Person)
 
     def test_record_auto_created(self, qt: QtDriver) -> None:
-        """Accessing record auto-creates a RecordVariable[T]."""
+        """Accessing record_state returns a RecordVariable[T]."""
 
         @widget
         class PersonEditor(Widget[Person]):
             pass
 
         w = qt.track(PersonEditor())
-        record = w.record
-        assert_that(record).is_instance_of(RecordVariable)
+        assert_that(w.record_state).is_instance_of(RecordVariable)
 
     def test_record_has_model_fields(self, qt: QtDriver) -> None:
         """Record proxy has model fields accessible."""
@@ -66,12 +67,48 @@ class TestWidgetRecord:
             pass
 
         w = qt.track(PersonEditor())
-        # Access fields through the proxy
-        w.record.observable.name.set("Alice")  # type: ignore[union-attr]
-        w.record.observable.age.set(30)  # type: ignore[union-attr]
+        # Access fields through the observable
+        w.record_state.observable.name.set("Alice")
+        w.record_state.observable.age.set(30)
 
-        assert_that(w.record.value.name).is_equal_to("Alice")
-        assert_that(w.record.value.age).is_equal_to(30)
+        assert_that(w.record_state.value.name).is_equal_to("Alice")
+        assert_that(w.record_state.value.age).is_equal_to(30)
+
+    def test_record_direct_field_access(self, qt: QtDriver) -> None:
+        """Record supports direct field access and assignment."""
+
+        @widget
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+
+        # Direct assignment triggers reactivity
+        w.record.name = "Bob"
+        w.record.age = 42
+
+        # Direct read returns actual value (not Observable)
+        assert_that(w.record.name).is_equal_to("Bob")
+        assert_that(w.record.age).is_equal_to(42)
+
+    def test_record_state_for_state_access(self, qt: QtDriver) -> None:
+        """record_state returns RecordVariable for state access."""
+
+        @widget
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+
+        # record_state returns RecordVariable
+        assert_that(w.record_state).is_instance_of(RecordVariable)
+
+        # Can access state properties
+        assert_that(w.record_state.is_dirty.get()).is_false()
+
+        w.record.name = "Changed"
+        assert_that(w.record_state.is_dirty.get()).is_true()
+        assert_that(w.record_state.value.name).is_equal_to("Changed")
 
     def test_record_dirty_tracking(self, qt: QtDriver) -> None:
         """Record participates in dirty tracking."""
@@ -81,10 +118,10 @@ class TestWidgetRecord:
             pass
 
         w = qt.track(PersonEditor())
-        assert_that(w.record.is_dirty.get()).is_false()
+        assert_that(w.record_state.is_dirty.get()).is_false()
 
-        w.record.observable.name.set("Bob")  # type: ignore[union-attr]
-        assert_that(w.record.is_dirty.get()).is_true()
+        w.record_state.observable.name.set("Bob")
+        assert_that(w.record_state.is_dirty.get()).is_true()
 
     def test_record_with_other_variables(self, qt: QtDriver) -> None:
         """Widget can have record AND other variables."""
@@ -97,8 +134,8 @@ class TestWidgetRecord:
         w = qt.track(PersonEditor())
 
         # Record works
-        w.record.observable.name.set("Charlie")  # type: ignore[union-attr]
-        assert_that(w.record.value.name).is_equal_to("Charlie")
+        w.record_state.observable.name.set("Charlie")
+        assert_that(w.record_state.value.name).is_equal_to("Charlie")
 
         # Other variable works independently
         w._status.value = "editing"
@@ -113,11 +150,20 @@ class TestWidgetRecord:
 
         w = qt.track(PlainWidget())
 
-        try:
+        with pytest.raises(TypeError, match="no record type"):
             _ = w.record
-            assert_that(False).is_true()  # Should not reach here
-        except TypeError as e:
-            assert_that(str(e)).contains("no record type")
+
+    def test_record_state_without_record_type_raises(self, qt: QtDriver) -> None:
+        """Accessing record_state on Widget without type param raises."""
+
+        @widget
+        class PlainWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(PlainWidget())
+
+        with pytest.raises(TypeError, match="has no record"):
+            _ = w.record_state
 
     def test_record_setter_with_value(self, qt: QtDriver) -> None:
         """Can set record with a model instance."""
@@ -141,12 +187,12 @@ class TestWidgetRecord:
         @widget
         class PersonEditor(Widget[Person]):
             def __setup__(self) -> None:
-                self.record.observable.name.set("Setup Name")  # type: ignore[union-attr]
-                self.record.observable.age.set(25)  # type: ignore[union-attr]
+                self.record_state.observable.name.set("Setup Name")
+                self.record_state.observable.age.set(25)
 
         w = qt.track(PersonEditor())
-        assert_that(w.record.value.name).is_equal_to("Setup Name")
-        assert_that(w.record.value.age).is_equal_to(25)
+        assert_that(w.record_state.value.name).is_equal_to("Setup Name")
+        assert_that(w.record_state.value.age).is_equal_to(25)
 
 
 class TestWidgetRecordExplicit:
@@ -162,7 +208,7 @@ class TestWidgetRecordExplicit:
         w = qt.track(CatEditor())
 
         # Record is accessible but value is None
-        assert_that(w.record.value).is_none()
+        assert_that(w.record_state.value).is_none()
 
     def test_set_record_in_setup(self, qt: QtDriver) -> None:
         """Can set record in __setup__ for types requiring args."""
@@ -173,8 +219,8 @@ class TestWidgetRecordExplicit:
                 self.record = Cat(name="Whiskers", lives=9)
 
         w = qt.track(CatEditor())
-        assert_that(w.record.value).is_not_none()
-        assert_that(w.record.value.name).is_equal_to("Whiskers")
+        assert_that(w.record_state.value).is_not_none()
+        assert_that(w.record_state.value.name).is_equal_to("Whiskers")
 
     def test_explicit_record_with_default(self, qt: QtDriver) -> None:
         """Can declare record explicitly with default value."""
@@ -185,10 +231,10 @@ class TestWidgetRecordExplicit:
 
         w = qt.track(CatEditor())
 
-        # Record should be accessible
-        assert_that(w.record).is_instance_of(Variable)
-        assert_that(w.record.value.name).is_equal_to("Whiskers")
-        assert_that(w.record.value.lives).is_equal_to(9)
+        # When explicit, record_state still works and returns the Variable
+        # (not RecordVariable, but has same interface for .value, .is_dirty)
+        assert_that(w.record_state.value.name).is_equal_to("Whiskers")
+        assert_that(w.record_state.value.lives).is_equal_to(9)
 
     def test_explicit_record_modifiable(self, qt: QtDriver) -> None:
         """Explicit record fields are modifiable."""
@@ -199,11 +245,11 @@ class TestWidgetRecordExplicit:
 
         w = qt.track(CatEditor())
 
-        w.record.observable.name.set("Felix")  # type: ignore[union-attr]
-        w.record.observable.lives.set(8)  # type: ignore[union-attr]
+        w.record_state.observable.name.set("Felix")  # type: ignore[union-attr]
+        w.record_state.observable.lives.set(8)  # type: ignore[union-attr]
 
-        assert_that(w.record.value.name).is_equal_to("Felix")
-        assert_that(w.record.value.lives).is_equal_to(8)
+        assert_that(w.record_state.value.name).is_equal_to("Felix")
+        assert_that(w.record_state.value.lives).is_equal_to(8)
 
     def test_explicit_record_dirty_tracking(self, qt: QtDriver) -> None:
         """Explicit record participates in dirty tracking."""
@@ -214,10 +260,10 @@ class TestWidgetRecordExplicit:
 
         w = qt.track(CatEditor())
 
-        assert_that(w.record.is_dirty.get()).is_false()
+        assert_that(w.record_state.is_dirty.get()).is_false()
 
-        w.record.observable.lives.set(8)  # type: ignore[union-attr]
-        assert_that(w.record.is_dirty.get()).is_true()
+        w.record_state.observable.lives.set(8)  # type: ignore[union-attr]
+        assert_that(w.record_state.is_dirty.get()).is_true()
 
 
 class TestWidgetRecordDirtyHook:
@@ -235,8 +281,8 @@ class TestWidgetRecordDirtyHook:
         w = qt.track(PersonEditor())
 
         # Touch record to register it
-        _ = w.record
+        _ = w.record_state
 
         # Modify record
-        w.record.observable.name.set("Dirty")  # type: ignore[union-attr]
+        w.record_state.observable.name.set("Dirty")
         assert_that(dirty_states).contains(True)

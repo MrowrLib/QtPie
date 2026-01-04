@@ -22,7 +22,8 @@ class MyWidget(Widget[Animal]):
 
     def on_clicked(self) -> None:
         self._count += 1
-        self.record.observable.name = "Buddy!"
+        self.record.name = "Buddy!"
+        self.record.species = "Cat!"
 
 
 if __name__ == "__main__":

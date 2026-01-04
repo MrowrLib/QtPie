@@ -6,9 +6,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
 
-if TYPE_CHECKING:
-    from .variable import Variable
-
 from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
@@ -21,7 +18,7 @@ from PySide6.QtWidgets import (
 from .layout import LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
-from .variable import RecordVariable, _create_observable_for_type, _VariableDescriptor
+from .variable import RecordVariable, Variable, _create_observable_for_type, _VariableDescriptor
 
 
 class _QtPieConfig:
@@ -251,9 +248,37 @@ class Widget[T = None](QWidget):
             self._qtpie = QtPieState(self)
         return self._qtpie.view_model
 
+    @property
+    def record_state(self: Widget[T]) -> RecordVariable[T] | Variable[T]:
+        """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        state = self._qtpie
+
+        # If we have a RecordVariable already, return it
+        if state._record is not None:
+            return cast(RecordVariable[T], state._record)
+
+        # Trigger access to create/register the record
+        _ = self.record
+
+        # Check if it's now a RecordVariable (auto-created)
+        if state._record is not None:
+            return cast(RecordVariable[T], state._record)
+
+        # Otherwise it's an explicit Variable declaration
+        if "record" in state.variables:
+            return cast(Variable[T], state.variables["record"])
+
+        raise TypeError(f"{type(self).__name__} has no record. Use Widget[YourModel] to enable record access.")
+
     if TYPE_CHECKING:
-        # Type stub for autocomplete - actual implementation via descriptor
-        record: RecordVariable[T]
+        # Lie to pyright: say record returns T for field autocomplete
+        # Runtime: _RecordDescriptor returns RecordVariable which forwards via __getattr__
+        @property
+        def record(self) -> T: ...
+        @record.setter
+        def record(self, value: T) -> None: ...
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Check that @widget decorator was applied."""

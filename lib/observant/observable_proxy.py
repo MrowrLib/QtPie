@@ -358,7 +358,12 @@ class ObservableProxy[T]:
         else:
             # Set directly on target and notify
             setattr(target, name, value)
-            self._update_dirty_state()
+            # Mark as dirty since we modified a field directly
+            dirty_tracking: bool = object.__getattribute__(self, "_dirty_tracking")
+            if dirty_tracking:
+                is_dirty_obs: Observable[bool] | None = object.__getattribute__(self, "_is_dirty")
+                if is_dirty_obs is not None and not is_dirty_obs.get():
+                    is_dirty_obs.set(True)
             self._notify_change()
 
     @override
