@@ -223,3 +223,96 @@ class TestNonQWidgetFields:
         # bind SHOULD be in kwargs - only consumed for QWidget types
         assert_that(w._config.kwargs).contains_key("bind")
         assert_that(w._config.kwargs["bind"]).is_equal_to("some_value")
+
+
+class TestWidgetDecoratorRequired:
+    """Test that @widget decorator is required."""
+
+    def test_missing_decorator_raises_error(self) -> None:
+        """Widget without @widget raises TypeError on instantiation."""
+        import pytest
+
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        with pytest.raises(TypeError) as exc_info:
+            MyWidget()
+
+        assert "must be decorated with @widget" in str(exc_info.value)
+        assert "MyWidget" in str(exc_info.value)
+
+
+class TestSignalConnections:
+    """Test declarative signal connections."""
+
+    def test_signal_with_lambda(self, qt: QtDriver) -> None:
+        """Signal connected to lambda."""
+        clicked = False
+
+        def on_click() -> None:
+            nonlocal clicked
+            clicked = True
+
+        @widget
+        class MyWidget(Widget):
+            _btn: QPushButton = new("Click", clicked=on_click)
+
+        w = qt.track(MyWidget())
+        w._btn.click()
+        assert_that(clicked).is_true()
+
+    def test_signal_with_method_name(self, qt: QtDriver) -> None:
+        """Signal connected to method by name."""
+
+        @widget
+        class MyWidget(Widget):
+            _btn: QPushButton = new("Click", clicked="on_clicked")
+            was_clicked: bool = False
+
+            def on_clicked(self) -> None:
+                self.was_clicked = True
+
+        w = qt.track(MyWidget())
+        w._btn.click()
+        assert_that(w.was_clicked).is_true()
+
+    def test_signal_missing_method_raises(self) -> None:
+        """Missing method name raises AttributeError."""
+        import pytest
+
+        @widget
+        class MyWidget(Widget):
+            _btn: QPushButton = new("Click", clicked="nonexistent_method")
+
+        with pytest.raises(AttributeError) as exc_info:
+            MyWidget()
+
+        assert "nonexistent_method" in str(exc_info.value)
+
+    def test_multiple_signals(self, qt: QtDriver) -> None:
+        """Multiple signals can be connected."""
+        pressed_count = 0
+        released_count = 0
+
+        @widget
+        class MyWidget(Widget):
+            _btn: QPushButton = new(
+                "Click",
+                pressed=lambda: inc_pressed(),
+                released=lambda: inc_released(),
+            )
+
+        def inc_pressed() -> None:
+            nonlocal pressed_count
+            pressed_count += 1
+
+        def inc_released() -> None:
+            nonlocal released_count
+            released_count += 1
+
+        w = qt.track(MyWidget())
+        w._btn.pressed.emit()
+        w._btn.released.emit()
+
+        assert_that(pressed_count).is_equal_to(1)
+        assert_that(released_count).is_equal_to(1)

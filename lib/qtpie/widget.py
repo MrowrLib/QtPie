@@ -238,6 +238,13 @@ class Widget[T = None](QWidget):
         # Type stub for autocomplete - actual implementation via descriptor
         record: VariableClass[T]
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Check that @widget decorator was applied."""
+        if not self._qtpie_config.init_wrapped:
+            raise TypeError(f"{type(self).__name__} must be decorated with @widget. Add @widget above your class definition.")
+        # This should never run - @widget replaces __init__
+        super().__init__(*args, **kwargs)  # pragma: no cover
+
     def __getattr__(self, name: str) -> Any:
         """Handle attribute access for special cases."""
         if name == "record":
@@ -351,6 +358,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
 
         # Apply bindings (auto-bind or explicit)
         _apply_auto_bindings(self, config)
+
+        # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
+        _connect_signals(self, config)
 
         # Call __setup__ hook if defined
         setup_method = getattr(self, "__setup__", None)
@@ -493,3 +503,35 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
             # ObservableProxy - not directly bindable to a widget property
             # This shouldn't normally happen since paths resolve to leaf observables
             pass
+
+
+def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Connect signals declared in new() to handlers.
+
+    Supports both callables and string method names:
+        clicked=lambda: print("clicked")
+        clicked="on_clicked"
+    """
+    for name, field in config.fields.items():
+        if not field.signal_connections:
+            continue
+
+        widget_instance = getattr(widget, name, None)
+        if widget_instance is None:
+            continue
+
+        for signal_name, handler in field.signal_connections.items():
+            signal = getattr(widget_instance, signal_name, None)
+            if signal is None:
+                continue
+
+            if isinstance(handler, str):
+                # Method name - resolve on the parent widget
+                method = getattr(widget, handler, None)
+                if method is not None and callable(method):
+                    signal.connect(method)
+                else:
+                    raise AttributeError(f"{type(widget).__name__} has no method '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
+            else:
+                # Direct callable (lambda, function, etc.)
+                signal.connect(handler)
