@@ -9,8 +9,8 @@ class MyWidget(Widget):
     _label: QLabel = new(bind="Count: {count}")
     _btn: QPushButton = new("Click me", clicked="on_clicked")
 
-    # def on_clicked(self) -> None:
-    #     self._count += 1
+    def on_clicked(self) -> None:
+        self._count += 1
 
 
 if __name__ == "__main__":

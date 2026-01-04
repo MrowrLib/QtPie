@@ -199,6 +199,94 @@ class TestVariablePrimitiveDefaults:
         assert_that(obj._value.value).is_equal_to(99)
 
 
+class TestVariableAugmentedAssignment:
+    """Test augmented assignment operators on Variable."""
+
+    def test_iadd(self) -> None:
+        """Variable supports +=."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(10)
+
+        obj = MyClass()
+        obj._count += 5
+        assert_that(obj._count.value).is_equal_to(15)
+
+    def test_isub(self) -> None:
+        """Variable supports -=."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(10)
+
+        obj = MyClass()
+        obj._count -= 3
+        assert_that(obj._count.value).is_equal_to(7)
+
+    def test_imul(self) -> None:
+        """Variable supports *=."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(10)
+
+        obj = MyClass()
+        obj._count *= 2
+        assert_that(obj._count.value).is_equal_to(20)
+
+    def test_itruediv(self) -> None:
+        """Variable supports /=."""
+
+        @new_fields
+        class MyClass:
+            _value: Variable[float] = new(10.0)
+
+        obj = MyClass()
+        obj._value /= 4
+        assert_that(obj._value.value).is_equal_to(2.5)
+
+    def test_ifloordiv(self) -> None:
+        """Variable supports //=."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(10)
+
+        obj = MyClass()
+        obj._count //= 3
+        assert_that(obj._count.value).is_equal_to(3)
+
+    def test_imod(self) -> None:
+        """Variable supports %=."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(10)
+
+        obj = MyClass()
+        obj._count %= 3
+        assert_that(obj._count.value).is_equal_to(1)
+
+    def test_iadd_triggers_change(self) -> None:
+        """Augmented assignment triggers change callback."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int] = new(0)
+
+        obj = MyClass()
+        changed = False
+
+        def on_change(_: int) -> None:
+            nonlocal changed
+            changed = True
+
+        obj._count.on_change(on_change)
+        obj._count += 1
+        assert_that(changed).is_true()
+
+
 class TestNewFieldsIdempotent:
     """Test that @new_fields is idempotent."""
 

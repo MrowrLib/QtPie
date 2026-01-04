@@ -1,7 +1,9 @@
 """Variable - Per-instance reactive state in QtPie widgets."""
 
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import Any, cast, get_origin, overload
+from typing import TYPE_CHECKING, Any, cast, get_origin, overload
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
@@ -128,6 +130,46 @@ class Variable[T]:
     def on_change(self, callback: Any) -> None:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
+
+    # Descriptor protocol for pyright - tells it that assignment accepts T or Variable[T]
+    if TYPE_CHECKING:
+
+        @overload
+        def __get__(self, obj: None, owner: type) -> Variable[T]: ...
+        @overload
+        def __get__(self, obj: object, owner: type) -> Variable[T]: ...
+        def __get__(self, obj: object | None, owner: type) -> Variable[T]: ...
+
+        @overload
+        def __set__(self, obj: object, value: T) -> None: ...
+        @overload
+        def __set__(self, obj: object, value: Variable[T]) -> None: ...
+        def __set__(self, obj: object, value: T | Variable[T]) -> None: ...
+
+    # Augmented assignment operators - allow self._count += 1
+    def __iadd__(self, other: Any) -> Variable[T]:
+        self.value = self.value + other  # type: ignore[operator]
+        return self
+
+    def __isub__(self, other: Any) -> Variable[T]:
+        self.value = self.value - other  # type: ignore[operator]
+        return self
+
+    def __imul__(self, other: Any) -> Variable[T]:
+        self.value = self.value * other  # type: ignore[operator]
+        return self
+
+    def __itruediv__(self, other: Any) -> Variable[T]:
+        self.value = self.value / other  # type: ignore[operator]
+        return self
+
+    def __ifloordiv__(self, other: Any) -> Variable[T]:
+        self.value = self.value // other  # type: ignore[operator]
+        return self
+
+    def __imod__(self, other: Any) -> Variable[T]:
+        self.value = self.value % other  # type: ignore[operator]
+        return self
 
 
 class _VariableDescriptor[T]:
