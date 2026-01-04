@@ -28,7 +28,7 @@ from .variable import _create_observable_for_type, _VariableDescriptor
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -37,6 +37,7 @@ class _QtPieConfig:
         self.variable_names: list[str] = []
         self.init_wrapped: bool = False
         self.record_type: type[Any] | None = None  # T from Widget[T]
+        self.auto_bind: bool = True  # Auto-bind QWidget fields to matching Variables/record fields
 
 
 class QtPieState:
@@ -254,6 +255,7 @@ def widget(
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
+    auto_bind: bool = True,
 ) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
 
 
@@ -262,6 +264,7 @@ def widget[W: Widget[Any]](
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
+    auto_bind: bool = True,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
 
@@ -274,17 +277,25 @@ def widget[W: Widget[Any]](
         class MyWidget(Widget):
             ...
 
+        @widget(auto_bind=False)
+        class MyWidget(Widget[Person]):
+            # No auto-binding, must use bind="field" explicitly
+            ...
+
     Args:
         layout: "vertical" | "horizontal" | "form" | "grid" | None
                 Default is "vertical". None disables auto-layout.
         margins: int | tuple[int, int, int, int] | None
                  Layout margins. int applies to all sides.
+        auto_bind: If True (default), QWidget fields are automatically bound
+                   to matching Variables or record fields.
     """
 
     def decorator(target: type[W]) -> type[W]:
         # Store layout config
         target._qtpie_config.layout = layout
         target._qtpie_config.margins = margins
+        target._qtpie_config.auto_bind = auto_bind
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(target)
@@ -338,6 +349,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
 
                     _add_to_layout(qt_layout, widget_instance, config.layout)
 
+        # Apply bindings (auto-bind or explicit)
+        _apply_auto_bindings(self, config)
+
         # Call __setup__ hook if defined
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -375,3 +389,107 @@ def _add_to_layout(layout: QLayout, widget_instance: QWidget, layout_type: Layou
         layout.addRow(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "grid":
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
+
+
+def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply auto-bindings for QWidget fields.
+
+    For each QWidget field:
+    - If field.bind is set, use that path (always applies)
+    - If auto_bind is True, strip leading underscore and use as bind path
+
+    Then resolve the path and create the binding.
+    """
+    from observant import Observable, ObservableProxy
+
+    from .bindings import bind, create_format_binding, is_format_string, resolve_binding_source
+    from .variable import Variable
+
+    for name, field in config.fields.items():
+        # Get the widget instance
+        widget_instance = getattr(widget, name, None)
+        if widget_instance is None:
+            continue
+
+        # Skip non-QWidget fields (Variables, etc.)
+        if not isinstance(widget_instance, QWidget):
+            continue
+
+        # Determine bind path
+        if field.bind is not None:
+            # Explicit bind - always apply
+            bind_path = field.bind
+        elif config.auto_bind:
+            # Auto-bind: strip underscore prefix
+            bind_path = name.lstrip("_")
+        else:
+            # No explicit bind and auto_bind is disabled
+            continue
+
+        # Handle format strings
+        if is_format_string(bind_path):
+            from .bindings.registry import get_binding_registry
+
+            registry = get_binding_registry()
+            default_prop = registry.get_default_prop(widget_instance)
+            adapter = registry.get(widget_instance, default_prop)
+            if adapter is not None and adapter.setter is not None:
+                # Create a bound setter function
+                setter = adapter.setter
+
+                def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                    def bound_setter(val: Any) -> None:
+                        s(w, val)
+
+                    return bound_setter
+
+                create_format_binding(widget, bind_path, make_setter(setter, widget_instance))
+            continue
+
+        # Resolve the binding source
+        source = resolve_binding_source(widget, bind_path)
+        if source is None:
+            continue
+
+        # Create the binding
+        if isinstance(source, Variable):
+            bind(source).to(widget_instance)
+        elif isinstance(source, Observable):
+            # Set up binding for Observable (e.g., from record field)
+            from .bindings.registry import get_binding_registry
+
+            registry = get_binding_registry()
+            default_prop = registry.get_default_prop(widget_instance)
+            adapter = registry.get(widget_instance, default_prop)
+            if adapter is not None and adapter.setter is not None:
+                # Set initial value (Observable → Widget)
+                adapter.setter(widget_instance, source.get())
+
+                # Subscribe to Observable changes (Observable → Widget)
+                setter = adapter.setter
+
+                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                    def on_observable_change(v: Any) -> None:
+                        s(w, v)
+
+                    return on_observable_change
+
+                source.on_change(make_obs_to_widget(setter, widget_instance))
+
+                # Two-way binding: Widget → Observable
+                if adapter.signal_name is not None and adapter.getter is not None:
+                    signal = getattr(widget_instance, adapter.signal_name, None)
+                    getter = adapter.getter
+
+                    def make_widget_to_obs(obs: Observable[Any], g: Callable[[Any], Any], w: QWidget) -> Callable[[], None]:
+                        def on_widget_change() -> None:
+                            obs.set(g(w))
+
+                        return on_widget_change
+
+                    if signal is not None:
+                        signal.connect(make_widget_to_obs(source, getter, widget_instance))
+        elif isinstance(source, ObservableProxy):
+            # ObservableProxy - not directly bindable to a widget property
+            # This shouldn't normally happen since paths resolve to leaf observables
+            pass

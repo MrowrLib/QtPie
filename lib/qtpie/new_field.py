@@ -14,6 +14,8 @@ class NewField:
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # Extract bind= before storing kwargs
+        self.bind: str | None = kwargs.pop("bind", None)
         self.args = args
         self.kwargs = kwargs
         self.name: str = ""

@@ -250,6 +250,67 @@ class ObservableProxy[T]:
         """Get the underlying target object."""
         return object.__getattribute__(self, "_target")
 
+    def _parse_path_segments(self, path: str) -> list[tuple[str, bool]]:
+        """Parse a path into segments with optional flags.
+
+        'a.b?.c' -> [('a', False), ('b', True), ('c', False)]
+
+        The boolean indicates if the PREVIOUS segment used optional chaining.
+        So 'b?.c' means if b is None, don't error.
+        """
+        segments: list[tuple[str, bool]] = []
+        # Replace ?. with a marker, then split on .
+        parts = path.replace("?.", "\x00.").split(".")
+        for part in parts:
+            is_optional = part.endswith("\x00")
+            name = part.rstrip("\x00")
+            if name:  # Skip empty parts
+                segments.append((name, is_optional))
+        return segments
+
+    def observable_for_path(self, path: str) -> Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]:
+        """Get observable for a dotted path like 'dog.breed.name'.
+
+        Handles optional chaining: 'dog.breed?.name' returns None-safe observable.
+        If breed is None, returns an Observable holding None instead of erroring.
+
+        Args:
+            path: Dotted path like 'name', 'dog.breed', or 'dog.breed?.name'
+
+        Returns:
+            The Observable/ObservableList/ObservableDict/ObservableProxy at the path.
+        """
+        segments = self._parse_path_segments(path)
+
+        current: Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any] = self
+        for name, is_optional in segments:
+            # If we have an ObservableProxy, traverse into it
+            if isinstance(current, ObservableProxy):
+                target = object.__getattribute__(current, "_target")
+
+                # Check if target is None (from optional chaining)
+                if target is None:
+                    return Observable[Any](None)
+
+                # Check if field exists
+                if not hasattr(target, name):
+                    if is_optional:
+                        return Observable[Any](None)
+                    raise AttributeError(f"'{type(target).__name__}' object has no attribute '{name}'")
+
+                # Get the value to check if it's None before optional chaining
+                value = getattr(target, name)
+                if value is None and is_optional:
+                    return Observable[Any](None)
+
+                # Get the observable/proxy for this field
+                current = getattr(current, name)
+            else:
+                # Can't traverse into Observable/ObservableList/ObservableDict
+                raise ValueError(f"Cannot traverse path '{name}' into {type(current).__name__}")
+
+        return current
+
     def __getattr__(self, name: str) -> Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]:
         """Get a field as an Observable, ObservableList, ObservableDict, or nested proxy."""
         # Check if this is an internal attribute
