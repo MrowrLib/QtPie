@@ -1,3 +1,4 @@
+# pyright: reportMissingTypeArgument=false
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownMemberType=false
 """Tests for Widget with auto-layout."""
 

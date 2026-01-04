@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
 
 if TYPE_CHECKING:
     from .variable import Variable
@@ -21,13 +21,14 @@ from PySide6.QtWidgets import (
 from .layout import LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
-from .variable import _VariableDescriptor
+from .variable import Variable as VariableClass
+from .variable import _create_observable_for_type, _VariableDescriptor
 
 
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -35,19 +36,21 @@ class _QtPieConfig:
         self.fields: dict[str, NewField] = {}
         self.variable_names: list[str] = []
         self.init_wrapped: bool = False
+        self.record_type: type[Any] | None = None  # T from Widget[T]
 
 
 class QtPieState:
     """Instance-level QtPie state."""
 
-    __slots__ = ("variables", "_view_model", "_widget", "_was_dirty", "_check_dirty")
+    __slots__ = ("variables", "_view_model", "_widget", "_was_dirty", "_check_dirty", "_record")
 
-    def __init__(self, widget: Widget) -> None:
+    def __init__(self, widget: Widget[Any]) -> None:
         self._widget = widget
         self.variables: dict[str, Variable[Any]] = {}
         self._view_model: QtPieViewModel | None = None
         self._was_dirty: bool = False
         self._check_dirty: Callable[[bool], None] | None = None
+        self._record: VariableClass[Any] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
@@ -119,7 +122,46 @@ class QtPieViewModel:
         self._state.reset_dirty()
 
 
-class Widget(QWidget):
+class _RecordDescriptor[T]:
+    """Descriptor for auto-created record on Widget[T].
+
+    This is used when the user doesn't explicitly declare `record: Variable[T] = new(...)`.
+    It lazily creates the record Variable on first access.
+    """
+
+    def __init__(self, record_type: type[T]) -> None:
+        self._record_type = record_type
+
+    def __get__(self, obj: Widget[T] | None, objtype: type | None = None) -> VariableClass[T]:
+        if obj is None:
+            return self  # type: ignore[return-value]
+
+        if not hasattr(obj, "_qtpie"):
+            obj._qtpie = QtPieState(obj)
+
+        state = obj._qtpie
+        if state._record is None:
+            wrapper = _create_observable_for_type(self._record_type, None)
+            state._record = VariableClass(wrapper)
+            state.register_variable("record", state._record)
+
+        return state._record
+
+    def __set__(self, obj: Widget[T], value: T | VariableClass[T]) -> None:
+        if not hasattr(obj, "_qtpie"):
+            obj._qtpie = QtPieState(obj)
+
+        if isinstance(value, VariableClass):
+            var = cast(VariableClass[T], value)
+            obj._qtpie._record = var
+            obj._qtpie.register_variable("record", var)
+        else:
+            # Get or create record, then set value
+            record = self.__get__(obj, type(obj))
+            record.value = value  # type: ignore[assignment]
+
+
+class Widget[T = None](QWidget):
     """QWidget container with automatic layout and QtPie features.
 
     Usage:
@@ -135,6 +177,15 @@ class Widget(QWidget):
         @widget
         class MyWidget(Widget):
             _label: QLabel = new("Hello")
+
+    With a record type (model binding):
+        @widget
+        class PersonEditor(Widget[Person]):
+            _name: QLineEdit = new()
+
+            def __setup__(self):
+                # self.record is Variable[Person]
+                self.record.observable.name.set("Alice")
     """
 
     # Class-level config
@@ -148,6 +199,18 @@ class Widget(QWidget):
         # Create fresh config for this subclass
         cls._qtpie_config = _QtPieConfig()
 
+        # Extract T from Widget[T] if present
+        for base in getattr(cls, "__orig_bases__", ()):
+            origin = get_origin(base)
+            if origin is Widget:
+                args = get_args(base)
+                if args:
+                    cls._qtpie_config.record_type = args[0]
+                break
+
+        # Check if user declared 'record' explicitly
+        has_explicit_record = "record" in cls.__dict__
+
         # Collect fields and variable names
         for name, value in list(cls.__dict__.items()):
             if isinstance(value, NewField):
@@ -158,6 +221,11 @@ class Widget(QWidget):
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
 
+        # Auto-create record descriptor if Widget[T] but no explicit record
+        if cls._qtpie_config.record_type is not None and not has_explicit_record:
+            # Create a descriptor that will lazily create the record
+            cls.record = _RecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
+
     @property
     def view_model(self) -> QtPieViewModel:
         """Access only the Variable fields of this widget."""
@@ -165,9 +233,19 @@ class Widget(QWidget):
             self._qtpie = QtPieState(self)
         return self._qtpie.view_model
 
+    if TYPE_CHECKING:
+        # Type stub for autocomplete - actual implementation via descriptor
+        record: VariableClass[T]
+
+    def __getattr__(self, name: str) -> Any:
+        """Handle attribute access for special cases."""
+        if name == "record":
+            raise TypeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
 
 @overload
-def widget(cls: type[Widget]) -> type[Widget]: ...
+def widget[W: Widget[Any]](cls: type[W]) -> type[W]: ...
 
 
 @overload
@@ -176,15 +254,15 @@ def widget(
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
-) -> Callable[[type[Widget]], type[Widget]]: ...
+) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
 
 
-def widget(
-    cls: type[Widget] | None = None,
+def widget[W: Widget[Any]](
+    cls: type[W] | None = None,
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
-) -> type[Widget] | Callable[[type[Widget]], type[Widget]]:
+) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
 
     Usage:
@@ -203,23 +281,23 @@ def widget(
                  Layout margins. int applies to all sides.
     """
 
-    def decorator(cls: type[Widget]) -> type[Widget]:
+    def decorator(target: type[W]) -> type[W]:
         # Store layout config
-        cls._qtpie_config.layout = layout
-        cls._qtpie_config.margins = margins
+        target._qtpie_config.layout = layout
+        target._qtpie_config.margins = margins
 
         # Wrap __init__ to set up layout
-        _wrap_init_for_layout(cls)
+        _wrap_init_for_layout(target)
 
-        return cls
+        return target
 
     if cls is not None:
         return decorator(cls)
 
-    return decorator
+    return decorator  # type: ignore[return-value]
 
 
-def _wrap_init_for_layout(cls: type[Widget]) -> None:
+def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
     """Wrap __init__ to create layout, add child widgets, and call __setup__."""
     if cls._qtpie_config.init_wrapped:
         return
@@ -229,7 +307,7 @@ def _wrap_init_for_layout(cls: type[Widget]) -> None:
     # Capture config at decoration time
     config = cls._qtpie_config
 
-    def wrapped_init(self: Widget, *args: Any, **kwargs: Any) -> None:
+    def wrapped_init(self: Widget[Any], *args: Any, **kwargs: Any) -> None:
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
 

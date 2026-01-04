@@ -1,3 +1,4 @@
+# pyright: reportMissingTypeArgument=false
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false
 """Tests for view_model - auto-generated from Variable fields."""
 
