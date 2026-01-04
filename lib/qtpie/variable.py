@@ -79,6 +79,8 @@ class Variable[T]:
         self._name.reset_dirty()        # mark as clean
     """
 
+    _wrapper: AnyObservable[T]
+
     def __init__(self, wrapper: AnyObservable[T]) -> None:
         self._wrapper = wrapper
 
@@ -170,6 +172,63 @@ class Variable[T]:
     def __imod__(self, other: Any) -> Variable[T]:
         self.value = self.value % other  # type: ignore[operator]
         return self
+
+
+class RecordVariable[T]:
+    """Variable specifically for Widget[T] records.
+
+    Has properly typed `observable` that returns `ObservableProxy[T]`
+    instead of the union type, so pyright understands field access.
+
+    Same interface as Variable[T] but specialized for records.
+    """
+
+    def __init__(self, wrapper: ObservableProxy[T]) -> None:
+        self._wrapper: ObservableProxy[T] = wrapper
+
+    @property
+    def value(self) -> T:
+        """Get the current value."""
+        return self._wrapper.unwrap()
+
+    @value.setter
+    def value(self, val: T) -> None:
+        """Set the value by replacing proxy target."""
+        self._wrapper._target = val  # type: ignore[attr-defined]
+        self._wrapper._notify_change()  # type: ignore[attr-defined]
+
+    @property
+    def observable(self) -> ObservableProxy[T]:
+        """Get the underlying ObservableProxy."""
+        return self._wrapper
+
+    @property
+    def is_dirty(self) -> Observable[bool]:
+        """Dirty state - usable as bool or Observable."""
+        return self._wrapper.is_dirty
+
+    def reset_dirty(self) -> None:
+        """Mark current value as clean."""
+        self._wrapper.reset_dirty()
+
+    def on_change(self, callback: Any) -> None:
+        """Register a change callback on the underlying wrapper."""
+        self._wrapper.on_change(callback)
+
+    # Descriptor protocol for pyright - assignment accepts T or RecordVariable[T]
+    if TYPE_CHECKING:
+
+        @overload
+        def __get__(self, obj: None, owner: type) -> RecordVariable[T]: ...
+        @overload
+        def __get__(self, obj: object, owner: type) -> RecordVariable[T]: ...
+        def __get__(self, obj: object | None, owner: type) -> RecordVariable[T]: ...
+
+        @overload
+        def __set__(self, obj: object, value: T) -> None: ...
+        @overload
+        def __set__(self, obj: object, value: RecordVariable[T]) -> None: ...
+        def __set__(self, obj: object, value: T | RecordVariable[T]) -> None: ...
 
 
 class _VariableDescriptor[T]:

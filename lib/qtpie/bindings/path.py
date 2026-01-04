@@ -69,9 +69,8 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
         if config.record_type is not None:
             try:
                 record = widget.record
-                observable = record.observable
-                if isinstance(observable, ObservableProxy):
-                    return observable.observable_for_path(lookup_path)
+                # RecordVariable.observable always returns ObservableProxy
+                return record.observable.observable_for_path(lookup_path)
             except (TypeError, AttributeError):
                 # record access failed (e.g., no type param)
                 pass

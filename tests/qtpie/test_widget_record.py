@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from assertpy import assert_that
 from PySide6.QtWidgets import QLabel
 
-from qtpie import Variable, Widget, new, widget
+from qtpie import RecordVariable, Variable, Widget, new, widget
 from qtpie.testing import QtDriver
 
 
@@ -48,7 +48,7 @@ class TestWidgetRecord:
         assert_that(w._qtpie_config.record_type).is_equal_to(Person)
 
     def test_record_auto_created(self, qt: QtDriver) -> None:
-        """Accessing record auto-creates a Variable[T]."""
+        """Accessing record auto-creates a RecordVariable[T]."""
 
         @widget
         class PersonEditor(Widget[Person]):
@@ -56,7 +56,7 @@ class TestWidgetRecord:
 
         w = qt.track(PersonEditor())
         record = w.record
-        assert_that(record).is_instance_of(Variable)
+        assert_that(record).is_instance_of(RecordVariable)
 
     def test_record_has_model_fields(self, qt: QtDriver) -> None:
         """Record proxy has model fields accessible."""
@@ -152,8 +152,8 @@ class TestWidgetRecord:
 class TestWidgetRecordExplicit:
     """Test explicit record declaration for types without defaults."""
 
-    def test_no_default_raises_without_explicit_record(self, qt: QtDriver) -> None:
-        """Accessing record on type without defaults raises helpful error."""
+    def test_no_default_allows_none_record(self, qt: QtDriver) -> None:
+        """Record on type without defaults starts as None (set in __setup__)."""
 
         @widget
         class CatEditor(Widget[Cat]):
@@ -161,19 +161,27 @@ class TestWidgetRecordExplicit:
 
         w = qt.track(CatEditor())
 
-        try:
-            _ = w.record
-            assert_that(False).is_true()  # Should not reach here
-        except ValueError as e:
-            assert_that(str(e)).contains("Cannot create Variable[Cat]")
-            assert_that(str(e)).contains("default value")
+        # Record is accessible but value is None
+        assert_that(w.record.value).is_none()
+
+    def test_set_record_in_setup(self, qt: QtDriver) -> None:
+        """Can set record in __setup__ for types requiring args."""
+
+        @widget
+        class CatEditor(Widget[Cat]):
+            def __setup__(self) -> None:
+                self.record = Cat(name="Whiskers", lives=9)
+
+        w = qt.track(CatEditor())
+        assert_that(w.record.value).is_not_none()
+        assert_that(w.record.value.name).is_equal_to("Whiskers")
 
     def test_explicit_record_with_default(self, qt: QtDriver) -> None:
         """Can declare record explicitly with default value."""
 
         @widget
         class CatEditor(Widget[Cat]):
-            record: Variable[Cat] = new(default=Cat("Whiskers", 9))
+            record: Variable[Cat] = new(default=Cat("Whiskers", 9))  # type: ignore[assignment]
 
         w = qt.track(CatEditor())
 
@@ -187,7 +195,7 @@ class TestWidgetRecordExplicit:
 
         @widget
         class CatEditor(Widget[Cat]):
-            record: Variable[Cat] = new(default=Cat("Mittens", 7))
+            record: Variable[Cat] = new(default=Cat("Mittens", 7))  # type: ignore[assignment]
 
         w = qt.track(CatEditor())
 
@@ -202,7 +210,7 @@ class TestWidgetRecordExplicit:
 
         @widget
         class CatEditor(Widget[Cat]):
-            record: Variable[Cat] = new(default=Cat("Luna", 9))
+            record: Variable[Cat] = new(default=Cat("Luna", 9))  # type: ignore[assignment]
 
         w = qt.track(CatEditor())
 

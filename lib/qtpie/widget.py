@@ -21,8 +21,7 @@ from PySide6.QtWidgets import (
 from .layout import LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
-from .variable import Variable as VariableClass
-from .variable import _create_observable_for_type, _VariableDescriptor
+from .variable import RecordVariable, _create_observable_for_type, _VariableDescriptor
 
 
 class _QtPieConfig:
@@ -51,7 +50,7 @@ class QtPieState:
         self._view_model: QtPieViewModel | None = None
         self._was_dirty: bool = False
         self._check_dirty: Callable[[bool], None] | None = None
-        self._record: VariableClass[Any] | None = None
+        self._record: RecordVariable[Any] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
@@ -87,9 +86,9 @@ class QtPieState:
 
         self._check_dirty = check_dirty_transition
 
-    def register_variable(self, name: str, var: Variable[Any]) -> None:
+    def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
         """Register a Variable and wire up dirty hook if enabled."""
-        self.variables[name] = var
+        self.variables[name] = var  # type: ignore[assignment]
         if self._check_dirty is not None:
             var.is_dirty.on_change(self._check_dirty)
 
@@ -133,7 +132,7 @@ class _RecordDescriptor[T]:
     def __init__(self, record_type: type[T]) -> None:
         self._record_type = record_type
 
-    def __get__(self, obj: Widget[T] | None, objtype: type | None = None) -> VariableClass[T]:
+    def __get__(self, obj: Widget[T] | None, objtype: type | None = None) -> RecordVariable[T]:
         if obj is None:
             return self  # type: ignore[return-value]
 
@@ -142,24 +141,42 @@ class _RecordDescriptor[T]:
 
         state = obj._qtpie
         if state._record is None:
-            wrapper = _create_observable_for_type(self._record_type, None)
-            state._record = VariableClass(wrapper)
-            state.register_variable("record", state._record)
+            from observant import ObservableProxy
 
-        return state._record
+            try:
+                wrapper = _create_observable_for_type(self._record_type, None)
+            except ValueError:
+                # Type requires constructor args - create proxy with None target
+                # User must set it in __setup__ or later
+                wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
+            record_var = RecordVariable(cast(ObservableProxy[T], wrapper))
+            state._record = record_var
+            state.register_variable("record", record_var)
 
-    def __set__(self, obj: Widget[T], value: T | VariableClass[T]) -> None:
+        return state._record  # type: ignore[return-value]
+
+    def __set__(self, obj: Widget[T], value: T | RecordVariable[T]) -> None:
         if not hasattr(obj, "_qtpie"):
             obj._qtpie = QtPieState(obj)
 
-        if isinstance(value, VariableClass):
-            var = cast(VariableClass[T], value)
-            obj._qtpie._record = var
-            obj._qtpie.register_variable("record", var)
+        if isinstance(value, RecordVariable):
+            obj._qtpie._record = value
+            obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
         else:
-            # Get or create record, then set value
-            record = self.__get__(obj, type(obj))
-            record.value = value  # type: ignore[assignment]
+            # Setting a value - create proper ObservableProxy wrapper
+            state = obj._qtpie
+            from observant import ObservableProxy
+
+            # Check if record doesn't exist yet or has None target
+            if state._record is None or state._record.value is None:
+                # Create proper ObservableProxy with the value
+                wrapper = ObservableProxy(value)
+                record_var = RecordVariable(wrapper)
+                state._record = record_var
+                state.register_variable("record", record_var)
+            else:
+                # Normal case - record exists, set value directly
+                state._record.value = value
 
 
 class Widget[T = None](QWidget):
@@ -236,7 +253,7 @@ class Widget[T = None](QWidget):
 
     if TYPE_CHECKING:
         # Type stub for autocomplete - actual implementation via descriptor
-        record: VariableClass[T]
+        record: RecordVariable[T]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Check that @widget decorator was applied."""
@@ -356,16 +373,16 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
 
                     _add_to_layout(qt_layout, widget_instance, config.layout)
 
-        # Apply bindings (auto-bind or explicit)
-        _apply_auto_bindings(self, config)
-
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)
 
-        # Call __setup__ hook if defined
+        # Call __setup__ hook if defined (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
+
+        # Apply bindings (after __setup__ so record is available)
+        _apply_auto_bindings(self, config)
 
         # Enable on_dirty_changed hook (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
