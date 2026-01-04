@@ -1,10 +1,13 @@
 """Tests for ObservableProxy."""
 
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
+# pyright: reportCallIssue=false, reportAttributeAccessIssue=false, reportIndexIssue=false
+# pyright: reportArgumentType=false, reportUnknownVariableType=false, reportUnknownLambdaType=false
+
 from dataclasses import dataclass
-from typing import Any, cast
 
 from assertpy import assert_that
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import ObservableDict, ObservableList, ObservableProxy
 
 
 @dataclass
@@ -32,26 +35,6 @@ class Person:
     age: int
 
 
-def obs(proxy: ObservableProxy[Any], field: str) -> Observable[Any]:
-    """Get field as Observable (for type checker)."""
-    return cast(Observable[Any], getattr(proxy, field))
-
-
-def obs_list(proxy: ObservableProxy[Any], field: str) -> ObservableList[Any]:
-    """Get field as ObservableList (for type checker)."""
-    return cast(ObservableList[Any], getattr(proxy, field))
-
-
-def obs_dict(proxy: ObservableProxy[Any], field: str) -> ObservableDict[Any, Any]:
-    """Get field as ObservableDict (for type checker)."""
-    return cast(ObservableDict[Any, Any], getattr(proxy, field))
-
-
-def nested(proxy: ObservableProxy[Any], field: str) -> ObservableProxy[Any]:
-    """Get field as nested ObservableProxy (for type checker)."""
-    return cast(ObservableProxy[Any], getattr(proxy, field))
-
-
 class TestObservableProxyBasics:
     """Test basic proxy operations."""
 
@@ -66,7 +49,7 @@ class TestObservableProxyBasics:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        name_obs = obs(proxy, "name")
+        name_obs = proxy.name
         assert_that(name_obs.get()).is_equal_to("Alice")
 
     def test_get_field_value(self) -> None:
@@ -74,25 +57,25 @@ class TestObservableProxyBasics:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        assert_that(obs(proxy, "name").get()).is_equal_to("Alice")
-        assert_that(obs(proxy, "age").get()).is_equal_to(30)
+        assert_that(proxy.name.get()).is_equal_to("Alice")
+        assert_that(proxy.age.get()).is_equal_to(30)
 
     def test_set_field_via_observable(self) -> None:
         """Can set field value via Observable.set()."""
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        obs(proxy, "name").set("Bob")
-        assert_that(obs(proxy, "name").get()).is_equal_to("Bob")
-        assert_that(person.name).is_equal_to("Bob")  # Target updated
+        proxy.name.set("Bob")
+        assert_that(proxy.name.get()).is_equal_to("Bob")
+        assert_that(person.name).is_equal_to("Bob")
 
     def test_set_field_via_proxy(self) -> None:
         """Can set field value directly on proxy."""
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        proxy.name = "Bob"  # type: ignore[assignment]
-        assert_that(obs(proxy, "name").get()).is_equal_to("Bob")
+        proxy.name = "Bob"
+        assert_that(proxy.name.get()).is_equal_to("Bob")
         assert_that(person.name).is_equal_to("Bob")
 
     def test_unwrap_returns_target(self) -> None:
@@ -133,7 +116,7 @@ class TestObservableProxyCallbacks:
 
         proxy.on_change(lambda: changes.append("changed"))
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(changes).is_equal_to(["changed"])
 
     def test_on_change_fires_on_direct_set(self) -> None:
@@ -144,7 +127,7 @@ class TestObservableProxyCallbacks:
 
         proxy.on_change(lambda: changes.append("changed"))
 
-        proxy.name = "Bob"  # type: ignore[assignment]
+        proxy.name = "Bob"
         assert_that(changes).is_equal_to(["changed"])
 
     def test_field_on_change_fires(self) -> None:
@@ -153,9 +136,9 @@ class TestObservableProxyCallbacks:
         proxy = ObservableProxy(person)
         changes: list[str] = []
 
-        obs(proxy, "name").on_change(lambda v: changes.append(f"name={v}"))
+        proxy.name.on_change(lambda v: changes.append(f"name={v}"))
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(changes).is_equal_to(["name=Bob"])
 
     def test_multiple_callbacks(self) -> None:
@@ -167,7 +150,7 @@ class TestObservableProxyCallbacks:
         proxy.on_change(lambda: results.append(1))
         proxy.on_change(lambda: results.append(2))
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(results).is_equal_to([1, 2])
 
 
@@ -185,7 +168,7 @@ class TestObservableProxyDirty:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(bool(proxy.is_dirty)).is_true()
 
     def test_dirty_after_direct_set(self) -> None:
@@ -194,8 +177,8 @@ class TestObservableProxyDirty:
         proxy = ObservableProxy(person)
 
         # Access field first to create Observable
-        _ = obs(proxy, "name").get()
-        proxy.name = "Bob"  # type: ignore[assignment]
+        _ = proxy.name.get()
+        proxy.name = "Bob"
         assert_that(bool(proxy.is_dirty)).is_true()
 
     def test_reset_dirty_clears(self) -> None:
@@ -203,7 +186,7 @@ class TestObservableProxyDirty:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(bool(proxy.is_dirty)).is_true()
 
         proxy.reset_dirty()
@@ -214,10 +197,10 @@ class TestObservableProxyDirty:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         proxy.reset_dirty()
 
-        obs(proxy, "age").set(31)
+        proxy.age.set(31)
         assert_that(bool(proxy.is_dirty)).is_true()
 
     def test_dirty_fields_list(self) -> None:
@@ -225,7 +208,7 @@ class TestObservableProxyDirty:
         person = Person("Alice", 30)
         proxy = ObservableProxy(person)
 
-        obs(proxy, "name").set("Bob")
+        proxy.name.set("Bob")
         assert_that(proxy.dirty_fields).contains("name")
         assert_that(proxy.dirty_fields).does_not_contain("age")
 
@@ -237,8 +220,8 @@ class TestObservableProxyDirty:
 
         proxy.is_dirty.on_change(lambda d: dirty_states.append(d))
 
-        obs(proxy, "name").set("Bob")  # clean -> dirty
-        obs(proxy, "age").set(31)  # stays dirty
+        proxy.name.set("Bob")  # clean -> dirty
+        proxy.age.set(31)  # stays dirty
         proxy.reset_dirty()  # dirty -> clean
 
         assert_that(dirty_states).is_equal_to([True, False])
@@ -253,7 +236,7 @@ class TestObservableProxyNested:
         dog = Dog("Buddy", 5, breed)
         proxy = ObservableProxy(dog)
 
-        breed_proxy = nested(proxy, "breed")
+        breed_proxy = proxy.breed
         assert_that(breed_proxy).is_instance_of(ObservableProxy)
 
     def test_nested_field_access(self) -> None:
@@ -262,9 +245,8 @@ class TestObservableProxyNested:
         dog = Dog("Buddy", 5, breed)
         proxy = ObservableProxy(dog)
 
-        breed_proxy = nested(proxy, "breed")
-        assert_that(obs(breed_proxy, "name").get()).is_equal_to("Labrador")
-        assert_that(obs(breed_proxy, "origin").get()).is_equal_to("Canada")
+        assert_that(proxy.breed.name.get()).is_equal_to("Labrador")
+        assert_that(proxy.breed.origin.get()).is_equal_to("Canada")
 
     def test_nested_field_set(self) -> None:
         """Can set nested object fields."""
@@ -272,10 +254,9 @@ class TestObservableProxyNested:
         dog = Dog("Buddy", 5, breed)
         proxy = ObservableProxy(dog)
 
-        breed_proxy = nested(proxy, "breed")
-        obs(breed_proxy, "name").set("Golden Retriever")
-        assert_that(obs(breed_proxy, "name").get()).is_equal_to("Golden Retriever")
-        assert_that(breed.name).is_equal_to("Golden Retriever")  # Original updated
+        proxy.breed.name.set("Golden Retriever")
+        assert_that(proxy.breed.name.get()).is_equal_to("Golden Retriever")
+        assert_that(breed.name).is_equal_to("Golden Retriever")
 
     def test_nested_change_fires_parent_callback(self) -> None:
         """Nested changes fire parent callback."""
@@ -286,8 +267,7 @@ class TestObservableProxyNested:
 
         proxy.on_change(lambda: changes.append("dog_changed"))
 
-        breed_proxy = nested(proxy, "breed")
-        obs(breed_proxy, "name").set("Golden Retriever")
+        proxy.breed.name.set("Golden Retriever")
         assert_that(changes).is_equal_to(["dog_changed"])
 
     def test_nested_dirty_propagates_up(self) -> None:
@@ -298,10 +278,9 @@ class TestObservableProxyNested:
 
         assert_that(bool(proxy.is_dirty)).is_false()
 
-        breed_proxy = nested(proxy, "breed")
-        obs(breed_proxy, "name").set("Golden Retriever")
+        proxy.breed.name.set("Golden Retriever")
         assert_that(bool(proxy.is_dirty)).is_true()
-        assert_that(bool(breed_proxy.is_dirty)).is_true()
+        assert_that(bool(proxy.breed.is_dirty)).is_true()
 
     def test_nested_reset_dirty(self) -> None:
         """Reset dirty clears nested dirty state."""
@@ -309,13 +288,12 @@ class TestObservableProxyNested:
         dog = Dog("Buddy", 5, breed)
         proxy = ObservableProxy(dog)
 
-        breed_proxy = nested(proxy, "breed")
-        obs(breed_proxy, "name").set("Golden Retriever")
+        proxy.breed.name.set("Golden Retriever")
         assert_that(bool(proxy.is_dirty)).is_true()
 
         proxy.reset_dirty()
         assert_that(bool(proxy.is_dirty)).is_false()
-        assert_that(bool(breed_proxy.is_dirty)).is_false()
+        assert_that(bool(proxy.breed.is_dirty)).is_false()
 
     def test_nested_dirty_fields(self) -> None:
         """dirty_fields includes nested proxy names."""
@@ -323,8 +301,7 @@ class TestObservableProxyNested:
         dog = Dog("Buddy", 5, breed)
         proxy = ObservableProxy(dog)
 
-        breed_proxy = nested(proxy, "breed")
-        obs(breed_proxy, "name").set("Golden Retriever")
+        proxy.breed.name.set("Golden Retriever")
         assert_that(proxy.dirty_fields).contains("breed")
 
 
@@ -345,7 +322,7 @@ class TestObservableProxyListField:
         person = PersonWithCollections("Alice", ["admin", "user"], {"age": 30})
         proxy = ObservableProxy(person)
 
-        tags = obs_list(proxy, "tags")
+        tags = proxy.tags
         assert_that(tags).is_instance_of(ObservableList)
 
     def test_list_field_access(self) -> None:
@@ -353,18 +330,16 @@ class TestObservableProxyListField:
         person = PersonWithCollections("Alice", ["admin", "user"], {"age": 30})
         proxy = ObservableProxy(person)
 
-        tags = obs_list(proxy, "tags")
-        assert_that(tags[0]).is_equal_to("admin")
-        assert_that(len(tags)).is_equal_to(2)
+        assert_that(proxy.tags[0]).is_equal_to("admin")
+        assert_that(len(proxy.tags)).is_equal_to(2)
 
     def test_list_field_modify(self) -> None:
         """Can modify list field."""
         person = PersonWithCollections("Alice", ["admin", "user"], {"age": 30})
         proxy = ObservableProxy(person)
 
-        tags = obs_list(proxy, "tags")
-        tags.append("moderator")
-        assert_that(tags.to_list()).is_equal_to(["admin", "user", "moderator"])
+        proxy.tags.append("moderator")
+        assert_that(proxy.tags.to_list()).is_equal_to(["admin", "user", "moderator"])
 
     def test_list_field_dirty(self) -> None:
         """List modification marks proxy dirty."""
@@ -372,7 +347,7 @@ class TestObservableProxyListField:
         proxy = ObservableProxy(person)
 
         assert_that(bool(proxy.is_dirty)).is_false()
-        obs_list(proxy, "tags").append("moderator")
+        proxy.tags.append("moderator")
         assert_that(bool(proxy.is_dirty)).is_true()
         assert_that(proxy.dirty_fields).contains("tags")
 
@@ -383,7 +358,7 @@ class TestObservableProxyListField:
         changes: list[str] = []
 
         proxy.on_change(lambda: changes.append("changed"))
-        obs_list(proxy, "tags").append("moderator")
+        proxy.tags.append("moderator")
 
         assert_that(changes).is_equal_to(["changed"])
 
@@ -396,7 +371,7 @@ class TestObservableProxyDictField:
         person = PersonWithCollections("Alice", ["admin"], {"age": 30})
         proxy = ObservableProxy(person)
 
-        metadata = obs_dict(proxy, "metadata")
+        metadata = proxy.metadata
         assert_that(metadata).is_instance_of(ObservableDict)
 
     def test_dict_field_access(self) -> None:
@@ -404,18 +379,16 @@ class TestObservableProxyDictField:
         person = PersonWithCollections("Alice", ["admin"], {"age": 30, "score": 100})
         proxy = ObservableProxy(person)
 
-        metadata = obs_dict(proxy, "metadata")
-        assert_that(metadata["age"]).is_equal_to(30)
-        assert_that(len(metadata)).is_equal_to(2)
+        assert_that(proxy.metadata["age"]).is_equal_to(30)
+        assert_that(len(proxy.metadata)).is_equal_to(2)
 
     def test_dict_field_modify(self) -> None:
         """Can modify dict field."""
         person = PersonWithCollections("Alice", ["admin"], {"age": 30})
         proxy = ObservableProxy(person)
 
-        metadata = obs_dict(proxy, "metadata")
-        metadata["score"] = 100
-        assert_that(metadata.to_dict()).is_equal_to({"age": 30, "score": 100})
+        proxy.metadata["score"] = 100
+        assert_that(proxy.metadata.to_dict()).is_equal_to({"age": 30, "score": 100})
 
     def test_dict_field_dirty(self) -> None:
         """Dict modification marks proxy dirty."""
@@ -423,7 +396,7 @@ class TestObservableProxyDictField:
         proxy = ObservableProxy(person)
 
         assert_that(bool(proxy.is_dirty)).is_false()
-        obs_dict(proxy, "metadata")["score"] = 100
+        proxy.metadata["score"] = 100
         assert_that(bool(proxy.is_dirty)).is_true()
         assert_that(proxy.dirty_fields).contains("metadata")
 
@@ -434,7 +407,7 @@ class TestObservableProxyDictField:
         changes: list[str] = []
 
         proxy.on_change(lambda: changes.append("changed"))
-        obs_dict(proxy, "metadata")["score"] = 100
+        proxy.metadata["score"] = 100
 
         assert_that(changes).is_equal_to(["changed"])
 
@@ -461,6 +434,6 @@ class TestObservableProxyNoTracking:
 
         proxy.on_change(lambda: changes.append("changed"))
 
-        obs(proxy, "name").set("Bob")
-        assert_that(obs(proxy, "name").get()).is_equal_to("Bob")
+        proxy.name.set("Bob")
+        assert_that(proxy.name.get()).is_equal_to("Bob")
         assert_that(changes).is_equal_to(["changed"])
