@@ -1,6 +1,6 @@
 """NewField - Stores field configuration for deferred instantiation."""
 
-from typing import Any, get_origin, get_type_hints
+from typing import Any, get_args, get_origin, get_type_hints
 
 from .variable import Variable, create_variable_descriptor
 
@@ -30,7 +30,12 @@ class NewField:
         origin = get_origin(self.field_type)
         if origin is Variable or self.field_type is Variable:
             default = self._get_variable_default()
-            setattr(owner, name, create_variable_descriptor(default, name))
+            # Extract inner type from Variable[T]
+            inner_type: type | None = None
+            if origin is Variable:
+                args = get_args(self.field_type)
+                inner_type = args[0] if args else None
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type))
             return
 
         # Handle layout kwarg for QWidget types only

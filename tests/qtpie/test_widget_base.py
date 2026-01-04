@@ -1,7 +1,10 @@
 # pyright: reportPrivateUsage=false
 """Tests for WidgetBase mixin."""
 
+from typing import cast
+
 from assertpy import assert_that
+from observant import Observable
 from PySide6.QtWidgets import QLabel, QListView, QPushButton, QWidget
 
 from qtpie import Variable, WidgetBase, new
@@ -50,7 +53,8 @@ class TestWidgetBaseWithMockWidget:
 
         obj = MyWidget()
         received: list[int] = []
-        obj._count.observable.on_change(lambda v: received.append(v))
+        observable = cast(Observable[int], obj._count.observable)
+        observable.on_change(lambda v: received.append(v))
 
         obj._count.value = 1
         obj._count.value = 2

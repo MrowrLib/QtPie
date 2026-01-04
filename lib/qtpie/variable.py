@@ -1,48 +1,133 @@
 """Variable - Per-instance reactive state in QtPie widgets."""
 
-from typing import Any, cast, overload
+from copy import deepcopy
+from typing import Any, cast, get_origin, overload
 
-from observant import Observable
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+
+# Union of all observable types
+type AnyObservable[T] = Observable[T] | ObservableList[T] | ObservableDict[Any, T] | ObservableProxy[T]
+
+
+def _is_primitive_type(t: type | None) -> bool:
+    """Check if type is a primitive."""
+    return t in (str, int, float, bool, type(None))
+
+
+def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObservable[Any]:
+    """Create the appropriate observable wrapper based on type.
+
+    Note: Mutable defaults (list, dict, complex objects) are deep-copied
+    to ensure each instance gets its own copy.
+    """
+    if inner_type is None:
+        # No type info, use Observable with the default
+        return Observable(default)
+
+    inner_origin = get_origin(inner_type)
+
+    # list[T] → ObservableList
+    if inner_origin is list:
+        if default is None:
+            default = []
+        else:
+            default = deepcopy(default)
+        return ObservableList(default)
+
+    # dict[K, V] → ObservableDict
+    if inner_origin is dict:
+        if default is None:
+            default = {}
+        else:
+            default = deepcopy(default)
+        return ObservableDict(default)
+
+    # Primitives → Observable
+    if _is_primitive_type(inner_type):
+        return Observable(default)
+
+    # Complex types → ObservableProxy
+    # Need to create an instance if default is None
+    if default is None:
+        # Try to instantiate with no args
+        try:
+            default = inner_type()
+        except TypeError as e:
+            raise ValueError(f"Cannot create Variable[{inner_type.__name__}] without a default value. Use new(default=YourClass(...)) or provide constructor args.") from e
+    else:
+        # Copy the default so each instance gets its own object
+        default = deepcopy(default)
+    return ObservableProxy(default)
 
 
 class Variable[T]:
     """Per-instance variable with value and observable access.
 
+    Works with all observable types:
+    - Variable[str] → wraps Observable[str]
+    - Variable[list[T]] → wraps ObservableList[T]
+    - Variable[dict[K,V]] → wraps ObservableDict[K,V]
+    - Variable[MyClass] → wraps ObservableProxy[MyClass]
+
     Usage:
         self._name.value = "hello"      # set value
         print(self._name.value)         # get value
         self._name.observable.on_change(callback)  # subscribe
-        bind(self._name).to(widget)     # bind to widget
         if self._name.is_dirty:         # check dirty state
         self._name.reset_dirty()        # mark as clean
     """
 
-    def __init__(self, observable: Observable[T]) -> None:
-        self._observable = observable
+    def __init__(self, wrapper: AnyObservable[T]) -> None:
+        self._wrapper = wrapper
 
     @property
     def value(self) -> T:
         """Get the current value."""
-        return self._observable.get()
+        if isinstance(self._wrapper, Observable):
+            return self._wrapper.get()
+        if isinstance(self._wrapper, ObservableList):
+            return cast(T, self._wrapper.to_list())
+        if isinstance(self._wrapper, ObservableDict):
+            return cast(T, self._wrapper.to_dict())
+        # Must be ObservableProxy (pyright narrows type)
+        return self._wrapper.unwrap()
 
     @value.setter
     def value(self, val: T) -> None:
         """Set the value (triggers change notifications)."""
-        self._observable.set(val)
+        if isinstance(self._wrapper, Observable):
+            self._wrapper.set(val)
+        elif isinstance(self._wrapper, ObservableList):
+            # Replace entire list
+            self._wrapper.clear()
+            if isinstance(val, list):
+                self._wrapper.extend(cast(list[Any], val))
+        elif isinstance(self._wrapper, ObservableDict):
+            # Replace entire dict
+            self._wrapper.clear()
+            if isinstance(val, dict):
+                self._wrapper.update(cast(dict[Any, Any], val))
+        else:
+            # Must be ObservableProxy - can't replace target
+            raise TypeError("Cannot replace ObservableProxy value. Modify fields directly.")
 
     @property
-    def observable(self) -> Observable[T]:
-        """Get the underlying Observable for subscriptions."""
-        return self._observable
+    def observable(self) -> AnyObservable[T]:
+        """Get the underlying observable (Observable, ObservableList, etc.)."""
+        return self._wrapper
 
     @property
     def is_dirty(self) -> Observable[bool]:
         """Dirty state - usable as bool or Observable."""
-        return self._observable.is_dirty
+        return self._wrapper.is_dirty
 
     def reset_dirty(self) -> None:
         """Mark current value as clean."""
-        self._observable.reset_dirty()
+        self._wrapper.reset_dirty()
+
+    def on_change(self, callback: Any) -> None:
+        """Register a change callback on the underlying wrapper."""
+        self._wrapper.on_change(callback)
 
 
 class _VariableDescriptor[T]:
@@ -51,9 +136,10 @@ class _VariableDescriptor[T]:
     This is an internal class. Users see Variable[T] in type hints.
     """
 
-    def __init__(self, default: T, name: str) -> None:
+    def __init__(self, default: T, name: str, inner_type: type | None = None) -> None:
         self._default = default
         self._name = name
+        self._inner_type = inner_type
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -73,8 +159,8 @@ class _VariableDescriptor[T]:
         qtpie_state = cast(QtPieState, obj._qtpie)  # type: ignore[attr-defined]
 
         if self._name not in qtpie_state.variables:
-            observable: Observable[T] = Observable(self._default)
-            var: Variable[T] = Variable(observable)
+            wrapper = _create_observable_for_type(self._inner_type, self._default)
+            var: Variable[T] = Variable(wrapper)
             qtpie_state.register_variable(self._name, var)
 
         return qtpie_state.variables[self._name]
@@ -99,6 +185,6 @@ class _VariableDescriptor[T]:
             var.value = value
 
 
-def create_variable_descriptor(default: Any, name: str) -> Any:
+def create_variable_descriptor(default: Any, name: str, inner_type: type | None = None) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name)
+    return _VariableDescriptor(default, name, inner_type)

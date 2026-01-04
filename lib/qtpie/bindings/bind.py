@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from observant import Observable
 from PySide6.QtCore import QObject
 
 from ..variable import Variable
@@ -49,18 +50,26 @@ class Binding[T]:
         if adapter.setter is None:
             raise ValueError(f"Binding for {type(widget).__name__}.{property_name} has no setter")
 
-        # Get the Observable from the Variable instance
-        observable = self._variable.observable
-
-        # Set initial value
-        adapter.setter(widget, observable.get())
+        # Set initial value from Variable
+        adapter.setter(widget, self._variable.value)
 
         # Subscribe to Variable changes → update widget
-        def on_variable_change(value: Any) -> None:
-            assert adapter.setter is not None
-            adapter.setter(widget, value)
+        # Observable.on_change passes value, others don't - handle both
+        observable = self._variable.observable
+        if isinstance(observable, Observable):
 
-        observable.on_change(on_variable_change)
+            def on_observable_change(value: Any) -> None:
+                assert adapter.setter is not None
+                adapter.setter(widget, value)
+
+            observable.on_change(on_observable_change)
+        else:
+
+            def on_wrapper_change() -> None:
+                assert adapter.setter is not None
+                adapter.setter(widget, self._variable.value)
+
+            observable.on_change(on_wrapper_change)
 
         # Two-way binding: widget changes → update Variable
         if two_way and adapter.signal_name is not None:

@@ -1,7 +1,11 @@
 # pyright: reportPrivateUsage=false
 """Tests for Variable[T] with new() and @new_fields."""
 
+from dataclasses import dataclass
+from typing import cast
+
 from assertpy import assert_that
+from observant import Observable
 
 from qtpie import Variable, new, new_fields
 
@@ -67,8 +71,9 @@ class TestVariableWithNewFields:
         obj = MyClass()
         received: list[str] = []
 
-        # Access the observable via the Variable instance
-        obj._name.observable.on_change(lambda v: received.append(v))
+        # For primitives, observable is an Observable[T] with value-passing callbacks
+        observable = cast(Observable[str], obj._name.observable)
+        observable.on_change(lambda v: received.append(v))
 
         obj._name.value = "hello"
         obj._name.value = "world"
@@ -208,3 +213,228 @@ class TestNewFieldsIdempotent:
         obj = MyClass()
         obj._value.value = 5
         assert_that(obj._value.value).is_equal_to(5)
+
+
+class TestVariableWithList:
+    """Test Variable[list[T]] → ObservableList."""
+
+    def test_list_variable_default(self) -> None:
+        """Variable[list[str]] uses empty list by default."""
+
+        @new_fields
+        class MyClass:
+            _tags: Variable[list[str]] = new()
+
+        obj = MyClass()
+        assert_that(obj._tags.value).is_equal_to([])
+
+    def test_list_variable_with_default(self) -> None:
+        """Variable[list[str]] can have default values."""
+
+        @new_fields
+        class MyClass:
+            _tags: Variable[list[str]] = new(default=["a", "b"])
+
+        obj = MyClass()
+        assert_that(obj._tags.value).is_equal_to(["a", "b"])
+
+    def test_list_variable_modify(self) -> None:
+        """Can modify list through wrapper."""
+
+        @new_fields
+        class MyClass:
+            _items: Variable[list[int]] = new()
+
+        obj = MyClass()
+        obj._items.observable.append(1)  # type: ignore[union-attr]
+        obj._items.observable.append(2)  # type: ignore[union-attr]
+        assert_that(obj._items.value).is_equal_to([1, 2])
+
+    def test_list_variable_replace(self) -> None:
+        """Can replace entire list via value setter."""
+
+        @new_fields
+        class MyClass:
+            _items: Variable[list[int]] = new()
+
+        obj = MyClass()
+        obj._items.value = [10, 20, 30]
+        assert_that(obj._items.value).is_equal_to([10, 20, 30])
+
+    def test_list_variable_on_change(self) -> None:
+        """List changes trigger on_change callback."""
+
+        @new_fields
+        class MyClass:
+            _items: Variable[list[str]] = new()
+
+        obj = MyClass()
+        changes: list[str] = []
+        obj._items.on_change(lambda: changes.append("changed"))
+
+        obj._items.observable.append("hello")  # type: ignore[union-attr]
+        assert_that(changes).is_equal_to(["changed"])
+
+    def test_list_variable_is_dirty(self) -> None:
+        """List modifications mark as dirty."""
+
+        @new_fields
+        class MyClass:
+            _items: Variable[list[str]] = new()
+
+        obj = MyClass()
+        assert_that(obj._items.is_dirty.get()).is_false()
+
+        obj._items.observable.append("test")  # type: ignore[union-attr]
+        assert_that(obj._items.is_dirty.get()).is_true()
+
+
+class TestVariableWithDict:
+    """Test Variable[dict[K,V]] → ObservableDict."""
+
+    def test_dict_variable_default(self) -> None:
+        """Variable[dict[str, int]] uses empty dict by default."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new()
+
+        obj = MyClass()
+        assert_that(obj._data.value).is_equal_to({})
+
+    def test_dict_variable_with_default(self) -> None:
+        """Variable[dict[str, int]] can have default values."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new(default={"a": 1, "b": 2})
+
+        obj = MyClass()
+        assert_that(obj._data.value).is_equal_to({"a": 1, "b": 2})
+
+    def test_dict_variable_modify(self) -> None:
+        """Can modify dict through wrapper."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new()
+
+        obj = MyClass()
+        obj._data.observable["x"] = 10  # type: ignore[index]
+        obj._data.observable["y"] = 20  # type: ignore[index]
+        assert_that(obj._data.value).is_equal_to({"x": 10, "y": 20})
+
+    def test_dict_variable_replace(self) -> None:
+        """Can replace entire dict via value setter."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new()
+
+        obj = MyClass()
+        obj._data.value = {"new": 100}
+        assert_that(obj._data.value).is_equal_to({"new": 100})
+
+    def test_dict_variable_on_change(self) -> None:
+        """Dict changes trigger on_change callback."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new()
+
+        obj = MyClass()
+        changes: list[str] = []
+        obj._data.on_change(lambda: changes.append("changed"))
+
+        obj._data.observable["key"] = 42  # type: ignore[index]
+        assert_that(changes).is_equal_to(["changed"])
+
+    def test_dict_variable_is_dirty(self) -> None:
+        """Dict modifications mark as dirty."""
+
+        @new_fields
+        class MyClass:
+            _data: Variable[dict[str, int]] = new()
+
+        obj = MyClass()
+        assert_that(obj._data.is_dirty.get()).is_false()
+
+        obj._data.observable["test"] = 1  # type: ignore[index]
+        assert_that(obj._data.is_dirty.get()).is_true()
+
+
+@dataclass
+class Person:
+    """Test dataclass for proxy tests."""
+
+    name: str
+    age: int
+
+
+class TestVariableWithProxy:
+    """Test Variable[ComplexType] → ObservableProxy."""
+
+    def test_proxy_variable_create_instance(self) -> None:
+        """Variable[Person] creates instance if default provided."""
+
+        @new_fields
+        class MyClass:
+            _person: Variable[Person] = new(default=Person("Alice", 30))
+
+        obj = MyClass()
+        assert_that(obj._person.value.name).is_equal_to("Alice")
+        assert_that(obj._person.value.age).is_equal_to(30)
+
+    def test_proxy_variable_modify_fields(self) -> None:
+        """Can modify proxy fields through wrapper."""
+
+        @new_fields
+        class MyClass:
+            _person: Variable[Person] = new(default=Person("Bob", 25))
+
+        obj = MyClass()
+        obj._person.observable.name.set("Charlie")  # type: ignore[union-attr]
+        assert_that(obj._person.value.name).is_equal_to("Charlie")
+
+    def test_proxy_variable_on_change(self) -> None:
+        """Proxy changes trigger on_change callback."""
+
+        @new_fields
+        class MyClass:
+            _person: Variable[Person] = new(default=Person("Dana", 40))
+
+        obj = MyClass()
+        changes: list[str] = []
+        obj._person.on_change(lambda: changes.append("changed"))
+
+        obj._person.observable.age.set(41)  # type: ignore[union-attr]
+        assert_that(changes).is_equal_to(["changed"])
+
+    def test_proxy_variable_is_dirty(self) -> None:
+        """Proxy modifications mark as dirty."""
+
+        @new_fields
+        class MyClass:
+            _person: Variable[Person] = new(default=Person("Eve", 35))
+
+        obj = MyClass()
+        assert_that(obj._person.is_dirty.get()).is_false()
+
+        obj._person.observable.name.set("Evelyn")  # type: ignore[union-attr]
+        assert_that(obj._person.is_dirty.get()).is_true()
+
+    def test_proxy_variable_per_instance(self) -> None:
+        """Each instance has its own proxy."""
+
+        @new_fields
+        class MyClass:
+            _person: Variable[Person] = new(default=Person("Frank", 50))
+
+        a = MyClass()
+        b = MyClass()
+
+        a._person.observable.name.set("Alice")  # type: ignore[union-attr]
+        b._person.observable.name.set("Bob")  # type: ignore[union-attr]
+
+        assert_that(a._person.value.name).is_equal_to("Alice")
+        assert_that(b._person.value.name).is_equal_to("Bob")
