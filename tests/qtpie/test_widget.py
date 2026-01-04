@@ -205,3 +205,21 @@ class TestNonQWidgetFields:
         # layout SHOULD be in kwargs - only consumed for QWidget types
         assert_that(w._config.kwargs).contains_key("layout")
         assert_that(w._config.kwargs["layout"]).is_equal_to(123)
+
+    def test_bind_kwarg_passed_to_non_qwidget(self, qt: QtDriver) -> None:
+        """bind= is passed through to non-QWidget constructors."""
+
+        class Config:
+            def __init__(self, **kwargs: object) -> None:
+                self.kwargs = kwargs
+
+        @widget
+        class MyWidget(Widget):
+            # bind= is NOT a QtPie kwarg for non-QWidgets, so it passes through
+            _config: Config = new(bind="some_value")
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        # bind SHOULD be in kwargs - only consumed for QWidget types
+        assert_that(w._config.kwargs).contains_key("bind")
+        assert_that(w._config.kwargs["bind"]).is_equal_to("some_value")

@@ -14,13 +14,12 @@ class NewField:
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # Extract bind= before storing kwargs
-        self.bind: str | None = kwargs.pop("bind", None)
         self.args = args
         self.kwargs = kwargs
         self.name: str = ""
         self.field_type: type | None = None
         self.exclude_from_layout = False
+        self.bind: str | None = None  # Extracted for QWidgets in __set_name__
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
@@ -40,10 +39,13 @@ class NewField:
             setattr(owner, name, create_variable_descriptor(default, name, inner_type))
             return
 
-        # Handle layout kwarg for QWidget types only
-        # For QWidgets: layout=False → exclude from layout, then consume the kwarg
-        # For non-QWidgets: leave layout= in kwargs so it passes to constructor
+        # Handle QWidget-specific kwargs only
+        # For non-QWidgets: leave bind= and layout= in kwargs so they pass to constructor
         if self._is_qwidget_type():
+            # Extract bind= for QtPie binding system
+            self.bind = self.kwargs.pop("bind", None)
+
+            # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)
             if layout_kwarg is False:
                 self.exclude_from_layout = True
