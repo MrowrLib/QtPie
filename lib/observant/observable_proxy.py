@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, override
 
-from .observable import Observable
+from .observable import Observable, ValidatorFn
 from .observable_dict import ObservableDict
 from .observable_list import ObservableList
 
@@ -22,7 +22,7 @@ class ObservableProxy[T]:
     Nested objects become nested ObservableProxies.
     """
 
-    def __init__(self, target: T, *, dirty_tracking: bool = True) -> None:
+    def __init__(self, target: T, *, dirty_tracking: bool = True, validation: bool = True) -> None:
         # Use object.__setattr__ to bypass our __setattr__
         object.__setattr__(self, "_target", target)
         object.__setattr__(self, "_field_observables", {})
@@ -31,11 +31,23 @@ class ObservableProxy[T]:
         object.__setattr__(self, "_nested_proxies", {})
         object.__setattr__(self, "_callbacks", [])
         object.__setattr__(self, "_dirty_tracking", dirty_tracking)
+        object.__setattr__(self, "_validation", validation)
         object.__setattr__(
             self,
             "_is_dirty",
-            Observable[bool](False, dirty_tracking=False) if dirty_tracking else None,
+            Observable[bool](False, dirty_tracking=False, validation=False) if dirty_tracking else None,
         )
+
+        # Validation
+        object.__setattr__(self, "_validators", {})
+        if validation:
+            object.__setattr__(self, "_validation_errors", Observable({}, dirty_tracking=False, validation=False))
+            object.__setattr__(self, "_validation_error_messages", Observable([], dirty_tracking=False, validation=False))
+            object.__setattr__(self, "_is_valid", Observable(True, dirty_tracking=False, validation=False))
+        else:
+            object.__setattr__(self, "_validation_errors", None)
+            object.__setattr__(self, "_validation_error_messages", None)
+            object.__setattr__(self, "_is_valid", None)
 
     def _get_or_create_field_observable(self, name: str) -> Observable[Any]:
         """Get or create an Observable for a field."""
@@ -45,17 +57,25 @@ class ObservableProxy[T]:
             target = object.__getattribute__(self, "_target")
             value = getattr(target, name)
             dirty_tracking = object.__getattribute__(self, "_dirty_tracking")
+            validation = object.__getattribute__(self, "_validation")
 
-            obs = Observable[Any](value, dirty_tracking=dirty_tracking)
+            obs = Observable[Any](value, dirty_tracking=dirty_tracking, validation=validation)
 
             # When this field changes, update the target and notify
             def on_field_change(new_value: Any, field_name: str = name) -> None:
                 target = object.__getattribute__(self, "_target")
                 setattr(target, field_name, new_value)
-                self._update_dirty_state()  # Update dirty state first
-                self._notify_change()  # Then notify (so parent sees us as dirty)
+                self._update_dirty_state()
+                self._validate()  # Re-run own validators
+                self._update_valid_state()
+                self._notify_change()
 
             obs.on_change(on_field_change)
+
+            # Also subscribe to field's validity changes
+            if validation:
+                obs.is_valid.on_change(lambda _: self._update_valid_state())
+
             field_observables[name] = obs
 
         return field_observables[name]
@@ -68,17 +88,25 @@ class ObservableProxy[T]:
             target = object.__getattribute__(self, "_target")
             value = getattr(target, name)
             dirty_tracking = object.__getattribute__(self, "_dirty_tracking")
+            validation = object.__getattribute__(self, "_validation")
 
-            obs_list = ObservableList[Any](value, dirty_tracking=dirty_tracking)
+            obs_list = ObservableList[Any](value, dirty_tracking=dirty_tracking, validation=validation)
 
             # When list changes, update the target and notify
             def on_list_change(field_name: str = name) -> None:
                 target = object.__getattribute__(self, "_target")
                 setattr(target, field_name, obs_list.to_list())
                 self._update_dirty_state()
+                self._validate()  # Re-run own validators
+                self._update_valid_state()
                 self._notify_change()
 
             obs_list.on_change(on_list_change)
+
+            # Subscribe to list's validity changes
+            if validation:
+                obs_list.is_valid.on_change(lambda _: self._update_valid_state())
+
             field_lists[name] = obs_list
 
         return field_lists[name]
@@ -91,17 +119,25 @@ class ObservableProxy[T]:
             target = object.__getattribute__(self, "_target")
             value = getattr(target, name)
             dirty_tracking = object.__getattribute__(self, "_dirty_tracking")
+            validation = object.__getattribute__(self, "_validation")
 
-            obs_dict = ObservableDict[Any, Any](value, dirty_tracking=dirty_tracking)
+            obs_dict = ObservableDict[Any, Any](value, dirty_tracking=dirty_tracking, validation=validation)
 
             # When dict changes, update the target and notify
             def on_dict_change(field_name: str = name) -> None:
                 target = object.__getattribute__(self, "_target")
                 setattr(target, field_name, obs_dict.to_dict())
                 self._update_dirty_state()
+                self._validate()  # Re-run own validators
+                self._update_valid_state()
                 self._notify_change()
 
             obs_dict.on_change(on_dict_change)
+
+            # Subscribe to dict's validity changes
+            if validation:
+                obs_dict.is_valid.on_change(lambda _: self._update_valid_state())
+
             field_dicts[name] = obs_dict
 
         return field_dicts[name]
@@ -114,15 +150,23 @@ class ObservableProxy[T]:
             target = object.__getattribute__(self, "_target")
             value = getattr(target, name)
             dirty_tracking = object.__getattribute__(self, "_dirty_tracking")
+            validation = object.__getattribute__(self, "_validation")
 
-            proxy = ObservableProxy[Any](value, dirty_tracking=dirty_tracking)
+            proxy = ObservableProxy[Any](value, dirty_tracking=dirty_tracking, validation=validation)
 
             # When nested proxy changes, propagate up
             def on_nested_change() -> None:
                 self._update_dirty_state()  # Update dirty state first
+                self._validate()  # Re-run own validators
+                self._update_valid_state()  # Update valid state
                 self._notify_change()  # Then notify
 
             proxy.on_change(on_nested_change)
+
+            # Subscribe to nested proxy's validity changes
+            if validation:
+                proxy.is_valid.on_change(lambda _: self._update_valid_state())
+
             nested_proxies[name] = proxy
 
         return nested_proxies[name]
@@ -176,6 +220,56 @@ class ObservableProxy[T]:
 
         if is_dirty_obs.get() != any_dirty:
             is_dirty_obs.set(any_dirty)
+
+    def _update_valid_state(self) -> None:
+        """Update aggregated valid state from all fields."""
+        is_valid_obs: Observable[bool] | None = object.__getattribute__(self, "_is_valid")
+        if is_valid_obs is None:
+            return
+
+        validation: bool = object.__getattribute__(self, "_validation")
+        if not validation:
+            return
+
+        # Check if all field wrappers are valid
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        field_lists: dict[str, ObservableList[Any]] = object.__getattribute__(self, "_field_lists")
+        field_dicts: dict[str, ObservableDict[Any, Any]] = object.__getattribute__(self, "_field_dicts")
+        nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+
+        all_valid = True
+
+        for obs in field_observables.values():
+            if not obs.is_valid.get():
+                all_valid = False
+                break
+
+        if all_valid:
+            for obs_list in field_lists.values():
+                if not obs_list.is_valid.get():
+                    all_valid = False
+                    break
+
+        if all_valid:
+            for obs_dict in field_dicts.values():
+                if not obs_dict.is_valid.get():
+                    all_valid = False
+                    break
+
+        if all_valid:
+            for proxy in nested_proxies.values():
+                if not proxy.is_valid.get():
+                    all_valid = False
+                    break
+
+        # Also check own validators
+        if all_valid:
+            validation_error_messages: Observable[list[str]] | None = object.__getattribute__(self, "_validation_error_messages")
+            if validation_error_messages is not None and validation_error_messages.get():
+                all_valid = False
+
+        if is_valid_obs.get() != all_valid:
+            is_valid_obs.set(all_valid)
 
     def on_change(self, callback: Callable[[], None]) -> None:
         """Register a callback for any field change."""
@@ -245,6 +339,107 @@ class ObservableProxy[T]:
                 dirty.append(name)
 
         return dirty
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, name: str, validator: ValidatorFn[T]) -> None:
+        """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
+        validators: dict[str, ValidatorFn[T]] = object.__getattribute__(self, "_validators")
+        validators[name] = validator
+        self._validate()
+
+    def _validate(self) -> None:
+        """Run own validators and update state."""
+        is_valid_obs: Observable[bool] | None = object.__getattribute__(self, "_is_valid")
+        if is_valid_obs is None:
+            return
+
+        validators: dict[str, ValidatorFn[T]] = object.__getattribute__(self, "_validators")
+        if not validators:
+            return
+
+        target: T = object.__getattribute__(self, "_target")
+        errors_dict: dict[str, list[str]] = {}
+        all_messages: list[str] = []
+
+        for name, validator in validators.items():
+            result = validator(target)
+            if result is None:
+                errors_dict[name] = []
+            elif isinstance(result, str):
+                errors_dict[name] = [result]
+                all_messages.append(result)
+            else:  # list[str]
+                errors_dict[name] = list(result)
+                all_messages.extend(result)
+
+        validation_errors: Observable[dict[str, list[str]]] | None = object.__getattribute__(self, "_validation_errors")
+        validation_error_messages: Observable[list[str]] | None = object.__getattribute__(self, "_validation_error_messages")
+
+        if validation_errors is not None:
+            validation_errors.set(errors_dict)
+        if validation_error_messages is not None:
+            validation_error_messages.set(all_messages)
+
+        self._update_valid_state()
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Aggregated validity state across all fields."""
+        is_valid_obs: Observable[bool] | None = object.__getattribute__(self, "_is_valid")
+        if is_valid_obs is None:
+            raise RuntimeError("Validation not enabled for this ObservableProxy")
+        return is_valid_obs
+
+    @property
+    def validation_errors(self) -> Observable[dict[str, list[str]]]:
+        """Errors by validator name. Bindable."""
+        validation_errors: Observable[dict[str, list[str]]] | None = object.__getattribute__(self, "_validation_errors")
+        if validation_errors is None:
+            raise RuntimeError("Validation not enabled for this ObservableProxy")
+        return validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Bindable."""
+        validation_error_messages: Observable[list[str]] | None = object.__getattribute__(self, "_validation_error_messages")
+        if validation_error_messages is None:
+            raise RuntimeError("Validation not enabled for this ObservableProxy")
+        return validation_error_messages
+
+    @property
+    def invalid_fields(self) -> list[str]:
+        """Get list of invalid field names."""
+        invalid: list[str] = []
+
+        validation: bool = object.__getattribute__(self, "_validation")
+        if not validation:
+            return invalid
+
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        field_lists: dict[str, ObservableList[Any]] = object.__getattribute__(self, "_field_lists")
+        field_dicts: dict[str, ObservableDict[Any, Any]] = object.__getattribute__(self, "_field_dicts")
+        nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+
+        for name, obs in field_observables.items():
+            if not obs.is_valid.get():
+                invalid.append(name)
+
+        for name, obs_list in field_lists.items():
+            if not obs_list.is_valid.get():
+                invalid.append(name)
+
+        for name, obs_dict in field_dicts.items():
+            if not obs_dict.is_valid.get():
+                invalid.append(name)
+
+        for name, proxy in nested_proxies.items():
+            if not proxy.is_valid.get():
+                invalid.append(name)
+
+        return invalid
 
     def unwrap(self) -> T:
         """Get the underlying target object."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, cast, get_origin, overload, override
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ValidatorFn
 
 # Union of all observable types
 type AnyObservable[T] = Observable[T] | ObservableList[T] | ObservableDict[Any, T] | ObservableProxy[T]
@@ -133,6 +133,30 @@ class Variable[T]:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
 
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, name: str, validator: ValidatorFn[T]) -> None:
+        """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
+        # type: ignore needed because AnyObservable union has different validator signatures
+        self._wrapper.add_validator(name, validator)  # type: ignore[arg-type]
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Validity state. Bindable."""
+        return self._wrapper.is_valid
+
+    @property
+    def validation_errors(self) -> Observable[dict[str, list[str]]]:
+        """Errors by validator name. Bindable."""
+        return self._wrapper.validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Bindable."""
+        return self._wrapper.validation_error_messages
+
     # Descriptor protocol for pyright - tells it that assignment accepts T or Variable[T]
     if TYPE_CHECKING:
 
@@ -238,6 +262,29 @@ class RecordVariable[T]:
     def on_change(self, callback: Any) -> None:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, name: str, validator: ValidatorFn[T]) -> None:
+        """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
+        self._wrapper.add_validator(name, validator)
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Validity state. Bindable."""
+        return cast(Observable[bool], self._wrapper.is_valid)
+
+    @property
+    def validation_errors(self) -> Observable[dict[str, list[str]]]:
+        """Errors by validator name. Bindable."""
+        return cast(Observable[dict[str, list[str]]], self._wrapper.validation_errors)
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Bindable."""
+        return cast(Observable[list[str]], self._wrapper.validation_error_messages)
 
     def __call__(self) -> RecordVariable[T]:
         """Call syntax: self.record().is_dirty returns RecordVariable for state access."""

@@ -39,7 +39,16 @@ class _QtPieConfig:
 class QtPieState:
     """Instance-level QtPie state."""
 
-    __slots__ = ("variables", "_view_model", "_widget", "_was_dirty", "_check_dirty", "_record")
+    __slots__ = (
+        "variables",
+        "_view_model",
+        "_widget",
+        "_was_dirty",
+        "_check_dirty",
+        "_record",
+        "_was_valid",
+        "_check_valid",
+    )
 
     def __init__(self, widget: Widget[Any]) -> None:
         self._widget = widget
@@ -48,6 +57,8 @@ class QtPieState:
         self._was_dirty: bool = False
         self._check_dirty: Callable[[bool], None] | None = None
         self._record: RecordVariable[Any] | None = None
+        self._was_valid: bool = True
+        self._check_valid: Callable[[bool], None] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
@@ -84,10 +95,96 @@ class QtPieState:
         self._check_dirty = check_dirty_transition
 
     def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
-        """Register a Variable and wire up dirty hook if enabled."""
+        """Register a Variable and wire up dirty/valid hooks if enabled."""
         self.variables[name] = var  # type: ignore[assignment]
         if self._check_dirty is not None:
             var.is_dirty.on_change(self._check_dirty)
+        if self._check_valid is not None:
+            var.is_valid.on_change(self._check_valid)
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all Variables are valid."""
+        return all(var.is_valid.get() for var in self.variables.values())
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Get validation errors: {field: {validator: [errors]}}."""
+        return {
+            name: var.validation_errors.get()
+            for name, var in self.variables.items()
+            if var.validation_error_messages.get()  # only include fields with errors
+        }
+
+    @property
+    def validation_error_messages(self) -> list[str]:
+        """Flat list of all error messages across all fields."""
+        msgs: list[str] = []
+        for var in self.variables.values():
+            msgs.extend(var.validation_error_messages.get())
+        return msgs
+
+    def enable_valid_hook(self) -> None:
+        """Enable the on_valid_changed hook (called after __setup__)."""
+
+        def check_valid_transition(_: bool) -> None:
+            is_now_valid = self.is_valid
+            if self._was_valid != is_now_valid:
+                self._was_valid = is_now_valid
+                hook = getattr(self._widget, "on_valid_changed", None)
+                if hook is not None:
+                    hook(is_now_valid)
+
+        self._check_valid = check_valid_transition
+
+        # Sync _was_valid with current state (after __setup__ ran and added validators)
+        self._was_valid = self.is_valid
+
+        # Subscribe to each variable's is_valid
+        for var in self.variables.values():
+            var.is_valid.on_change(check_valid_transition)
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add named validator to a specific field."""
+        # Check if field is already in variables
+        if field in self.variables:
+            self.variables[field].add_validator(name, validator)
+            return
+
+        # Try to trigger variable creation by accessing it on the widget
+        # This handles lazy Variable creation via descriptors
+        if hasattr(self._widget, field):
+            attr = getattr(self._widget, field)
+            # After access, check if it's now registered
+            if field in self.variables:
+                self.variables[field].add_validator(name, validator)
+                return
+            # If it's a Variable directly (shouldn't happen but handle it)
+            if hasattr(attr, "add_validator"):
+                attr.add_validator(name, validator)
+                return
+
+        # Check if it's a record field
+        # First, try to trigger record creation by accessing widget.record
+        if self._record is None and hasattr(self._widget, "record"):
+            try:
+                _ = self._widget.record  # Trigger record creation
+            except TypeError:
+                pass  # No record type configured
+
+        if self._record is not None:
+            try:
+                field_obs = getattr(self._record.observable, field)
+                field_obs.add_validator(name, validator)
+                return
+            except AttributeError:
+                pass
+
+        raise KeyError(f"No field named '{field}' found in widget")
 
 
 class QtPieViewModel:
@@ -280,6 +377,42 @@ class Widget[T = None](QWidget):
         @record.setter
         def record(self, value: T) -> None: ...
 
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add a named validator to a field.
+
+        Usage:
+            def __setup__(self) -> None:
+                self.add_validator("name", "required", lambda v: None if v else "Required")
+        """
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        self._qtpie.add_validator(field, name, validator)
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all fields are valid."""
+        if not hasattr(self, "_qtpie"):
+            return True
+        return self._qtpie.is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Errors: {field: {validator: [errors]}}."""
+        if not hasattr(self, "_qtpie"):
+            return {}
+        return self._qtpie.validation_errors
+
+    @property
+    def validation_error_messages(self) -> list[str]:
+        """Flat list of all error messages."""
+        if not hasattr(self, "_qtpie"):
+            return []
+        return self._qtpie.validation_error_messages
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Check that @widget decorator was applied."""
         if not self._qtpie_config.init_wrapped:
@@ -409,12 +542,13 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
         # Apply bindings (after __setup__ so record is available)
         _apply_auto_bindings(self, config)
 
-        # Enable on_dirty_changed hook (subscribes to future Variable changes)
+        # Enable on_dirty_changed and on_valid_changed hooks (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
         if not isinstance(state, QtPieState):
             state = QtPieState(self)
             self._qtpie = state  # type: ignore[assignment]
         state.enable_dirty_hook()
+        state.enable_valid_hook()
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._qtpie_config.init_wrapped = True

@@ -5,17 +5,28 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from typing import overload, override
 
-from .observable import Observable
+from .observable import Observable, ValidatorFn
 
 
 class ObservableDict[K, V]:
     """A dict that notifies listeners when it changes."""
 
-    def __init__(self, items: dict[K, V] | None = None, *, dirty_tracking: bool = True) -> None:
+    def __init__(self, items: dict[K, V] | None = None, *, dirty_tracking: bool = True, validation: bool = True) -> None:
         self._items: dict[K, V] = dict(items) if items else {}
         self._clean_items: dict[K, V] = dict(self._items)
         self._callbacks: list[Callable[[], None]] = []
-        self._is_dirty: Observable[bool] | None = Observable[bool](False, dirty_tracking=False) if dirty_tracking else None
+        self._is_dirty: Observable[bool] | None = Observable[bool](False, dirty_tracking=False, validation=False) if dirty_tracking else None
+
+        # Validation
+        self._validators: dict[str, ValidatorFn[dict[K, V]]] = {}
+        if validation:
+            self._validation_errors: Observable[dict[str, list[str]]] | None = Observable({}, dirty_tracking=False, validation=False)
+            self._validation_error_messages: Observable[list[str]] | None = Observable([], dirty_tracking=False, validation=False)
+            self._is_valid: Observable[bool] | None = Observable(True, dirty_tracking=False, validation=False)
+        else:
+            self._validation_errors = None
+            self._validation_error_messages = None
+            self._is_valid = None
 
     def _notify(self) -> None:
         """Notify listeners and update dirty state."""
@@ -23,6 +34,8 @@ class ObservableDict[K, V]:
             now_dirty = self._items != self._clean_items
             if self._is_dirty.get() != now_dirty:
                 self._is_dirty.set(now_dirty)
+
+        self._validate()
 
         for callback in self._callbacks:
             callback()
@@ -137,3 +150,61 @@ class ObservableDict[K, V]:
     def to_dict(self) -> dict[K, V]:
         """Return a copy of the internal dict."""
         return dict(self._items)
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, name: str, validator: ValidatorFn[dict[K, V]]) -> None:
+        """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
+        self._validators[name] = validator
+        self._validate()
+
+    def _validate(self) -> None:
+        """Run all validators and update state."""
+        if self._is_valid is None or not self._validators:
+            return  # Validation disabled or no validators
+
+        errors_dict: dict[str, list[str]] = {}
+        all_messages: list[str] = []
+
+        for name, validator in self._validators.items():
+            result = validator(self._items)
+            if result is None:
+                errors_dict[name] = []
+            elif isinstance(result, str):
+                errors_dict[name] = [result]
+                all_messages.append(result)
+            else:  # list[str]
+                errors_dict[name] = list(result)
+                all_messages.extend(result)
+
+        assert self._validation_errors is not None
+        assert self._validation_error_messages is not None
+        self._validation_errors.set(errors_dict)
+        self._validation_error_messages.set(all_messages)
+
+        is_valid = len(all_messages) == 0
+        if self._is_valid.get() != is_valid:
+            self._is_valid.set(is_valid)
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Validity state. Bindable."""
+        if self._is_valid is None:
+            raise RuntimeError("Validation not enabled for this ObservableDict")
+        return self._is_valid
+
+    @property
+    def validation_errors(self) -> Observable[dict[str, list[str]]]:
+        """Errors by validator name. Bindable."""
+        if self._validation_errors is None:
+            raise RuntimeError("Validation not enabled for this ObservableDict")
+        return self._validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Bindable."""
+        if self._validation_error_messages is None:
+            raise RuntimeError("Validation not enabled for this ObservableDict")
+        return self._validation_error_messages
