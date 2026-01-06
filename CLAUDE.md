@@ -308,3 +308,131 @@ class MyApp(Widget):
 # Just run: python my_app.py
 # The @entrypoint decorator handles QApplication setup
 ```
+
+---
+
+## Format String Bindings (Complex Expressions)
+
+The `bind=` parameter supports complex Python expressions in format strings:
+
+### Basic Expressions
+
+```python
+@widget
+class Example(Widget):
+    _name: Variable[str] = new("hello")
+    _count: Variable[int] = new(42)
+
+    # Function calls
+    _len_label: QLabel = new(bind="Length: {len(_name)}")
+
+    # String methods
+    _upper_label: QLabel = new(bind="Upper: {_name.upper()}")
+
+    # Math expressions
+    _x: Variable[int] = new(10)
+    _y: Variable[int] = new(20)
+    _math_label: QLabel = new(bind="Sum: {_x + _y}, Product: {_x * _y}")
+
+    # Complex math with parentheses
+    _z: Variable[int] = new(5)
+    _complex: QLabel = new(bind="Result: {(_x + _y) * _z}")
+
+    # Format specs (Python format string syntax)
+    _price: Variable[float] = new(19.99)
+    _price_label: QLabel = new(bind="Price: ${_price:.2f}")
+
+    # Instance methods
+    def compute(self) -> str:
+        return "computed value"
+
+    _computed: QLabel = new(bind="Value: {compute()}")
+
+    # Methods with parameters
+    def repeat(self, s: str, n: int) -> str:
+        return s * n
+
+    _repeated: QLabel = new(bind="{repeat(_name, 3)}")
+```
+
+### Special Placeholders
+
+| Placeholder | Description |
+|-------------|-------------|
+| `{#self}` | Variable's value (in `Variable[T,W]` context) or Widget instance |
+| `{#var}` | Explicit reference to Variable's value |
+| `{#widget}` | Explicit reference to parent Widget instance |
+| `{#index}` | Item index (in list/dict repeaters) |
+| `{#key}` | Dict key (in dict repeaters) |
+| `{#value}` | Dict value (in dict repeaters) |
+
+### Variable[T, W] with bind=
+
+```python
+@widget
+class Example(Widget):
+    # #self refers to the Variable's value ("Hello"), not the widget
+    _name: Variable[str, QLabel] = new("Hello")(bind="Value: {#self}")
+
+    # Use expressions on #self
+    _upper: Variable[str, QLabel] = new("hello")(bind="Upper: {#self.upper()}")
+    _len: Variable[str, QLabel] = new("hello")(bind="Length: {len(#self)}")
+
+    # #var is explicit alias for Variable's value
+    _count: Variable[int, QLabel] = new(10)(bind="Double: {#var * 2}")
+
+    # #widget refers to parent widget (for accessing widget attributes)
+    title: str = "MyWidget"
+    _with_title: Variable[str, QLabel] = new("x")(bind="Title: {#widget.title}")
+
+    # Combine them all
+    _combo: Variable[int, QLabel] = new(5)(
+        bind="{#widget.title}: value={#self}, doubled={#var * 2}"
+    )
+```
+
+### List Repeater Placeholders
+
+```python
+@widget
+class ListExample(Widget):
+    _numbers: Variable[list[int], QLabel] = new([1, 2, 3])(
+        bind="Index {#index}: value is {#self}"
+        # Output: "Index 0: value is 1", "Index 1: value is 2", etc.
+    )
+
+    # With complex objects
+    _dogs: Variable[list[Dog], QLabel] = new([Dog("Fido", 3)])(
+        bind="{name} is {age} years old"  # Direct property access
+    )
+```
+
+### Dict Repeater Placeholders
+
+```python
+@widget
+class DictExample(Widget):
+    _scores: Variable[dict[str, int], QLabel] = new({"Alice": 100})(
+        bind="{#key} scored {#value} points"
+    )
+
+    # #self and #value are aliases for dict values
+    _dogs: Variable[dict[str, Dog], QLabel] = new({"Fido": Dog("Fido", 3)})(
+        bind="{#key}: {#self.name} is {age} years old"
+    )
+```
+
+### Reactivity
+
+All format bindings are reactive - when any referenced Variable changes, the expression is re-evaluated and the widget updates automatically:
+
+```python
+@widget
+class ReactiveExample(Widget):
+    _x: Variable[int] = new(10)
+    _y: Variable[int] = new(20)
+    _sum: QLabel = new(bind="Sum: {_x + _y}")  # Shows "Sum: 30"
+
+    def update_x(self):
+        self._x.value = 50  # _sum automatically updates to "Sum: 70"
+```
