@@ -190,8 +190,8 @@ class Variable[T, W = None]:
             if isinstance(val, dict):
                 self._wrapper.update(cast(dict[Any, Any], val))
         else:
-            # Must be ObservableProxy - can't replace target
-            raise TypeError("Cannot replace ObservableProxy value. Modify fields directly.")
+            # Must be ObservableProxy - replace target object
+            self._wrapper.replace_target(val)
 
     @property
     def observable(self) -> AnyObservable[T]:

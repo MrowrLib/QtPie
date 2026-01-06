@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, override
+from typing import Any, cast, override
 
 from .observable import Observable, ValidatorFn
 from .observable_dict import ObservableDict
@@ -444,6 +444,55 @@ class ObservableProxy[T]:
     def unwrap(self) -> T:
         """Get the underlying target object."""
         return object.__getattribute__(self, "_target")
+
+    def replace_target(self, new_target: T) -> None:
+        """Replace the underlying target object and update all field observables.
+
+        This triggers change notifications so all bound widgets update.
+
+        Args:
+            new_target: The new object to wrap.
+        """
+        # Replace the target
+        object.__setattr__(self, "_target", new_target)
+
+        # Update all existing field observables with new values
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        for name, obs in field_observables.items():
+            if hasattr(new_target, name):
+                new_value = getattr(new_target, name)
+                obs.set(new_value)
+
+        # Update all existing field lists
+        field_lists: dict[str, ObservableList[Any]] = object.__getattribute__(self, "_field_lists")
+        for name, obs_list in field_lists.items():
+            if hasattr(new_target, name):
+                new_list_value = getattr(new_target, name)
+                obs_list.clear()
+                if isinstance(new_list_value, list):
+                    obs_list.extend(cast(list[Any], new_list_value))
+
+        # Update all existing field dicts
+        field_dicts: dict[str, ObservableDict[Any, Any]] = object.__getattribute__(self, "_field_dicts")
+        for name, obs_dict in field_dicts.items():
+            if hasattr(new_target, name):
+                new_dict_value = getattr(new_target, name)
+                obs_dict.clear()
+                if isinstance(new_dict_value, dict):
+                    obs_dict.update(cast(dict[Any, Any], new_dict_value))
+
+        # Update all nested proxies recursively
+        nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+        for name, proxy in nested_proxies.items():
+            if hasattr(new_target, name):
+                new_value = getattr(new_target, name)
+                proxy.replace_target(new_value)
+
+        # Update dirty/valid state and notify
+        self._update_dirty_state()
+        self._validate()
+        self._update_valid_state()
+        self._notify_change()
 
     def _parse_path_segments(self, path: str) -> list[tuple[str, bool]]:
         """Parse a path into segments with optional flags.

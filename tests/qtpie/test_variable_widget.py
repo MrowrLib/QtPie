@@ -474,3 +474,87 @@ class TestVariableProxyFieldAccess:
         # Primitives don't have fields
         with pytest.raises(AttributeError):
             _ = w._count.some_field  # type: ignore[attr-defined]
+
+    def test_replace_entire_object(self, qt: QtDriver) -> None:
+        """self._dog.value = Dog(...) replaces the entire object reactively."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog] = new(Dog("Fido", 3))
+            _label: QLabel = new("")
+
+            def __setup__(self) -> None:
+                self._update_label()
+                self._dog.observable.on_change(self._update_label)
+
+            def _update_label(self) -> None:
+                self._label.setText(f"{self._dog.name}, {self._dog.age}")
+
+        w = qt.track(Test())
+
+        # Initial state
+        assert w._label.text() == "Fido, 3"
+
+        # Replace entire object
+        w._dog.value = Dog("Buddy", 5)
+
+        # Should have updated reactively
+        assert w._label.text() == "Buddy, 5"
+        assert w._dog.name == "Buddy"
+        assert w._dog.age == 5
+
+    def test_replace_object_updates_bound_widget(self, qt: QtDriver) -> None:
+        """Replacing object updates bound Widget[T]."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget(layout="form")
+        class DogEditor(Widget[Dog]):
+            _name: QLineEdit = new(label="Name")
+            _age: QSpinBox = new(label="Age")
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog, DogEditor] = new(Dog("Fido", 3))
+
+        w = qt.track(Test())
+        editor = w._dog.widget
+
+        # Initial state
+        assert editor._name.text() == "Fido"
+        assert editor._age.value() == 3
+
+        # Replace entire object
+        w._dog.value = Dog("Rex", 7)
+
+        # Widget should update
+        assert editor._name.text() == "Rex"
+        assert editor._age.value() == 7
+
+    def test_assign_object_via_descriptor(self, qt: QtDriver) -> None:
+        """self._dog = Dog(...) also works (via descriptor __set__)."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog] = new(Dog("Fido", 3))
+
+        w = qt.track(Test())
+
+        # This goes through _VariableDescriptor.__set__ -> Variable.value setter
+        w._dog = Dog("Max", 2)  # type: ignore[assignment]
+
+        assert w._dog.name == "Max"
+        assert w._dog.age == 2
