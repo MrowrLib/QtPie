@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from qtpy.QtCore import QSize
 from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
 
 from qtpie import Variable, Widget, entrypoint, new, widget
@@ -328,7 +329,6 @@ class ComplexBindings2(Widget):
     label_showing_repeated: QLabel = new(bind="Repeated string: {repeat_string(simple_string_variable, 3)}")  # If the ast stuff can do this, let's do this too
 
 
-@entrypoint
 @widget
 class ComplexBindings(Widget):
     testing_self: Variable[str, QLabel] = new("Hello")(bind="Value is: {#self.upper()}!")
@@ -366,3 +366,25 @@ class ComplexBindings(Widget):
         return s * times
 
     label_showing_repeated: QLabel = new(bind="Repeated string: {repeat_string(_simple_string, 3)}")
+
+
+@widget
+class MyWidget(Widget):
+    _show_label: Variable[bool] = new(False)
+
+    btn_toggle_label: QPushButton = new("Toggle Label", clicked="toggle_label")
+    cool_label: QLabel = new("This is a cool label!", visible="_show_label")
+
+    def toggle_label(self) -> None:
+        self._show_label.value = not self._show_label.value
+
+
+@entrypoint
+@widget(windowTitle="{title.upper()}", fixedSize=QSize(400, 200))
+class ReactiveWindowTitle(Widget):
+    title: Variable[str] = new("Initial Title")
+
+    btn_change_title: QPushButton = new("Change Title", clicked="change_title")
+
+    def change_title(self) -> None:
+        self.title.value = "Updated Title"

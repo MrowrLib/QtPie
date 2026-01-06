@@ -40,6 +40,8 @@ class NewField:
         # Object name and CSS classes
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
+        # Property bindings (visible="_is_visible", enabled="{_count > 0}")
+        self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -246,20 +248,46 @@ class NewField:
         except Exception:
             return False
 
+    def _is_binding_expression(self, value: Any) -> bool:
+        """Check if value is a binding expression (string reference or {expr})."""
+        if not isinstance(value, str):
+            return False
+        # If it contains {}, it's definitely a binding expression
+        if "{" in value and "}" in value:
+            return True
+        # If it's a simple identifier (possibly with underscore prefix), treat as variable reference
+        # But NOT if it looks like a regular value (e.g., "true", "false", urls, paths, etc.)
+        stripped = value.strip()
+        if not stripped:
+            return False
+        # Check if it's a valid Python identifier (variable/method name)
+        # This catches things like "_is_visible", "should_show", but not "hello world"
+        return stripped.replace("_", "").replace(".", "").isalnum() and stripped[0].isalpha() or stripped[0] == "_"
+
     def _extract_widget_props(self, widget_type: type | None = None) -> None:
         """Extract property kwargs for QWidgets.
 
         For kwargs like windowTitle="Foo", if the widget class has a
         setWindowTitle method, extract it to widget_props for later application.
 
+        If the value is a string that looks like a binding expression (e.g., "_is_visible"
+        or "{_count > 0}"), it's stored in property_bindings instead.
+
         Args:
             widget_type: The widget type to check for setters. If None, uses self.field_type.
         """
+        # Properties that support binding (common QWidget properties)
+        bindable_props = {"visible", "enabled", "windowModified", "acceptDrops", "updatesEnabled"}
+
         to_remove: list[str] = []
         for key, value in self.kwargs.items():
             # Check if this kwarg corresponds to a setter on the widget type
             if self._has_setter(key, widget_type):
-                self.widget_props[key] = value
+                # Check if this is a bindable property with a binding expression
+                if key in bindable_props and self._is_binding_expression(value):
+                    self.property_bindings[key] = value
+                else:
+                    self.widget_props[key] = value
                 to_remove.append(key)
 
         for key in to_remove:

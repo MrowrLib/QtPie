@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QSlider,
     QSpinBox,
     QTextEdit,
+    QWidget,
 )
 
 
@@ -244,3 +245,87 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         ),
     )
     registry.set_default_prop(QProgressBar, "value")
+
+    # ============================================================
+    # Common QWidget properties (inherited by all widgets)
+    # ============================================================
+
+    # QWidget - visible (one-way, no signal for visibility changes)
+    registry.add(
+        BindingKey(QWidget, "visible"),
+        BindingAdapter(
+            getter=lambda w: w.isVisible(),
+            setter=lambda w, v: w.setVisible(bool(v) if v is not None else True),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - enabled (one-way, no signal)
+    registry.add(
+        BindingKey(QWidget, "enabled"),
+        BindingAdapter(
+            getter=lambda w: w.isEnabled(),
+            setter=lambda w, v: w.setEnabled(bool(v) if v is not None else True),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - styleSheet (one-way)
+    registry.add(
+        BindingKey(QWidget, "styleSheet"),
+        BindingAdapter(
+            getter=lambda w: w.styleSheet(),
+            setter=lambda w, v: w.setStyleSheet(str(v) if v is not None else ""),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - toolTip (one-way)
+    registry.add(
+        BindingKey(QWidget, "toolTip"),
+        BindingAdapter(
+            getter=lambda w: w.toolTip(),
+            setter=lambda w, v: w.setToolTip(str(v) if v is not None else ""),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - windowTitle (one-way)
+    registry.add(
+        BindingKey(QWidget, "windowTitle"),
+        BindingAdapter(
+            getter=lambda w: w.windowTitle(),
+            setter=lambda w, v: w.setWindowTitle(str(v) if v is not None else ""),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - windowModified (one-way) - shows "document modified" indicator
+    registry.add(
+        BindingKey(QWidget, "windowModified"),
+        BindingAdapter(
+            getter=lambda w: w.isWindowModified(),
+            setter=lambda w, v: w.setWindowModified(bool(v) if v is not None else False),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - acceptDrops (one-way)
+    registry.add(
+        BindingKey(QWidget, "acceptDrops"),
+        BindingAdapter(
+            getter=lambda w: w.acceptDrops(),
+            setter=lambda w, v: w.setAcceptDrops(bool(v) if v is not None else False),
+            signal_name=None,
+        ),
+    )
+
+    # QWidget - updatesEnabled (one-way) - temporarily disable repainting for batch updates
+    registry.add(
+        BindingKey(QWidget, "updatesEnabled"),
+        BindingAdapter(
+            getter=lambda w: w.updatesEnabled(),
+            setter=lambda w, v: w.setUpdatesEnabled(bool(v) if v is not None else True),
+            signal_name=None,
+        ),
+    )

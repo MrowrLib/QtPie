@@ -659,6 +659,12 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
         # Apply bindings (after __setup__ so record is available)
         _apply_auto_bindings(self, config)
 
+        # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
+        _apply_property_bindings(self, config)
+
+        # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
+        _apply_reactive_widget_props(self, config)
+
         # Enable on_dirty_changed and on_valid_changed hooks (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
         if not isinstance(state, QtPieState):
@@ -741,7 +747,11 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
 
     For each prop like windowTitle="X", calls widget.setWindowTitle("X").
     Also applies name and classes from the decorator.
+
+    Reactive props (with {}) are skipped here and applied later by _apply_reactive_widget_props.
     """
+    from .bindings import is_format_string
+
     # Apply objectName: use explicit name if set, otherwise default to class name
     if config.object_name is not None:
         widget.setObjectName(config.object_name)
@@ -754,8 +764,12 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
 
         set_classes(widget, config.css_classes)
 
-    # Apply other widget properties
+    # Apply other widget properties (skip reactive ones with {})
     for prop_name, value in config.widget_props.items():
+        # Skip reactive props - they'll be handled by _apply_reactive_widget_props
+        if isinstance(value, str) and is_format_string(value):
+            continue
+
         # Convert propName to setPropName (capitalize first letter)
         setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
         setter = getattr(widget, setter_name, None)
@@ -1087,3 +1101,165 @@ def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
             else:
                 # Direct callable (lambda, function, etc.)
                 signal.connect(handler)
+
+
+def _apply_property_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply property bindings like visible="_is_visible" or enabled="{_count > 0}".
+
+    For each QWidget field with property_bindings, resolves the binding expression
+    and creates a one-way binding to the property setter (e.g., setVisible, setEnabled).
+    """
+    from .bindings import is_format_string, resolve_binding_source
+    from .bindings.registry import get_binding_registry
+    from .variable import Variable
+
+    registry = get_binding_registry()
+
+    for name, field in config.fields.items():
+        if not field.property_bindings:
+            continue
+
+        # Get the widget instance
+        widget_instance = getattr(widget, name, None)
+        if widget_instance is None or not isinstance(widget_instance, QWidget):
+            continue
+
+        # Apply each property binding
+        for prop_name, bind_expr in field.property_bindings.items():
+            # Get the binding adapter for this property
+            adapter = registry.get(widget_instance, prop_name)
+            if adapter is None or adapter.setter is None:
+                continue
+
+            # Create a bound setter
+            setter = adapter.setter
+
+            def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                def bound_setter(val: Any) -> None:
+                    s(w, val)
+
+                return bound_setter  # noqa: B023
+
+            bound_setter = make_setter(setter, widget_instance)
+
+            # Check if it's a format/expression binding or simple variable reference
+            if is_format_string(bind_expr):
+                # Expression like "{_count > 0}" - use expression binding (returns raw value, not string)
+                _create_expression_binding(widget, bind_expr, bound_setter)
+            else:
+                # Simple variable reference like "_is_visible"
+                source = resolve_binding_source(widget, bind_expr)
+                if source is None:
+                    continue
+
+                # Get initial value and set up binding
+                if isinstance(source, Variable):
+                    # Set initial value
+                    bound_setter(source.value)  # pyright: ignore[reportUnknownMemberType]
+                    # Subscribe to changes - use Variable's on_change which accepts Any callback
+                    source.on_change(bound_setter)
+                elif isinstance(source, Observable):
+                    # Set initial value
+                    bound_setter(source.get())
+                    # Subscribe to changes
+                    source.on_change(bound_setter)
+
+
+def _create_expression_binding(
+    widget: Widget[Any],
+    expression: str,
+    setter: Callable[[Any], None],
+) -> None:
+    """Create a binding for an expression like "{_count > 0}".
+
+    Unlike format bindings which return strings, this returns the raw evaluated value.
+    This is used for property bindings like visible= and enabled= that need boolean results.
+    """
+    from .bindings import resolve_binding_source
+    from .bindings.format_binding import _BUILTINS, _extract_ast_names
+    from .variable import Variable
+
+    # Extract the expression from {expr}
+    # Handle both "{expr}" and "expr" formats
+    expr = expression.strip()
+    if expr.startswith("{") and expr.endswith("}"):
+        expr = expr[1:-1].strip()
+
+    # Extract variable names from the expression
+    ast_names = _extract_ast_names(expr)
+    var_names = ast_names - _BUILTINS
+
+    # Collect all observables to subscribe to
+    all_observables: list[Observable[Any]] = []
+
+    for var_name in var_names:
+        source = resolve_binding_source(widget, var_name)
+        if source is not None:
+            if isinstance(source, Variable):
+                obs = source.observable
+                if isinstance(obs, Observable):
+                    all_observables.append(obs)
+            elif isinstance(source, Observable):
+                all_observables.append(source)
+
+    def compute() -> Any:
+        # Build context with current values
+        context: dict[str, Any] = {}
+
+        for var_name in var_names:
+            # Try with underscore prefix first, then without
+            for attr_name in [f"_{var_name}", var_name]:
+                if hasattr(widget, attr_name):
+                    raw_attr: Any = getattr(widget, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        context[var_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                    else:
+                        context[var_name] = raw_attr
+                    break
+
+        # Evaluate the expression
+        try:
+            value = eval(expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+            return value
+        except Exception:
+            return None
+
+    # Set initial value
+    setter(compute())
+
+    # Subscribe to ALL observables - when any changes, recompute
+    def on_any_change(_: Any) -> None:
+        setter(compute())
+
+    for obs in all_observables:
+        obs.on_change(on_any_change)
+
+
+def _apply_reactive_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply reactive widget properties from @widget decorator.
+
+    For props like windowTitle="{title}", creates a format binding that updates
+    the property when the referenced variables change.
+    """
+    from .bindings import create_format_binding, is_format_string
+
+    for prop_name, value in config.widget_props.items():
+        # Only handle reactive props with {}
+        if not isinstance(value, str) or not is_format_string(value):
+            continue
+
+        # Get the setter for this property
+        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+        setter_method = getattr(widget, setter_name, None)
+        if setter_method is None or not callable(setter_method):
+            raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
+
+        # Create a format binding - this returns a string which is what we want for windowTitle etc.
+        # Wrap the setter to match expected signature
+        def make_setter(s: Callable[..., Any]) -> Callable[[Any], None]:
+            def wrapped(val: Any) -> None:
+                s(val)
+
+            return wrapped
+
+        create_format_binding(widget, value, make_setter(setter_method))
