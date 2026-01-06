@@ -3,10 +3,9 @@ from dataclasses import dataclass
 from typing import override
 
 from PySide6.QtGui import QAction
-from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QMainWindow, QMenu, QPushButton, QTabWidget
+from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, entrypoint, menu, new, slot, widget
-from qtpie.widget_base import WidgetBase
+from qtpie import Variable, Widget, Window, entrypoint, menu, new, slot, widget, window
 
 
 @dataclass
@@ -423,8 +422,20 @@ class FileMenu(QMenu):
 
 
 @entrypoint
-class MainWindow(QMainWindow, WidgetBase):
+@window(title="My App")
+class MainWindow(Window[Dog]):
+    # record: Variable[Dog] = new(Dog("Fido", 4))  # <--- Pyright is upset, but it works at runtime
+
     file_menu: FileMenu = new()
 
-    def __setup__(self) -> None:
-        self.menuBar().addMenu(self.file_menu)
+    btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
+
+    def print_dog(self) -> None:
+        print(f"Dog Name: {self.record.name}, Age: {self.record.age}")
+
+    # add some regular widgets:
+    name: QLineEdit = new()
+    age: QLineEdit = new()
+
+    # def __setup__(self) -> None:
+    #     self.record = Dog(name="Rover", age=5)

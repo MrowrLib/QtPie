@@ -15,6 +15,7 @@ from .variable import RecordVariable, Variable
 from .widget import Widget, widget
 from .widget_base import WidgetBase
 from .widget_repeater import WidgetRepeater
+from .window import Window, window
 
 __all__ = [
     "App",
@@ -39,4 +40,6 @@ __all__ = [
     "set_color_scheme",
     "slot",
     "widget",
+    "Window",
+    "window",
 ]

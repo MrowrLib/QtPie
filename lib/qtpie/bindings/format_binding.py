@@ -206,7 +206,8 @@ def create_format_binding(
     - Special placeholders:
       - {#self} - the variable's value (if variable provided) or widget instance
       - {#var} - alias for variable's value (only when variable provided)
-      - {#widget} - always the widget instance
+      - {#widget} - always the widget/window instance
+      - {#window} - alias for #widget (more semantic for Window classes)
 
     Args:
         widget: The Widget instance to resolve paths from.
@@ -226,7 +227,7 @@ def create_format_binding(
     # Check for special placeholder usage (can appear anywhere in expression)
     uses_self = any("#self" in f.expression for f in fields)
     uses_var = any("#var" in f.expression for f in fields)
-    uses_widget = any("#widget" in f.expression for f in fields)
+    uses_widget = any("#widget" in f.expression or "#window" in f.expression for f in fields)
 
     # Get ROOT names for building eval context
     root_names = _get_root_names(var_names)
@@ -306,6 +307,7 @@ def create_format_binding(
                 eval_expr = eval_expr.replace("#self", "self")
                 eval_expr = eval_expr.replace("#var", "var")
                 eval_expr = eval_expr.replace("#widget", "widget_ref")
+                eval_expr = eval_expr.replace("#window", "widget_ref")
 
                 # Evaluate the expression
                 try:
