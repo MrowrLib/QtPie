@@ -12,6 +12,7 @@ Overview of TODOs, high-level ...
 
 ## Port over from V1
 
+- [ ] E2E tests, I think for App stuff mostly? skip by default.
 - [ ] async stuff
 - [ ] bind= using complex evaluations w/ reactive updates
 

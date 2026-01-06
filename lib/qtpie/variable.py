@@ -693,10 +693,14 @@ class _VariableDescriptor[T]:
                     )
                 else:
                     # Regular widget creation
+                    # Extract bind= from widget_kwargs (don't pass to widget constructor)
+                    widget_kwargs_copy = dict(self._widget_kwargs)
+                    bind_expr = widget_kwargs_copy.pop("bind", None)
+
                     try:
-                        widget_instance = self._widget_type(*self._widget_args, **self._widget_kwargs)
+                        widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
-                        raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
+                        raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={widget_kwargs_copy}") from e
 
                     # Apply objectName: use explicit name if set, otherwise default to field name
                     if self._object_name is not None:
@@ -710,7 +714,26 @@ class _VariableDescriptor[T]:
 
                         set_classes(widget_instance, self._css_classes)
 
-                    bind(var).to(widget_instance)
+                    # Apply binding - format string or simple bind
+                    if bind_expr is not None and "{" in bind_expr:
+                        from .bindings import create_format_binding
+                        from .bindings.registry import get_binding_registry
+
+                        registry = get_binding_registry()
+                        default_prop = registry.get_default_prop(widget_instance)
+                        adapter = registry.get(widget_instance, default_prop)
+                        if adapter is not None and adapter.setter is not None:
+                            setter = adapter.setter
+
+                            def make_setter(s: Any, w: Any) -> Any:
+                                def bound_setter(val: Any) -> None:
+                                    s(w, val)
+
+                                return bound_setter
+
+                            create_format_binding(obj, bind_expr, make_setter(setter, widget_instance), variable=var)  # type: ignore[arg-type]
+                    else:
+                        bind(var).to(widget_instance)
 
                 var.widget = widget_instance  # Use setter
 

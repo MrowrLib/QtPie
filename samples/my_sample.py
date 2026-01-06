@@ -245,7 +245,6 @@ class DictionariesOfThings(Widget):
             del self.str_int_dict["one"]
 
 
-@entrypoint
 @widget(
     stylesheet="""
 #my-label {
@@ -270,3 +269,100 @@ class TestingQss(Widget):
     lbl2: QLabel = new("Should be italic")
     label: QLabel = new("Label", name="my-label")
     label_with_class: QLabel = new("Label with class", classes=["my-class"])
+
+
+@widget
+class ComplexBindings2(Widget):
+    simple_string_variable: Variable[str] = new("Hello, World!")
+
+    # Button to change this string (to test reactivity
+    btn_change_string: QPushButton = new("Change String", clicked="change_string")
+
+    def change_string(self) -> None:
+        self.simple_string_variable = "Goodbye!"
+
+    # Call a function
+    call_fn: Variable[str, QLabel] = new("The string value")(bind="Number of characters is: {len(simple_string_variable)}!")
+
+    # Call a function (using self)
+    call_fn_on_self: Variable[str, QLabel] = new("The string value")(bind="Number of characters is: {len(#self)}!")
+
+    # Call a instance method
+    call_instance_method: Variable[str, QLabel] = new("Hello")(bind="Uppercase is: {simple_string_variable.upper()}!")
+
+    # Some number variables, x and y and z ...
+    var_x: Variable[int] = new(10)
+    var_y: Variable[int] = new(20)
+    var_z: Variable[int] = new(30)
+
+    # Some buttons which increment those variables (to test reactivity)
+    btn_inc_x: QPushButton = new("Increment X", clicked="increment_x")
+    btn_inc_y: QPushButton = new("Increment Y", clicked="increment_y")
+    btn_inc_z: QPushButton = new("Increment Z", clicked="increment_z")
+
+    def increment_x(self) -> None:
+        self.var_x += 1
+
+    def increment_y(self) -> None:
+        self.var_y += 1
+
+    def increment_z(self) -> None:
+        self.var_z += 1
+
+    # Do some math in a QLabel binding
+    math_binding: Variable[str, QLabel] = new("Math result")(bind="Result of (x + y) * z is: {(var_x + var_y) * var_z}")
+
+    # Bind to the output of a function, obviously non-reactive
+    def compute_something(self) -> str:
+        return "Computed Value"
+
+    label_showing_computed: QLabel = new(bind="Value is: {compute_something()}")
+
+    # Same without parens, calls cuz it's a callable
+    label_showing_computed_no_parens: QLabel = new(bind="Value is: {compute_something}")
+
+    # Now what about a function which takes a parameter?
+    def repeat_string(self, s: str, times: int) -> str:
+        return s * times
+
+    label_showing_repeated: QLabel = new(bind="Repeated string: {repeat_string(simple_string_variable, 3)}")  # If the ast stuff can do this, let's do this too
+
+
+@entrypoint
+@widget
+class ComplexBindings(Widget):
+    testing_self: Variable[str, QLabel] = new("Hello")(bind="Value is: {#self.upper()}!")
+
+    _simple_string: Variable[str] = new("Hello, World!")
+
+    btn_change_string: QPushButton = new("Change String", clicked="change_string")
+
+    def change_string(self) -> None:
+        self._simple_string.value = "Goodbye!"  # Use .value, not direct assignment
+
+    # Format string bindings use plain QLabel, not Variable[str, QLabel]
+    call_fn: QLabel = new(bind="Number of characters is: {len(_simple_string)}!")
+
+    call_instance_method: QLabel = new(bind="Uppercase is: {_simple_string.upper()}!")
+
+    _var_x: Variable[int] = new(10)
+    _var_y: Variable[int] = new(20)
+    _var_z: Variable[int] = new(30)
+
+    btn_inc_x: QPushButton = new("Increment X", clicked="increment_x")
+
+    def increment_x(self) -> None:
+        self._var_x.value += 1  # Use .value
+
+    # Math binding - plain QLabel
+    math_binding: QLabel = new(bind="Result of (x + y) * z is: {(_var_x + _var_y) * _var_z}")
+
+    def compute_something(self) -> str:
+        return "Computed Value"
+
+    label_showing_computed: QLabel = new(bind="Value is: {compute_something()}")
+
+    def repeat_string(self, s: str, times: int) -> str:
+        return s * times
+
+    label_showing_repeated: QLabel = new(bind="Repeated string: {repeat_string(_simple_string, 3)}")

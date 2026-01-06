@@ -24,9 +24,10 @@ The `observant` library provides reactive primitives. Originally a separate proj
 
 ### Key Differences from v1
 
-- v2 uses PySide6 directly (no `qtpy` abstraction)
 - v2 has `observant` integrated in the same repo
 - v2 has much better typing and pyright strict compliance
+
+We use `qtpy` for Qt abstraction so it works with PySide6 or PyQt6.
 
 ## Running Things
 
