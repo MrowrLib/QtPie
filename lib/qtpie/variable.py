@@ -194,6 +194,20 @@ class Variable[T, W = None]:
         def __set__(self, obj: object, value: Variable[T]) -> None: ...
         def __set__(self, obj: object, value: T | Variable[T]) -> None: ...
 
+    # Primitive coercion - allow Variable[int] to be used as int, etc.
+    def __int__(self) -> int:
+        return int(self.value)  # type: ignore[arg-type]
+
+    def __float__(self) -> float:
+        return float(self.value)  # type: ignore[arg-type]
+
+    @override
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def __bool__(self) -> bool:
+        return bool(self.value)
+
     # Augmented assignment operators - allow self._count += 1
     def __iadd__(self, other: Any) -> Self:
         self.value = self.value + other  # type: ignore[operator]
@@ -474,13 +488,18 @@ class _VariableDescriptor[T]:
                     type_args = typing_get_args(self._inner_type)
                     item_type = type_args[0] if type_args else None
 
+                    # Extract bind= from widget_kwargs for WidgetRepeater
+                    widget_kwargs_copy = dict(self._widget_kwargs)
+                    bind_expr = widget_kwargs_copy.pop("bind", "{#self}")
+
                     # Create WidgetRepeater instead of single widget
                     widget_instance = WidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
                         observable_list=wrapper,  # type: ignore[arg-type]
                         item_type=item_type,
                         widget_type=self._widget_type,
                         widget_args=self._widget_args,
-                        widget_kwargs=self._widget_kwargs,
+                        widget_kwargs=widget_kwargs_copy,
+                        bind_expr=bind_expr,
                     )
                 else:
                     # Regular widget creation

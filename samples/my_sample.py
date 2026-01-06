@@ -69,21 +69,41 @@ class VarsWithWidgets(Widget):
         print(f"var1: {self.var1.value}, var2: {self.var2.value}")
 
 
+@dataclass
+class Dog:
+    name: str
+    age: int
+
+
 @widget
 class ListsOfThings(Widget):
     regular_int: Variable[int] = new(0)
-    numbers: Variable[list[int], QLabel] = new([1, 2, 3])
+    numbers: Variable[list[int], QLabel] = new([1, 2, 3])(bind="Index: {#index} is {#self}")
+    dogs: Variable[list[Dog], QLabel] = new([Dog("Fido", 3), Dog("Buddy", 5)])(bind="{name} is {age} years old")
 
     btn_add: QPushButton = new("Add Number", clicked="add_number")
     btn_remove: QPushButton = new("Remove Number", clicked="remove_number")
 
+    new_dog_name: Variable[str, QLineEdit] = new("")(placeholderText="New Dog Name")
+    new_dog_age: Variable[int, QLineEdit] = new(0)(placeholderText="New Dog Age")
+    btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
+
     def add_number(self) -> None:
-        next_number = len(self.numbers) + 1
-        self.numbers.append(next_number)
+        self.regular_int += 1
+        self.numbers.append(self.regular_int.value)
 
     def remove_number(self) -> None:
         last_number = self.numbers[-1]
         self.numbers.remove(last_number)
+
+    def add_dog(self) -> None:
+        name = self.new_dog_name.value.strip()
+        age = int(self.new_dog_age.value)
+        if name:
+            new_dog = Dog(name=name, age=age)
+            self.dogs.append(new_dog)
+            self.new_dog_name.value = ""
+            self.new_dog_age.value = 0
 
 
 if __name__ == "__main__":

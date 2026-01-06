@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
@@ -9,6 +10,9 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from .bindings import bind
 from .variable import Variable
+
+# Regex to find placeholders like {#self}, {#index}, {name}, {age}
+_PLACEHOLDER_RE = re.compile(r"\{(#?\w+)\}")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -106,13 +110,44 @@ class WidgetRepeater[T](QWidget):
             wrapper: Observable or ObservableProxy wrapping the item.
             index_holder: Mutable [int] for tracking index changes.
         """
-        # Create a Variable wrapper for the binding system
-        var: Variable[Any] = Variable(wrapper)
+        bind_expr = self._bind_expr
 
-        # Bind Variable → Widget
-        bind(var).to(widget)
+        # Find all placeholders in the bind expression
+        placeholders = _PLACEHOLDER_RE.findall(bind_expr)
 
-        # For primitives, sync wrapper changes back to list
+        # Case 1: Simple {#self} - bind directly to item value (two-way)
+        if bind_expr == "{#self}":
+            var: Variable[Any] = Variable(wrapper)
+            bind(var).to(widget)
+            self._setup_primitive_sync(wrapper, index_holder)
+            return
+
+        # Case 2: Single property {name} - bind to that property (two-way for objects)
+        if len(placeholders) == 1 and bind_expr == f"{{{placeholders[0]}}}":
+            prop_name = placeholders[0]
+            if prop_name.startswith("#"):
+                # Special placeholder like {#index} - one-way computed
+                self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
+            elif isinstance(wrapper, ObservableProxy):
+                # Property on object - get Observable for that property
+                prop_obs: Observable[Any] = getattr(wrapper, prop_name)
+                var = Variable(prop_obs)
+                bind(var).to(widget)
+                # No need for sync - ObservableProxy auto-syncs to object
+            else:
+                # Primitive with property access doesn't make sense, fall back to format
+                self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
+            return
+
+        # Case 3: Format string with multiple placeholders - one-way computed binding
+        self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
+
+    def _setup_primitive_sync(
+        self,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        index_holder: list[int],
+    ) -> None:
+        """Set up sync from primitive Observable back to list."""
         if isinstance(wrapper, Observable):
             # Prevent infinite loop: track if we're updating
             updating = {"active": False}
@@ -122,12 +157,85 @@ class WidgetRepeater[T](QWidget):
                     return
                 upd["active"] = True
                 try:
-                    # Update the list item
                     self._obs_list[idx[0]] = new_val
                 finally:
                     upd["active"] = False
 
             wrapper.on_change(sync_to_list)
+
+    def _bind_computed_format(
+        self,
+        widget: QWidget,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        index_holder: list[int],
+        format_str: str,
+    ) -> None:
+        """Bind a computed format string to widget (one-way only).
+
+        Supports placeholders:
+        - {#self} - the item value
+        - {#index} - the item index
+        - {property} - item.property (for objects)
+        """
+        from .bindings.registry import get_binding_registry
+
+        # Get the setter for the widget's default property
+        registry = get_binding_registry()
+        default_prop = registry.get_default_prop(widget)
+        adapter = registry.get(widget, default_prop)
+        if adapter is None or adapter.setter is None:
+            return
+
+        setter = adapter.setter
+
+        def compute_value() -> str:
+            """Compute the formatted string from current values."""
+            result = format_str
+
+            # Find and replace all placeholders
+            for match in _PLACEHOLDER_RE.finditer(format_str):
+                placeholder = match.group(1)
+                full_match = match.group(0)
+
+                value: Any
+                if placeholder == "#self":
+                    if isinstance(wrapper, Observable):
+                        value = wrapper.get()
+                    else:
+                        value = wrapper.unwrap()
+                elif placeholder == "#index":
+                    value = index_holder[0]
+                elif isinstance(wrapper, ObservableProxy):
+                    # Property access on object
+                    prop_obs: Any = getattr(wrapper, placeholder, None)
+                    if isinstance(prop_obs, Observable):
+                        value = prop_obs.get()  # pyright: ignore[reportUnknownVariableType]
+                    else:
+                        value = f"<unknown:{placeholder}>"
+                else:
+                    value = f"<unknown:{placeholder}>"
+
+                result = result.replace(full_match, str(value), 1)  # pyright: ignore[reportUnknownArgumentType]
+
+            return result
+
+        # Set initial value
+        setter(widget, compute_value())
+
+        # Subscribe to changes and update widget
+        def on_change(_: Any) -> None:
+            setter(widget, compute_value())
+
+        if isinstance(wrapper, Observable):
+            wrapper.on_change(on_change)
+        else:
+            # For ObservableProxy, subscribe to all property observables mentioned
+            for match in _PLACEHOLDER_RE.finditer(format_str):
+                placeholder = match.group(1)
+                if not placeholder.startswith("#"):
+                    prop_obs: Any = getattr(wrapper, placeholder, None)
+                    if isinstance(prop_obs, Observable):
+                        prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
 
     def _create_and_add_widget(self, index: int, item: T) -> None:
         """Create a widget for an item and add it to the layout."""
