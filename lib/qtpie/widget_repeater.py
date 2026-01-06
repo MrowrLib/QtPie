@@ -11,8 +11,8 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from .bindings import bind
 from .variable import Variable
 
-# Regex to find placeholders like {#self}, {#index}, {name}, {age}
-_PLACEHOLDER_RE = re.compile(r"\{(#?\w+)\}")
+# Regex to find placeholders like {#self}, {#index}, {name}, {age}, {#self.age}
+_PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -173,6 +173,27 @@ class WidgetRepeater[T](QWidget):
 
             wrapper.on_change(sync_to_list)
 
+    def _resolve_nested_property(self, obj: Any, path: str) -> Any:
+        """Resolve a dotted property path like 'breed.name' on an object."""
+        parts = path.split(".")
+        current: Any = obj
+        for part in parts:
+            if isinstance(current, Observable):
+                current = current.get()  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(current, ObservableProxy):
+                prop_obs = getattr(current, part, None)  # pyright: ignore[reportUnknownArgumentType]
+                if isinstance(prop_obs, Observable):
+                    current = prop_obs.get()  # pyright: ignore[reportUnknownVariableType]
+                else:
+                    current = prop_obs  # pyright: ignore[reportUnknownVariableType]
+            elif hasattr(current, part):  # pyright: ignore[reportUnknownArgumentType]
+                current = getattr(current, part)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
+            else:
+                return f"<unknown:{path}>"
+        if isinstance(current, Observable):
+            current = current.get()  # pyright: ignore[reportUnknownVariableType]
+        return current  # pyright: ignore[reportUnknownVariableType]
+
     def _bind_computed_format(
         self,
         widget: QWidget,
@@ -185,7 +206,9 @@ class WidgetRepeater[T](QWidget):
         Supports placeholders:
         - {#self} - the item value
         - {#index} - the item index
+        - {#self.property} - nested property on item
         - {property} - item.property (for objects)
+        - {property.nested} - nested property access
         """
         from .bindings.registry import get_binding_registry
 
@@ -215,13 +238,16 @@ class WidgetRepeater[T](QWidget):
                         value = wrapper.unwrap()
                 elif placeholder == "#index":
                     value = index_holder[0]
-                elif isinstance(wrapper, ObservableProxy):
-                    # Property access on object
-                    prop_obs: Any = getattr(wrapper, placeholder, None)
-                    if isinstance(prop_obs, Observable):
-                        value = prop_obs.get()  # pyright: ignore[reportUnknownVariableType]
+                elif placeholder.startswith("#self."):
+                    # Nested property on item: #self.age -> item.age
+                    prop_path = placeholder[6:]  # Remove "#self."
+                    if isinstance(wrapper, Observable):
+                        value = self._resolve_nested_property(wrapper.get(), prop_path)
                     else:
-                        value = f"<unknown:{placeholder}>"
+                        value = self._resolve_nested_property(wrapper, prop_path)
+                elif isinstance(wrapper, ObservableProxy):
+                    # Property access on object (may be nested like breed.name)
+                    value = self._resolve_nested_property(wrapper, placeholder)
                 else:
                     value = f"<unknown:{placeholder}>"
 
@@ -242,8 +268,19 @@ class WidgetRepeater[T](QWidget):
             # For ObservableProxy, subscribe to all property observables mentioned
             for match in _PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
-                if not placeholder.startswith("#"):
-                    prop_obs: Any = getattr(wrapper, placeholder, None)
+                # Skip special placeholders
+                if placeholder in ("#self", "#index"):
+                    continue
+                # Handle #self.prop
+                if placeholder.startswith("#self."):
+                    prop_name = placeholder[6:].split(".")[0]
+                    prop_obs: Any = getattr(wrapper, prop_name, None)
+                    if isinstance(prop_obs, Observable):
+                        prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
+                elif not placeholder.startswith("#"):
+                    # Direct property (may be nested)
+                    prop_name = placeholder.split(".")[0]
+                    prop_obs = getattr(wrapper, prop_name, None)
                     if isinstance(prop_obs, Observable):
                         prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
 

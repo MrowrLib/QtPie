@@ -11,8 +11,10 @@ from observant import Observable, ObservableDict, ObservableList, ObservableProx
 # Union of all observable types
 type AnyObservable[T] = Observable[T] | ObservableList[T] | ObservableDict[Any, T] | ObservableProxy[T]
 
-# TypeVar for list item type (used in overloads)
+# TypeVars for list/dict item types (used in overloads)
 _ItemT = TypeVar("_ItemT")
+_KeyT = TypeVar("_KeyT")
+_ValT = TypeVar("_ValT")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -290,23 +292,73 @@ class Variable[T, W = None]:
         return self
 
     # -------------------------------------------------------------------------
-    # List delegation - for Variable[list[T]]
-    # Typed overloads provide intellisense for list item types
+    # List/Dict delegation
+    # Typed overloads provide intellisense for list/dict item types
     # -------------------------------------------------------------------------
 
     if TYPE_CHECKING:
-
+        # List-specific methods
         def append(self: Variable[list[_ItemT], Any], item: _ItemT) -> None: ...
         def extend(self: Variable[list[_ItemT], Any], items: list[_ItemT]) -> None: ...
         def insert(self: Variable[list[_ItemT], Any], index: int, item: _ItemT) -> None: ...
         def remove(self: Variable[list[_ItemT], Any], item: _ItemT) -> None: ...
+
+        # List pop
+        @overload
         def pop(self: Variable[list[_ItemT], Any], index: int = -1) -> _ItemT: ...
+        @overload
+        def pop(self: Variable[dict[_KeyT, _ValT], Any], index: _KeyT) -> _ValT: ...  # pyright: ignore[reportInconsistentOverload]
+        def pop(self, index: Any = -1) -> Any: ...
+
+        # Shared list/dict methods with overloads
+        @overload
         def clear(self: Variable[list[_ItemT], Any]) -> None: ...
+        @overload
+        def clear(self: Variable[dict[_KeyT, _ValT], Any]) -> None: ...
+        def clear(self) -> None: ...
+
+        @overload
         def __len__(self: Variable[list[_ItemT], Any]) -> int: ...
+        @overload
+        def __len__(self: Variable[dict[_KeyT, _ValT], Any]) -> int: ...
+        def __len__(self) -> int: ...
+
+        @overload
         def __iter__(self: Variable[list[_ItemT], Any]) -> Iterator[_ItemT]: ...
+        @overload
+        def __iter__(self: Variable[dict[_KeyT, _ValT], Any]) -> Iterator[_KeyT]: ...
+        def __iter__(self) -> Iterator[Any]: ...
+
+        @overload
         def __contains__(self: Variable[list[_ItemT], Any], item: _ItemT) -> bool: ...
-        def __getitem__(self: Variable[list[_ItemT], Any], index: int) -> _ItemT: ...
-        def __setitem__(self: Variable[list[_ItemT], Any], index: int, value: _ItemT) -> None: ...
+        @overload
+        def __contains__(self: Variable[dict[_KeyT, _ValT], Any], item: _KeyT) -> bool: ...  # pyright: ignore[reportInconsistentOverload]
+        def __contains__(self, item: Any) -> bool: ...
+
+        @overload
+        def __getitem__(self: Variable[list[_ItemT], Any], key: int) -> _ItemT: ...  # pyright: ignore[reportInconsistentOverload]
+        @overload
+        def __getitem__(self: Variable[dict[_KeyT, _ValT], Any], key: _KeyT) -> _ValT: ...
+        def __getitem__(self, key: Any) -> Any: ...
+
+        @overload
+        def __setitem__(self: Variable[list[_ItemT], Any], key: int, value: _ItemT) -> None: ...  # pyright: ignore[reportInconsistentOverload]
+        @overload
+        def __setitem__(self: Variable[dict[_KeyT, _ValT], Any], key: _KeyT, value: _ValT) -> None: ...
+        def __setitem__(self, key: Any, value: Any) -> None: ...
+
+        @overload
+        def __delitem__(self: Variable[list[_ItemT], Any], key: int) -> None: ...  # pyright: ignore[reportInconsistentOverload]
+        @overload
+        def __delitem__(self: Variable[dict[_KeyT, _ValT], Any], key: _KeyT) -> None: ...
+        def __delitem__(self, key: Any) -> None: ...
+
+        # Dict-specific methods
+        def keys(self: Variable[dict[_KeyT, _ValT], Any]) -> list[_KeyT]: ...
+        def values(self: Variable[dict[_KeyT, _ValT], Any]) -> list[_ValT]: ...
+        def items(self: Variable[dict[_KeyT, _ValT], Any]) -> list[tuple[_KeyT, _ValT]]: ...
+        def get(self: Variable[dict[_KeyT, _ValT], Any], key: _KeyT, default: _ValT | None = None) -> _ValT | None: ...
+        def update(self: Variable[dict[_KeyT, _ValT], Any], other: dict[_KeyT, _ValT]) -> None: ...
     else:
 
         def append(self, item: Any) -> None:
@@ -364,17 +416,56 @@ class Variable[T, W = None]:
                 return item in self._wrapper
             raise TypeError(f"'in' requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
 
-        def __getitem__(self, index: int) -> Any:
-            """Get item at index (delegates to ObservableList)."""
-            if not isinstance(self._wrapper, ObservableList):
-                raise TypeError(f"__getitem__ requires ObservableList, got {type(self._wrapper).__name__}")
-            return self._wrapper[index]
+        def __getitem__(self, key: Any) -> Any:
+            """Get item at index/key (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                return self._wrapper[key]
+            raise TypeError(f"__getitem__ requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
 
-        def __setitem__(self, index: int, value: Any) -> None:
-            """Set item at index (delegates to ObservableList)."""
-            if not isinstance(self._wrapper, ObservableList):
-                raise TypeError(f"__setitem__ requires ObservableList, got {type(self._wrapper).__name__}")
-            self._wrapper[index] = value
+        def __setitem__(self, key: Any, value: Any) -> None:
+            """Set item at index/key (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                self._wrapper[key] = value
+            else:
+                raise TypeError(f"__setitem__ requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        def __delitem__(self, key: Any) -> None:
+            """Delete item at index/key (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                del self._wrapper[key]
+            else:
+                raise TypeError(f"__delitem__ requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        # Dict-specific methods
+        def keys(self) -> list[Any]:
+            """Return keys (delegates to ObservableDict)."""
+            if not isinstance(self._wrapper, ObservableDict):
+                raise TypeError(f"keys() requires ObservableDict, got {type(self._wrapper).__name__}")
+            return self._wrapper.keys()
+
+        def values(self) -> list[Any]:
+            """Return values (delegates to ObservableDict)."""
+            if not isinstance(self._wrapper, ObservableDict):
+                raise TypeError(f"values() requires ObservableDict, got {type(self._wrapper).__name__}")
+            return self._wrapper.values()
+
+        def items(self) -> list[tuple[Any, Any]]:
+            """Return items (delegates to ObservableDict)."""
+            if not isinstance(self._wrapper, ObservableDict):
+                raise TypeError(f"items() requires ObservableDict, got {type(self._wrapper).__name__}")
+            return self._wrapper.items()
+
+        def get(self, key: Any, default: Any = None) -> Any:
+            """Get value for key with optional default (delegates to ObservableDict)."""
+            if not isinstance(self._wrapper, ObservableDict):
+                raise TypeError(f"get() requires ObservableDict, got {type(self._wrapper).__name__}")
+            return self._wrapper.get(key, default)
+
+        def update(self, other: dict[Any, Any]) -> None:
+            """Update with items from other dict (delegates to ObservableDict)."""
+            if not isinstance(self._wrapper, ObservableDict):
+                raise TypeError(f"update() requires ObservableDict, got {type(self._wrapper).__name__}")
+            self._wrapper.update(other)
 
 
 class RecordVariable[T]:
@@ -543,7 +634,7 @@ class _VariableDescriptor[T]:
             if self._widget_type is not None:
                 from .bindings import bind
 
-                # Check if inner_type is list[X] - create WidgetRepeater
+                # Check if inner_type is list[X] or dict[K, V] - create repeater
                 inner_origin = get_origin(self._inner_type)
                 if inner_origin is list:
                     from typing import get_args as typing_get_args
@@ -562,6 +653,30 @@ class _VariableDescriptor[T]:
                     widget_instance = WidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
                         observable_list=wrapper,  # type: ignore[arg-type]
                         item_type=item_type,
+                        widget_type=self._widget_type,
+                        widget_args=self._widget_args,
+                        widget_kwargs=widget_kwargs_copy,
+                        bind_expr=bind_expr,
+                    )
+                elif inner_origin is dict:
+                    from typing import get_args as typing_get_args
+
+                    from .dict_widget_repeater import DictWidgetRepeater
+
+                    # Extract K, V from dict[K, V]
+                    type_args = typing_get_args(self._inner_type)
+                    key_type = type_args[0] if len(type_args) > 0 else None
+                    value_type = type_args[1] if len(type_args) > 1 else None
+
+                    # Extract bind= from widget_kwargs for DictWidgetRepeater
+                    widget_kwargs_copy = dict(self._widget_kwargs)
+                    bind_expr = widget_kwargs_copy.pop("bind", "{#key} = {#value}")
+
+                    # Create DictWidgetRepeater instead of single widget
+                    widget_instance = DictWidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
+                        observable_dict=wrapper,  # type: ignore[arg-type]
+                        key_type=key_type,
+                        value_type=value_type,
                         widget_type=self._widget_type,
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,

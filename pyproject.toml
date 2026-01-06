@@ -29,7 +29,7 @@ dev = [
 ]
 
 [tool.pyright]
-exclude = ["v1/", ".venv/", "samples/"]
+exclude = ["v1/", ".venv/"]
 pythonPlatform = "All"
 pythonVersion = "3.13"
 reportPrivateImportUsage = false

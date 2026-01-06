@@ -212,8 +212,31 @@ class SimpleLists(Widget):
         return None
 
 
+@widget(title="Dictionaries of Things")
+class DictionariesOfThings(Widget):
+    # Key = value (simple primitives)
+    str_int_dict: Variable[dict[str, int], QLabel] = new({"one": 1, "two": 2})(bind="{#key} = {#value}")
+
+    # Value is a complex object - access properties
+    str_dog_dict: Variable[dict[str, Dog], QLabel] = new({"Fido": Dog("Fido", 3), "Rex": Dog("Rex", 5)})(bind="{#key} is {age} years old")
+
+    # Explicit #value.property and #self.property also work
+    str_dog_dict2: Variable[dict[str, Dog], QLabel] = new({"Buddy": Dog("Buddy", 2), "Max": Dog("Max", 7)})(bind="{#key}: {#value.name} is {#self.age} years old")
+
+    btn_add: QPushButton = new("Add Entry", clicked="add_entry")
+    btn_remove: QPushButton = new("Remove 'one'", clicked="remove_entry")
+
+    def add_entry(self) -> None:
+        count = len(self.str_int_dict) + 1
+        self.str_int_dict[f"new_{count}"] = count * 10
+
+    def remove_entry(self) -> None:
+        if "one" in self.str_int_dict:
+            del self.str_int_dict["one"]
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = SimpleLists()
+    widget = DictionariesOfThings()
     widget.show()
     app.exec()
