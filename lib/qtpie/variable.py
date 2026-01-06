@@ -372,12 +372,34 @@ class _VariableDescriptor[T]:
             if self._widget_type is not None:
                 from .bindings import bind
 
-                try:
-                    widget_instance = self._widget_type(*self._widget_args, **self._widget_kwargs)
-                except (TypeError, AttributeError) as e:
-                    raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
+                # Check if inner_type is list[X] - create WidgetRepeater
+                inner_origin = get_origin(self._inner_type)
+                if inner_origin is list:
+                    from typing import get_args as typing_get_args
+
+                    from .widget_repeater import WidgetRepeater
+
+                    # Extract item type X from list[X]
+                    type_args = typing_get_args(self._inner_type)
+                    item_type = type_args[0] if type_args else None
+
+                    # Create WidgetRepeater instead of single widget
+                    widget_instance = WidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
+                        observable_list=wrapper,  # type: ignore[arg-type]
+                        item_type=item_type,
+                        widget_type=self._widget_type,
+                        widget_args=self._widget_args,
+                        widget_kwargs=self._widget_kwargs,
+                    )
+                else:
+                    # Regular widget creation
+                    try:
+                        widget_instance = self._widget_type(*self._widget_args, **self._widget_kwargs)
+                    except (TypeError, AttributeError) as e:
+                        raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
+                    bind(var).to(widget_instance)
+
                 var.widget = widget_instance  # Use setter
-                bind(var).to(widget_instance)
 
         return qtpie_state.variables[self._name]
 

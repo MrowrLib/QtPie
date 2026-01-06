@@ -121,9 +121,7 @@ class NewField:
         # Check for explicit default= kwarg
         if "default" in self.kwargs:
             return self.kwargs["default"]
-        # Check for single primitive arg
+        # Check for single arg (primitive, list, dict, or object)
         if len(self.args) == 1:
-            arg = self.args[0]
-            if isinstance(arg, (str, int, float, bool)):
-                return arg
+            return self.args[0]
         return None

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from qtpy.QtWidgets import QApplication, QLineEdit, QPushButton
+from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
 
 from qtpie import Variable, Widget, new, widget
 
@@ -54,6 +54,11 @@ class VariableValidationWidget(Widget):
         print(f"Button clicked! Current text: {self._text.value}")
 
 
+@widget
+class CustomWidgetWhichCanDisplayMultipleErrors(Widget):
+    pass
+
+
 @widget(title="Variables with Widgets")
 class VarsWithWidgets(Widget):
     var1: Variable[int, QLineEdit] = new()(placeholderText="Enter a number")
@@ -64,8 +69,23 @@ class VarsWithWidgets(Widget):
         print(f"var1: {self.var1.value}, var2: {self.var2.value}")
 
 
+@widget
+class ListsOfThings(Widget):
+    numbers: Variable[list[int], QLabel] = new([1, 2, 3])
+
+    btn_add: QPushButton = new("Add Number", clicked="add_number")
+    btn_remove: QPushButton = new("Remove Number", clicked="remove_number")
+
+    def add_number(self) -> None:
+        self.numbers += [len(self.numbers.value) + 1]
+
+    # def remove_number(self) -> None:
+    #     if self.numbers.value:
+    #         self.numbers.observable.remove(self.numbers.value[-1])
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = VarsWithWidgets()
+    widget = ListsOfThings()
     widget.show()
     app.exec()
