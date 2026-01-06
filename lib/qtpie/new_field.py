@@ -1,5 +1,7 @@
 """NewField - Stores field configuration for deferred instantiation."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any, get_args, get_origin, get_type_hints
 
@@ -22,6 +24,19 @@ class NewField:
         self.exclude_from_layout = False
         self.bind: str | None = None  # Extracted for QWidgets in __set_name__
         self.signal_connections: dict[str, str | Callable[..., Any]] = {}  # signal_name -> method_name or callable
+        # Widget args for Variable[T, W] - set via __call__
+        self.widget_args: tuple[Any, ...] = ()
+        self.widget_kwargs: dict[str, Any] = {}
+
+    def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
+        """Store widget constructor args: new("value")(placeholder="...").
+
+        For Variable[T, W], the first new() call stores Variable args,
+        and the second call stores widget constructor args.
+        """
+        self.widget_args = widget_args
+        self.widget_kwargs = widget_kwargs
+        return self
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
@@ -40,7 +55,7 @@ class NewField:
                 args = get_args(self.field_type)
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type))
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, self.widget_kwargs))
             return
 
         # Handle QWidget-specific kwargs only

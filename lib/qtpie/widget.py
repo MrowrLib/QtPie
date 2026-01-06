@@ -24,7 +24,7 @@ from .variable import RecordVariable, Variable, _create_observable_for_type, _Va
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind", "widget_props")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -34,6 +34,7 @@ class _QtPieConfig:
         self.init_wrapped: bool = False
         self.record_type: type[Any] | None = None  # T from Widget[T]
         self.auto_bind: bool = True  # Auto-bind QWidget fields to matching Variables/record fields
+        self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
 
 
 class QtPieState:
@@ -442,6 +443,8 @@ def widget(
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
+    title: str | None = None,
+    **kwargs: Any,
 ) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
 
 
@@ -451,6 +454,8 @@ def widget[W: Widget[Any]](
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
+    title: str | None = None,
+    **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
 
@@ -468,6 +473,11 @@ def widget[W: Widget[Any]](
             # No auto-binding, must use bind="field" explicitly
             ...
 
+        @widget(title="My App", minimumWidth=400)
+        class MyWidget(Widget):
+            # Extra kwargs become setXXX() calls on the widget
+            ...
+
     Args:
         layout: "vertical" | "horizontal" | "form" | "grid" | None
                 Default is "vertical". None disables auto-layout.
@@ -475,13 +485,20 @@ def widget[W: Widget[Any]](
                  Layout margins. int applies to all sides.
         auto_bind: If True (default), QWidget fields are automatically bound
                    to matching Variables or record fields.
+        title: Shorthand for windowTitle.
+        **kwargs: Extra properties applied via setXXX() methods.
+                  e.g., windowTitle="Foo" calls self.setWindowTitle("Foo")
     """
+    # title is an alias for windowTitle
+    if title is not None:
+        kwargs["windowTitle"] = title
 
     def decorator(target: type[W]) -> type[W]:
         # Store layout config
         target._qtpie_config.layout = layout
         target._qtpie_config.margins = margins
         target._qtpie_config.auto_bind = auto_bind
+        target._qtpie_config.widget_props = kwargs
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(target)
@@ -507,6 +524,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
     def wrapped_init(self: Widget[Any], *args: Any, **kwargs: Any) -> None:
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
+
+        # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
+        _apply_widget_props(self, config)
 
         # Set up layout if configured
         if config.layout is not None:
@@ -582,6 +602,24 @@ def _add_to_layout(layout: QLayout, widget_instance: QWidget, layout_type: Layou
         layout.addRow(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "grid":
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
+
+
+def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply widget properties from @widget decorator kwargs.
+
+    For each prop like windowTitle="X", calls widget.setWindowTitle("X").
+    """
+    for prop_name, value in config.widget_props.items():
+        # Convert propName to setPropName (capitalize first letter)
+        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+        setter = getattr(widget, setter_name, None)
+        if setter is not None and callable(setter):
+            try:
+                setter(value)
+            except TypeError as e:
+                raise TypeError(f"Failed to call {setter_name}({value!r}) on {type(widget).__name__}: {e}") from e
+        else:
+            raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
 
 
 def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:

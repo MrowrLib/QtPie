@@ -54,8 +54,18 @@ class VariableValidationWidget(Widget):
         print(f"Button clicked! Current text: {self._text.value}")
 
 
+@widget(title="Variables with Widgets")
+class VarsWithWidgets(Widget):
+    var1: Variable[int, QLineEdit] = new()(placeholderText="Enter a number")
+    var2: Variable[str, QLineEdit] = new()(placeholderText="Enter text here")
+    btn: QPushButton = new("Print Vars", clicked="print_vars")
+
+    def print_vars(self) -> None:
+        print(f"var1: {self.var1.value}, var2: {self.var2.value}")
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = VariableValidationWidget()
+    widget = VarsWithWidgets()
     widget.show()
     app.exec()

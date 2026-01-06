@@ -316,3 +316,63 @@ class TestSignalConnections:
 
         assert_that(pressed_count).is_equal_to(1)
         assert_that(released_count).is_equal_to(1)
+
+
+class TestWidgetProps:
+    """Test @widget decorator kwargs become setXXX() calls."""
+
+    def test_window_title(self, qt: QtDriver) -> None:
+        """windowTitle kwarg calls setWindowTitle()."""
+
+        @widget(windowTitle="My Window")
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowTitle()).is_equal_to("My Window")
+
+    def test_title_alias(self, qt: QtDriver) -> None:
+        """title kwarg is alias for windowTitle."""
+
+        @widget(title="My Window")
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowTitle()).is_equal_to("My Window")
+
+    def test_minimum_size(self, qt: QtDriver) -> None:
+        """minimumWidth/minimumHeight kwargs work."""
+
+        @widget(minimumWidth=400, minimumHeight=300)
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.minimumWidth()).is_equal_to(400)
+        assert_that(w.minimumHeight()).is_equal_to(300)
+
+    def test_multiple_props(self, qt: QtDriver) -> None:
+        """Multiple props all applied."""
+
+        @widget(windowTitle="Test", toolTip="A tooltip")
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowTitle()).is_equal_to("Test")
+        assert_that(w.toolTip()).is_equal_to("A tooltip")
+
+    def test_invalid_prop_raises(self) -> None:
+        """Invalid prop name raises AttributeError."""
+        import pytest
+
+        @widget(notARealProperty="value")
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        with pytest.raises(AttributeError) as exc_info:
+            MyWidget()
+
+        assert "setNotARealProperty" in str(exc_info.value)
+        assert "notARealProperty" in str(exc_info.value)

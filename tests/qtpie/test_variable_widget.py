@@ -253,3 +253,98 @@ class TestBindingTypeConversion:
         # Two-way: changing spinbox updates variable
         w._spin.setValue(20)
         assert w._count.value == 20
+
+
+class TestCallableNewSyntax:
+    """Test new(value_args)(widget_args) callable chain syntax."""
+
+    def test_invalid_widget_kwarg_raises_clear_error(self, qt: QtDriver) -> None:
+        """Invalid widget kwarg raises TypeError with helpful message."""
+        import pytest
+
+        @widget
+        class Test(Widget):
+            # 'placeholder' is wrong - should be 'placeholderText'
+            _name: Variable[str, QLineEdit] = new("hi")(placeholder="wrong kwarg")  # type: ignore[type-arg]
+
+        with pytest.raises(TypeError) as exc_info:
+            Test()
+
+        error_msg = str(exc_info.value)
+        assert "QLineEdit" in error_msg
+        assert "_name" in error_msg
+        assert "placeholder" in error_msg
+
+    def test_widget_kwargs_passed_to_constructor(self, qt: QtDriver) -> None:
+        """new("value")(placeholder="...") passes kwargs to widget."""
+
+        @widget
+        class Test(Widget):
+            _name: Variable[str, QLineEdit] = new("default")(placeholderText="Enter name...")  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+
+        # Value should be set
+        assert w._name.value == "default"
+        assert w._name.widget.text() == "default"
+
+        # Widget kwarg should be applied
+        assert w._name.widget.placeholderText() == "Enter name..."
+
+    def test_widget_kwargs_without_value(self, qt: QtDriver) -> None:
+        """new()(placeholder="...") works with no value args."""
+
+        @widget
+        class Test(Widget):
+            _name: Variable[str, QLineEdit] = new()(placeholderText="Type here...")  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+
+        # Default value should be None/empty
+        assert w._name.value is None or w._name.value == ""
+
+        # Widget kwarg should be applied
+        assert w._name.widget.placeholderText() == "Type here..."
+
+    def test_widget_multiple_kwargs(self, qt: QtDriver) -> None:
+        """Multiple widget kwargs are all passed."""
+
+        @widget
+        class Test(Widget):
+            _name: Variable[str, QLineEdit] = new("hello")(  # type: ignore[type-arg]
+                placeholderText="Placeholder",
+                maxLength=10,
+            )
+
+        w = qt.track(Test())
+
+        assert w._name.widget.placeholderText() == "Placeholder"
+        assert w._name.widget.maxLength() == 10
+
+    def test_no_widget_call_still_works(self, qt: QtDriver) -> None:
+        """new("value") without second call still works (backward compat)."""
+
+        @widget
+        class Test(Widget):
+            _name: Variable[str, QLineEdit] = new("hello")  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+
+        assert w._name.value == "hello"
+        assert w._name.widget.text() == "hello"
+        # Default placeholder is empty
+        assert w._name.widget.placeholderText() == ""
+
+    def test_spinbox_with_range(self, qt: QtDriver) -> None:
+        """QSpinBox can be configured with range kwargs."""
+
+        @widget
+        class Test(Widget):
+            _count: Variable[int, QSpinBox] = new(50)(minimum=0, maximum=100)  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+
+        assert w._count.value == 50
+        assert w._count.widget.value() == 50
+        assert w._count.widget.minimum() == 0
+        assert w._count.widget.maximum() == 100

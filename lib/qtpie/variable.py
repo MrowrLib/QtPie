@@ -336,11 +336,15 @@ class _VariableDescriptor[T]:
         name: str,
         inner_type: type | None = None,
         widget_type: type | None = None,
+        widget_args: tuple[Any, ...] = (),
+        widget_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._default = default
         self._name = name
         self._inner_type = inner_type
         self._widget_type = widget_type
+        self._widget_args = widget_args
+        self._widget_kwargs = widget_kwargs or {}
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -368,7 +372,10 @@ class _VariableDescriptor[T]:
             if self._widget_type is not None:
                 from .bindings import bind
 
-                widget_instance = self._widget_type()
+                try:
+                    widget_instance = self._widget_type(*self._widget_args, **self._widget_kwargs)
+                except (TypeError, AttributeError) as e:
+                    raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
                 var.widget = widget_instance  # Use setter
                 bind(var).to(widget_instance)
 
@@ -399,6 +406,8 @@ def create_variable_descriptor(
     name: str,
     inner_type: type | None = None,
     widget_type: type | None = None,
+    widget_args: tuple[Any, ...] = (),
+    widget_kwargs: dict[str, Any] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs)
