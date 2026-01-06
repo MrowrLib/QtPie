@@ -176,21 +176,49 @@ class NewField:
             # Extract widget props (e.g., windowTitle="Foo" → setWindowTitle("Foo"))
             self._extract_widget_props()
 
+        # Handle QObject subclasses (not QWidget, but have signals and props)
+        # This covers QAction, QMenu, etc.
+        elif self._is_qobject_type():
+            # Extract signal connections (e.g., triggered="on_triggered")
+            self._extract_signal_connections()
+
+            # Extract widget props (e.g., shortcut="Ctrl+N" → setShortcut)
+            self._extract_widget_props()
+
     def _normalize_kwargs_aliases(self) -> None:
         """Normalize convenience aliases in kwargs.
 
         Converts:
             title -> windowTitle
             stylesheet -> styleSheet
+            tooltip -> toolTip
         """
         if "title" in self.kwargs:
             self.kwargs["windowTitle"] = self.kwargs.pop("title")
         if "stylesheet" in self.kwargs:
             self.kwargs["styleSheet"] = self.kwargs.pop("stylesheet")
+        if "tooltip" in self.kwargs:
+            self.kwargs["toolTip"] = self.kwargs.pop("tooltip")
 
     def _is_qwidget_type(self) -> bool:
         """Check if the field type is a QWidget subclass."""
         return self._is_qwidget_class(self.field_type)
+
+    def _is_qobject_type(self) -> bool:
+        """Check if the field type is a QObject subclass (but not QWidget)."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtCore import QObject
+            from qtpy.QtWidgets import QWidget
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            # Is a QObject but NOT a QWidget (QWidget handled separately above)
+            return issubclass(self.field_type, QObject) and not issubclass(self.field_type, QWidget)
+        except (ImportError, TypeError):
+            return False
 
     def _is_qwidget_class(self, cls: type | None) -> bool:
         """Check if cls is a QWidget subclass."""

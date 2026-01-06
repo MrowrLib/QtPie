@@ -39,8 +39,8 @@ def wrap_async_methods(cls: type[Any]) -> None:
         # qasync not installed - skip wrapping
         return
 
-    # Check for async on_close hook
-    on_close = getattr(cls, "on_close", None)
+    # Check for async on_close hook - only if defined on THIS class, not inherited from Widget base
+    on_close = cls.__dict__.get("on_close")  # Check class dict directly, not inherited
     if on_close is not None and asyncio.iscoroutinefunction(on_close):
         # Generate closeEvent that calls on_close
         # We need to wrap the async call with asyncClose

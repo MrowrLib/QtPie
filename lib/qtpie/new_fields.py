@@ -64,6 +64,12 @@ def new_fields[T](cls: type[T]) -> type[T]:
                         setter = getattr(instance, setter_name, None)
                         if setter is not None and callable(setter):
                             setter(value)
+                        # Special case: tooltip on QAction also sets statusTip
+                        if prop_name == "toolTip":
+                            from qtpy.QtGui import QAction
+
+                            if isinstance(instance, QAction):
+                                instance.setStatusTip(value)
                     setattr(self, fname, instance)
 
         # Call original __init__

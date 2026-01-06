@@ -2,9 +2,11 @@ import asyncio
 from dataclasses import dataclass
 from typing import override
 
-from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
+from PySide6.QtGui import QAction
+from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QMainWindow, QMenu, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, entrypoint, new, slot, widget
+from qtpie import Variable, Widget, entrypoint, menu, new, slot, widget
+from qtpie.widget_base import WidgetBase
 
 
 @dataclass
@@ -390,7 +392,6 @@ class ReactiveWindowTitle(Widget):
         self.title.value = "Updated Title"
 
 
-@entrypoint
 @widget
 class AsyncExample(Widget):
     btn: QPushButton = new("Fetch Data", clicked="fetch_data")
@@ -408,3 +409,22 @@ class AsyncExample(Widget):
         print("Cleaning up...")
         await asyncio.sleep(2)
         print("Cleanup complete.")
+
+
+@menu("&File")
+class FileMenu(QMenu):
+    action_exit: QAction = new("E&xit", triggered="on_exit")
+
+    def on_exit(self) -> None:
+        print("Exit action triggered.")
+        app = QApplication.instance()
+        if app:
+            app.quit()
+
+
+@entrypoint
+class MainWindow(QMainWindow, WidgetBase):
+    file_menu: FileMenu = new()
+
+    def __setup__(self) -> None:
+        self.menuBar().addMenu(self.file_menu)
