@@ -94,6 +94,10 @@ class QtPieState:
 
         self._check_dirty = check_dirty_transition
 
+        # Subscribe to each variable's is_dirty (including those registered before this)
+        for var in self.variables.values():
+            var.is_dirty.on_change(check_dirty_transition)
+
     def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
         """Register a Variable and wire up dirty/valid hooks if enabled."""
         self.variables[name] = var  # type: ignore[assignment]
@@ -518,18 +522,21 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
                         qt_layout.setContentsMargins(*config.margins)
 
                 # Add child widgets to layout (in field definition order)
-                for name, field in config.fields.items():
-                    if field.exclude_from_layout:
-                        continue
-
-                    widget_instance = getattr(self, name, None)
-                    if widget_instance is None:
-                        continue
-
-                    if not isinstance(widget_instance, QWidget):
-                        continue
-
-                    _add_to_layout(qt_layout, widget_instance, config.layout)
+                # Use __annotations__ to preserve order across QWidget and Variable[T, W] fields
+                for name in getattr(cls, "__annotations__", {}):
+                    # Check if it's a QWidget field
+                    if name in config.fields:
+                        field = config.fields[name]
+                        if field.exclude_from_layout:
+                            continue
+                        widget_instance = getattr(self, name, None)
+                        if widget_instance is not None and isinstance(widget_instance, QWidget):
+                            _add_to_layout(qt_layout, widget_instance, config.layout)
+                    # Check if it's a Variable with a widget
+                    elif name in config.variable_names:
+                        var = getattr(self, name, None)
+                        if isinstance(var, Variable) and var.widget is not None:
+                            _add_to_layout(qt_layout, var.widget, config.layout)
 
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)

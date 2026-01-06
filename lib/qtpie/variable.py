@@ -97,6 +97,11 @@ class Variable[T, W = None]:
         """Get the bound widget (if Variable was declared with a widget type)."""
         return self._widget
 
+    @widget.setter
+    def widget(self, value: Any) -> None:
+        """Set the bound widget (used internally by the descriptor)."""
+        self._widget = value
+
     @property
     def value(self) -> T:
         """Get the current value."""
@@ -358,6 +363,14 @@ class _VariableDescriptor[T]:
             wrapper = _create_observable_for_type(self._inner_type, self._default)
             var: Variable[T] = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
+
+            # If widget_type is set, create the widget and bind it
+            if self._widget_type is not None:
+                from .bindings import bind
+
+                widget_instance = self._widget_type()
+                var.widget = widget_instance  # Use setter
+                bind(var).to(widget_instance)
 
         return qtpie_state.variables[self._name]
 

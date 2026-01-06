@@ -5,7 +5,6 @@
 from dataclasses import dataclass
 from typing import override
 
-import pytest
 from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox
 
 from qtpie import Variable, Widget, bind, new, new_fields, widget
@@ -36,38 +35,62 @@ class TestVariableWidgetTypeExtraction:
         desc = type.__getattribute__(Test, "_name")
         assert desc._widget_type is QLineEdit
 
-    def test_widget_type_stored_in_variable_instance(self) -> None:
+    def test_widget_type_stored_in_variable_instance(self, qt: QtDriver) -> None:
         """Widget type is accessible on the Variable instance."""
 
-        @new_fields
-        class Test:
+        @widget
+        class Test(Widget):
             _name: Variable[str, QLineEdit] = new("")  # type: ignore[type-arg]
 
-        obj = Test()
-        assert obj._name._widget_type is QLineEdit
+        w = qt.track(Test())
+        assert w._name._widget_type is QLineEdit
 
-    def test_widget_property_initially_none(self) -> None:
-        """Variable.widget is None until widget is created (Phase 4)."""
+    def test_widget_created_and_bound(self, qt: QtDriver) -> None:
+        """Variable[T, W].widget is created and bound to the Variable."""
 
-        @new_fields
-        class Test:
-            _name: Variable[str, QLineEdit] = new("")  # type: ignore[type-arg]
+        @widget
+        class Test(Widget):
+            _name: Variable[str, QLineEdit] = new("hello")  # type: ignore[type-arg]
 
-        obj = Test()
-        assert obj._name.widget is None
+        w = qt.track(Test())
 
-    def test_variable_still_works_with_widget_type(self) -> None:
+        # Widget should be created
+        assert w._name.widget is not None
+        assert isinstance(w._name.widget, QLineEdit)
+
+        # Widget should be bound to Variable value
+        assert w._name.widget.text() == "hello"
+
+        # Changing Variable updates widget
+        w._name.value = "world"
+        assert w._name.widget.text() == "world"
+
+        # Two-way: changing widget updates Variable
+        w._name.widget.setText("updated")
+        assert w._name.value == "updated"
+
+    def test_widget_none_when_no_widget_type(self, qt: QtDriver) -> None:
+        """Variable[T] (no widget type) has widget=None."""
+
+        @widget
+        class Test(Widget):
+            _name: Variable[str] = new("hello")
+
+        w = qt.track(Test())
+        assert w._name.widget is None
+
+    def test_variable_still_works_with_widget_type(self, qt: QtDriver) -> None:
         """Variable[T, W] still functions as a normal Variable."""
 
-        @new_fields
-        class Test:
+        @widget
+        class Test(Widget):
             _name: Variable[str, QLineEdit] = new("default")  # type: ignore[type-arg]
 
-        obj = Test()
-        assert obj._name.value == "default"
+        w = qt.track(Test())
+        assert w._name.value == "default"
 
-        obj._name.value = "updated"
-        assert obj._name.value == "updated"
+        w._name.value = "updated"
+        assert w._name.value == "updated"
 
     def test_different_widget_types(self) -> None:
         """Can use different widget types."""
@@ -101,7 +124,6 @@ class TestVariableWidgetTypeExtraction:
 class TestVariableWidgetLayoutOrder:
     """Test that Variable[T, W].widget appears in correct layout order."""
 
-    @pytest.mark.skip(reason="Phase 5: Widget instantiation not yet implemented")
     def test_interleaved_layout_order(self, qt: QtDriver) -> None:
         """Variable[T, W] widgets interleave correctly with regular QWidgets."""
 
