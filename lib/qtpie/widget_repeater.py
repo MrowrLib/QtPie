@@ -43,6 +43,8 @@ class WidgetRepeater[T](QWidget):
         widget_props: dict[str, Any] | None = None,
         bind_expr: str | Callable[[T], str] = "{#self}",
         layout_type: str = "vertical",
+        object_name: str | None = None,
+        css_classes: list[str] | None = None,
     ) -> None:
         """Initialize the widget repeater.
 
@@ -55,6 +57,8 @@ class WidgetRepeater[T](QWidget):
             widget_props: Widget properties to apply via setXxx() after creation.
             bind_expr: Binding expression or callable formatter (default "{#self}").
             layout_type: "vertical" or "horizontal".
+            object_name: objectName to set on each created widget.
+            css_classes: CSS classes to apply to each created widget.
         """
         super().__init__()
 
@@ -66,6 +70,8 @@ class WidgetRepeater[T](QWidget):
         self._widget_props = widget_props or {}
         self._bind_expr: str | Callable[[T], str] = bind_expr
         self._is_primitive = _is_primitive_type(item_type)
+        self._object_name = object_name
+        self._css_classes = css_classes or []
 
         # Track: (widget, item_wrapper, index_holder)
         # item_wrapper is Observable[T] for primitives, ObservableProxy[T] for objects
@@ -100,6 +106,17 @@ class WidgetRepeater[T](QWidget):
     def _create_widget_for_item(self) -> QWidget:
         """Create a new widget instance."""
         widget = self._widget_type(*self._widget_args, **self._widget_kwargs)
+
+        # Apply objectName if specified
+        if self._object_name is not None:
+            widget.setObjectName(self._object_name)
+
+        # Apply CSS classes if specified
+        if self._css_classes:
+            from .styles import set_classes
+
+            set_classes(widget, list(self._css_classes))
+
         # Apply widget props (styleSheet="X" → setStyleSheet("X"))
         for prop_name, value in self._widget_props.items():
             setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"

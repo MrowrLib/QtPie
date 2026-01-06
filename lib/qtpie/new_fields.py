@@ -42,6 +42,17 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     continue
                 if field.field_type is not None:
                     instance = field.field_type(*field.args, **field.kwargs)
+
+                    # Apply objectName if specified
+                    if field.object_name is not None:
+                        instance.setObjectName(field.object_name)
+
+                    # Apply CSS classes if specified
+                    if field.css_classes:
+                        from .styles import set_classes
+
+                        set_classes(instance, field.css_classes)
+
                     # Apply widget props (windowTitle="X" → setWindowTitle("X"))
                     for prop_name, value in field.widget_props.items():
                         setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"

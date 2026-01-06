@@ -25,7 +25,7 @@ from .variable import RecordVariable, Variable, _create_observable_for_type, _Va
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind", "widget_props")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind", "widget_props", "object_name", "css_classes")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -36,6 +36,8 @@ class _QtPieConfig:
         self.record_type: type[Any] | None = None  # T from Widget[T]
         self.auto_bind: bool = True  # Auto-bind QWidget fields to matching Variables/record fields
         self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
+        self.object_name: str | None = None  # objectName for the widget
+        self.css_classes: list[str] = []  # CSS classes for the widget
 
 
 class QtPieState:
@@ -495,6 +497,8 @@ def widget(
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
     title: str | None = None,
     **kwargs: Any,
 ) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
@@ -506,6 +510,8 @@ def widget[W: Widget[Any]](
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
     title: str | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
@@ -519,6 +525,11 @@ def widget[W: Widget[Any]](
 
         @widget(layout="horizontal", margins=10)
         class MyWidget(Widget):
+            ...
+
+        @widget(name="my-widget", classes=["card", "primary"])
+        class MyWidget(Widget):
+            # Sets objectName and CSS classes
             ...
 
         @widget(auto_bind=False)
@@ -538,6 +549,8 @@ def widget[W: Widget[Any]](
                  Layout margins. int applies to all sides.
         auto_bind: If True (default), QWidget fields are automatically bound
                    to matching Variables or record fields.
+        name: Set the widget's objectName.
+        classes: List of CSS classes to apply to the widget.
         title: Shorthand for windowTitle.
         stylesheet: Shorthand for styleSheet.
         **kwargs: Extra properties applied via setXXX() methods.
@@ -556,6 +569,8 @@ def widget[W: Widget[Any]](
         target._qtpie_config.margins = margins
         target._qtpie_config.auto_bind = auto_bind
         target._qtpie_config.widget_props = kwargs
+        target._qtpie_config.object_name = name
+        target._qtpie_config.css_classes = classes or []
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(target)
@@ -725,7 +740,19 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Apply widget properties from @widget decorator kwargs.
 
     For each prop like windowTitle="X", calls widget.setWindowTitle("X").
+    Also applies name and classes from the decorator.
     """
+    # Apply objectName if specified
+    if config.object_name is not None:
+        widget.setObjectName(config.object_name)
+
+    # Apply CSS classes if specified
+    if config.css_classes:
+        from .styles import set_classes
+
+        set_classes(widget, config.css_classes)
+
+    # Apply other widget properties
     for prop_name, value in config.widget_props.items():
         # Convert propName to setPropName (capitalize first letter)
         setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
@@ -869,6 +896,8 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 widget_kwargs=field.kwargs,
                 widget_props=field.widget_props,
                 bind_expr=bind_expr_dict,
+                object_name=field.object_name,
+                css_classes=field.css_classes,
             )
             setattr(widget, name, dict_repeater)
             continue
@@ -910,6 +939,8 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_kwargs=field.kwargs,
             widget_props=field.widget_props,
             bind_expr=bind_expr,
+            object_name=field.object_name,
+            css_classes=field.css_classes,
         )
 
         # Store the repeater on the widget

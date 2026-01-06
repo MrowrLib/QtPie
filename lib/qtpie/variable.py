@@ -594,6 +594,8 @@ class _VariableDescriptor[T]:
         grid: tuple[int, ...] | None = None,
         exclude_from_layout: bool = False,
         validators: list[str] | None = None,
+        object_name: str | None = None,
+        css_classes: list[str] | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -607,6 +609,9 @@ class _VariableDescriptor[T]:
         self.exclude_from_layout = exclude_from_layout
         # Validator method names to auto-register
         self.validators = validators or []
+        # Widget objectName and CSS classes
+        self._object_name = object_name
+        self._css_classes = css_classes or []
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -657,6 +662,8 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
+                        object_name=self._object_name,
+                        css_classes=self._css_classes,
                     )
                 elif inner_origin is dict:
                     from typing import get_args as typing_get_args
@@ -681,6 +688,8 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
+                        object_name=self._object_name,
+                        css_classes=self._css_classes,
                     )
                 else:
                     # Regular widget creation
@@ -688,6 +697,15 @@ class _VariableDescriptor[T]:
                         widget_instance = self._widget_type(*self._widget_args, **self._widget_kwargs)
                     except (TypeError, AttributeError) as e:
                         raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
+
+                    # Apply objectName and CSS classes
+                    if self._object_name is not None:
+                        widget_instance.setObjectName(self._object_name)
+                    if self._css_classes:
+                        from .styles import set_classes
+
+                        set_classes(widget_instance, self._css_classes)
+
                     bind(var).to(widget_instance)
 
                 var.widget = widget_instance  # Use setter
@@ -725,6 +743,8 @@ def create_variable_descriptor(
     grid: tuple[int, ...] | None = None,
     exclude_from_layout: bool = False,
     validators: list[Any] | None = None,
+    object_name: str | None = None,
+    css_classes: list[str] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes)

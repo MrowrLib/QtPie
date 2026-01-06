@@ -37,6 +37,9 @@ class NewField:
         self.is_list_widget: bool = False
         self.list_widget_type: type | None = None  # The QWidget type inside list[QWidget]
         self.list_format: str | Callable[[Any], str] | None = None  # Format for list items
+        # Object name and CSS classes
+        self.object_name: str | None = None  # objectName for the widget
+        self.css_classes: list[str] = []  # CSS classes for the widget
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -77,10 +80,28 @@ class NewField:
             layout_kwarg = widget_kwargs_copy.pop("layout", None)
             exclude_from_layout = layout_kwarg is False
 
+            # Extract name= and classes= for widget configuration (not constructor params)
+            object_name: str | None = widget_kwargs_copy.pop("name", None)
+            css_classes: list[str] = widget_kwargs_copy.pop("classes", None) or []
+
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
 
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid, exclude_from_layout, validators))
+            descriptor = create_variable_descriptor(
+                default,
+                name,
+                inner_type,
+                widget_type,
+                self.widget_args,
+                widget_kwargs_copy,
+                label,
+                grid,
+                exclude_from_layout,
+                validators,
+                object_name,
+                css_classes,
+            )
+            setattr(owner, name, descriptor)
             return
 
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
@@ -107,6 +128,14 @@ class NewField:
                 # Extract grid= for grid layouts
                 self.grid = self.kwargs.pop("grid", None)
 
+                # Extract name= for objectName (applied to each widget in list)
+                self.object_name = self.kwargs.pop("name", None)
+
+                # Extract classes= for CSS classes (applied to each widget in list)
+                classes = self.kwargs.pop("classes", None)
+                if classes is not None:
+                    self.css_classes = classes
+
                 # Extract widget props (e.g., styleSheet="..." → setStyleSheet)
                 # Use list_widget_type for setter detection
                 self._extract_widget_props(self.list_widget_type)
@@ -130,6 +159,14 @@ class NewField:
 
             # Extract grid= for grid layouts
             self.grid = self.kwargs.pop("grid", None)
+
+            # Extract name= for objectName
+            self.object_name = self.kwargs.pop("name", None)
+
+            # Extract classes= for CSS classes
+            classes = self.kwargs.pop("classes", None)
+            if classes is not None:
+                self.css_classes = classes
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()

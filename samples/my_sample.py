@@ -222,7 +222,6 @@ class LabelListsComplexObject(Widget):
     dog_dict_labels: list[QLabel] = new(bind="dogs_dict", format="{#key} is {age} years old")
 
 
-@entrypoint
 @widget(title="Dictionaries of Things")
 class DictionariesOfThings(Widget):
     # Key = value (simple primitives)
@@ -244,3 +243,25 @@ class DictionariesOfThings(Widget):
     def remove_entry(self) -> None:
         if "one" in self.str_int_dict:
             del self.str_int_dict["one"]
+
+
+@entrypoint
+@widget(
+    stylesheet="""
+#my-label {
+    color: red;
+}
+
+*[class~="my-class"] {
+    font-weight: bold;
+}
+
+#TestingQss {
+    color: blue;
+}
+"""
+)
+class TestingQss(Widget):
+    lbl: QLabel = new("Label")
+    label: QLabel = new("Label", name="my-label")
+    label_with_class: QLabel = new("Label with class", classes=["my-class"])
