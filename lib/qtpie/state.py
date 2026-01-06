@@ -1,0 +1,277 @@
+# pyright: reportPrivateUsage=false, reportUnknownMemberType=false
+"""Shared state and view model logic for Widget and Window."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Protocol
+
+from observant import Observable
+
+if TYPE_CHECKING:
+    from .variable import RecordVariable, Variable
+
+
+class HasQtPieConfig(Protocol):
+    """Protocol for Widget/Window with _qtpie_config."""
+
+    _qtpie_config: Any
+
+
+class QtPieStateBase:
+    """Base state with dirty tracking and validation."""
+
+    __slots__ = (
+        "_host",
+        "variables",
+        "_was_dirty",
+        "_check_dirty",
+        "_record",
+        "_was_valid",
+        "_check_valid",
+        "_aggregated_validation_errors",
+    )
+
+    def __init__(self, host: Any) -> None:
+        self._host = host
+        self.variables: dict[str, Variable[Any]] = {}
+        self._was_dirty: bool = False
+        self._check_dirty: Callable[[bool], None] | None = None
+        self._record: RecordVariable[Any] | None = None
+        self._was_valid: bool = True
+        self._check_valid: Callable[[bool], None] | None = None
+        self._aggregated_validation_errors: Observable[list[str]] | None = None
+
+    # -------------------------------------------------------------------------
+    # Dirty tracking
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_dirty(self) -> bool:
+        """Check if any Variable has changed from its clean state."""
+        return any(var.is_dirty for var in self.variables.values())
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        return {name for name, var in self.variables.items() if var.is_dirty}
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean."""
+        for var in self.variables.values():
+            var.reset_dirty()
+
+    def enable_dirty_hook(self) -> None:
+        """Enable the on_dirty_changed hook (called after __setup__)."""
+
+        def check_dirty_transition(_: bool) -> None:
+            is_now_dirty = self.is_dirty
+            if self._was_dirty != is_now_dirty:
+                self._was_dirty = is_now_dirty
+                hook = getattr(self._host, "on_dirty_changed", None)
+                if hook is not None:
+                    hook(is_now_dirty)
+
+        self._check_dirty = check_dirty_transition
+
+        # Subscribe to each variable's is_dirty (including those registered before this)
+        for var in self.variables.values():
+            var.is_dirty.on_change(check_dirty_transition)
+
+    def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
+        """Register a Variable and wire up dirty/valid hooks if enabled."""
+        self.variables[name] = var  # type: ignore[assignment]
+        if self._check_dirty is not None:
+            var.is_dirty.on_change(self._check_dirty)
+        if self._check_valid is not None:
+            var.is_valid.on_change(self._check_valid)
+        # Subscribe to validation aggregation if active
+        self._subscribe_variable_to_aggregation(var)  # type: ignore[arg-type]
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all Variables are valid."""
+        return all(var.is_valid.get() for var in self.variables.values())
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Get validation errors: {field: {validator: [errors]}}."""
+        return {
+            name: var.validation_errors.get()
+            for name, var in self.variables.items()
+            if var.validation_error_messages.get()  # only include fields with errors
+        }
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Aggregated validation errors from all Variables. Reactive/bindable."""
+        if self._aggregated_validation_errors is None:
+            self._aggregated_validation_errors = Observable[list[str]]([], dirty_tracking=False, validation=False)
+            self._setup_validation_aggregation()
+        return self._aggregated_validation_errors
+
+    def _setup_validation_aggregation(self) -> None:
+        """Subscribe to all Variables' validation_error_messages and aggregate."""
+
+        def update_aggregated(_: Any = None) -> None:
+            msgs: list[str] = []
+            for var in self.variables.values():
+                msgs.extend(var.validation_error_messages.get())
+            assert self._aggregated_validation_errors is not None
+            self._aggregated_validation_errors.set(msgs)
+
+        # Subscribe to existing variables
+        for var in self.variables.values():
+            var.validation_error_messages.on_change(update_aggregated)
+
+        # Initial update
+        update_aggregated()
+
+    def _subscribe_variable_to_aggregation(self, var: Variable[Any]) -> None:
+        """Subscribe a new variable to the aggregation (if active)."""
+        if self._aggregated_validation_errors is not None:
+
+            def update_aggregated(_: Any = None) -> None:
+                msgs: list[str] = []
+                for v in self.variables.values():
+                    msgs.extend(v.validation_error_messages.get())
+                assert self._aggregated_validation_errors is not None
+                self._aggregated_validation_errors.set(msgs)
+
+            var.validation_error_messages.on_change(update_aggregated)
+            update_aggregated()
+
+    def enable_valid_hook(self) -> None:
+        """Enable the on_valid_changed hook (called after __setup__)."""
+
+        def check_valid_transition(_: bool) -> None:
+            is_now_valid = self.is_valid
+            if self._was_valid != is_now_valid:
+                self._was_valid = is_now_valid
+                hook = getattr(self._host, "on_valid_changed", None)
+                if hook is not None:
+                    hook(is_now_valid)
+
+        self._check_valid = check_valid_transition
+
+        # Sync _was_valid with current state (after __setup__ ran and added validators)
+        self._was_valid = self.is_valid
+
+        # Subscribe to each variable's is_valid
+        for var in self.variables.values():
+            var.is_valid.on_change(check_valid_transition)
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add named validator to a specific field."""
+        # Check if field is already in variables
+        if field in self.variables:
+            self.variables[field].add_validator(name, validator)
+            return
+
+        # Try to trigger variable creation by accessing it on the host
+        if hasattr(self._host, field):
+            attr = getattr(self._host, field)
+            # After access, check if it's now registered
+            if field in self.variables:
+                self.variables[field].add_validator(name, validator)
+                return
+            # If it's a Variable directly
+            if hasattr(attr, "add_validator"):
+                attr.add_validator(name, validator)
+                return
+
+        # Check if it's a record field
+        if self._record is None and hasattr(self._host, "record"):
+            try:
+                _ = self._host.record  # Trigger record creation
+            except TypeError:
+                pass  # No record type configured
+
+        if self._record is not None:
+            try:
+                field_obs = getattr(self._record.observable, field)
+                field_obs.add_validator(name, validator)
+                return
+            except AttributeError:
+                pass
+
+        raise KeyError(f"No field named '{field}' found")
+
+
+class QtPieViewModelBase:
+    """Base view model with dirty tracking and validation."""
+
+    __slots__ = ("_state",)
+
+    def __init__(self, state: QtPieStateBase) -> None:
+        self._state = state
+
+    # -------------------------------------------------------------------------
+    # Dirty tracking
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_dirty(self) -> bool:
+        """Check if any Variable has changed from its clean state."""
+        return self._state.is_dirty
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        return self._state.dirty_fields
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean."""
+        self._state.reset_dirty()
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all Variables are valid."""
+        return self._state.is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Get validation errors: {field: {validator: [errors]}}."""
+        return self._state.validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Aggregated validation errors from all Variables. Reactive/bindable."""
+        return self._state.validation_error_messages
+
+
+class QtPieState(QtPieStateBase):
+    """Instance-level QtPie state for Widget/Window."""
+
+    __slots__ = ("_view_model",)
+
+    def __init__(self, host: Any) -> None:
+        super().__init__(host)
+        self._view_model: QtPieViewModel | None = None
+
+    @property
+    def view_model(self) -> QtPieViewModel:
+        if self._view_model is None:
+            self._view_model = QtPieViewModel(self)
+        return self._view_model
+
+
+class QtPieViewModel(QtPieViewModelBase):
+    """Auto-generated view model containing only Variable fields."""
+
+    def __init__(self, state: QtPieState) -> None:
+        super().__init__(state)
+
+    def __getattr__(self, name: str) -> Variable[Any]:
+        # Get variable names from class config
+        if name in type(self._state._host)._qtpie_config.variable_names:
+            return getattr(self._state._host, name)
+        raise AttributeError(f"ViewModel has no attribute {name!r}")

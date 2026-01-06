@@ -1,4 +1,4 @@
-# pyright: reportPrivateUsage=false
+# pyright: reportPrivateUsage=false, reportUnknownMemberType=false
 """Window - QMainWindow with QtPie features."""
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from qtpy.QtWidgets import (
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
+from .state import QtPieState, QtPieViewModel
 from .variable import RecordVariable, Variable
 
 
@@ -41,43 +42,6 @@ class WindowConfig:
     margins: int | tuple[int, int, int, int] | None = None
     # Record type from Window[T]
     record_type: type[Any] | None = None
-
-
-class WindowState:
-    """Instance-level QtPie state for Window."""
-
-    __slots__ = ("_window", "variables", "_view_model", "_record")
-
-    def __init__(self, window: Window[Any]) -> None:
-        self._window = window
-        self.variables: dict[str, Variable[Any]] = {}
-        self._view_model: WindowViewModel | None = None
-        self._record: RecordVariable[Any] | None = None
-
-    @property
-    def view_model(self) -> WindowViewModel:
-        if self._view_model is None:
-            self._view_model = WindowViewModel(self)
-        return self._view_model
-
-    def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
-        """Register a Variable."""
-        self.variables[name] = var  # type: ignore[assignment]
-
-
-class WindowViewModel:
-    """Auto-generated view model containing only Variable fields."""
-
-    __slots__ = ("_state",)
-
-    def __init__(self, state: WindowState) -> None:
-        self._state = state
-
-    def __getattr__(self, name: str) -> Variable[Any]:
-        # Get variable names from class config
-        if name in type(self._state._window)._qtpie_config.variable_names:
-            return getattr(self._state._window, name)
-        raise AttributeError(f"ViewModel has no attribute {name!r}")
 
 
 class Window[T = None](QMainWindow):
@@ -105,7 +69,7 @@ class Window[T = None](QMainWindow):
     """
 
     _qtpie_config: WindowConfig
-    _qtpie: WindowState
+    _qtpie: QtPieState
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -150,17 +114,17 @@ class Window[T = None](QMainWindow):
         super().__init__(*args, **kwargs)
 
     @property
-    def view_model(self) -> WindowViewModel:
+    def view_model(self) -> QtPieViewModel:
         """Access only the Variable fields of this window."""
         if not hasattr(self, "_qtpie"):
-            self._qtpie = WindowState(self)
+            self._qtpie = QtPieState(self)
         return self._qtpie.view_model
 
     @property
     def record_state(self: Window[T]) -> RecordVariable[T] | Variable[T]:
         """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
         if not hasattr(self, "_qtpie"):
-            self._qtpie = WindowState(self)
+            self._qtpie = QtPieState(self)
         state = self._qtpie
 
         # If we have a RecordVariable already, return it
@@ -199,6 +163,42 @@ class Window[T = None](QMainWindow):
         Override this to perform async cleanup before the window closes.
         """
         pass
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add a named validator to a field.
+
+        Usage:
+            def __setup__(self) -> None:
+                self.add_validator("name", "required", lambda v: None if v else "Required")
+        """
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        self._qtpie.add_validator(field, name, validator)
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all fields are valid."""
+        if not hasattr(self, "_qtpie"):
+            return True
+        return self._qtpie.is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Errors: {field: {validator: [errors]}}."""
+        if not hasattr(self, "_qtpie"):
+            return {}
+        return self._qtpie.validation_errors
+
+    @property
+    def validation_error_messages(self) -> list[str]:
+        """Flat list of all error messages."""
+        if not hasattr(self, "_qtpie"):
+            return []
+        return self._qtpie.validation_error_messages.get()
 
 
 def _collect_fields(cls: type[Window[Any]]) -> None:
@@ -403,6 +403,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
             self.setCentralWidget(central)
 
+        # Ensure QtPieState exists BEFORE bindings run (binding code checks hasattr)
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+
         # Call __setup__ hook (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -415,6 +419,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         apply_auto_bindings(self, config)
         apply_property_bindings(self, config, create_expression_binding_fn=_create_expression_binding)
         apply_reactive_widget_props(self, config)
+
+        # Enable on_dirty_changed and on_valid_changed hooks
+        self._qtpie.enable_dirty_hook()
+        self._qtpie.enable_valid_hook()
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._qtpie_config.init_wrapped = True

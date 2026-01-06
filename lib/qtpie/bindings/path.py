@@ -69,7 +69,7 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
             break
 
     # Ensure _qtpie state exists for widget-level property access
-    from qtpie.widget import QtPieState
+    from qtpie.state import QtPieState
 
     if not hasattr(widget, "_qtpie"):
         widget._qtpie = QtPieState(widget)  # type: ignore[attr-defined]

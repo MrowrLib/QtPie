@@ -114,8 +114,9 @@ class Binding[T]:
         # For Widget[T], we need to share our ObservableProxy with the widget's record
         if isinstance(observable, ObservableProxy):
             # Import here to avoid circular imports
+            from ..state import QtPieState
             from ..variable import RecordVariable
-            from ..widget import QtPieState, _apply_auto_bindings  # pyright: ignore[reportPrivateUsage]
+            from ..widget import _apply_auto_bindings  # pyright: ignore[reportPrivateUsage]
 
             # Get or create the widget's QtPieState
             if not hasattr(widget, "_qtpie"):

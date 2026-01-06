@@ -1360,3 +1360,294 @@ class TestWindowListWidgetBinding:
         w = qt.track(MainWindow())
         assert_that(w.labels[0].text()).is_equal_to("Value: 10")
         assert_that(w.labels[1].text()).is_equal_to("Value: 20")
+
+
+# =============================================================================
+# Dirty tracking in Window
+# =============================================================================
+
+
+class TestWindowDirtyTracking:
+    """Test dirty tracking in Window matches Widget behavior."""
+
+    def test_initially_not_dirty(self, qt: QtDriver) -> None:
+        """New window's view_model is not dirty."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        assert_that(w.view_model.is_dirty).is_false()
+
+    def test_dirty_after_change(self, qt: QtDriver) -> None:
+        """view_model becomes dirty after Variable change."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        assert_that(w.view_model.is_dirty).is_true()
+
+    def test_dirty_fields_tracks_which_changed(self, qt: QtDriver) -> None:
+        """dirty_fields() returns only the changed fields."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+
+        assert_that(w.view_model.dirty_fields).is_equal_to({"_name"})
+
+    def test_dirty_fields_multiple(self, qt: QtDriver) -> None:
+        """dirty_fields() returns all changed fields."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        w._count.value = 42
+
+        assert_that(w.view_model.dirty_fields).is_equal_to({"_name", "_count"})
+
+    def test_reset_dirty_clears_all(self, qt: QtDriver) -> None:
+        """reset_dirty() marks all Variables as clean."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        w._count.value = 42
+        assert_that(w.view_model.is_dirty).is_true()
+
+        w.view_model.reset_dirty()
+        assert_that(w.view_model.is_dirty).is_false()
+        assert_that(w.view_model.dirty_fields).is_equal_to(set())
+
+    def test_dirty_after_reset_and_change(self, qt: QtDriver) -> None:
+        """After reset, changing a value makes it dirty again."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        w._name.value = "first"
+        w.view_model.reset_dirty()
+
+        w._name.value = "second"
+        assert_that(w.view_model.is_dirty).is_true()
+
+
+class TestWindowOnDirtyChangedHook:
+    """Test on_dirty_changed lifecycle hook in Window."""
+
+    def test_hook_fires_on_dirty(self, qt: QtDriver) -> None:
+        """on_dirty_changed fires when window becomes dirty."""
+        dirty_states: list[bool] = []
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+
+        assert_that(dirty_states).is_equal_to([True])
+
+    def test_hook_fires_on_clean(self, qt: QtDriver) -> None:
+        """on_dirty_changed fires when window becomes clean."""
+        dirty_states: list[bool] = []
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        w.view_model.reset_dirty()
+
+        assert_that(dirty_states).is_equal_to([True, False])
+
+    def test_hook_fires_on_transition_only(self, qt: QtDriver) -> None:
+        """on_dirty_changed only fires on state transitions, not every change."""
+        dirty_states: list[bool] = []
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        w = qt.track(MainWindow())
+        w._name.value = "first"  # clean -> dirty
+        w._name.value = "second"  # dirty -> dirty (no fire)
+        w._count.value = 42  # dirty -> dirty (no fire)
+
+        assert_that(dirty_states).is_equal_to([True])
+
+    def test_hook_not_required(self, qt: QtDriver) -> None:
+        """Window without on_dirty_changed still works."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        # Should not raise
+        assert_that(w.view_model.is_dirty).is_true()
+
+
+# =============================================================================
+# Validation in Window
+# =============================================================================
+
+
+class TestWindowValidation:
+    """Test validation in Window matches Widget behavior."""
+
+    def test_window_add_validator(self, qt: QtDriver) -> None:
+        """Window.add_validator adds validator to field."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        w = qt.track(MainWindow())
+        assert_that(w._name.is_valid.get()).is_false()
+
+    def test_window_is_valid_aggregates(self, qt: QtDriver) -> None:
+        """Window.is_valid aggregates from all fields."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _age: Variable[int] = new(0)
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+                self.add_validator("_age", "positive", lambda v: None if v > 0 else "Must be positive")
+
+        w = qt.track(MainWindow())
+        assert_that(w.is_valid).is_false()
+
+        w._name.value = "Alice"
+        assert_that(w.is_valid).is_false()  # still invalid (age)
+
+        w._age.value = 25
+        assert_that(w.is_valid).is_true()
+
+    def test_window_validation_errors_nested_dict(self, qt: QtDriver) -> None:
+        """Window.validation_errors returns {field: {validator: [errors]}}."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _age: Variable[int] = new(0)
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+                self.add_validator("_age", "positive", lambda v: None if v > 0 else "Must be positive")
+
+        w = qt.track(MainWindow())
+        errors = w.validation_errors
+
+        assert_that(errors).contains_key("_name", "_age")
+        assert_that(errors["_name"]["required"]).is_equal_to(["Required"])
+        assert_that(errors["_age"]["positive"]).is_equal_to(["Must be positive"])
+
+    def test_window_validation_error_messages_flat(self, qt: QtDriver) -> None:
+        """Window.validation_error_messages returns flat list."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+                self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Too short")
+
+        w = qt.track(MainWindow())
+        msgs = w.validation_error_messages
+
+        assert_that(msgs).contains("Required", "Too short")
+
+    def test_window_valid_without_validators(self, qt: QtDriver) -> None:
+        """Window without validators is always valid."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.is_valid).is_true()
+
+    def test_record_field_validation(self, qt: QtDriver) -> None:
+        """Can add validators to record fields in Window[T]."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        @window(title="Test")
+        class PersonWindow(Window[Person]):
+            def __setup__(self) -> None:
+                self.add_validator("name", "required", lambda v: None if v else "Name required")
+
+        w = qt.track(PersonWindow())
+        assert_that(w.is_valid).is_false()
+
+        w.record.name = "Alice"
+        assert_that(w.is_valid).is_true()
+
+
+class TestWindowOnValidChangedHook:
+    """Test on_valid_changed lifecycle hook in Window."""
+
+    def test_hook_fires_on_valid(self, qt: QtDriver) -> None:
+        """on_valid_changed fires when validity changes."""
+        valid_states: list[bool] = []
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        w = qt.track(MainWindow())
+        # Initially invalid, but hook fires on transition only
+
+        w._name.value = "hello"
+        assert_that(valid_states).contains(True)
+
+        w._name.value = ""
+        assert_that(valid_states).contains(False)
