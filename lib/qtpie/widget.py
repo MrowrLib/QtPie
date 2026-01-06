@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .layout import LayoutType
+from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
 from .variable import RecordVariable, Variable, _create_observable_for_type, _VariableDescriptor
@@ -551,12 +551,21 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
                             continue
                         widget_instance = getattr(self, name, None)
                         if widget_instance is not None and isinstance(widget_instance, QWidget):
-                            _add_to_layout(qt_layout, widget_instance, config.layout)
+                            _validate_layout_params(name, config.layout, field.label, field.grid)
+                            _add_to_layout(qt_layout, widget_instance, config.layout, field.label, field.grid)
                     # Check if it's a Variable with a widget
                     elif name in config.variable_names:
                         var = getattr(self, name, None)
                         if isinstance(var, Variable) and var.widget is not None:
-                            _add_to_layout(qt_layout, var.widget, config.layout)
+                            # Get label/grid from the descriptor
+                            descriptor: Any = getattr(cls, name, None)
+                            label: str | None = None
+                            grid: GridPosition | None = None
+                            if isinstance(descriptor, _VariableDescriptor):
+                                label = descriptor.label
+                                grid = descriptor.grid  # type: ignore[assignment]
+                            _validate_layout_params(name, config.layout, label, grid)
+                            _add_to_layout(qt_layout, var.widget, config.layout, label, grid)
 
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)
@@ -594,14 +603,56 @@ def _create_layout(layout_type: LayoutType) -> QLayout | None:
     return None
 
 
-def _add_to_layout(layout: QLayout, widget_instance: QWidget, layout_type: LayoutType) -> None:
-    """Add a widget to the layout."""
+def _validate_layout_params(
+    field_name: str,
+    layout_type: LayoutType,
+    label: str | None,
+    grid: GridPosition | None,
+) -> None:
+    """Validate that required layout params are provided.
+
+    Raises:
+        TypeError: If form layout is used without label=, or grid layout without grid=.
+    """
+    if layout_type == "form" and label is None:
+        raise TypeError(f"Field '{field_name}' requires label= for form layout. Use: new(..., label=\"Field Label\")")
+    if layout_type == "grid" and grid is None:
+        raise TypeError(f"Field '{field_name}' requires grid= for grid layout. Use: new(..., grid=(row, col)) or new(..., grid=(row, col, rowspan, colspan))")
+
+
+def _add_to_layout(
+    layout: QLayout,
+    widget_instance: QWidget,
+    layout_type: LayoutType,
+    label: str | None = None,
+    grid: GridPosition | None = None,
+) -> None:
+    """Add a widget to the layout.
+
+    Args:
+        layout: The Qt layout to add to.
+        widget_instance: The widget to add.
+        layout_type: The type of layout.
+        label: For form layouts, the label text for this row.
+        grid: For grid layouts, position as (row, col) or (row, col, rowspan, colspan).
+    """
     if layout_type in ("vertical", "horizontal"):
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "form":
-        layout.addRow(widget_instance)  # type: ignore[union-attr]
+        form_layout = cast(QFormLayout, layout)
+        if label is not None:
+            form_layout.addRow(label, widget_instance)
+        else:
+            form_layout.addRow(widget_instance)
     elif layout_type == "grid":
-        layout.addWidget(widget_instance)  # type: ignore[union-attr]
+        grid_layout = cast(QGridLayout, layout)
+        if grid is not None:
+            row, col = grid[0], grid[1]
+            rowspan = grid[2] if len(grid) > 2 else 1
+            colspan = grid[3] if len(grid) > 3 else 1
+            grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
+        else:
+            grid_layout.addWidget(widget_instance)
 
 
 def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:

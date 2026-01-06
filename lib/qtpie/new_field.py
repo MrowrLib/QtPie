@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, get_args, get_origin, get_type_hints
 
+from .layout import GridPosition
 from .variable import Variable, create_variable_descriptor
 
 
@@ -24,6 +25,9 @@ class NewField:
         self.exclude_from_layout = False
         self.bind: str | None = None  # Extracted for QWidgets in __set_name__
         self.signal_connections: dict[str, str | Callable[..., Any]] = {}  # signal_name -> method_name or callable
+        # Layout params for form/grid layouts
+        self.label: str | None = None  # For form layouts: new(label="Name")
+        self.grid: GridPosition | None = None  # For grid layouts: new(grid=(0, 0)) or (row, col, rowspan, colspan)
         # Widget args for Variable[T, W] - set via __call__
         self.widget_args: tuple[Any, ...] = ()
         self.widget_kwargs: dict[str, Any] = {}
@@ -55,7 +59,13 @@ class NewField:
                 args = get_args(self.field_type)
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, self.widget_kwargs))
+
+            # Extract label= and grid= from widget_kwargs (they're layout params, not widget constructor params)
+            widget_kwargs_copy = dict(self.widget_kwargs)
+            label = widget_kwargs_copy.pop("label", None)
+            grid = widget_kwargs_copy.pop("grid", None)
+
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid))
             return
 
         # Handle QWidget-specific kwargs only
@@ -68,6 +78,12 @@ class NewField:
             layout_kwarg = self.kwargs.pop("layout", None)
             if layout_kwarg is False:
                 self.exclude_from_layout = True
+
+            # Extract label= for form layouts
+            self.label = self.kwargs.pop("label", None)
+
+            # Extract grid= for grid layouts
+            self.grid = self.kwargs.pop("grid", None)
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()

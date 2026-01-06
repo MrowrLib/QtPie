@@ -75,6 +75,20 @@ class Dog:
     age: int
 
 
+@widget(layout="form")
+class DogEditor(Widget[Dog]):
+    name: Variable[str, QLineEdit] = new("")(label="Dog's Name")
+    age: Variable[int, QLineEdit] = new(0)(label="Dog's Age")
+
+    def __setup__(self) -> None:
+        self.record = Dog(name="Buddy", age=4)
+
+
+@widget
+class HasMultipleDogForms(Widget):
+    dogs: Variable[list[Dog], DogEditor] = new([Dog("Fido", 3), Dog("Rex", 5)])
+
+
 @widget
 class ListsOfThings(Widget):
     regular_int: Variable[int] = new(0)
@@ -98,7 +112,7 @@ class ListsOfThings(Widget):
 
     def add_dog(self) -> None:
         name = self.new_dog_name.value.strip()
-        age = int(self.new_dog_age.value)
+        age = int(self.new_dog_age)
         if name:
             new_dog = Dog(name=name, age=age)
             self.dogs.append(new_dog)
@@ -108,6 +122,6 @@ class ListsOfThings(Widget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    widget = ListsOfThings()
+    widget = HasMultipleDogForms()
     widget.show()
     app.exec()
