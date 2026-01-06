@@ -259,9 +259,14 @@ class DictionariesOfThings(Widget):
 #TestingQss {
     color: blue;
 }
+
+#lbl2 {
+    font-style: italic;
+}
 """
 )
 class TestingQss(Widget):
     lbl: QLabel = new("Label")
+    lbl2: QLabel = new("Should be italic")
     label: QLabel = new("Label", name="my-label")
     label_with_class: QLabel = new("Label with class", classes=["my-class"])

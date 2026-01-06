@@ -43,15 +43,20 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 if field.field_type is not None:
                     instance = field.field_type(*field.args, **field.kwargs)
 
-                    # Apply objectName if specified
-                    if field.object_name is not None:
-                        instance.setObjectName(field.object_name)
+                    # Apply objectName: use explicit name if set, otherwise default to field name for QWidgets
+                    from PySide6.QtWidgets import QWidget
 
-                    # Apply CSS classes if specified
-                    if field.css_classes:
-                        from .styles import set_classes
+                    if isinstance(instance, QWidget):
+                        if field.object_name is not None:
+                            instance.setObjectName(field.object_name)
+                        else:
+                            instance.setObjectName(fname)
 
-                        set_classes(instance, field.css_classes)
+                        # Apply CSS classes if specified
+                        if field.css_classes:
+                            from .styles import set_classes
+
+                            set_classes(instance, field.css_classes)
 
                     # Apply widget props (windowTitle="X" → setWindowTitle("X"))
                     for prop_name, value in field.widget_props.items():

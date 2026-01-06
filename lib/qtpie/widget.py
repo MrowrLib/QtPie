@@ -742,9 +742,11 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     For each prop like windowTitle="X", calls widget.setWindowTitle("X").
     Also applies name and classes from the decorator.
     """
-    # Apply objectName if specified
+    # Apply objectName: use explicit name if set, otherwise default to class name
     if config.object_name is not None:
         widget.setObjectName(config.object_name)
+    else:
+        widget.setObjectName(type(widget).__name__)
 
     # Apply CSS classes if specified
     if config.css_classes:
@@ -896,7 +898,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 widget_kwargs=field.kwargs,
                 widget_props=field.widget_props,
                 bind_expr=bind_expr_dict,
-                object_name=field.object_name,
+                object_name=field.object_name or name,
                 css_classes=field.css_classes,
             )
             setattr(widget, name, dict_repeater)
@@ -939,7 +941,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_kwargs=field.kwargs,
             widget_props=field.widget_props,
             bind_expr=bind_expr,
-            object_name=field.object_name,
+            object_name=field.object_name or name,
             css_classes=field.css_classes,
         )
 

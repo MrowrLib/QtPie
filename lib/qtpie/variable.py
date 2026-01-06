@@ -662,7 +662,7 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
-                        object_name=self._object_name,
+                        object_name=self._object_name or self._name,
                         css_classes=self._css_classes,
                     )
                 elif inner_origin is dict:
@@ -688,7 +688,7 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
-                        object_name=self._object_name,
+                        object_name=self._object_name or self._name,
                         css_classes=self._css_classes,
                     )
                 else:
@@ -698,9 +698,13 @@ class _VariableDescriptor[T]:
                     except (TypeError, AttributeError) as e:
                         raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={self._widget_kwargs}") from e
 
-                    # Apply objectName and CSS classes
+                    # Apply objectName: use explicit name if set, otherwise default to field name
                     if self._object_name is not None:
                         widget_instance.setObjectName(self._object_name)
+                    else:
+                        widget_instance.setObjectName(self._name)
+
+                    # Apply CSS classes if specified
                     if self._css_classes:
                         from .styles import set_classes
 

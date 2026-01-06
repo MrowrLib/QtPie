@@ -335,3 +335,108 @@ class TestDynamicListItemsNameClasses:
 
         assert len(w._labels) == 1
         assert get_classes(w._labels[0]) == ["dynamic", "styled"]
+
+
+class TestDefaultObjectName:
+    """Test automatic objectName defaults."""
+
+    def test_widget_class_defaults_to_class_name(self, app):
+        """Test that @widget without name= defaults objectName to class name."""
+
+        @widget
+        class MyDefaultWidget(Widget):
+            pass
+
+        w = MyDefaultWidget()
+        assert w.objectName() == "MyDefaultWidget"
+
+    def test_qwidget_field_defaults_to_field_name(self, app):
+        """Test that QWidget fields without name= default objectName to field name."""
+
+        @widget
+        class MyWidget(Widget):
+            _button: QPushButton = new("Click")
+            _label: QLabel = new("Hello")
+
+        w = MyWidget()
+        assert w._button.objectName() == "_button"
+        assert w._label.objectName() == "_label"
+
+    def test_variable_widget_defaults_to_field_name(self, app):
+        """Test that Variable[T, W] widgets without name= default objectName to field name."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str, QLineEdit] = new("initial")
+
+        w = MyWidget()
+        assert w._name.widget.objectName() == "_name"
+
+    def test_list_widget_defaults_to_field_name(self, app):
+        """Test that list[QWidget] items without name= default objectName to field name."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str]] = new(["a", "b"])
+            _labels: list[QLabel] = new(bind="_items")
+
+        w = MyWidget()
+        for label in w._labels:
+            assert label.objectName() == "_labels"
+
+    def test_variable_list_widget_defaults_to_field_name(self, app):
+        """Test that Variable[list[T], W] items default objectName to field name."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str], QLabel] = new(["a", "b"])
+
+        w = MyWidget()
+        for widget_item in w._items.widget:
+            assert widget_item.objectName() == "_items"
+
+    def test_variable_dict_widget_defaults_to_field_name(self, app):
+        """Test that Variable[dict[K, V], W] items default objectName to field name."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _entries: Variable[dict[str, int], QLabel] = new({"a": 1, "b": 2})
+
+        w = MyWidget()
+        for widget_item in w._entries.widget:
+            assert widget_item.objectName() == "_entries"
+
+    def test_explicit_name_overrides_default(self, app):
+        """Test that explicit name= overrides default field name."""
+
+        @widget(name="custom-widget")
+        class MyWidget(Widget):
+            _button: QPushButton = new("Click", name="custom-button")
+
+        w = MyWidget()
+        assert w.objectName() == "custom-widget"
+        assert w._button.objectName() == "custom-button"
+
+    def test_qss_selector_works_with_defaults(self, app):
+        """Test that QSS selectors work with default objectNames."""
+
+        @widget(
+            stylesheet="""
+#TestQssWidget {
+    background-color: red;
+}
+#_my_label {
+    color: blue;
+}
+"""
+        )
+        class TestQssWidget(Widget):
+            _my_label: QLabel = new("Label")
+
+        w = TestQssWidget()
+        assert w.objectName() == "TestQssWidget"
+        assert w._my_label.objectName() == "_my_label"
