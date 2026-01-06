@@ -154,12 +154,27 @@ class UserEditor(Widget[User]):
 @widget
 class SomeTabs(Widget):
     tabs: QTabWidget = new()
-    user: Variable[User, UserEditor] = new(User("john_doe", "john@example.com"))(layout=False)
-    dog: Variable[Dog, DogEditor] = new(Dog("Fido", 3))(layout=False)
+    user: Variable[User, UserEditor] = new(User("", ""))(layout=False)
+    dogs: Variable[list[Dog], DogEditor] = new([])(layout=False)
+
+    btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
+
+    btn_print_user: QPushButton = new("Print User", clicked="print_user")
+    btn_print_dogs: QPushButton = new("Print Dogs", clicked="print_dogs")
 
     def __setup__(self) -> None:
-        self.tabs.addTab(self.user.widget, "User Editor")
-        self.tabs.addTab(self.dog.widget, "Dog Editor")
+        self.tabs.addTab(self.user.widget, "User")
+        self.tabs.addTab(self.dogs.widget, "Dogs")
+
+    def add_dog(self) -> None:
+        self.dogs.append(Dog(name="New Dog", age=1))
+
+    def print_user(self) -> None:
+        print(f"User: {self.user.value.username}, Email: {self.user.value.email}")
+
+    def print_dogs(self) -> None:
+        for dog in self.dogs:
+            print(f"Dog: {dog.name}, Age: {dog.age}")
 
 
 if __name__ == "__main__":
