@@ -39,6 +39,7 @@ class WidgetRepeater[T](QWidget):
         widget_type: type,
         widget_args: tuple[Any, ...] = (),
         widget_kwargs: dict[str, Any] | None = None,
+        widget_props: dict[str, Any] | None = None,
         bind_expr: str = "{#self}",
         layout_type: str = "vertical",
     ) -> None:
@@ -50,6 +51,7 @@ class WidgetRepeater[T](QWidget):
             widget_type: The widget type to create for each item.
             widget_args: Positional args for widget constructor.
             widget_kwargs: Keyword args for widget constructor.
+            widget_props: Widget properties to apply via setXxx() after creation.
             bind_expr: Binding expression (default "{#self}").
             layout_type: "vertical" or "horizontal".
         """
@@ -60,6 +62,7 @@ class WidgetRepeater[T](QWidget):
         self._widget_type = widget_type
         self._widget_args = widget_args
         self._widget_kwargs = widget_kwargs or {}
+        self._widget_props = widget_props or {}
         self._bind_expr = bind_expr
         self._is_primitive = _is_primitive_type(item_type)
 
@@ -95,7 +98,14 @@ class WidgetRepeater[T](QWidget):
 
     def _create_widget_for_item(self) -> QWidget:
         """Create a new widget instance."""
-        return self._widget_type(*self._widget_args, **self._widget_kwargs)
+        widget = self._widget_type(*self._widget_args, **self._widget_kwargs)
+        # Apply widget props (styleSheet="X" → setStyleSheet("X"))
+        for prop_name, value in self._widget_props.items():
+            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+            setter = getattr(widget, setter_name, None)
+            if setter is not None and callable(setter):
+                setter(value)
+        return widget
 
     def _bind_widget_to_item(
         self,

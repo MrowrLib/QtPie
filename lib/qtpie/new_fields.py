@@ -42,6 +42,12 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     continue
                 if field.field_type is not None:
                     instance = field.field_type(*field.args, **field.kwargs)
+                    # Apply widget props (windowTitle="X" → setWindowTitle("X"))
+                    for prop_name, value in field.widget_props.items():
+                        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+                        setter = getattr(instance, setter_name, None)
+                        if setter is not None and callable(setter):
+                            setter(value)
                     setattr(self, fname, instance)
 
         # Call original __init__

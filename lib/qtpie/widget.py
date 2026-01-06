@@ -507,6 +507,7 @@ def widget[W: Widget[Any]](
     margins: int | tuple[int, int, int, int] | None = None,
     auto_bind: bool = True,
     title: str | None = None,
+    stylesheet: str | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
@@ -538,12 +539,16 @@ def widget[W: Widget[Any]](
         auto_bind: If True (default), QWidget fields are automatically bound
                    to matching Variables or record fields.
         title: Shorthand for windowTitle.
+        stylesheet: Shorthand for styleSheet.
         **kwargs: Extra properties applied via setXXX() methods.
                   e.g., windowTitle="Foo" calls self.setWindowTitle("Foo")
     """
     # title is an alias for windowTitle
     if title is not None:
         kwargs["windowTitle"] = title
+    # stylesheet is an alias for styleSheet
+    if stylesheet is not None:
+        kwargs["styleSheet"] = stylesheet
 
     def decorator(target: type[W]) -> type[W]:
         # Store layout config
@@ -825,6 +830,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_type=field.list_widget_type,
             widget_args=field.args,
             widget_kwargs=field.kwargs,
+            widget_props=field.widget_props,
             bind_expr="{#self}",  # Each widget binds to its list item
         )
 

@@ -26,6 +26,7 @@ class NewField:
         self.exclude_from_layout = False
         self.bind: str | None = None  # Extracted for QWidgets in __set_name__
         self.signal_connections: dict[str, str | Callable[..., Any]] = {}  # signal_name -> method_name or callable
+        self.widget_props: dict[str, Any] = {}  # propName -> value (becomes setPropName(value))
         # Layout params for form/grid layouts
         self.label: str | None = None  # For form layouts: new(label="Name")
         self.grid: GridPosition | None = None  # For grid layouts: new(grid=(0, 0)) or (row, col, rowspan, colspan)
@@ -48,6 +49,10 @@ class NewField:
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
+
+        # Normalize aliases (title -> windowTitle, stylesheet -> styleSheet)
+        self._normalize_kwargs_aliases()
+
         # Get the type annotation
         hints = get_type_hints(owner)
         self.field_type = hints.get(name)
@@ -95,6 +100,10 @@ class NewField:
                 # Extract grid= for grid layouts
                 self.grid = self.kwargs.pop("grid", None)
 
+                # Extract widget props (e.g., styleSheet="..." → setStyleSheet)
+                # Use list_widget_type for setter detection
+                self._extract_widget_props(self.list_widget_type)
+
                 # Remaining kwargs go to widget constructor
                 return
 
@@ -117,6 +126,21 @@ class NewField:
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()
+
+            # Extract widget props (e.g., windowTitle="Foo" → setWindowTitle("Foo"))
+            self._extract_widget_props()
+
+    def _normalize_kwargs_aliases(self) -> None:
+        """Normalize convenience aliases in kwargs.
+
+        Converts:
+            title -> windowTitle
+            stylesheet -> styleSheet
+        """
+        if "title" in self.kwargs:
+            self.kwargs["windowTitle"] = self.kwargs.pop("title")
+        if "stylesheet" in self.kwargs:
+            self.kwargs["styleSheet"] = self.kwargs.pop("stylesheet")
 
     def _is_qwidget_type(self) -> bool:
         """Check if the field type is a QWidget subclass."""
@@ -162,6 +186,37 @@ class NewField:
                 if isinstance(value, str) or callable(value):
                     self.signal_connections[key] = value
                     to_remove.append(key)
+
+        for key in to_remove:
+            del self.kwargs[key]
+
+    def _has_setter(self, prop_name: str, widget_type: type | None = None) -> bool:
+        """Check if the widget type has a setXxx method for the given property name."""
+        check_type = widget_type or self.field_type
+        if check_type is None:
+            return False
+        try:
+            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+            attr = getattr(check_type, setter_name, None)
+            return attr is not None and callable(attr)
+        except Exception:
+            return False
+
+    def _extract_widget_props(self, widget_type: type | None = None) -> None:
+        """Extract property kwargs for QWidgets.
+
+        For kwargs like windowTitle="Foo", if the widget class has a
+        setWindowTitle method, extract it to widget_props for later application.
+
+        Args:
+            widget_type: The widget type to check for setters. If None, uses self.field_type.
+        """
+        to_remove: list[str] = []
+        for key, value in self.kwargs.items():
+            # Check if this kwarg corresponds to a setter on the widget type
+            if self._has_setter(key, widget_type):
+                self.widget_props[key] = value
+                to_remove.append(key)
 
         for key in to_remove:
             del self.kwargs[key]

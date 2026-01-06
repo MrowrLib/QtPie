@@ -188,6 +188,19 @@ class TestListWidgetWithWidgetKwargs:
         label = w.labels.layout().itemAt(0).widget()
         assert_that(label.styleSheet()).is_equal_to("color: red;")
 
+    def test_stylesheet_alias(self, qt: QtDriver) -> None:
+        """stylesheet= alias works for list[QWidget]."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["test"])
+            labels: list[QLabel] = new(bind="items", stylesheet="color: blue;")
+
+        w = qt.track(MyWidget())
+
+        label = w.labels.layout().itemAt(0).widget()
+        assert_that(label.styleSheet()).is_equal_to("color: blue;")
+
 
 class TestListWidgetAggregatedValidation:
     """Test list[QWidget] binding to widget-level validation_error_messages."""

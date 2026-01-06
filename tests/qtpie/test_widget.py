@@ -398,3 +398,92 @@ class TestWidgetProps:
 
         assert "setNotARealProperty" in str(exc_info.value)
         assert "notARealProperty" in str(exc_info.value)
+
+
+class TestNewFieldWidgetProps:
+    """Test new() kwargs become setXXX() calls on child QWidgets."""
+
+    def test_new_with_tooltip(self, qt: QtDriver) -> None:
+        """new(toolTip=...) calls setToolTip() on the widget."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hello", toolTip="This is a label")
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.toolTip()).is_equal_to("This is a label")
+
+    def test_new_with_style_sheet(self, qt: QtDriver) -> None:
+        """new(styleSheet=...) calls setStyleSheet() on the widget."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hello", styleSheet="color: red;")
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.styleSheet()).is_equal_to("color: red;")
+
+    def test_new_with_multiple_props(self, qt: QtDriver) -> None:
+        """Multiple props all applied to child widget."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hello", toolTip="Tip", styleSheet="color: blue;")
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.toolTip()).is_equal_to("Tip")
+        assert_that(w.label.styleSheet()).is_equal_to("color: blue;")
+
+    def test_new_with_enabled_false(self, qt: QtDriver) -> None:
+        """new(enabled=False) calls setEnabled(False)."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Disabled", enabled=False)
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.isEnabled()).is_false()
+
+    def test_new_with_visible_false(self, qt: QtDriver) -> None:
+        """new(visible=False) calls setVisible(False)."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hidden", visible=False)
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.isVisible()).is_false()
+
+    def test_new_with_title_alias(self, qt: QtDriver) -> None:
+        """new(title=...) is alias for windowTitle."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hello", title="My Label")
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.windowTitle()).is_equal_to("My Label")
+
+    def test_new_with_stylesheet_alias(self, qt: QtDriver) -> None:
+        """new(stylesheet=...) is alias for styleSheet (lowercase convenience)."""
+
+        @widget
+        class MyWidget(Widget):
+            label: QLabel = new("Hello", stylesheet="color: green;")
+
+        w = qt.track(MyWidget())
+        assert_that(w.label.styleSheet()).is_equal_to("color: green;")
+
+
+class TestWidgetDecoratorAliases:
+    """Test @widget decorator convenience aliases."""
+
+    def test_widget_stylesheet_alias(self, qt: QtDriver) -> None:
+        """@widget(stylesheet=...) is alias for styleSheet."""
+
+        @widget(stylesheet="background: yellow;")
+        class MyWidget(Widget):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.styleSheet()).is_equal_to("background: yellow;")
