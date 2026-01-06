@@ -196,15 +196,10 @@ class HasListOfStrings:
     strings: list[str]
 
 
-@widget(title="hello", stylesheet="color: blue;")
+@widget
 class SimpleLists(Widget):
-    whatever: Variable[str, QLineEdit] = new("")
-    variable_labels: list[QLabel] = new(bind="validation_error_messages", stylesheet="color: red;")
-
-    def __setup__(self) -> None:
-        self.whatever.add_validator("not-empty", self.validate_not_empty)
-        self.whatever.add_validator("length-check", self.validate_length)
-        # self.variable_labels[0].setStyleSheet("color: red;")
+    whatever: Variable[str, QLineEdit] = new("", validate=["validate_not_empty", "validate_length"])
+    variable_labels: list[QLabel] = new(bind="validation_error_messages")
 
     def validate_not_empty(self, value: str) -> str | None:
         if not value.strip():

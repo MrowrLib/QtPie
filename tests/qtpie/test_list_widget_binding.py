@@ -202,6 +202,99 @@ class TestListWidgetWithWidgetKwargs:
         assert_that(label.styleSheet()).is_equal_to("color: blue;")
 
 
+class TestListWidgetListInterface:
+    """Test list-like interface on WidgetRepeater."""
+
+    def test_getitem_positive_index(self, qt: QtDriver) -> None:
+        """Can access widgets by positive index."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["a", "b", "c"])
+            labels: list[QLabel] = new(bind="items")
+
+        w = qt.track(MyWidget())
+
+        assert_that(w.labels[0].text()).is_equal_to("a")
+        assert_that(w.labels[1].text()).is_equal_to("b")
+        assert_that(w.labels[2].text()).is_equal_to("c")
+
+    def test_getitem_negative_index(self, qt: QtDriver) -> None:
+        """Can access widgets by negative index."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["a", "b", "c"])
+            labels: list[QLabel] = new(bind="items")
+
+        w = qt.track(MyWidget())
+
+        assert_that(w.labels[-1].text()).is_equal_to("c")
+        assert_that(w.labels[-2].text()).is_equal_to("b")
+        assert_that(w.labels[-3].text()).is_equal_to("a")
+
+    def test_getitem_out_of_range_raises(self, qt: QtDriver) -> None:
+        """Accessing out of range index raises IndexError."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["a"])
+            labels: list[QLabel] = new(bind="items")
+
+        w = qt.track(MyWidget())
+
+        try:
+            _ = w.labels[5]
+            pytest.fail("Expected IndexError")
+        except IndexError:
+            pass
+
+    def test_len(self, qt: QtDriver) -> None:
+        """len() returns number of widgets."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["a", "b", "c"])
+            labels: list[QLabel] = new(bind="items")
+
+        w = qt.track(MyWidget())
+
+        assert_that(len(w.labels)).is_equal_to(3)
+
+        w.items.append("d")
+        assert_that(len(w.labels)).is_equal_to(4)
+
+    def test_iter(self, qt: QtDriver) -> None:
+        """Can iterate over widgets."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["a", "b", "c"])
+            labels: list[QLabel] = new(bind="items")
+
+        w = qt.track(MyWidget())
+
+        texts = [label.text() for label in w.labels]
+        assert_that(texts).is_equal_to(["a", "b", "c"])
+
+    def test_modify_widget_in_setup(self, qt: QtDriver) -> None:
+        """Can modify widgets in __setup__."""
+
+        @widget
+        class MyWidget(Widget):
+            items: Variable[list[str]] = new(["first", "second"])
+            labels: list[QLabel] = new(bind="items")
+
+            def __setup__(self) -> None:
+                self.labels[0].setStyleSheet("color: red;")
+                self.labels[1].setStyleSheet("color: blue;")
+
+        w = qt.track(MyWidget())
+
+        assert_that(w.labels[0].styleSheet()).is_equal_to("color: red;")
+        assert_that(w.labels[1].styleSheet()).is_equal_to("color: blue;")
+
+
 class TestListWidgetAggregatedValidation:
     """Test list[QWidget] binding to widget-level validation_error_messages."""
 

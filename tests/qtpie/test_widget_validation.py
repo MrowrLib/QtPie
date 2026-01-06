@@ -1,4 +1,4 @@
-# pyright: reportPrivateUsage=false, reportUnknownMemberType=false
+# pyright: reportPrivateUsage=false, reportUnknownMemberType=false, reportUnknownLambdaType=false
 """Tests for QtPie validation support."""
 
 from dataclasses import dataclass
@@ -226,3 +226,149 @@ class TestValidationWithUI:
 
         w._username.value = ""
         assert_that(w._submit.isEnabled()).is_false()
+
+
+class TestValidateParameter:
+    """Test validate= parameter on Variable fields."""
+
+    def test_validate_single_method_name(self, qt: QtDriver) -> None:
+        """validate='method_name' registers a single validator."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        w = qt.track(TestWidget())
+        assert_that(w._name.is_valid.get()).is_false()
+
+        w._name.value = "hello"
+        assert_that(w._name.is_valid.get()).is_true()
+
+    def test_validate_list_of_method_names(self, qt: QtDriver) -> None:
+        """validate=['m1', 'm2'] registers multiple validators."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate=["validate_required", "validate_length"])
+
+            def validate_required(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def validate_length(self, value: str) -> str | None:
+                return None if len(value) >= 3 else "Too short"
+
+        w = qt.track(TestWidget())
+        msgs = w._name.validation_error_messages.get()
+        assert_that(msgs).contains("Required", "Too short")
+
+        w._name.value = "ab"
+        msgs = w._name.validation_error_messages.get()
+        assert_that(msgs).is_equal_to(["Too short"])
+
+        w._name.value = "abc"
+        assert_that(w._name.is_valid.get()).is_true()
+
+    def test_validate_with_callable(self, qt: QtDriver) -> None:
+        """validate=callable registers a callable as validator."""
+
+        def check_not_empty(value: str) -> str | None:
+            return None if value else "Cannot be empty"
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate=check_not_empty)
+
+        w = qt.track(TestWidget())
+        assert_that(w._name.is_valid.get()).is_false()
+        assert_that(w._name.validation_error_messages.get()).contains("Cannot be empty")
+
+    def test_validate_with_tuple_explicit_name(self, qt: QtDriver) -> None:
+        """validate=[('name', 'method')] uses explicit validator name."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate=[("custom_name", "validate_required")])
+
+            def validate_required(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        w = qt.track(TestWidget())
+        errors = w._name.validation_errors.get()
+        assert_that(errors).contains_key("custom_name")
+
+    def test_validate_with_tuple_callable(self, qt: QtDriver) -> None:
+        """validate=[('name', callable)] uses explicit name with callable."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate=[("my_validator", lambda v: None if v else "Empty")])
+
+        w = qt.track(TestWidget())
+        errors = w._name.validation_errors.get()
+        assert_that(errors).contains_key("my_validator")
+        assert_that(errors["my_validator"]).is_equal_to(["Empty"])
+
+    def test_validate_mixed_formats(self, qt: QtDriver) -> None:
+        """validate= supports mixing different formats."""
+
+        def external_check(value: str) -> str | None:
+            return None if value.isalpha() else "Letters only"
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new(
+                "",
+                validate=[
+                    "validate_required",
+                    external_check,
+                    ("length_check", "validate_length"),
+                ],
+            )
+
+            def validate_required(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def validate_length(self, value: str) -> str | None:
+                return None if len(value) >= 3 else "Too short"
+
+        w = qt.track(TestWidget())
+        msgs = w._name.validation_error_messages.get()
+        assert_that(msgs).contains("Required", "Letters only", "Too short")
+
+    def test_validate_runs_before_setup(self, qt: QtDriver) -> None:
+        """Validators are registered before __setup__ runs."""
+        setup_validity: list[bool] = []
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def __setup__(self) -> None:
+                # Validator should already be active
+                setup_validity.append(self._name.is_valid.get())
+
+        qt.track(TestWidget())
+        assert_that(setup_validity).is_equal_to([False])
+
+    def test_validate_with_widget_type(self, qt: QtDriver) -> None:
+        """validate= works with Variable[T, W] syntax."""
+        from PySide6.QtWidgets import QLineEdit
+
+        @widget
+        class TestWidget(Widget):
+            name: Variable[str, QLineEdit] = new("", validate="check_name")
+
+            def check_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        w = qt.track(TestWidget())
+        assert_that(w.name.is_valid.get()).is_false()
+
+        w.name.widget.setText("Alice")
+        assert_that(w.name.is_valid.get()).is_true()

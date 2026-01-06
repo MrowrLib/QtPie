@@ -502,6 +502,7 @@ class _VariableDescriptor[T]:
         label: str | None = None,
         grid: tuple[int, ...] | None = None,
         exclude_from_layout: bool = False,
+        validators: list[str] | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -513,6 +514,8 @@ class _VariableDescriptor[T]:
         self.label = label
         self.grid = grid
         self.exclude_from_layout = exclude_from_layout
+        # Validator method names to auto-register
+        self.validators = validators or []
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -606,6 +609,7 @@ def create_variable_descriptor(
     label: str | None = None,
     grid: tuple[int, ...] | None = None,
     exclude_from_layout: bool = False,
+    validators: list[Any] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators)

@@ -633,6 +633,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)
 
+        # Register validators from validate= parameter (before __setup__ so they're active)
+        _register_validators(self, config)
+
         # Call __setup__ hook if defined (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -734,6 +737,75 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
                 raise TypeError(f"Failed to call {setter_name}({value!r}) on {type(widget).__name__}: {e}") from e
         else:
             raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
+
+
+def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # pyright: ignore[reportUnknownArgumentType]
+    """Register validators defined via validate= parameter on Variables.
+
+    Supports multiple formats:
+    - validate="method_name" → single string method
+    - validate=callable → single callable
+    - validate=["method1", "method2"] → list of method names
+    - validate=[callable1, callable2] → list of callables
+    - validate=[("custom_name", "method")] → tuple with explicit validator name
+    - validate=[("custom_name", callable)] → tuple with explicit name and callable
+    """
+    from .variable import Variable, _VariableDescriptor
+
+    cls = type(widget)
+
+    for name in config.variable_names:
+        # Get the descriptor to access validators list
+        descriptor = getattr(cls, name, None)
+        if not isinstance(descriptor, _VariableDescriptor):
+            continue
+
+        if not descriptor.validators:
+            continue
+
+        # Access the Variable instance to register validators
+        var = getattr(widget, name, None)
+        if not isinstance(var, Variable):
+            continue
+
+        # Normalize validators to a list
+        raw_validators: Any = descriptor.validators
+        validators_list: list[Any] = cast(list[Any], raw_validators) if isinstance(raw_validators, list) else [raw_validators]
+
+        for spec in validators_list:
+            validator_name: str
+            validator_fn: Callable[..., Any]
+
+            if isinstance(spec, tuple) and len(spec) == 2:  # pyright: ignore[reportUnknownArgumentType]
+                # ("name", "method") or ("name", callable)
+                name_part = str(spec[0])  # pyright: ignore[reportUnknownArgumentType]
+                fn_part = cast(Any, spec[1])
+                if isinstance(fn_part, str):
+                    fn = getattr(widget, fn_part, None)
+                    if fn is None or not callable(fn):
+                        raise AttributeError(f"Validator method '{fn_part}' not found on {cls.__name__}")
+                    validator_name = name_part
+                    validator_fn = fn
+                elif callable(fn_part):  # pyright: ignore[reportUnknownArgumentType]
+                    validator_name = name_part
+                    validator_fn = fn_part
+                else:
+                    raise TypeError(f"Invalid validator spec: {spec}")
+            elif isinstance(spec, str):
+                # "method_name" → name defaults to method name
+                validator_name = spec
+                fn = getattr(widget, spec, None)
+                if fn is None or not callable(fn):
+                    raise AttributeError(f"Validator method '{spec}' not found on {cls.__name__}")
+                validator_fn = fn
+            elif callable(spec):  # pyright: ignore[reportUnknownArgumentType]
+                # callable → name from __name__ attribute
+                validator_name = getattr(spec, "__name__", str(spec))
+                validator_fn = spec
+            else:
+                raise TypeError(f"Invalid validator spec: {spec}")
+
+            var.add_validator(validator_name, validator_fn)  # pyright: ignore[reportUnknownMemberType]
 
 
 def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> None:

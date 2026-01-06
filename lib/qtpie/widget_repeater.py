@@ -315,3 +315,21 @@ class WidgetRepeater[T](QWidget):
     def widget_count(self) -> int:
         """Get the number of widgets."""
         return len(self._items)
+
+    # List-like interface so list[QLabel] annotation isn't a total lie
+    def __getitem__(self, index: int) -> QWidget:
+        """Get widget at index (list-like access)."""
+        if index < 0:
+            index = len(self._items) + index
+        if 0 <= index < len(self._items):
+            return self._items[index][0]
+        raise IndexError(f"index {index} out of range")
+
+    def __len__(self) -> int:
+        """Return number of widgets."""
+        return len(self._items)
+
+    def __iter__(self):
+        """Iterate over widgets."""
+        for widget, _, _ in self._items:
+            yield widget

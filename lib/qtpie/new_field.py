@@ -76,7 +76,10 @@ class NewField:
             layout_kwarg = widget_kwargs_copy.pop("layout", None)
             exclude_from_layout = layout_kwarg is False
 
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid, exclude_from_layout))
+            # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
+            validators = self.kwargs.pop("validate", None)
+
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid, exclude_from_layout, validators))
             return
 
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
