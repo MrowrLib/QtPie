@@ -71,17 +71,19 @@ class VarsWithWidgets(Widget):
 
 @widget
 class ListsOfThings(Widget):
+    regular_int: Variable[int] = new(0)
     numbers: Variable[list[int], QLabel] = new([1, 2, 3])
 
     btn_add: QPushButton = new("Add Number", clicked="add_number")
     btn_remove: QPushButton = new("Remove Number", clicked="remove_number")
 
     def add_number(self) -> None:
-        self.numbers += [len(self.numbers.value) + 1]
+        next_number = len(self.numbers) + 1
+        self.numbers.append(next_number)
 
-    # def remove_number(self) -> None:
-    #     if self.numbers.value:
-    #         self.numbers.observable.remove(self.numbers.value[-1])
+    def remove_number(self) -> None:
+        last_number = self.numbers[-1]
+        self.numbers.remove(last_number)
 
 
 if __name__ == "__main__":

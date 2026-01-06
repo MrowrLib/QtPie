@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Self, cast, get_origin, overload, override
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_origin, overload, override
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ValidatorFn
 
 # Union of all observable types
 type AnyObservable[T] = Observable[T] | ObservableList[T] | ObservableDict[Any, T] | ObservableProxy[T]
+
+# TypeVar for list item type (used in overloads)
+_ItemT = TypeVar("_ItemT")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -214,6 +218,93 @@ class Variable[T, W = None]:
     def __imod__(self, other: Any) -> Self:
         self.value = self.value % other  # type: ignore[operator]
         return self
+
+    # -------------------------------------------------------------------------
+    # List delegation - for Variable[list[T]]
+    # Typed overloads provide intellisense for list item types
+    # -------------------------------------------------------------------------
+
+    if TYPE_CHECKING:
+
+        def append(self: Variable[list[_ItemT], Any], item: _ItemT) -> None: ...
+        def extend(self: Variable[list[_ItemT], Any], items: list[_ItemT]) -> None: ...
+        def insert(self: Variable[list[_ItemT], Any], index: int, item: _ItemT) -> None: ...
+        def remove(self: Variable[list[_ItemT], Any], item: _ItemT) -> None: ...
+        def pop(self: Variable[list[_ItemT], Any], index: int = -1) -> _ItemT: ...
+        def clear(self: Variable[list[_ItemT], Any]) -> None: ...
+        def __len__(self: Variable[list[_ItemT], Any]) -> int: ...
+        def __iter__(self: Variable[list[_ItemT], Any]) -> Iterator[_ItemT]: ...
+        def __contains__(self: Variable[list[_ItemT], Any], item: _ItemT) -> bool: ...
+        def __getitem__(self: Variable[list[_ItemT], Any], index: int) -> _ItemT: ...
+        def __setitem__(self: Variable[list[_ItemT], Any], index: int, value: _ItemT) -> None: ...
+    else:
+
+        def append(self, item: Any) -> None:
+            """Append item (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"append() requires ObservableList, got {type(self._wrapper).__name__}")
+            self._wrapper.append(item)
+
+        def extend(self, items: list[Any]) -> None:
+            """Extend with items (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"extend() requires ObservableList, got {type(self._wrapper).__name__}")
+            self._wrapper.extend(items)
+
+        def insert(self, index: int, item: Any) -> None:
+            """Insert item at index (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"insert() requires ObservableList, got {type(self._wrapper).__name__}")
+            self._wrapper.insert(index, item)
+
+        def remove(self, item: Any) -> None:
+            """Remove first occurrence of item (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"remove() requires ObservableList, got {type(self._wrapper).__name__}")
+            self._wrapper.remove(item)
+
+        def pop(self, index: int = -1) -> Any:
+            """Remove and return item at index (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"pop() requires ObservableList, got {type(self._wrapper).__name__}")
+            return self._wrapper.pop(index)
+
+        def clear(self) -> None:
+            """Remove all items (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                self._wrapper.clear()
+            else:
+                raise TypeError(f"clear() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        def __len__(self) -> int:
+            """Return length (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                return len(self._wrapper)
+            raise TypeError(f"len() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        def __iter__(self) -> Iterator[Any]:
+            """Iterate (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                return iter(self._wrapper)
+            raise TypeError(f"iter() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        def __contains__(self, item: Any) -> bool:
+            """Check membership (delegates to ObservableList or ObservableDict)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+                return item in self._wrapper
+            raise TypeError(f"'in' requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+
+        def __getitem__(self, index: int) -> Any:
+            """Get item at index (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"__getitem__ requires ObservableList, got {type(self._wrapper).__name__}")
+            return self._wrapper[index]
+
+        def __setitem__(self, index: int, value: Any) -> None:
+            """Set item at index (delegates to ObservableList)."""
+            if not isinstance(self._wrapper, ObservableList):
+                raise TypeError(f"__setitem__ requires ObservableList, got {type(self._wrapper).__name__}")
+            self._wrapper[index] = value
 
 
 class RecordVariable[T]:
