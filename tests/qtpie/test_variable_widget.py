@@ -1,5 +1,7 @@
 # pyright: reportPrivateUsage=false, reportOptionalMemberAccess=false
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
+# pyright: reportArgumentType=false, reportUnknownLambdaType=false
+# pyright: reportCallIssue=false
 """Tests for Variable[T, W] with widget type parameter."""
 
 from dataclasses import dataclass
@@ -348,3 +350,127 @@ class TestCallableNewSyntax:
         assert w._count.widget.value() == 50
         assert w._count.widget.minimum() == 0
         assert w._count.widget.maximum() == 100
+
+
+class TestVariableProxyFieldAccess:
+    """Test direct field access on Variable[MyClass] via proxy forwarding."""
+
+    def test_get_field_via_variable(self, qt: QtDriver) -> None:
+        """self._dog.name returns dog.name value."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog] = new(Dog("Fido", 3))
+
+        w = qt.track(Test())
+
+        # Direct field access should work
+        assert w._dog.name == "Fido"
+        assert w._dog.age == 3
+
+    def test_set_field_via_variable_is_reactive(self, qt: QtDriver) -> None:
+        """self._dog.name = 'Max' is reactive."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog] = new(Dog("Fido", 3))
+            _label: QLabel = new("")
+
+            def __setup__(self) -> None:
+                # Set initial value
+                self._label.setText(f"Name: {self._dog.name}")
+                # Bind to the observable manually to verify reactivity
+                self._dog.observable.name.on_change(lambda v: self._label.setText(f"Name: {v}"))
+
+        w = qt.track(Test())
+
+        # Initial state
+        assert w._label.text() == "Name: Fido"
+
+        # Change via direct field access
+        w._dog.name = "Max"
+
+        # Should have triggered the callback
+        assert w._label.text() == "Name: Max"
+
+        # And the value should be updated
+        assert w._dog.name == "Max"
+        assert w._dog.value.name == "Max"
+
+    def test_set_field_updates_bound_widget(self, qt: QtDriver) -> None:
+        """self._dog.name = 'Max' updates bound Widget[Dog]."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget(layout="form")
+        class DogEditor(Widget[Dog]):
+            _name: QLineEdit = new(label="Name")
+            _age: QSpinBox = new(label="Age")
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog, DogEditor] = new(Dog("Fido", 3))  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+        editor = w._dog.widget
+
+        # Initial state - widget should show values
+        assert editor._name.text() == "Fido"
+        assert editor._age.value() == 3
+
+        # Change via direct field access on Variable
+        w._dog.name = "Buddy"
+        w._dog.age = 5
+
+        # Widget should update
+        assert editor._name.text() == "Buddy"
+        assert editor._age.value() == 5
+
+    def test_variable_own_attributes_not_forwarded(self, qt: QtDriver) -> None:
+        """Variable's own attributes (value, widget, etc.) still work."""
+
+        @dataclass
+        class Dog:
+            name: str
+            value: str  # Intentionally named 'value' to test collision
+
+        @widget
+        class Test(Widget):
+            _dog: Variable[Dog] = new(Dog("Fido", "test_value"))
+
+        w = qt.track(Test())
+
+        # Variable.value should return the Dog object, not dog.value
+        assert isinstance(w._dog.value, Dog)
+        assert w._dog.value.name == "Fido"
+
+        # But we can still access dog.value through the proxy
+        # by going through observable directly
+        assert w._dog.observable.value.get() == "test_value"
+
+    def test_field_access_only_for_proxy_types(self, qt: QtDriver) -> None:
+        """Direct field access only works for Variable[MyClass], not primitives."""
+        import pytest
+
+        @widget
+        class Test(Widget):
+            _count: Variable[int] = new(42)
+
+        w = qt.track(Test())
+
+        # Primitives don't have fields
+        with pytest.raises(AttributeError):
+            _ = w._count.some_field  # type: ignore[attr-defined]

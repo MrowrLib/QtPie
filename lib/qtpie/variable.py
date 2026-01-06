@@ -85,16 +85,72 @@ class Variable[T, W = None]:
         if self._name.is_dirty:         # check dirty state
         self._name.reset_dirty()        # mark as clean
         self._name.widget               # access the bound widget (if any)
+
+    For Variable[MyClass] (ObservableProxy), direct field access is supported:
+        self._dog.name = "Max"          # reactive! same as self._dog.observable.name = "Max"
+        print(self._dog.name)           # gets the value
     """
+
+    # Known attributes that belong to Variable itself (not forwarded to proxy)
+    _SELF_ATTRS = frozenset(
+        {
+            "_wrapper",
+            "_widget_type",
+            "_widget",
+            "widget",
+            "value",
+            "observable",
+            "is_dirty",
+            "is_valid",
+            "validation_errors",
+            "validation_error_messages",
+        }
+    )
 
     _wrapper: AnyObservable[T]
     _widget_type: type | None
     _widget: Any  # Will be W | None where W is the widget type
 
     def __init__(self, wrapper: AnyObservable[T], widget_type: type | None = None) -> None:
-        self._wrapper = wrapper
-        self._widget_type = widget_type
-        self._widget = None  # Populated later when widget is created
+        object.__setattr__(self, "_wrapper", wrapper)
+        object.__setattr__(self, "_widget_type", widget_type)
+        object.__setattr__(self, "_widget", None)  # Populated later when widget is created
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to ObservableProxy for field access.
+
+        For Variable[Dog], self._dog.name returns dog.name (unwrapped value).
+        Use .observable.name for the Observable itself.
+        """
+        # Only forward to proxy if we're wrapping an ObservableProxy
+        wrapper: Any = object.__getattribute__(self, "_wrapper")
+        if isinstance(wrapper, ObservableProxy):
+            result = getattr(cast(Any, wrapper), name)
+            # Unwrap Observable to return actual value
+            if isinstance(result, Observable):
+                return cast(Any, result.get())
+            return result
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    @override
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Forward attribute setting to ObservableProxy for field mutation.
+
+        For Variable[Dog], self._dog.name = "Max" sets dog.name reactively.
+        """
+        # Handle Variable's own attributes normally
+        if name in Variable._SELF_ATTRS:
+            object.__setattr__(self, name, value)
+            return
+
+        # Forward to proxy if we're wrapping an ObservableProxy
+        wrapper: Any = object.__getattribute__(self, "_wrapper")
+        if isinstance(wrapper, ObservableProxy):
+            setattr(cast(Any, wrapper), name, value)
+            return
+
+        # Fall back to normal attribute setting
+        object.__setattr__(self, name, value)
 
     @property
     def widget(self) -> Any:

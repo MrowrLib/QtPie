@@ -2,11 +2,18 @@
 
 from typing import Any
 
-from observant import Observable
+from observant import Observable, ObservableProxy
 from PySide6.QtCore import QObject
 
 from ..variable import Variable
 from .registry import get_binding_registry
+
+
+def _is_widget_with_record(widget: QObject) -> bool:
+    """Check if widget is a Widget[T] subclass with record support."""
+    # Check for our Widget class by looking for the QtPie markers
+    widget_type: Any = type(widget)
+    return hasattr(widget_type, "_qtpie_config") and hasattr(widget_type._qtpie_config, "record_type") and widget_type._qtpie_config.record_type is not None
 
 
 class Binding[T]:
@@ -36,6 +43,11 @@ class Binding[T]:
             two_way: If True and the property has a signal, changes to the widget
                      will update the Variable. Default True.
         """
+        # Special case: Widget[T] subclass - bind via .record with shared proxy
+        if _is_widget_with_record(widget):
+            self._bind_to_widget_record(widget)
+            return
+
         registry = get_binding_registry()
 
         # Get property name (use default if not specified)
@@ -89,6 +101,40 @@ class Binding[T]:
                             updating["active"] = False
 
                 signal.connect(on_widget_change)
+
+    def _bind_to_widget_record(self, widget: QObject) -> None:
+        """Bind to a Widget[T] subclass via its .record property.
+
+        This shares the ObservableProxy between the Variable and the Widget,
+        so changes made via either path are visible to both.
+        """
+        # Get the underlying observable from our Variable
+        observable = self._variable.observable
+
+        # For Widget[T], we need to share our ObservableProxy with the widget's record
+        if isinstance(observable, ObservableProxy):
+            # Import here to avoid circular imports
+            from ..variable import RecordVariable
+            from ..widget import QtPieState, _apply_auto_bindings  # pyright: ignore[reportPrivateUsage]
+
+            # Get or create the widget's QtPieState
+            if not hasattr(widget, "_qtpie"):
+                widget._qtpie = QtPieState(widget)  # type: ignore[arg-type, attr-defined]
+
+            # Create a RecordVariable that wraps our same ObservableProxy
+            # This shares the proxy so both sides see the same data
+            record_var = RecordVariable(observable)
+            widget._qtpie._record = record_var  # type: ignore[attr-defined, union-attr]
+            widget._qtpie.register_variable("record", record_var)  # type: ignore[union-attr]
+
+            # Re-apply auto-bindings now that record is populated
+            # This is needed because the widget's __init__ ran before we set up the record
+            config = type(widget)._qtpie_config  # type: ignore[attr-defined]
+            _apply_auto_bindings(widget, config)  # type: ignore[arg-type]
+        else:
+            # For primitives or other types, just set the value directly
+            # The widget will create its own proxy when accessed
+            widget.record = self._variable.value  # type: ignore[attr-defined]
 
 
 def bind(variable: Variable[Any]) -> Binding[Any]:

@@ -77,16 +77,35 @@ class Dog:
 
 @widget(layout="form")
 class DogEditor(Widget[Dog]):
-    name: Variable[str, QLineEdit] = new("")(label="Dog's Name")
-    age: Variable[int, QLineEdit] = new(0)(label="Dog's Age")
+    name: QLineEdit = new(label="Dog's Name")
+    age: QLineEdit = new(label="Dog's Age")
 
-    def __setup__(self) -> None:
-        self.record = Dog(name="Buddy", age=4)
+
+@widget
+class HasOneDogForm(Widget):
+    dog: Variable[Dog, DogEditor] = new(Dog("Fido", 3))
+    btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
+    btn_change_dog_name: QPushButton = new("Change Dog Name", clicked="change_dog_name")
+    btn_change_dog_object: QPushButton = new("Change Dog Object", clicked="change_dog_object")
+
+    def print_dog(self) -> None:
+        print(f"{self.dog.value.name} is {self.dog.value.age} years old.")
+
+    def change_dog_name(self) -> None:
+        self.dog.name = "Max"
+
+    def change_dog_object(self) -> None:
+        self.dog = Dog("Buddy", 4)  # is there a way to replace the underlying object in an ObservableProxy?
 
 
 @widget
 class HasMultipleDogForms(Widget):
     dogs: Variable[list[Dog], DogEditor] = new([Dog("Fido", 3), Dog("Rex", 5)])
+    btn_print_dogs: QPushButton = new("Print Dogs", clicked="print_dogs")
+
+    def print_dogs(self) -> None:
+        for dog in self.dogs:
+            print(f"{dog.name} is {dog.age} years old.")
 
 
 @widget
@@ -122,6 +141,6 @@ class ListsOfThings(Widget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    widget = HasMultipleDogForms()
+    widget = HasOneDogForm()
     widget.show()
     app.exec()
