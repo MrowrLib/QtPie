@@ -5,9 +5,9 @@ import sys
 from enum import Enum
 from typing import cast
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QGuiApplication
+from qtpy.QtWidgets import QApplication
 
 
 class ColorScheme(Enum):

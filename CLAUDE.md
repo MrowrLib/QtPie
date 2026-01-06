@@ -4,9 +4,29 @@
 
 **QtPie** is a declarative UI library for Qt/PySide6 in Python. Think React/Vue patterns but for desktop apps. Or other GUI frameworks. And with the 'Conventions over Configuration' culture of Ruby on Rails.
 
-Although we actually use `qtpy` library for all of dependencies so it works with PySide6 or PyQt6.
+## Project Structure
 
-And we use qasync for async goodness.
+This is **v2** - a complete rewrite of QtPie.
+
+- `lib/qtpie/` - The v2 QtPie library (active development)
+- `lib/observant/` - The v2 observant library (reactive primitives)
+- `v1/` - The original v1 codebase (reference only, uses `qtpy` for Qt abstraction)
+- `tests/` - All tests for v2
+
+### Observant Library
+
+The `observant` library provides reactive primitives. Originally a separate project at `C:/Code/mrowr/MrowrLib/observant.py`, we're rewriting it here in `lib/observant/`:
+
+- `Observable[T]` - Single reactive value
+- `ObservableList[T]` - Reactive list with granular callbacks (on_insert, on_remove, etc.)
+- `ObservableDict[K, V]` - Reactive dictionary with granular callbacks
+- `ObservableProxy[T]` - Wraps any object, making its fields reactive
+
+### Key Differences from v1
+
+- v2 uses PySide6 directly (no `qtpy` abstraction)
+- v2 has `observant` integrated in the same repo
+- v2 has much better typing and pyright strict compliance
 
 ## Running Things
 
@@ -77,3 +97,213 @@ If ANY check fails, fix it FIRST, then re-run ALL checks again.
 - Only use `if TYPE_CHECKING` when it super makes sense to use it
 
 When in doubt, leave it out. Simpler is better.
+
+---
+
+## Widget Examples
+
+### Basic Widget
+
+```python
+from PySide6.QtWidgets import QLabel, QPushButton
+from qtpie import Widget, new, widget
+
+@widget
+class HelloWorld(Widget):
+    _label: QLabel = new("Hello, World!")
+    _button: QPushButton = new("Click Me")
+```
+
+### Widget with Reactive State (Variable)
+
+```python
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton
+from qtpie import Widget, Variable, new, widget
+
+@widget
+class Counter(Widget):
+    # Variable[T] creates reactive state
+    _count: Variable[int] = new(0)
+
+    # Variable[T, W] creates reactive state + auto-bound widget
+    _name: Variable[str, QLineEdit] = new("Enter name")
+
+    # Regular widgets
+    _label: QLabel = new("Count: 0")
+    _increment: QPushButton = new("Increment", clicked="on_increment")
+
+    def on_increment(self):
+        self._count += 1  # Triggers reactive updates
+```
+
+### Widget with Record Type (Widget[T])
+
+```python
+from dataclasses import dataclass
+from PySide6.QtWidgets import QLineEdit
+from qtpie import Widget, Variable, new, widget
+
+@dataclass
+class Person:
+    name: str = ""
+    age: int = 0
+
+@widget
+class PersonEditor(Widget[Person]):
+    # self.record is automatically an ObservableProxy[Person]
+    # Fields auto-bind to record.name, record.age by convention
+    _name: Variable[str, QLineEdit] = new("")
+    _age: Variable[int, QLineEdit] = new(0)
+
+    def __init__(self, person: Person | None = None):
+        super().__init__(person or Person())
+        # self.record.name, self.record.age are now reactive!
+```
+
+### List Binding with WidgetRepeater
+
+```python
+from PySide6.QtWidgets import QLabel
+from qtpie import Widget, Variable, new, widget
+
+@widget
+class TodoList(Widget):
+    # Source data
+    _items: Variable[list[str]] = new(["Buy milk", "Walk dog"])
+
+    # list[QWidget] bound to a Variable creates a WidgetRepeater
+    # One QLabel per item, auto-synced when list changes
+    _labels: list[QLabel] = new(bind="_items")
+
+    def add_item(self, text: str):
+        self._items.append(text)  # Automatically creates new QLabel
+```
+
+### List with Custom Format
+
+```python
+@widget
+class NumberList(Widget):
+    _numbers: Variable[list[int]] = new([1, 2, 3])
+
+    # format= customizes how items are displayed
+    _labels: list[QLabel] = new(
+        bind="_numbers",
+        format="Item #{#index}: {#self}"  # "Item #0: 1", "Item #1: 2", etc.
+    )
+```
+
+### Dict Binding
+
+```python
+@widget
+class ScoreBoard(Widget):
+    _scores: Variable[dict[str, int]] = new({"Alice": 100, "Bob": 85})
+
+    # Dict binding with key/value placeholders
+    _labels: list[QLabel] = new(
+        bind="_scores",
+        format="{#key}: {#value} points"  # "Alice: 100 points"
+    )
+```
+
+### Variable with Widget Type (Inline)
+
+```python
+@widget
+class InlineWidgets(Widget):
+    # Variable[T, W] - creates T observable + W widget, auto-bound
+    _username: Variable[str, QLineEdit] = new("")(placeholder="Username")
+    _password: Variable[str, QLineEdit] = new("")(placeholder="Password", echoMode=QLineEdit.EchoMode.Password)
+
+    # Access the widget via .widget property
+    def focus_username(self):
+        self._username.widget.setFocus()
+```
+
+### Object Name and CSS Classes
+
+```python
+@widget(name="main-window", classes=["dark-theme"])
+class StyledWidget(Widget):
+    # objectName defaults to field name, or explicit name=
+    _title: QLabel = new("Title", name="page-title", classes=["header"])
+    _content: QLabel = new("Content")  # objectName = "_content"
+
+    # Widget class objectName defaults to class name
+    # So #StyledWidget works in QSS (if name= not set)
+```
+
+### Signal Connections
+
+```python
+@widget
+class ButtonExample(Widget):
+    # Connect signal to method by name
+    _save: QPushButton = new("Save", clicked="on_save")
+
+    # Or connect to lambda
+    _cancel: QPushButton = new("Cancel", clicked=lambda: print("Cancelled"))
+
+    def on_save(self):
+        print("Saved!")
+```
+
+### The `new()` Function
+
+`new()` is the factory for creating fields:
+
+```python
+# Positional args go to widget constructor
+_button: QPushButton = new("Button Text")
+
+# Keyword args: some are QtPie special, rest go to constructor
+_field: QLineEdit = new(
+    bind="_some_var",       # QtPie: bind to variable
+    name="my-field",        # QtPie: set objectName
+    classes=["input"],      # QtPie: set CSS classes
+    clicked="on_click",     # QtPie: signal connection
+    placeholderText="...",  # Qt: passed to constructor
+)
+
+# For Variable[T, W], chain calls:
+_name: Variable[str, QLineEdit] = new("default")(placeholder="Name...")
+#                                     ^          ^
+#                                     |          Widget kwargs
+#                                     Variable default value
+```
+
+### Layout Types
+
+```python
+@widget(layout="vertical")   # Default - QVBoxLayout
+class VBox(Widget): ...
+
+@widget(layout="horizontal") # QHBoxLayout
+class HBox(Widget): ...
+
+@widget(layout="form")       # QFormLayout - use label= on fields
+class Form(Widget):
+    _name: QLineEdit = new(label="Name:")
+    _email: QLineEdit = new(label="Email:")
+
+@widget(layout="grid")       # QGridLayout - use grid= on fields
+class Grid(Widget):
+    _a: QLabel = new("A", grid=(0, 0))
+    _b: QLabel = new("B", grid=(0, 1))
+    _c: QLabel = new("C", grid=(1, 0, 1, 2))  # row, col, rowspan, colspan
+```
+
+### Entrypoint
+
+```python
+from qtpie import entrypoint
+
+@entrypoint
+@widget
+class MyApp(Widget):
+    _label: QLabel = new("Hello!")
+
+# Just run: python my_app.py
+# The @entrypoint decorator handles QApplication setup
+```

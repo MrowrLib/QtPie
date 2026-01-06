@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import override
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QApplication
+from qtpy.QtWidgets import QApplication
 
 from qtpie import App
 

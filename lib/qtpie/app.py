@@ -6,8 +6,8 @@ import sys
 from collections.abc import Sequence
 
 import qasync  # type: ignore[import-untyped]
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QWidget
+from qtpy.QtCore import QTimer
+from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
@@ -27,7 +27,7 @@ def run_app(app: QApplication) -> int:
         The application exit code (always 0 currently).
 
     Example:
-        from PySide6.QtWidgets import QApplication, QLabel
+        from qtpy.QtWidgets import QApplication, QLabel
 
         app = QApplication([])
         label = QLabel("Hello")

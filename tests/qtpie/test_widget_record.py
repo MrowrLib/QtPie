@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel
+from qtpy.QtWidgets import QLabel
 
 from qtpie import RecordVariable, Variable, Widget, new, widget
 from qtpie.testing import QtDriver

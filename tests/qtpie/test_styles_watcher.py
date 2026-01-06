@@ -4,8 +4,8 @@ import time
 from pathlib import Path
 
 from assertpy import assert_that
-from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QWidget
+from qtpy.QtCore import QEventLoop, QTimer
+from qtpy.QtWidgets import QWidget
 
 from qtpie.styles import watch_qss, watch_scss, watch_styles
 from qtpie.styles.watcher import QssWatcher, ScssWatcher

@@ -3,7 +3,7 @@
 """Tests for Widget with auto-layout."""
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver
@@ -119,7 +119,7 @@ class TestWidgetLayoutExclusion:
 
     def test_exclude_variable_widget_from_layout(self, qt: QtDriver) -> None:
         """Variable[T, W] with layout=False excludes widget from layout."""
-        from PySide6.QtWidgets import QLineEdit
+        from qtpy.QtWidgets import QLineEdit
 
         @widget
         class MyWidget(Widget):

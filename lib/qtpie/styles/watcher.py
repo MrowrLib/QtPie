@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
-from PySide6.QtWidgets import QApplication, QWidget
+from qtpy.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
+from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.compiler import compile_scss
 

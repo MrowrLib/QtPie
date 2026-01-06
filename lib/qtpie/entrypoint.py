@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Any, cast, overload
 
 import qasync  # type: ignore[import-untyped]
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QWidget
+from qtpy.QtCore import QTimer
+from qtpy.QtWidgets import QApplication, QWidget
 
 # Import App and run_app lazily to avoid circular imports
 _App: type | None = None

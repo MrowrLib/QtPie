@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from .bindings import bind
 from .variable import Variable

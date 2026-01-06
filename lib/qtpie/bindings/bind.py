@@ -3,7 +3,7 @@
 from typing import Any
 
 from observant import Observable, ObservableProxy
-from PySide6.QtCore import QObject
+from qtpy.QtCore import QObject
 
 from ..variable import Variable
 from .registry import get_binding_registry

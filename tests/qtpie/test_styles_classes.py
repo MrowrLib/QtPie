@@ -1,7 +1,7 @@
 """Tests for CSS class helpers."""
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QWidget
+from qtpy.QtWidgets import QWidget
 
 from qtpie.styles import (
     add_class,

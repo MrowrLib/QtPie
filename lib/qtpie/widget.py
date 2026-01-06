@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
 
 from observant import Observable
-from PySide6.QtWidgets import (
+from qtpy.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QHBoxLayout,

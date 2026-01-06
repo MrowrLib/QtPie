@@ -10,6 +10,11 @@ so before that let's make this work, `bind="whatever.upper()"` and `len(whatever
 
 Overview of TODOs, high-level ...
 
+## Port over from V1
+
 - [ ] async stuff
 - [ ] bind= using complex evaluations w/ reactive updates
+
+## New
+
 - [ ] boolean= predicate expression or function reference or reactive binding, the expression also reacts to updates ...

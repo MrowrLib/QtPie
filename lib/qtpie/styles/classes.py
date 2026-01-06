@@ -19,8 +19,8 @@ In QSS, match classes with attribute selectors:
 
 from typing import cast
 
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QWidget
+from qtpy.QtCore import QObject
+from qtpy.QtWidgets import QWidget
 
 
 def get_classes(widget: QObject) -> list[str]:

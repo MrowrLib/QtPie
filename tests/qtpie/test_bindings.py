@@ -3,7 +3,7 @@
 """Tests for bind() - connecting Variables to widget properties."""
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox
+from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox
 
 from qtpie import Variable, Widget, bind, new, widget
 from qtpie.testing import QtDriver

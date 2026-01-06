@@ -4,7 +4,7 @@
 from dataclasses import dataclass
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QPushButton
+from qtpy.QtWidgets import QLabel, QPushButton
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver
@@ -358,7 +358,7 @@ class TestValidateParameter:
 
     def test_validate_with_widget_type(self, qt: QtDriver) -> None:
         """validate= works with Variable[T, W] syntax."""
-        from PySide6.QtWidgets import QLineEdit
+        from qtpy.QtWidgets import QLineEdit
 
         @widget
         class TestWidget(Widget):

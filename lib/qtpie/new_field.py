@@ -195,7 +195,7 @@ class NewField:
         if cls is None:
             return False
         try:
-            from PySide6.QtWidgets import QWidget
+            from qtpy.QtWidgets import QWidget
 
             # cls could be a generic alias, so check it's a proper type
             return isinstance(cls, type) and issubclass(cls, QWidget)  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -210,7 +210,7 @@ class NewField:
             attr = getattr(self.field_type, name, None)
             if attr is None:
                 return False
-            # PySide6 signals at class level have type name 'Signal'
+            # qtpy signals at class level have type name 'Signal'
             return type(attr).__name__ == "Signal"
         except Exception:
             return False

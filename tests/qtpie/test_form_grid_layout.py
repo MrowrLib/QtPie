@@ -5,7 +5,7 @@
 """Tests for form and grid layouts with label= and grid= params."""
 
 import pytest
-from PySide6.QtWidgets import QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver

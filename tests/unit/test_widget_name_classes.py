@@ -2,7 +2,7 @@
 """Tests for widget name and classes parameters."""
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
+from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
 
 from qtpie import Widget, new, widget
 from qtpie.styles import get_classes

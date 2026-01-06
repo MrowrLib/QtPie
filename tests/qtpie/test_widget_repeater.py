@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 
-from PySide6.QtWidgets import QLabel, QLineEdit, QSpinBox
+from qtpy.QtWidgets import QLabel, QLineEdit, QSpinBox
 
 from qtpie import Variable, Widget, WidgetRepeater, new, widget
 from qtpie.testing import QtDriver

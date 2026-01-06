@@ -5,7 +5,7 @@ from typing import cast
 
 from assertpy import assert_that
 from observant import Observable
-from PySide6.QtWidgets import QLabel, QListView, QPushButton, QWidget
+from qtpy.QtWidgets import QLabel, QListView, QPushButton, QWidget
 
 from qtpie import Variable, WidgetBase, new
 from qtpie.testing import QtDriver

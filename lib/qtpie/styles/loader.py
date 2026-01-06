@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QFile, QIODeviceBase, QTextStream
+from qtpy.QtCore import QFile, QIODeviceBase, QTextStream
 
 
 def load_stylesheet(

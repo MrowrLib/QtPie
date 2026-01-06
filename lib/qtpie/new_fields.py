@@ -44,7 +44,7 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     instance = field.field_type(*field.args, **field.kwargs)
 
                     # Apply objectName: use explicit name if set, otherwise default to field name for QWidgets
-                    from PySide6.QtWidgets import QWidget
+                    from qtpy.QtWidgets import QWidget
 
                     if isinstance(instance, QWidget):
                         if field.object_name is not None:

@@ -4,7 +4,7 @@
 
 import pytest
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QLineEdit
+from qtpy.QtWidgets import QLabel, QLineEdit
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver

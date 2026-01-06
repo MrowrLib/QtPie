@@ -5,8 +5,8 @@ import sys
 from unittest.mock import patch
 
 from assertpy import assert_that
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import QApplication
 
 from qtpie.styles import (
     ColorScheme,

@@ -1,7 +1,7 @@
 """Tests for the @entrypoint decorator."""
 
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QWidget
+from qtpy.QtWidgets import QLabel, QWidget
 
 from qtpie import App, Widget, entrypoint, new, widget
 from qtpie.entrypoint import (
