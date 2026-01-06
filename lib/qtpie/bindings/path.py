@@ -53,6 +53,11 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
             if isinstance(raw_attr, Variable):
                 attr = cast("Variable[Any]", raw_attr)
                 if rest:
+                    # Check if rest is a property on Variable itself (e.g., validation_error_messages)
+                    if hasattr(attr, rest) and not rest.startswith("_"):
+                        prop_val = getattr(attr, rest)
+                        if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+                            return cast(BindingSource, prop_val)
                     # Nested path into Variable[ComplexType]
                     # Rebuild the path with optional chaining preserved
                     nested_path = path.lstrip("_").split(".", 1)[1] if "." in path.lstrip("_") else ""
@@ -62,6 +67,24 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
                 return attr
             # Regular attribute - not bindable for now
             break
+
+    # Ensure _qtpie state exists for widget-level property access
+    from qtpie.widget import QtPieState
+
+    if not hasattr(widget, "_qtpie"):
+        widget._qtpie = QtPieState(widget)  # type: ignore[attr-defined]
+
+    # Try view_model properties (e.g., view_model.validation_error_messages)
+    if first == "view_model" and rest:
+        view_model = widget._qtpie.view_model  # type: ignore[attr-defined]
+        if hasattr(view_model, rest):
+            prop_val = getattr(view_model, rest)
+            if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+                return cast(BindingSource, prop_val)
+
+    # Try widget-level Observable properties (e.g., validation_error_messages)
+    if first == "validation_error_messages" and not rest:
+        return widget._qtpie.validation_error_messages  # type: ignore[attr-defined]
 
     # Try record if Widget[T]
     if hasattr(widget, "_qtpie_config"):

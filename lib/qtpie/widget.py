@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
 
+from observant import Observable
 from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
@@ -49,6 +50,7 @@ class QtPieState:
         "_record",
         "_was_valid",
         "_check_valid",
+        "_aggregated_validation_errors",
     )
 
     def __init__(self, widget: Widget[Any]) -> None:
@@ -60,6 +62,8 @@ class QtPieState:
         self._record: RecordVariable[Any] | None = None
         self._was_valid: bool = True
         self._check_valid: Callable[[bool], None] | None = None
+        # Aggregated validation_error_messages (lazy-created)
+        self._aggregated_validation_errors: Observable[list[str]] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
@@ -106,6 +110,8 @@ class QtPieState:
             var.is_dirty.on_change(self._check_dirty)
         if self._check_valid is not None:
             var.is_valid.on_change(self._check_valid)
+        # Subscribe to validation aggregation if active
+        self._subscribe_variable_to_aggregation(var)  # type: ignore[arg-type]
 
     # -------------------------------------------------------------------------
     # Validation
@@ -126,12 +132,43 @@ class QtPieState:
         }
 
     @property
-    def validation_error_messages(self) -> list[str]:
-        """Flat list of all error messages across all fields."""
-        msgs: list[str] = []
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Aggregated validation errors from all Variables. Reactive/bindable."""
+        if self._aggregated_validation_errors is None:
+            self._aggregated_validation_errors = Observable[list[str]]([], dirty_tracking=False, validation=False)
+            self._setup_validation_aggregation()
+        return self._aggregated_validation_errors
+
+    def _setup_validation_aggregation(self) -> None:
+        """Subscribe to all Variables' validation_error_messages and aggregate."""
+
+        def update_aggregated(_: Any = None) -> None:
+            msgs: list[str] = []
+            for var in self.variables.values():
+                msgs.extend(var.validation_error_messages.get())
+            assert self._aggregated_validation_errors is not None
+            self._aggregated_validation_errors.set(msgs)
+
+        # Subscribe to existing variables
         for var in self.variables.values():
-            msgs.extend(var.validation_error_messages.get())
-        return msgs
+            var.validation_error_messages.on_change(update_aggregated)
+
+        # Initial update
+        update_aggregated()
+
+    def _subscribe_variable_to_aggregation(self, var: Variable[Any]) -> None:
+        """Subscribe a new variable to the aggregation (if active)."""
+        if self._aggregated_validation_errors is not None:
+
+            def update_aggregated(_: Any = None) -> None:
+                msgs: list[str] = []
+                for v in self.variables.values():
+                    msgs.extend(v.validation_error_messages.get())
+                assert self._aggregated_validation_errors is not None
+                self._aggregated_validation_errors.set(msgs)
+
+            var.validation_error_messages.on_change(update_aggregated)
+            update_aggregated()
 
     def enable_valid_hook(self) -> None:
         """Enable the on_valid_changed hook (called after __setup__)."""
@@ -219,6 +256,21 @@ class QtPieViewModel:
     def reset_dirty(self) -> None:
         """Mark all Variables as clean."""
         self._state.reset_dirty()
+
+    @property
+    def is_valid(self) -> bool:
+        """Check if all Variables are valid."""
+        return self._state.is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Errors: {field: {validator: [errors]}}."""
+        return self._state.validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Aggregated validation errors. Reactive/bindable."""
+        return self._state.validation_error_messages
 
 
 class _RecordDescriptor[T]:
@@ -416,7 +468,7 @@ class Widget[T = None](QWidget):
         """Flat list of all error messages."""
         if not hasattr(self, "_qtpie"):
             return []
-        return self._qtpie.validation_error_messages
+        return self._qtpie.validation_error_messages.get()
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Check that @widget decorator was applied."""
@@ -524,6 +576,10 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
     def wrapped_init(self: Widget[Any], *args: Any, **kwargs: Any) -> None:
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
+
+        # Create list widget fields (list[QWidget] = new(bind="..."))
+        # This must happen before layout so they're included in the correct order
+        _create_list_widget_fields(self, config)
 
         # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
         _apply_widget_props(self, config)
@@ -675,6 +731,107 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
             raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
 
 
+def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Create WidgetRepeater instances for list[QWidget] fields.
+
+    For each field with annotation like `list[QLabel]` and `bind="some_path"`,
+    resolves the bind path to get the source list and creates a WidgetRepeater.
+
+    The source can be:
+    - Variable[list[T]] → uses its ObservableList (reactive)
+    - ObservableList directly → uses it (reactive)
+    - Observable[list] → wraps value in ObservableList (one-time)
+    - Plain list → wraps in ObservableList (one-time)
+    """
+    from observant import Observable, ObservableList
+
+    from .bindings import resolve_binding_source
+    from .variable import Variable
+    from .widget_repeater import WidgetRepeater
+
+    for name, field in config.fields.items():
+        if not field.is_list_widget:
+            continue
+
+        # list_widget_type is always set when is_list_widget is True
+        assert field.list_widget_type is not None
+
+        if field.bind is None:
+            raise ValueError(f"list[{field.list_widget_type.__name__}] field '{name}' requires bind='...'")
+
+        # Resolve the bind path to get the source
+        source = resolve_binding_source(widget, field.bind)
+
+        # Convert source to ObservableList
+        obs_list: ObservableList[Any]
+        item_type: type | None = None
+
+        if source is None:
+            raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
+
+        if isinstance(source, Variable):
+            # Variable[list[T]] - get the underlying observable
+            wrapper = source.observable
+            if isinstance(wrapper, ObservableList):
+                obs_list = wrapper
+            elif isinstance(wrapper, Observable):
+                # Observable containing a list - create synced ObservableList
+                val = wrapper.get()
+                if isinstance(val, list):
+                    obs_list = ObservableList(cast(list[Any], val))
+
+                    # Sync: when Observable changes, update ObservableList
+                    def make_sync_var(obs: Observable[Any], target: ObservableList[Any]) -> None:
+                        def on_source_change(new_val: Any) -> None:
+                            if isinstance(new_val, list):
+                                target.clear()
+                                target.extend(cast(list[Any], new_val))
+
+                        obs.on_change(on_source_change)
+
+                    make_sync_var(wrapper, obs_list)
+                else:
+                    raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list")
+            else:
+                raise TypeError(f"bind='{field.bind}' resolved to Variable with {type(wrapper).__name__}, expected list")
+        elif isinstance(source, ObservableList):
+            obs_list = source
+        elif isinstance(source, Observable):
+            # Observable containing a list - create synced ObservableList
+            val = source.get()
+            if isinstance(val, list):
+                obs_list = ObservableList(cast(list[Any], val))
+
+                # Sync: when Observable changes, update ObservableList
+                def make_sync(obs: Observable[Any], target: ObservableList[Any]) -> None:
+                    def on_source_change(new_val: Any) -> None:
+                        if isinstance(new_val, list):
+                            # Clear and repopulate
+                            target.clear()
+                            target.extend(cast(list[Any], new_val))
+
+                    obs.on_change(on_source_change)
+
+                make_sync(source, obs_list)
+            else:
+                raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list")
+        else:
+            raise TypeError(f"bind='{field.bind}' resolved to {type(source).__name__}, expected Variable[list[...]] or ObservableList")
+
+        # Create WidgetRepeater
+        repeater = WidgetRepeater(
+            observable_list=obs_list,
+            item_type=item_type,  # Could extract from source type hints if needed
+            widget_type=field.list_widget_type,
+            widget_args=field.args,
+            widget_kwargs=field.kwargs,
+            bind_expr="{#self}",  # Each widget binds to its list item
+        )
+
+        # Store the repeater on the widget
+        setattr(widget, name, repeater)
+
+
 def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Apply auto-bindings for QWidget fields.
 
@@ -690,6 +847,10 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
     from .variable import Variable
 
     for name, field in config.fields.items():
+        # Skip list widget fields - they're already bound via WidgetRepeater
+        if field.is_list_widget:
+            continue
+
         # Get the widget instance
         widget_instance = getattr(widget, name, None)
         if widget_instance is None:

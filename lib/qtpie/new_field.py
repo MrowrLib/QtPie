@@ -13,6 +13,7 @@ class NewField:
     """Stores args/kwargs for deferred field instantiation.
 
     For Variable[T] annotations: replaces itself with a Variable descriptor.
+    For list[QWidget] annotations: stores binding info for list widget creation.
     For QWidget types: tracks layout inclusion/exclusion.
     For other types: @new_fields handles instantiation, passing all args/kwargs.
     """
@@ -31,6 +32,9 @@ class NewField:
         # Widget args for Variable[T, W] - set via __call__
         self.widget_args: tuple[Any, ...] = ()
         self.widget_kwargs: dict[str, Any] = {}
+        # list[QWidget] support
+        self.is_list_widget: bool = False
+        self.list_widget_type: type | None = None  # The QWidget type inside list[QWidget]
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -70,6 +74,30 @@ class NewField:
             setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid, exclude_from_layout))
             return
 
+        # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
+        if origin is list:
+            type_args = get_args(self.field_type)
+            if type_args and self._is_qwidget_class(type_args[0]):
+                self.is_list_widget = True
+                self.list_widget_type = type_args[0]
+
+                # Extract bind= (required for list widgets)
+                self.bind = self.kwargs.pop("bind", None)
+
+                # layout=False → exclude from layout
+                layout_kwarg = self.kwargs.pop("layout", None)
+                if layout_kwarg is False:
+                    self.exclude_from_layout = True
+
+                # Extract label= for form layouts
+                self.label = self.kwargs.pop("label", None)
+
+                # Extract grid= for grid layouts
+                self.grid = self.kwargs.pop("grid", None)
+
+                # Remaining kwargs go to widget constructor
+                return
+
         # Handle QWidget-specific kwargs only
         # For non-QWidgets: leave bind= and layout= in kwargs so they pass to constructor
         if self._is_qwidget_type():
@@ -92,13 +120,17 @@ class NewField:
 
     def _is_qwidget_type(self) -> bool:
         """Check if the field type is a QWidget subclass."""
-        if self.field_type is None:
+        return self._is_qwidget_class(self.field_type)
+
+    def _is_qwidget_class(self, cls: type | None) -> bool:
+        """Check if cls is a QWidget subclass."""
+        if cls is None:
             return False
         try:
             from PySide6.QtWidgets import QWidget
 
-            # field_type could be a generic alias, so check it's a proper type
-            return isinstance(self.field_type, type) and issubclass(self.field_type, QWidget)  # pyright: ignore[reportUnnecessaryIsInstance]
+            # cls could be a generic alias, so check it's a proper type
+            return isinstance(cls, type) and issubclass(cls, QWidget)  # pyright: ignore[reportUnnecessaryIsInstance]
         except (ImportError, TypeError):
             return False
 

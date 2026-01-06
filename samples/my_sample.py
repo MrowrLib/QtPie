@@ -139,6 +139,17 @@ class ListsOfThings(Widget):
             self.new_dog_age.value = 0
 
 
+# @widget
+# class VariableValidationErrorExample(Widget):
+#     text_var: Variable[str] = new("", validate=lambda v: "Text cannot be empty." if not v.strip() else None)
+
+#     # Show error messages from one specific field
+#     error_messages: list[QLabel] = new(bind="text_var.validation_error_messages", stylesheet="color: red;")
+
+#     # Or aggregated from the view_model (ALL variables in this widget
+#     all_error_messages: list[QLabel] = new(bind="validation_error_messages", stylesheet="color: blue;")
+
+
 @dataclass
 class User:
     username: str
@@ -149,6 +160,9 @@ class User:
 class UserEditor(Widget[User]):
     username: QLineEdit = new(label="Username")
     email: QLineEdit = new(label="Email")
+
+    # Show error messages for just this form (it's from .record)
+    # error_messages: list[QLabel] = new(bind="validation_error_messages", stylesheet="color: red;")
 
 
 @widget
@@ -177,8 +191,33 @@ class SomeTabs(Widget):
             print(f"Dog: {dog.name}, Age: {dog.age}")
 
 
+@dataclass
+class HasListOfStrings:
+    strings: list[str]
+
+
+@widget
+class SimpleLists(Widget):
+    whatever: Variable[str, QLineEdit] = new("")
+    variable_labels: list[QLabel] = new(bind="validation_error_messages")
+
+    def __setup__(self) -> None:
+        self.whatever.add_validator("not-empty", self.validate_not_empty)
+        self.whatever.add_validator("length-check", self.validate_length)
+
+    def validate_not_empty(self, value: str) -> str | None:
+        if not value.strip():
+            return "Value cannot be empty."
+        return None
+
+    def validate_length(self, value: str) -> str | None:
+        if len(value) < 5:
+            return "Value must be at least 5 characters long."
+        return None
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = SomeTabs()
+    widget = SimpleLists()
     widget.show()
     app.exec()

@@ -33,10 +33,13 @@ def new_fields[T](cls: type[T]) -> type[T]:
     original_init = cls.__init__ if hasattr(cls, "__init__") else None
 
     def new_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        # Instantiate non-Variable fields
+        # Instantiate non-Variable fields (skip list widgets - handled in widget.py)
         for fname, field in fields.items():
             origin = get_origin(field.field_type)
             if origin is not Variable and field.field_type is not Variable:
+                # Skip list[QWidget] fields - they're created as WidgetRepeaters in widget.py
+                if field.is_list_widget:
+                    continue
                 if field.field_type is not None:
                     instance = field.field_type(*field.args, **field.kwargs)
                     setattr(self, fname, instance)
