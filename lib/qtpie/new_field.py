@@ -60,12 +60,14 @@ class NewField:
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
 
-            # Extract label= and grid= from widget_kwargs (they're layout params, not widget constructor params)
+            # Extract layout params from widget_kwargs (they're layout params, not widget constructor params)
             widget_kwargs_copy = dict(self.widget_kwargs)
             label = widget_kwargs_copy.pop("label", None)
             grid = widget_kwargs_copy.pop("grid", None)
+            layout_kwarg = widget_kwargs_copy.pop("layout", None)
+            exclude_from_layout = layout_kwarg is False
 
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid))
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type, self.widget_args, widget_kwargs_copy, label, grid, exclude_from_layout))
             return
 
         # Handle QWidget-specific kwargs only

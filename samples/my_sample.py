@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
+from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QTabWidget
 
 from qtpie import Variable, Widget, new, widget
 
@@ -139,8 +139,31 @@ class ListsOfThings(Widget):
             self.new_dog_age.value = 0
 
 
+@dataclass
+class User:
+    username: str
+    email: str
+
+
+@widget(layout="form")
+class UserEditor(Widget[User]):
+    username: QLineEdit = new(label="Username")
+    email: QLineEdit = new(label="Email")
+
+
+@widget
+class SomeTabs(Widget):
+    tabs: QTabWidget = new()
+    user: Variable[User, UserEditor] = new(User("john_doe", "john@example.com"))(layout=False)
+    dog: Variable[Dog, DogEditor] = new(Dog("Fido", 3))(layout=False)
+
+    def __setup__(self) -> None:
+        self.tabs.addTab(self.user.widget, "User Editor")
+        self.tabs.addTab(self.dog.widget, "Dog Editor")
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    widget = HasOneDogForm()
+    widget = SomeTabs()
     widget.show()
     app.exec()

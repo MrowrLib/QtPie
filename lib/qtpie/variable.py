@@ -501,6 +501,7 @@ class _VariableDescriptor[T]:
         widget_kwargs: dict[str, Any] | None = None,
         label: str | None = None,
         grid: tuple[int, ...] | None = None,
+        exclude_from_layout: bool = False,
     ) -> None:
         self._default = default
         self._name = name
@@ -511,6 +512,7 @@ class _VariableDescriptor[T]:
         # Layout params for form/grid layouts (not passed to widget constructor)
         self.label = label
         self.grid = grid
+        self.exclude_from_layout = exclude_from_layout
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -603,6 +605,7 @@ def create_variable_descriptor(
     widget_kwargs: dict[str, Any] | None = None,
     label: str | None = None,
     grid: tuple[int, ...] | None = None,
+    exclude_from_layout: bool = False,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout)

@@ -117,6 +117,28 @@ class TestWidgetLayoutExclusion:
         assert_that(w._hidden).is_not_none()
         assert_that(w._hidden.text()).is_equal_to("Hidden")
 
+    def test_exclude_variable_widget_from_layout(self, qt: QtDriver) -> None:
+        """Variable[T, W] with layout=False excludes widget from layout."""
+        from PySide6.QtWidgets import QLineEdit
+
+        @widget
+        class MyWidget(Widget):
+            _visible: QLabel = new("Visible")
+            _name: Variable[str, QLineEdit] = new("test")(layout=False)
+            _also_visible: QLabel = new("Also Visible")
+
+        w = qt.track(MyWidget())
+        layout = w.layout()
+
+        # Only 2 widgets in layout (labels, not the Variable's QLineEdit)
+        assert_that(layout.count()).is_equal_to(2)
+        assert_that(layout.itemAt(0).widget()).is_equal_to(w._visible)
+        assert_that(layout.itemAt(1).widget()).is_equal_to(w._also_visible)
+
+        # But the Variable widget exists and works
+        assert_that(w._name.widget).is_not_none()
+        assert_that(w._name.widget.text()).is_equal_to("test")
+
 
 class TestWidgetWithVariables:
     """Test Widget with Variable fields."""

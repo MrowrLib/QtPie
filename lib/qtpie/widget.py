@@ -557,11 +557,13 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
                     elif name in config.variable_names:
                         var = getattr(self, name, None)
                         if isinstance(var, Variable) and var.widget is not None:
-                            # Get label/grid from the descriptor
+                            # Get label/grid/exclude_from_layout from the descriptor
                             descriptor: Any = getattr(cls, name, None)
                             label: str | None = None
                             grid: GridPosition | None = None
                             if isinstance(descriptor, _VariableDescriptor):
+                                if descriptor.exclude_from_layout:
+                                    continue
                                 label = descriptor.label
                                 grid = descriptor.grid  # type: ignore[assignment]
                             _validate_layout_params(name, config.layout, label, grid)
