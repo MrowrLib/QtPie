@@ -1,6 +1,7 @@
 """Tests for the App class."""
 
 import inspect
+from pathlib import Path
 from typing import override
 
 from assertpy import assert_that
@@ -29,6 +30,31 @@ class TestAppClass:
         """App should have a run_async method."""
         assert_that(qapp.run_async).is_not_none()
         assert_that(callable(qapp.run_async)).is_true()
+
+    def test_app_has_load_stylesheet_method(self, qapp: App) -> None:
+        """App should have a load_stylesheet method."""
+        assert_that(qapp.load_stylesheet).is_not_none()
+        assert_that(callable(qapp.load_stylesheet)).is_true()
+
+    def test_app_has_dark_light_mode_methods(self, qapp: App) -> None:
+        """App should have enable_dark_mode and enable_light_mode methods."""
+        assert_that(callable(qapp.enable_dark_mode)).is_true()
+        assert_that(callable(qapp.enable_light_mode)).is_true()
+
+    def test_app_load_stylesheet_from_file(self, qapp: App, tmp_path: Path) -> None:
+        """App should be able to load a stylesheet from a file."""
+        qss_file = tmp_path / "test.qss"
+        qss_file.write_text("QWidget { background-color: red; }")
+
+        qapp.load_stylesheet(str(qss_file))
+
+        assert_that(qapp.styleSheet()).contains("background-color")
+
+    def test_app_load_stylesheet_nonexistent_file(self, qapp: App) -> None:
+        """App should handle nonexistent stylesheet gracefully."""
+        # Should not raise
+        qapp.load_stylesheet("/nonexistent/path/style.qss")
+        # Stylesheet might be empty but shouldn't crash
 
 
 class TestAppLifecycleHooks:

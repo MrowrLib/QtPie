@@ -352,6 +352,18 @@ wheels = [
 ]
 
 [[package]]
+name = "mrowrpurr-pyscss"
+version = "1.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ee/1a/c3101dd23e0e24a4389cc75ffaa5f0e40684e5eab23017402bc8c701feef/mrowrpurr_pyscss-1.4.1.tar.gz", hash = "sha256:aee45870d9bc9b82cbda00e388854804587250600ba951b10c537c2789347795", size = 133539, upload-time = "2025-12-13T18:38:29.388Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/61/e99845334a57d9638d4f61413496b65add6dee9784b46bd3666a3502a97b/mrowrpurr_pyscss-1.4.1-py3-none-any.whl", hash = "sha256:e8367ec9c8f9e63c7a6868ccffdd82a7c9d8af706a8322607b42052c379847fa", size = 155147, upload-time = "2025-12-13T18:38:27.975Z" },
+]
+
+[[package]]
 name = "nodeenv"
 version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -619,6 +631,7 @@ name = "qtpie"
 version = "0.1.0"
 source = { editable = "lib" }
 dependencies = [
+    { name = "mrowrpurr-pyscss" },
     { name = "qasync" },
     { name = "qtpy" },
 ]
@@ -631,6 +644,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mrowrpurr-pyscss", specifier = ">=1.4.1" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-qt", marker = "extra == 'test'" },
     { name = "qasync", specifier = ">=0.28.0" },

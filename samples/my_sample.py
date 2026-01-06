@@ -244,10 +244,3 @@ class DictionariesOfThings(Widget):
     def remove_entry(self) -> None:
         if "one" in self.str_int_dict:
             del self.str_int_dict["one"]
-
-
-# if __name__ == "__main__":
-#     app = QApplication([])
-#     widget = LabelListsComplexObject()
-#     widget.show()
-#     app.exec()

@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+  "mrowrpurr-pyscss>=1.4.1",
   "qasync>=0.28.0",
   "qtpy>=2.4.3",
 ]

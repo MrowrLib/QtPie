@@ -9,6 +9,9 @@ import qasync  # type: ignore[import-untyped]
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 
+from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
+from qtpie.styles.loader import load_stylesheet as _load_stylesheet
+
 
 def run_app(app: QApplication) -> int:
     """
@@ -60,11 +63,13 @@ class App(QApplication):
 
     Features:
     - Lifecycle hooks: setup(), create_window()
+    - Dark/light mode support
+    - Stylesheet loading
     - qasync event loop for async/await support
 
     Examples:
         # Simple usage
-        app = App("My App")
+        app = App("My App", dark_mode=True)
         window = MyMainWindow()
         window.show()
         app.run()
@@ -72,7 +77,7 @@ class App(QApplication):
         # Subclass with hooks
         class MyApp(App):
             def setup(self):
-                print("Setting up!")
+                self.load_stylesheet("styles.qss")
 
             def create_window(self):
                 return MyMainWindow()
@@ -83,6 +88,8 @@ class App(QApplication):
         name: str = "Application",
         *,
         version: str = "1.0.0",
+        dark_mode: bool = False,
+        light_mode: bool = False,
         argv: Sequence[str] | None = None,
     ) -> None:
         """
@@ -91,8 +98,16 @@ class App(QApplication):
         Args:
             name: Application name (sets QApplication.applicationName).
             version: Application version (sets QApplication.applicationVersion).
+            dark_mode: Enable dark mode color scheme.
+            light_mode: Enable light mode color scheme.
             argv: Command-line arguments. Defaults to sys.argv.
         """
+        # Handle color scheme before QApplication init
+        if dark_mode:
+            set_color_scheme(ColorScheme.Dark)
+        elif light_mode:
+            set_color_scheme(ColorScheme.Light)
+
         # Initialize QApplication
         if argv is None:
             argv = sys.argv
@@ -101,6 +116,15 @@ class App(QApplication):
         # Set application metadata
         self.setApplicationName(name)
         self.setApplicationVersion(version)
+
+        # Apply color scheme if app now exists
+        if dark_mode:
+            set_color_scheme(ColorScheme.Dark, self)
+        elif light_mode:
+            set_color_scheme(ColorScheme.Light, self)
+        else:
+            # Apply any pending color scheme set before app creation
+            apply_deferred_color_scheme(self)
 
         # Call lifecycle hooks
         self._call_lifecycle_hooks()
@@ -129,6 +153,31 @@ class App(QApplication):
             A QWidget to show as the main window, or None.
         """
         return None
+
+    def load_stylesheet(
+        self,
+        path: str,
+        *,
+        qrc_path: str | None = None,
+    ) -> None:
+        """
+        Load a stylesheet from a file path or QRC resource.
+
+        Args:
+            path: Path to a .qss or .scss file.
+            qrc_path: Optional QRC resource path for fallback.
+        """
+        stylesheet = _load_stylesheet(qss_path=path, qrc_path=qrc_path)
+        if stylesheet:
+            self.setStyleSheet(stylesheet)
+
+    def enable_dark_mode(self) -> None:
+        """Enable dark mode color scheme."""
+        set_color_scheme(ColorScheme.Dark, self)
+
+    def enable_light_mode(self) -> None:
+        """Enable light mode color scheme."""
+        set_color_scheme(ColorScheme.Light, self)
 
     def run(self) -> int:
         """

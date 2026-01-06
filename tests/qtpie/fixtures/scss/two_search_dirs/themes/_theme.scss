@@ -1,0 +1,9 @@
+QWidget {
+    font-size: $base-size;
+    color: $base-color;
+}
+
+QPushButton {
+    background-color: $accent-color;
+    padding: $base-size;
+}
