@@ -36,6 +36,7 @@ class NewField:
         # list[QWidget] support
         self.is_list_widget: bool = False
         self.list_widget_type: type | None = None  # The QWidget type inside list[QWidget]
+        self.list_format: str | Callable[[Any], str] | None = None  # Format for list items
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -91,6 +92,9 @@ class NewField:
 
                 # Extract bind= (required for list widgets)
                 self.bind = self.kwargs.pop("bind", None)
+
+                # Extract format= for list item formatting (string template or callable)
+                self.list_format = self.kwargs.pop("format", None)
 
                 # layout=False → exclude from layout
                 layout_kwarg = self.kwargs.pop("layout", None)

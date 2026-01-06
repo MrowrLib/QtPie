@@ -199,7 +199,7 @@ class HasListOfStrings:
 @widget
 class SimpleLists(Widget):
     whatever: Variable[str, QLineEdit] = new("", validate=["validate_not_empty", "validate_length"])
-    variable_labels: list[QLabel] = new(bind="validation_error_messages")
+    variable_labels: list[QLabel] = new(bind="validation_error_messages")  # <--- this is a string array
 
     def validate_not_empty(self, value: str) -> str | None:
         if not value.strip():
@@ -210,6 +210,16 @@ class SimpleLists(Widget):
         if len(value) < 5:
             return "Value must be at least 5 characters long."
         return None
+
+
+@widget
+class LabelListsComplexObject(Widget):
+    dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+    dog_labels: list[QLabel] = new(bind="dogs", format="{name} is {age} years old")
+
+    # and let's try a dictionary...
+    dogs_dict: Variable[dict[str, Dog]] = new({"Fido": Dog("Fido", 3), "Rex": Dog("Rex", 5)})
+    dog_dict_labels: list[QLabel] = new(bind="dogs_dict", format="{#key} is {age} years old")
 
 
 @widget(title="Dictionaries of Things")
@@ -237,6 +247,6 @@ class DictionariesOfThings(Widget):
 
 if __name__ == "__main__":
     app = QApplication([])
-    widget = DictionariesOfThings()
+    widget = LabelListsComplexObject()
     widget.show()
     app.exec()

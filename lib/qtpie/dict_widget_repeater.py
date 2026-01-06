@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from observant import Observable, ObservableDict, ObservableProxy
@@ -49,7 +50,7 @@ class DictWidgetRepeater[K, V](QWidget):
         widget_args: tuple[Any, ...] = (),
         widget_kwargs: dict[str, Any] | None = None,
         widget_props: dict[str, Any] | None = None,
-        bind_expr: str = "{#key} = {#value}",
+        bind_expr: str | Callable[[K, V], str] = "{#key} = {#value}",
         layout_type: str = "vertical",
     ) -> None:
         """Initialize the dict widget repeater.
@@ -62,7 +63,7 @@ class DictWidgetRepeater[K, V](QWidget):
             widget_args: Positional args for widget constructor.
             widget_kwargs: Keyword args for widget constructor.
             widget_props: Widget properties to apply via setXxx() after creation.
-            bind_expr: Binding expression (default "{#key} = {#value}").
+            bind_expr: Binding expression or callable(key, value) -> str.
             layout_type: "vertical" or "horizontal".
         """
         super().__init__()
@@ -74,7 +75,7 @@ class DictWidgetRepeater[K, V](QWidget):
         self._widget_args = widget_args
         self._widget_kwargs = widget_kwargs or {}
         self._widget_props = widget_props or {}
-        self._bind_expr = bind_expr
+        self._bind_expr: str | Callable[[K, V], str] = bind_expr
         self._is_key_primitive = _is_primitive_type(key_type)
         self._is_value_primitive = _is_primitive_type(value_type)
 
@@ -166,6 +167,11 @@ class DictWidgetRepeater[K, V](QWidget):
         """
         bind_expr = self._bind_expr
 
+        # Case 0: Callable formatter - one-way computed binding
+        if callable(bind_expr):
+            self._bind_callable_format(widget, key, key_wrapper, value_wrapper, bind_expr)
+            return
+
         # Find all placeholders in the bind expression
         placeholders = _PLACEHOLDER_RE.findall(bind_expr)
 
@@ -211,6 +217,63 @@ class DictWidgetRepeater[K, V](QWidget):
                     upd["active"] = False
 
             value_wrapper.on_change(sync_to_dict)
+
+    def _bind_callable_format(
+        self,
+        widget: QWidget,
+        key: K,
+        key_wrapper: Observable[Any] | ObservableProxy[Any],
+        value_wrapper: Observable[Any] | ObservableProxy[Any],
+        formatter: Callable[[Any, Any], str],
+    ) -> None:
+        """Bind using a callable formatter (one-way only).
+
+        Args:
+            widget: The widget to bind.
+            key: The original key.
+            key_wrapper: Observable or ObservableProxy wrapping the key.
+            value_wrapper: Observable or ObservableProxy wrapping the value.
+            formatter: Callable(key, value) -> str.
+        """
+        from .bindings.registry import get_binding_registry
+
+        # Get the setter for the widget's default property
+        registry = get_binding_registry()
+        default_prop = registry.get_default_prop(widget)
+        adapter = registry.get(widget, default_prop)
+        if adapter is None or adapter.setter is None:
+            return
+
+        setter = adapter.setter
+
+        def compute_value() -> str:
+            """Compute the formatted string using the callable."""
+            if isinstance(key_wrapper, Observable):
+                k = key_wrapper.get()
+            else:
+                k = key_wrapper.unwrap()
+            if isinstance(value_wrapper, Observable):
+                v = value_wrapper.get()
+            else:
+                v = value_wrapper.unwrap()
+            return formatter(k, v)
+
+        # Set initial value
+        setter(widget, compute_value())
+
+        # Subscribe to changes and update widget
+        def on_change(_: Any) -> None:
+            setter(widget, compute_value())
+
+        if isinstance(key_wrapper, Observable):
+            key_wrapper.on_change(on_change)
+        else:
+            key_wrapper.on_change(lambda: on_change(None))
+
+        if isinstance(value_wrapper, Observable):
+            value_wrapper.on_change(on_change)
+        else:
+            value_wrapper.on_change(lambda: on_change(None))
 
     def _bind_computed_format(
         self,

@@ -510,3 +510,136 @@ class TestWidgetRepeaterIntegration:
         edit3 = repeater.widget_at(2)
         assert isinstance(edit3, QLineEdit)
         assert edit3.maxLength() == 5
+
+
+class TestListWidgetBoundToDict:
+    """Test list[QWidget] bound to dict variables."""
+
+    def test_list_qlabel_bound_to_dict_variable(self, qt: QtDriver) -> None:
+        """list[QLabel] can bind to Variable[dict[K, V]]."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dogs_dict: Variable[dict[str, Dog]] = new({"Fido": Dog("Fido", 3), "Rex": Dog("Rex", 5)})
+            _labels: list[QLabel] = new(bind="_dogs_dict", format="{#key} is {age} years old")
+
+        w = qt.track(Test())
+
+        # Should create labels for each dict entry
+        from qtpie import DictWidgetRepeater
+
+        assert isinstance(w._labels, DictWidgetRepeater)
+        assert w._labels.widget_count() == 2
+
+    def test_list_qlabel_bound_to_dict_with_format_string(self, qt: QtDriver) -> None:
+        """format= string template works with dict bindings."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dogs: Variable[dict[str, Dog]] = new({"Fido": Dog("Fido", 3)})
+            _labels: list[QLabel] = new(bind="_dogs", format="{#key}: {name} is {age}")
+
+        w = qt.track(Test())
+
+        label = w._labels.widget_for_key("Fido")
+        assert label is not None
+        assert label.text() == "Fido: Fido is 3"
+
+    def test_list_qlabel_bound_to_dict_updates_on_insert(self, qt: QtDriver) -> None:
+        """Adding to dict creates new labels."""
+
+        @widget
+        class Test(Widget):
+            _items: Variable[dict[str, int]] = new({"a": 1})
+            _labels: list[QLabel] = new(bind="_items", format="{#key}={#value}")
+
+        w = qt.track(Test())
+        assert w._labels.widget_count() == 1
+
+        # Add new entry
+        w._items["b"] = 2
+        assert w._labels.widget_count() == 2
+
+        label = w._labels.widget_for_key("b")
+        assert label is not None
+        assert label.text() == "b=2"
+
+
+class TestListWidgetFormatParameter:
+    """Test format= parameter for list[QWidget] bindings."""
+
+    def test_list_qlabel_with_format_string(self, qt: QtDriver) -> None:
+        """list[QLabel] with format= uses string template."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _labels: list[QLabel] = new(bind="_dogs", format="{name} is {age} years old")
+
+        w = qt.track(Test())
+
+        from qtpie import WidgetRepeater
+
+        assert isinstance(w._labels, WidgetRepeater)
+        assert w._labels.widget_at(0).text() == "Fido is 3 years old"
+        assert w._labels.widget_at(1).text() == "Rex is 5 years old"
+
+    def test_list_qlabel_with_callable_format(self, qt: QtDriver) -> None:
+        """list[QLabel] with format= callable uses function."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _labels: list[QLabel] = new(bind="_dogs", format=lambda d: f"{d.name.upper()} - {d.age}")  # pyright: ignore[reportUnknownLambdaType]
+
+        w = qt.track(Test())
+
+        from qtpie import WidgetRepeater
+
+        assert isinstance(w._labels, WidgetRepeater)
+        assert w._labels.widget_at(0).text() == "FIDO - 3"
+
+    def test_list_qlabel_format_updates_on_replace(self, qt: QtDriver) -> None:
+        """Replacing list item creates new label with updated format."""
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @widget
+        class Test(Widget):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _labels: list[QLabel] = new(bind="_dogs", format="{name}: {age}")
+
+        w = qt.track(Test())
+
+        label = w._labels.widget_at(0)
+        assert label.text() == "Fido: 3"
+
+        # Replace the item - for objects, this creates a new widget
+        w._dogs[0] = Dog("Rex", 5)
+
+        # Get the new widget (replace creates new widget for non-primitives)
+        new_label = w._labels.widget_at(0)
+        assert new_label.text() == "Rex: 5"

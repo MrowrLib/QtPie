@@ -18,6 +18,7 @@ qtpie = {workspace = true}
 [dependency-groups]
 dev = [
   "assertpy>=1.1",
+  "mkdocs-material>=9.7.1",
   "pyright>=1.1.407",
   "pyside6>=6.10.1",
   "pytest>=9.0.2",

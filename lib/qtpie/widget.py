@@ -820,7 +820,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
     - Observable[list] → wraps value in ObservableList (one-time)
     - Plain list → wraps in ObservableList (one-time)
     """
-    from observant import Observable, ObservableList
+    from observant import Observable, ObservableDict, ObservableList
 
     from .bindings import resolve_binding_source
     from .variable import Variable
@@ -846,36 +846,40 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if source is None:
             raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
 
+        # Get the underlying observable from Variable or use source directly
+        wrapper: Any = None
         if isinstance(source, Variable):
-            # Variable[list[T]] - get the underlying observable
             wrapper = source.observable
-            if isinstance(wrapper, ObservableList):
-                obs_list = wrapper
-            elif isinstance(wrapper, Observable):
-                # Observable containing a list - create synced ObservableList
-                val = wrapper.get()
-                if isinstance(val, list):
-                    obs_list = ObservableList(cast(list[Any], val))
+        else:
+            wrapper = source
 
-                    # Sync: when Observable changes, update ObservableList
-                    def make_sync_var(obs: Observable[Any], target: ObservableList[Any]) -> None:
-                        def on_source_change(new_val: Any) -> None:
-                            if isinstance(new_val, list):
-                                target.clear()
-                                target.extend(cast(list[Any], new_val))
+        # Handle ObservableDict -> DictWidgetRepeater
+        if isinstance(wrapper, ObservableDict):
+            from .dict_widget_repeater import DictWidgetRepeater
 
-                        obs.on_change(on_source_change)
+            # Determine bind expression: use format= if provided, else "{#key} = {#value}"
+            bind_expr_dict: Any = field.list_format if field.list_format is not None else "{#key} = {#value}"
 
-                    make_sync_var(wrapper, obs_list)
-                else:
-                    raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list")
-            else:
-                raise TypeError(f"bind='{field.bind}' resolved to Variable with {type(wrapper).__name__}, expected list")
-        elif isinstance(source, ObservableList):
-            obs_list = source
-        elif isinstance(source, Observable):
+            dict_repeater: DictWidgetRepeater[Any, Any] = DictWidgetRepeater(
+                observable_dict=wrapper,  # pyright: ignore[reportUnknownArgumentType]
+                key_type=None,  # Could extract from type hints if needed
+                value_type=None,
+                widget_type=field.list_widget_type,  # pyright: ignore[reportArgumentType]
+                widget_args=field.args,
+                widget_kwargs=field.kwargs,
+                widget_props=field.widget_props,
+                bind_expr=bind_expr_dict,
+            )
+            setattr(widget, name, dict_repeater)
+            continue
+
+        # Handle ObservableList -> WidgetRepeater
+        obs_list: ObservableList[Any]
+        if isinstance(wrapper, ObservableList):
+            obs_list = wrapper  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(wrapper, Observable):
             # Observable containing a list - create synced ObservableList
-            val = source.get()
+            val: Any = wrapper.get()  # pyright: ignore[reportUnknownVariableType]
             if isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
 
@@ -883,17 +887,19 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 def make_sync(obs: Observable[Any], target: ObservableList[Any]) -> None:
                     def on_source_change(new_val: Any) -> None:
                         if isinstance(new_val, list):
-                            # Clear and repopulate
                             target.clear()
                             target.extend(cast(list[Any], new_val))
 
                     obs.on_change(on_source_change)
 
-                make_sync(source, obs_list)
+                make_sync(wrapper, obs_list)  # pyright: ignore[reportUnknownArgumentType]
             else:
-                raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list")
+                raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list or dict")  # pyright: ignore[reportUnknownArgumentType]
         else:
-            raise TypeError(f"bind='{field.bind}' resolved to {type(source).__name__}, expected Variable[list[...]] or ObservableList")
+            raise TypeError(f"bind='{field.bind}' resolved to {type(wrapper).__name__}, expected Variable[list[...]], Variable[dict[...]], ObservableList, or ObservableDict")
+
+        # Determine bind expression: use format= if provided, else "{#self}"
+        bind_expr: str | Callable[[Any], str] = field.list_format if field.list_format is not None else "{#self}"
 
         # Create WidgetRepeater
         repeater = WidgetRepeater(
@@ -903,7 +909,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_args=field.args,
             widget_kwargs=field.kwargs,
             widget_props=field.widget_props,
-            bind_expr="{#self}",  # Each widget binds to its list item
+            bind_expr=bind_expr,
         )
 
         # Store the repeater on the widget

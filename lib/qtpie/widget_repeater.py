@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
@@ -40,7 +41,7 @@ class WidgetRepeater[T](QWidget):
         widget_args: tuple[Any, ...] = (),
         widget_kwargs: dict[str, Any] | None = None,
         widget_props: dict[str, Any] | None = None,
-        bind_expr: str = "{#self}",
+        bind_expr: str | Callable[[T], str] = "{#self}",
         layout_type: str = "vertical",
     ) -> None:
         """Initialize the widget repeater.
@@ -52,7 +53,7 @@ class WidgetRepeater[T](QWidget):
             widget_args: Positional args for widget constructor.
             widget_kwargs: Keyword args for widget constructor.
             widget_props: Widget properties to apply via setXxx() after creation.
-            bind_expr: Binding expression (default "{#self}").
+            bind_expr: Binding expression or callable formatter (default "{#self}").
             layout_type: "vertical" or "horizontal".
         """
         super().__init__()
@@ -63,7 +64,7 @@ class WidgetRepeater[T](QWidget):
         self._widget_args = widget_args
         self._widget_kwargs = widget_kwargs or {}
         self._widget_props = widget_props or {}
-        self._bind_expr = bind_expr
+        self._bind_expr: str | Callable[[T], str] = bind_expr
         self._is_primitive = _is_primitive_type(item_type)
 
         # Track: (widget, item_wrapper, index_holder)
@@ -122,6 +123,11 @@ class WidgetRepeater[T](QWidget):
         """
         bind_expr = self._bind_expr
 
+        # Case 0: Callable formatter - one-way computed binding
+        if callable(bind_expr):
+            self._bind_callable_format(widget, wrapper, index_holder, bind_expr)
+            return
+
         # Find all placeholders in the bind expression
         placeholders = _PLACEHOLDER_RE.findall(bind_expr)
 
@@ -172,6 +178,53 @@ class WidgetRepeater[T](QWidget):
                     upd["active"] = False
 
             wrapper.on_change(sync_to_list)
+
+    def _bind_callable_format(
+        self,
+        widget: QWidget,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        index_holder: list[int],
+        formatter: Callable[[Any], str],
+    ) -> None:
+        """Bind using a callable formatter (one-way only).
+
+        Args:
+            widget: The widget to bind.
+            wrapper: Observable or ObservableProxy wrapping the item.
+            index_holder: Mutable [int] for tracking index changes.
+            formatter: Callable that takes the item and returns a string.
+        """
+        from .bindings.registry import get_binding_registry
+
+        # Get the setter for the widget's default property
+        registry = get_binding_registry()
+        default_prop = registry.get_default_prop(widget)
+        adapter = registry.get(widget, default_prop)
+        if adapter is None or adapter.setter is None:
+            return
+
+        setter = adapter.setter
+
+        def compute_value() -> str:
+            """Compute the formatted string using the callable."""
+            if isinstance(wrapper, Observable):
+                item = wrapper.get()
+            else:
+                item = wrapper.unwrap()
+            return formatter(item)
+
+        # Set initial value
+        setter(widget, compute_value())
+
+        # Subscribe to changes and update widget
+        def on_change(_: Any) -> None:
+            setter(widget, compute_value())
+
+        if isinstance(wrapper, Observable):
+            wrapper.on_change(on_change)
+        else:
+            # For ObservableProxy, subscribe to on_change which fires for any field change
+            wrapper.on_change(lambda: on_change(None))
 
     def _resolve_nested_property(self, obj: Any, path: str) -> Any:
         """Resolve a dotted property path like 'breed.name' on an object."""
