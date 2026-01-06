@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton, QTabWidget
+from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, new, widget
+from qtpie import Variable, Widget, entrypoint, new, widget
 
 
 @dataclass
@@ -222,6 +222,7 @@ class LabelListsComplexObject(Widget):
     dog_dict_labels: list[QLabel] = new(bind="dogs_dict", format="{#key} is {age} years old")
 
 
+@entrypoint
 @widget(title="Dictionaries of Things")
 class DictionariesOfThings(Widget):
     # Key = value (simple primitives)
@@ -245,8 +246,8 @@ class DictionariesOfThings(Widget):
             del self.str_int_dict["one"]
 
 
-if __name__ == "__main__":
-    app = QApplication([])
-    widget = LabelListsComplexObject()
-    widget.show()
-    app.exec()
+# if __name__ == "__main__":
+#     app = QApplication([])
+#     widget = LabelListsComplexObject()
+#     widget.show()
+#     app.exec()

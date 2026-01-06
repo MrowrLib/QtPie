@@ -1,7 +1,9 @@
 """QtPie - Declarative UI framework for Qt."""
 
+from .app import App, run_app
 from .bindings import bind, register_binding
 from .dict_widget_repeater import DictWidgetRepeater
+from .entrypoint import entrypoint
 from .new import new
 from .new_fields import new_fields
 from .variable import RecordVariable, Variable
@@ -10,6 +12,7 @@ from .widget_base import WidgetBase
 from .widget_repeater import WidgetRepeater
 
 __all__ = [
+    "App",
     "DictWidgetRepeater",
     "RecordVariable",
     "Variable",
@@ -17,8 +20,10 @@ __all__ = [
     "WidgetBase",
     "WidgetRepeater",
     "bind",
+    "entrypoint",
     "new",
     "new_fields",
     "register_binding",
+    "run_app",
     "widget",
 ]

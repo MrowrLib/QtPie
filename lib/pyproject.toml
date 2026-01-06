@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+  "qasync>=0.28.0",
   "qtpy>=2.4.3",
 ]
 description = "Add your description here"
