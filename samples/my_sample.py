@@ -37,7 +37,8 @@ class VariableValidationWidget(Widget):
 
     def __setup__(self) -> None:
         self._text.add_validator("not-empty", self.validate_not_empty)
-        self._text.is_valid.on_change(self.on_validity_change)
+        # self._text.is_valid.on_change(self.on_validity_change)
+        # self.val
 
     def validate_not_empty(self, value: str) -> str | None:
         if not value.strip():

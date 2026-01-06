@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, cast, get_origin, overload, override
+from typing import TYPE_CHECKING, Any, Self, cast, get_origin, overload, override
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ValidatorFn
 
@@ -62,7 +62,7 @@ def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObs
     return ObservableProxy(default)
 
 
-class Variable[T]:
+class Variable[T, W = None]:
     """Per-instance variable with value and observable access.
 
     Works with all observable types:
@@ -71,18 +71,31 @@ class Variable[T]:
     - Variable[dict[K,V]] → wraps ObservableDict[K,V]
     - Variable[MyClass] → wraps ObservableProxy[MyClass]
 
+    Optionally includes a widget type:
+    - Variable[str, QLineEdit] → wraps Observable[str] with auto-bound QLineEdit
+
     Usage:
         self._name.value = "hello"      # set value
         print(self._name.value)         # get value
         self._name.observable.on_change(callback)  # subscribe
         if self._name.is_dirty:         # check dirty state
         self._name.reset_dirty()        # mark as clean
+        self._name.widget               # access the bound widget (if any)
     """
 
     _wrapper: AnyObservable[T]
+    _widget_type: type | None
+    _widget: Any  # Will be W | None where W is the widget type
 
-    def __init__(self, wrapper: AnyObservable[T]) -> None:
+    def __init__(self, wrapper: AnyObservable[T], widget_type: type | None = None) -> None:
         self._wrapper = wrapper
+        self._widget_type = widget_type
+        self._widget = None  # Populated later when widget is created
+
+    @property
+    def widget(self) -> Any:
+        """Get the bound widget (if Variable was declared with a widget type)."""
+        return self._widget
 
     @property
     def value(self) -> T:
@@ -173,27 +186,27 @@ class Variable[T]:
         def __set__(self, obj: object, value: T | Variable[T]) -> None: ...
 
     # Augmented assignment operators - allow self._count += 1
-    def __iadd__(self, other: Any) -> Variable[T]:
+    def __iadd__(self, other: Any) -> Self:
         self.value = self.value + other  # type: ignore[operator]
         return self
 
-    def __isub__(self, other: Any) -> Variable[T]:
+    def __isub__(self, other: Any) -> Self:
         self.value = self.value - other  # type: ignore[operator]
         return self
 
-    def __imul__(self, other: Any) -> Variable[T]:
+    def __imul__(self, other: Any) -> Self:
         self.value = self.value * other  # type: ignore[operator]
         return self
 
-    def __itruediv__(self, other: Any) -> Variable[T]:
+    def __itruediv__(self, other: Any) -> Self:
         self.value = self.value / other  # type: ignore[operator]
         return self
 
-    def __ifloordiv__(self, other: Any) -> Variable[T]:
+    def __ifloordiv__(self, other: Any) -> Self:
         self.value = self.value // other  # type: ignore[operator]
         return self
 
-    def __imod__(self, other: Any) -> Variable[T]:
+    def __imod__(self, other: Any) -> Self:
         self.value = self.value % other  # type: ignore[operator]
         return self
 
@@ -312,10 +325,17 @@ class _VariableDescriptor[T]:
     This is an internal class. Users see Variable[T] in type hints.
     """
 
-    def __init__(self, default: T, name: str, inner_type: type | None = None) -> None:
+    def __init__(
+        self,
+        default: T,
+        name: str,
+        inner_type: type | None = None,
+        widget_type: type | None = None,
+    ) -> None:
         self._default = default
         self._name = name
         self._inner_type = inner_type
+        self._widget_type = widget_type
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -336,7 +356,7 @@ class _VariableDescriptor[T]:
 
         if self._name not in qtpie_state.variables:
             wrapper = _create_observable_for_type(self._inner_type, self._default)
-            var: Variable[T] = Variable(wrapper)
+            var: Variable[T] = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
 
         return qtpie_state.variables[self._name]
@@ -361,6 +381,11 @@ class _VariableDescriptor[T]:
             var.value = value
 
 
-def create_variable_descriptor(default: Any, name: str, inner_type: type | None = None) -> Any:
+def create_variable_descriptor(
+    default: Any,
+    name: str,
+    inner_type: type | None = None,
+    widget_type: type | None = None,
+) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type)
+    return _VariableDescriptor(default, name, inner_type, widget_type)

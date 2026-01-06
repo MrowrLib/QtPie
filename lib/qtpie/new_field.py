@@ -33,12 +33,14 @@ class NewField:
         origin = get_origin(self.field_type)
         if origin is Variable or self.field_type is Variable:
             default = self._get_variable_default()
-            # Extract inner type from Variable[T]
+            # Extract inner type from Variable[T] and optional widget type from Variable[T, W]
             inner_type: type | None = None
+            widget_type: type | None = None
             if origin is Variable:
                 args = get_args(self.field_type)
                 inner_type = args[0] if args else None
-            setattr(owner, name, create_variable_descriptor(default, name, inner_type))
+                widget_type = args[1] if len(args) > 1 else None
+            setattr(owner, name, create_variable_descriptor(default, name, inner_type, widget_type))
             return
 
         # Handle QWidget-specific kwargs only
