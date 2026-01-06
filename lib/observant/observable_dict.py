@@ -17,6 +17,12 @@ class ObservableDict[K, V]:
         self._callbacks: list[Callable[[], None]] = []
         self._is_dirty: Observable[bool] | None = Observable[bool](False, dirty_tracking=False, validation=False) if dirty_tracking else None
 
+        # Granular callbacks for efficient UI sync
+        self._insert_callbacks: list[Callable[[K, V], None]] = []
+        self._remove_callbacks: list[Callable[[K, V], None]] = []
+        self._replace_callbacks: list[Callable[[K, V, V], None]] = []
+        self._clear_callbacks: list[Callable[[dict[K, V]], None]] = []
+
         # Validation
         self._validators: dict[str, ValidatorFn[dict[K, V]]] = {}
         if validation:
@@ -44,6 +50,46 @@ class ObservableDict[K, V]:
         """Register a callback to be called when the dict changes."""
         if callback not in self._callbacks:
             self._callbacks.append(callback)
+
+    def on_insert(self, callback: Callable[[K, V], None]) -> None:
+        """Register callback for new key insertion: callback(key, value)."""
+        if callback not in self._insert_callbacks:
+            self._insert_callbacks.append(callback)
+
+    def on_remove(self, callback: Callable[[K, V], None]) -> None:
+        """Register callback for key removal: callback(key, value)."""
+        if callback not in self._remove_callbacks:
+            self._remove_callbacks.append(callback)
+
+    def on_replace(self, callback: Callable[[K, V, V], None]) -> None:
+        """Register callback for value replacement: callback(key, old_value, new_value)."""
+        if callback not in self._replace_callbacks:
+            self._replace_callbacks.append(callback)
+
+    def on_clear(self, callback: Callable[[dict[K, V]], None]) -> None:
+        """Register callback for dict clear: callback(removed_items)."""
+        if callback not in self._clear_callbacks:
+            self._clear_callbacks.append(callback)
+
+    def _notify_insert(self, key: K, value: V) -> None:
+        """Fire insert callbacks."""
+        for cb in self._insert_callbacks:
+            cb(key, value)
+
+    def _notify_remove(self, key: K, value: V) -> None:
+        """Fire remove callbacks."""
+        for cb in self._remove_callbacks:
+            cb(key, value)
+
+    def _notify_replace(self, key: K, old_value: V, new_value: V) -> None:
+        """Fire replace callbacks."""
+        for cb in self._replace_callbacks:
+            cb(key, old_value, new_value)
+
+    def _notify_clear(self, removed_items: dict[K, V]) -> None:
+        """Fire clear callbacks."""
+        for cb in self._clear_callbacks:
+            cb(removed_items)
 
     @property
     def is_dirty(self) -> Observable[bool]:
@@ -94,42 +140,65 @@ class ObservableDict[K, V]:
 
     # Dict write operations - all notify
     def __setitem__(self, key: K, value: V) -> None:
-        self._items[key] = value
+        if key in self._items:
+            old_value = self._items[key]
+            self._items[key] = value
+            self._notify_replace(key, old_value, value)
+        else:
+            self._items[key] = value
+            self._notify_insert(key, value)
         self._notify()
 
     def __delitem__(self, key: K) -> None:
+        value = self._items[key]
         del self._items[key]
+        self._notify_remove(key, value)
         self._notify()
 
     def pop(self, key: K, *default: V) -> V:
         """Remove and return value for key."""
+        had_key = key in self._items
+        value_before = self._items.get(key) if had_key else None
         if default:
             result = self._items.pop(key, default[0])
         else:
             result = self._items.pop(key)
+        if had_key and value_before is not None:
+            self._notify_remove(key, value_before)
         self._notify()
         return result
 
     def popitem(self) -> tuple[K, V]:
         """Remove and return (key, value) pair."""
         item = self._items.popitem()
+        self._notify_remove(item[0], item[1])
         self._notify()
         return item
 
     def clear(self) -> None:
         """Remove all items."""
+        removed = dict(self._items)
         self._items.clear()
+        self._notify_clear(removed)
         self._notify()
 
     def update(self, other: dict[K, V]) -> None:
         """Update with items from other dict."""
-        self._items.update(other)
+        for key, value in other.items():
+            if key in self._items:
+                old_value = self._items[key]
+                self._items[key] = value
+                self._notify_replace(key, old_value, value)
+            else:
+                self._items[key] = value
+                self._notify_insert(key, value)
         self._notify()
 
     def setdefault(self, key: K, default: V) -> V:
         """Set default value for key if not present."""
         if key not in self._items:
             self._items[key] = default
+            self._notify_insert(key, default)
             self._notify()
             return default
         return self._items[key]

@@ -270,3 +270,167 @@ class TestObservableDictDirty:
         obs.reset_dirty()  # dirty -> clean
 
         assert_that(dirty_states).is_equal_to([True, False])
+
+
+class TestObservableDictGranularCallbacks:
+    """Test granular insert/remove/replace/clear callbacks."""
+
+    def test_on_insert_fires_on_new_key(self) -> None:
+        """on_insert fires when adding a new key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        inserts: list[tuple[str, int]] = []
+        obs.on_insert(lambda k, v: inserts.append((k, v)))
+
+        obs["b"] = 2
+        assert_that(inserts).is_equal_to([("b", 2)])
+
+    def test_on_insert_not_fired_on_existing_key(self) -> None:
+        """on_insert does NOT fire when updating existing key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        inserts: list[tuple[str, int]] = []
+        obs.on_insert(lambda k, v: inserts.append((k, v)))
+
+        obs["a"] = 99  # update, not insert
+        assert_that(inserts).is_equal_to([])
+
+    def test_on_insert_fires_on_setdefault_new_key(self) -> None:
+        """on_insert fires on setdefault for new key."""
+        obs = ObservableDict[str, int]()
+        inserts: list[tuple[str, int]] = []
+        obs.on_insert(lambda k, v: inserts.append((k, v)))
+
+        obs.setdefault("a", 1)
+        assert_that(inserts).is_equal_to([("a", 1)])
+
+    def test_on_insert_not_fired_on_setdefault_existing(self) -> None:
+        """on_insert not fired on setdefault for existing key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        inserts: list[tuple[str, int]] = []
+        obs.on_insert(lambda k, v: inserts.append((k, v)))
+
+        obs.setdefault("a", 99)
+        assert_that(inserts).is_equal_to([])
+
+    def test_on_insert_fires_on_update_new_keys(self) -> None:
+        """on_insert fires for each new key in update."""
+        obs = ObservableDict[str, int]({"a": 1})
+        inserts: list[tuple[str, int]] = []
+        obs.on_insert(lambda k, v: inserts.append((k, v)))
+
+        obs.update({"b": 2, "c": 3})
+        assert_that(inserts).is_equal_to([("b", 2), ("c", 3)])
+
+    def test_on_replace_fires_on_existing_key(self) -> None:
+        """on_replace fires when updating existing key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        replaces: list[tuple[str, int, int]] = []
+        obs.on_replace(lambda k, old, new: replaces.append((k, old, new)))
+
+        obs["a"] = 99
+        assert_that(replaces).is_equal_to([("a", 1, 99)])
+
+    def test_on_replace_not_fired_on_new_key(self) -> None:
+        """on_replace does NOT fire when adding new key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        replaces: list[tuple[str, int, int]] = []
+        obs.on_replace(lambda k, old, new: replaces.append((k, old, new)))
+
+        obs["b"] = 2  # new key, not replace
+        assert_that(replaces).is_equal_to([])
+
+    def test_on_replace_fires_on_update_existing_keys(self) -> None:
+        """on_replace fires for each existing key in update."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        replaces: list[tuple[str, int, int]] = []
+        obs.on_replace(lambda k, old, new: replaces.append((k, old, new)))
+
+        obs.update({"a": 10, "c": 3})  # a is replace, c is insert
+        assert_that(replaces).is_equal_to([("a", 1, 10)])
+
+    def test_on_remove_fires_on_delitem(self) -> None:
+        """on_remove fires on del dict[key]."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        removes: list[tuple[str, int]] = []
+        obs.on_remove(lambda k, v: removes.append((k, v)))
+
+        del obs["a"]
+        assert_that(removes).is_equal_to([("a", 1)])
+
+    def test_on_remove_fires_on_pop(self) -> None:
+        """on_remove fires on pop."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        removes: list[tuple[str, int]] = []
+        obs.on_remove(lambda k, v: removes.append((k, v)))
+
+        obs.pop("a")
+        assert_that(removes).is_equal_to([("a", 1)])
+
+    def test_on_remove_not_fired_on_pop_missing_with_default(self) -> None:
+        """on_remove not fired on pop with default for missing key."""
+        obs = ObservableDict[str, int]({"a": 1})
+        removes: list[tuple[str, int]] = []
+        obs.on_remove(lambda k, v: removes.append((k, v)))
+
+        obs.pop("missing", 99)
+        assert_that(removes).is_equal_to([])
+
+    def test_on_remove_fires_on_popitem(self) -> None:
+        """on_remove fires on popitem."""
+        obs = ObservableDict[str, int]({"a": 1})
+        removes: list[tuple[str, int]] = []
+        obs.on_remove(lambda k, v: removes.append((k, v)))
+
+        obs.popitem()
+        assert_that(removes).is_equal_to([("a", 1)])
+
+    def test_on_clear_fires_with_removed_items(self) -> None:
+        """on_clear fires with dict of all removed items."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        clears: list[dict[str, int]] = []
+        obs.on_clear(lambda items: clears.append(items))
+
+        obs.clear()
+        assert_that(clears).is_equal_to([{"a": 1, "b": 2}])
+
+    def test_on_clear_fires_with_empty_dict_if_already_empty(self) -> None:
+        """on_clear fires with empty dict if dict was already empty."""
+        obs = ObservableDict[str, int]()
+        clears: list[dict[str, int]] = []
+        obs.on_clear(lambda items: clears.append(items))
+
+        obs.clear()
+        assert_that(clears).is_equal_to([{}])
+
+    def test_multiple_granular_callbacks(self) -> None:
+        """Multiple callbacks of same type all fire."""
+        obs = ObservableDict[str, int]()
+        results: list[int] = []
+        obs.on_insert(lambda k, v: results.append(1))
+        obs.on_insert(lambda k, v: results.append(2))
+
+        obs["a"] = 1
+        assert_that(results).is_equal_to([1, 2])
+
+    def test_duplicate_granular_callback_ignored(self) -> None:
+        """Same callback not added twice."""
+        obs = ObservableDict[str, int]()
+        results: list[int] = []
+
+        def cb(k: str, v: int) -> None:
+            results.append(1)
+
+        obs.on_insert(cb)
+        obs.on_insert(cb)
+
+        obs["a"] = 1
+        assert_that(results).is_equal_to([1])
+
+    def test_granular_and_generic_both_fire(self) -> None:
+        """Both granular and generic on_change fire."""
+        obs = ObservableDict[str, int]()
+        events: list[str] = []
+        obs.on_insert(lambda k, v: events.append(f"insert:{k}={v}"))
+        obs.on_change(lambda: events.append("change"))
+
+        obs["a"] = 1
+        assert_that(events).is_equal_to(["insert:a=1", "change"])

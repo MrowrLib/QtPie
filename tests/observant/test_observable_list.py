@@ -228,3 +228,140 @@ class TestObservableListDirty:
         obs.reset_dirty()  # dirty -> clean
 
         assert_that(dirty_states).is_equal_to([True, False])
+
+
+class TestObservableListGranularCallbacks:
+    """Test granular insert/remove/replace/clear callbacks."""
+
+    def test_on_insert_fires_on_append(self) -> None:
+        """on_insert fires with correct index and item on append."""
+        obs = ObservableList[str](["a", "b"])
+        inserts: list[tuple[int, str]] = []
+        obs.on_insert(lambda idx, item: inserts.append((idx, item)))
+
+        obs.append("c")
+        assert_that(inserts).is_equal_to([(2, "c")])
+
+    def test_on_insert_fires_on_insert(self) -> None:
+        """on_insert fires with correct index on insert."""
+        obs = ObservableList[str](["a", "c"])
+        inserts: list[tuple[int, str]] = []
+        obs.on_insert(lambda idx, item: inserts.append((idx, item)))
+
+        obs.insert(1, "b")
+        assert_that(inserts).is_equal_to([(1, "b")])
+
+    def test_on_insert_fires_on_extend(self) -> None:
+        """on_insert fires for each item on extend."""
+        obs = ObservableList[str](["a"])
+        inserts: list[tuple[int, str]] = []
+        obs.on_insert(lambda idx, item: inserts.append((idx, item)))
+
+        obs.extend(["b", "c", "d"])
+        assert_that(inserts).is_equal_to([(1, "b"), (2, "c"), (3, "d")])
+
+    def test_on_remove_fires_on_remove(self) -> None:
+        """on_remove fires with correct index and item."""
+        obs = ObservableList[str](["a", "b", "c"])
+        removes: list[tuple[int, str]] = []
+        obs.on_remove(lambda idx, item: removes.append((idx, item)))
+
+        obs.remove("b")
+        assert_that(removes).is_equal_to([(1, "b")])
+
+    def test_on_remove_fires_on_pop(self) -> None:
+        """on_remove fires on pop with correct index."""
+        obs = ObservableList[str](["a", "b", "c"])
+        removes: list[tuple[int, str]] = []
+        obs.on_remove(lambda idx, item: removes.append((idx, item)))
+
+        obs.pop()  # removes "c" at index 2
+        assert_that(removes).is_equal_to([(2, "c")])
+
+    def test_on_remove_fires_on_pop_at_index(self) -> None:
+        """on_remove fires on pop(index) with correct index."""
+        obs = ObservableList[str](["a", "b", "c"])
+        removes: list[tuple[int, str]] = []
+        obs.on_remove(lambda idx, item: removes.append((idx, item)))
+
+        obs.pop(0)  # removes "a" at index 0
+        assert_that(removes).is_equal_to([(0, "a")])
+
+    def test_on_remove_fires_on_pop_negative_index(self) -> None:
+        """on_remove normalizes negative index."""
+        obs = ObservableList[str](["a", "b", "c"])
+        removes: list[tuple[int, str]] = []
+        obs.on_remove(lambda idx, item: removes.append((idx, item)))
+
+        obs.pop(-2)  # removes "b" at index 1
+        assert_that(removes).is_equal_to([(1, "b")])
+
+    def test_on_remove_fires_on_delitem(self) -> None:
+        """on_remove fires on del list[index]."""
+        obs = ObservableList[str](["a", "b", "c"])
+        removes: list[tuple[int, str]] = []
+        obs.on_remove(lambda idx, item: removes.append((idx, item)))
+
+        del obs[1]
+        assert_that(removes).is_equal_to([(1, "b")])
+
+    def test_on_replace_fires_on_setitem(self) -> None:
+        """on_replace fires with index, old, and new item."""
+        obs = ObservableList[str](["a", "b", "c"])
+        replaces: list[tuple[int, str, str]] = []
+        obs.on_replace(lambda idx, old, new: replaces.append((idx, old, new)))
+
+        obs[1] = "B"
+        assert_that(replaces).is_equal_to([(1, "b", "B")])
+
+    def test_on_clear_fires_with_removed_items(self) -> None:
+        """on_clear fires with list of all removed items."""
+        obs = ObservableList[str](["a", "b", "c"])
+        clears: list[list[str]] = []
+        obs.on_clear(lambda items: clears.append(items))
+
+        obs.clear()
+        assert_that(clears).is_equal_to([["a", "b", "c"]])
+
+    def test_on_clear_fires_with_empty_list_if_already_empty(self) -> None:
+        """on_clear fires with empty list if list was already empty."""
+        obs = ObservableList[str]()
+        clears: list[list[str]] = []
+        obs.on_clear(lambda items: clears.append(items))
+
+        obs.clear()
+        assert_that(clears).is_equal_to([[]])
+
+    def test_multiple_granular_callbacks(self) -> None:
+        """Multiple callbacks of same type all fire."""
+        obs = ObservableList[str]()
+        results: list[int] = []
+        obs.on_insert(lambda idx, item: results.append(1))
+        obs.on_insert(lambda idx, item: results.append(2))
+
+        obs.append("a")
+        assert_that(results).is_equal_to([1, 2])
+
+    def test_duplicate_granular_callback_ignored(self) -> None:
+        """Same callback not added twice."""
+        obs = ObservableList[str]()
+        results: list[int] = []
+
+        def cb(idx: int, item: str) -> None:
+            results.append(1)
+
+        obs.on_insert(cb)
+        obs.on_insert(cb)
+
+        obs.append("a")
+        assert_that(results).is_equal_to([1])
+
+    def test_granular_and_generic_both_fire(self) -> None:
+        """Both granular and generic on_change fire."""
+        obs = ObservableList[str]()
+        events: list[str] = []
+        obs.on_insert(lambda idx, item: events.append(f"insert:{item}"))
+        obs.on_change(lambda: events.append("change"))
+
+        obs.append("a")
+        assert_that(events).is_equal_to(["insert:a", "change"])

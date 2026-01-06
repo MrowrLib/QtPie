@@ -17,6 +17,12 @@ class ObservableList[T]:
         self._callbacks: list[Callable[[], None]] = []
         self._is_dirty: Observable[bool] | None = Observable[bool](False, dirty_tracking=False, validation=False) if dirty_tracking else None
 
+        # Granular callbacks for efficient UI sync
+        self._insert_callbacks: list[Callable[[int, T], None]] = []
+        self._remove_callbacks: list[Callable[[int, T], None]] = []
+        self._replace_callbacks: list[Callable[[int, T, T], None]] = []
+        self._clear_callbacks: list[Callable[[list[T]], None]] = []
+
         # Validation
         self._validators: dict[str, ValidatorFn[list[T]]] = {}
         if validation:
@@ -44,6 +50,46 @@ class ObservableList[T]:
         """Register a callback to be called when the list changes."""
         if callback not in self._callbacks:
             self._callbacks.append(callback)
+
+    def on_insert(self, callback: Callable[[int, T], None]) -> None:
+        """Register callback for item insertion: callback(index, item)."""
+        if callback not in self._insert_callbacks:
+            self._insert_callbacks.append(callback)
+
+    def on_remove(self, callback: Callable[[int, T], None]) -> None:
+        """Register callback for item removal: callback(index, item)."""
+        if callback not in self._remove_callbacks:
+            self._remove_callbacks.append(callback)
+
+    def on_replace(self, callback: Callable[[int, T, T], None]) -> None:
+        """Register callback for item replacement: callback(index, old_item, new_item)."""
+        if callback not in self._replace_callbacks:
+            self._replace_callbacks.append(callback)
+
+    def on_clear(self, callback: Callable[[list[T]], None]) -> None:
+        """Register callback for list clear: callback(removed_items)."""
+        if callback not in self._clear_callbacks:
+            self._clear_callbacks.append(callback)
+
+    def _notify_insert(self, index: int, item: T) -> None:
+        """Fire insert callbacks."""
+        for cb in self._insert_callbacks:
+            cb(index, item)
+
+    def _notify_remove(self, index: int, item: T) -> None:
+        """Fire remove callbacks."""
+        for cb in self._remove_callbacks:
+            cb(index, item)
+
+    def _notify_replace(self, index: int, old_item: T, new_item: T) -> None:
+        """Fire replace callbacks."""
+        for cb in self._replace_callbacks:
+            cb(index, old_item, new_item)
+
+    def _notify_clear(self, removed_items: list[T]) -> None:
+        """Fire clear callbacks."""
+        for cb in self._clear_callbacks:
+            cb(removed_items)
 
     @property
     def is_dirty(self) -> Observable[bool]:
@@ -88,33 +134,46 @@ class ObservableList[T]:
     # List write operations - all notify
     def append(self, item: T) -> None:
         """Append item to end."""
+        index = len(self._items)
         self._items.append(item)
+        self._notify_insert(index, item)
         self._notify()
 
     def extend(self, items: list[T]) -> None:
         """Extend list with items."""
+        start_index = len(self._items)
         self._items.extend(items)
+        for i, item in enumerate(items):
+            self._notify_insert(start_index + i, item)
         self._notify()
 
     def insert(self, index: int, item: T) -> None:
         """Insert item at index."""
         self._items.insert(index, item)
+        self._notify_insert(index, item)
         self._notify()
 
     def remove(self, item: T) -> None:
         """Remove first occurrence of item."""
+        index = self._items.index(item)
         self._items.remove(item)
+        self._notify_remove(index, item)
         self._notify()
 
     def pop(self, index: int = -1) -> T:
         """Remove and return item at index."""
+        # Normalize negative index
+        actual_index = index if index >= 0 else len(self._items) + index
         item = self._items.pop(index)
+        self._notify_remove(actual_index, item)
         self._notify()
         return item
 
     def clear(self) -> None:
         """Remove all items."""
+        removed = list(self._items)
         self._items.clear()
+        self._notify_clear(removed)
         self._notify()
 
     @overload
@@ -122,11 +181,25 @@ class ObservableList[T]:
     @overload
     def __setitem__(self, index: slice, value: list[T]) -> None: ...
     def __setitem__(self, index: int | slice, value: T | list[T]) -> None:
-        self._items[index] = value  # type: ignore[index, assignment]
+        if isinstance(index, int):
+            old_item = self._items[index]
+            self._items[index] = value  # type: ignore[index, assignment]
+            self._notify_replace(index, old_item, value)  # type: ignore[arg-type]
+        else:
+            # Slice assignment - complex, just use generic notify
+            self._items[index] = value  # type: ignore[index, assignment]
         self._notify()
 
     def __delitem__(self, index: int | slice) -> None:
-        del self._items[index]
+        if isinstance(index, int):
+            item = self._items[index]
+            # Normalize negative index
+            actual_index = index if index >= 0 else len(self._items) + index
+            del self._items[index]
+            self._notify_remove(actual_index, item)
+        else:
+            # Slice deletion - complex, just use generic notify
+            del self._items[index]
         self._notify()
 
     # Utility
