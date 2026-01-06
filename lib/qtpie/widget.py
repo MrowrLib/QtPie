@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
 from observant import Observable
 from qtpy.QtWidgets import (
@@ -472,6 +472,25 @@ class Widget[T = None](QWidget):
             return []
         return self._qtpie.validation_error_messages.get()
 
+    # -------------------------------------------------------------------------
+    # Async Hooks
+    # -------------------------------------------------------------------------
+
+    async def on_close(self) -> None:
+        """Async hook called when the widget is closing.
+
+        Override this to perform async cleanup before the widget closes.
+        The close event is automatically accepted after this completes.
+
+        Example:
+            @widget
+            class MyWidget(Widget):
+                @override
+                async def on_close(self) -> None:
+                    await self.save_data()
+        """
+        pass
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Check that @widget decorator was applied."""
         if not self._qtpie_config.init_wrapped:
@@ -479,7 +498,7 @@ class Widget[T = None](QWidget):
         # This should never run - @widget replaces __init__
         super().__init__(*args, **kwargs)  # pragma: no cover
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> NoReturn:
         """Handle attribute access for special cases."""
         if name == "record":
             raise TypeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
@@ -571,6 +590,11 @@ def widget[W: Widget[Any]](
         target._qtpie_config.widget_props = kwargs
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
+
+        # Auto-wrap async methods (e.g., async def closeEvent)
+        from qtpie.async_wrap import wrap_async_methods
+
+        wrap_async_methods(target)
 
         # Wrap __init__ to set up layout
         _wrap_init_for_layout(target)

@@ -14,8 +14,8 @@ Overview of TODOs, high-level ...
 
 - [ ] E2E tests, I think for App stuff mostly? skip by default.
 - [ ] async stuff
-- [ ] bind= using complex evaluations w/ reactive updates
+- [x] bind= using complex evaluations w/ reactive updates
 
 ## New
 
-- [ ] boolean= predicate expression or function reference or reactive binding, the expression also reacts to updates ...
+- [x] boolean= predicate expression or function reference or reactive binding, the expression also reacts to updates ...

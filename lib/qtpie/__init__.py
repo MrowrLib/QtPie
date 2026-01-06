@@ -6,6 +6,7 @@ from .dict_widget_repeater import DictWidgetRepeater
 from .entrypoint import entrypoint
 from .new import new
 from .new_fields import new_fields
+from .slot import slot
 from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
 from .variable import RecordVariable, Variable
 from .widget import Widget, widget
@@ -30,5 +31,6 @@ __all__ = [
     "register_binding",
     "run_app",
     "set_color_scheme",
+    "slot",
     "widget",
 ]

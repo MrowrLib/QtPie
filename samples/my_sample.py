@@ -1,9 +1,10 @@
+import asyncio
 from dataclasses import dataclass
+from typing import override
 
-from qtpy.QtCore import QSize
 from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, entrypoint, new, widget
+from qtpie import Variable, Widget, entrypoint, new, slot, widget
 
 
 @dataclass
@@ -379,8 +380,7 @@ class MyWidget(Widget):
         self._show_label.value = not self._show_label.value
 
 
-@entrypoint
-@widget(windowTitle="{title.upper()}", fixedSize=QSize(400, 200))
+@widget(windowTitle="{title.upper()}")
 class ReactiveWindowTitle(Widget):
     title: Variable[str] = new("Initial Title")
 
@@ -388,3 +388,23 @@ class ReactiveWindowTitle(Widget):
 
     def change_title(self) -> None:
         self.title.value = "Updated Title"
+
+
+@entrypoint
+@widget
+class AsyncExample(Widget):
+    btn: QPushButton = new("Fetch Data", clicked="fetch_data")
+    label: QLabel = new("Ready")
+
+    @slot
+    async def fetch_data(self) -> None:
+        self.label.setText("Loading...")
+        await asyncio.sleep(5)
+        self.label.setText("Done!")
+
+    # Async closeEvent - cleanup waits for completion
+    @override
+    async def on_close(self) -> None:
+        print("Cleaning up...")
+        await asyncio.sleep(2)
+        print("Cleanup complete.")
