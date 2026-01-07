@@ -26,7 +26,22 @@ from .variable import RecordVariable, Variable, _create_observable_for_type, _Va
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "record_default", "auto_bind", "widget_props", "object_name", "css_classes")
+    __slots__ = (
+        "layout",
+        "margins",
+        "fields",
+        "variable_names",
+        "init_wrapped",
+        "record_type",
+        "record_default",
+        "auto_bind",
+        "widget_props",
+        "object_name",
+        "css_classes",
+        "undo",
+        "undo_debounce_ms",
+        "undo_max",
+    )
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -40,6 +55,10 @@ class _QtPieConfig:
         self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
+        # Undo configuration (None = inherit from app)
+        self.undo: bool | None = None
+        self.undo_debounce_ms: int | None = None
+        self.undo_max: int | None = None
 
 
 class _RecordDescriptor[T]:
@@ -282,6 +301,9 @@ def widget(
     classes: list[str] | None = None,
     title: str | None = None,
     record: Any | None = None,
+    undo: bool | None = None,
+    undo_debounce_ms: int | None = None,
+    undo_max: int | None = None,
     **kwargs: Any,
 ) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
 
@@ -297,6 +319,9 @@ def widget[W: Widget[Any]](
     title: str | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
+    undo: bool | None = None,
+    undo_debounce_ms: int | None = None,
+    undo_max: int | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
@@ -336,6 +361,9 @@ def widget[W: Widget[Any]](
         classes: List of CSS classes to apply to the widget.
         title: Shorthand for windowTitle.
         stylesheet: Shorthand for styleSheet.
+        undo: Enable/disable undo for this widget's Variables (None = inherit from app).
+        undo_debounce_ms: Debounce time in ms (None = inherit from app).
+        undo_max: Max undo stack size (None = inherit from app).
         **kwargs: Extra properties applied via setXXX() methods.
                   e.g., windowTitle="Foo" calls self.setWindowTitle("Foo")
     """
@@ -355,6 +383,10 @@ def widget[W: Widget[Any]](
         target._qtpie_config.widget_props = kwargs
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
+        # Store undo config
+        target._qtpie_config.undo = undo
+        target._qtpie_config.undo_debounce_ms = undo_debounce_ms
+        target._qtpie_config.undo_max = undo_max
 
         # Auto-wrap async methods (e.g., async def closeEvent)
         from qtpie.async_wrap import wrap_async_methods
