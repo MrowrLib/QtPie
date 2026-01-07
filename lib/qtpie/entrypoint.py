@@ -51,10 +51,6 @@ class EntryConfig:
     watch_stylesheet: bool = False
     scss_search_paths: tuple[str, ...] = field(default_factory=tuple)
     window: type[QWidget] | None = None
-    # Undo configuration (None = use defaults)
-    undo: bool | None = None
-    undo_debounce_ms: int | None = None
-    undo_max: int | None = None
 
 
 # Attribute name for storing entry config
@@ -181,18 +177,12 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             if isinstance(result, QWidget):
                 window = result
     else:
-        # Create a default App with dark/light mode and undo support
+        # Create a default App with dark/light mode support
         app_kwargs: dict[str, Any] = {}
         if config.dark_mode:
             app_kwargs["dark_mode"] = True
         if config.light_mode:
             app_kwargs["light_mode"] = True
-        if config.undo is not None:
-            app_kwargs["undo"] = config.undo
-        if config.undo_debounce_ms is not None:
-            app_kwargs["undo_debounce_ms"] = config.undo_debounce_ms
-        if config.undo_max is not None:
-            app_kwargs["undo_max"] = config.undo_max
 
         app = App(**app_kwargs)
 
@@ -274,9 +264,6 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
-    undo: bool | None = ...,
-    undo_debounce_ms: int | None = ...,
-    undo_max: int | None = ...,
 ) -> type[T]: ...
 
 
@@ -292,9 +279,6 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
-    undo: bool | None = ...,
-    undo_debounce_ms: int | None = ...,
-    undo_max: int | None = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -310,9 +294,6 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
-    undo: bool | None = ...,
-    undo_debounce_ms: int | None = ...,
-    undo_max: int | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -327,9 +308,6 @@ def entrypoint(
     watch_stylesheet: bool = False,
     scss_search_paths: list[str] | None = None,
     window: type[QWidget] | None = None,
-    undo: bool | None = None,
-    undo_debounce_ms: int | None = None,
-    undo_max: int | None = None,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -355,9 +333,6 @@ def entrypoint(
         scss_search_paths: Directories for SCSS @import resolution.
             If not provided, the SCSS file's parent folder is used.
         window: A widget class to instantiate as the main window.
-        undo: Enable/disable undo (None = use default True).
-        undo_debounce_ms: Debounce time in ms (None = use default 1000).
-        undo_max: Max undo stack size (None = use default 1000).
 
     Examples:
         # Simplest - function returning a widget
@@ -410,9 +385,6 @@ def entrypoint(
         watch_stylesheet=watch_stylesheet,
         scss_search_paths=tuple(scss_search_paths) if scss_search_paths else (),
         window=window,
-        undo=undo,
-        undo_debounce_ms=undo_debounce_ms,
-        undo_max=undo_max,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:

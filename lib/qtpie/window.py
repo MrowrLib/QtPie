@@ -44,10 +44,6 @@ class WindowConfig:
     record_type: type[Any] | None = None
     # Initial record value from @window(record=...)
     record_default: Any | None = None
-    # Undo configuration (None = inherit from app)
-    undo: bool | None = None
-    undo_debounce_ms: int | None = None
-    undo_max: int | None = None
 
 
 class Window[T = None](QMainWindow):
@@ -231,9 +227,6 @@ def window(
     classes: list[str] | None = None,
     title: str | None = None,
     record: Any | None = None,
-    undo: bool | None = None,
-    undo_debounce_ms: int | None = None,
-    undo_max: int | None = None,
     **kwargs: Any,
 ) -> Callable[[type[Window[Any]]], type[Window[Any]]]: ...
 
@@ -249,9 +242,6 @@ def window[W: Window[Any]](
     title: str | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
-    undo: bool | None = None,
-    undo_debounce_ms: int | None = None,
-    undo_max: int | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator for Window classes.
@@ -287,9 +277,6 @@ def window[W: Window[Any]](
         classes: List of CSS classes to apply.
         title: Shorthand for windowTitle.
         stylesheet: Shorthand for styleSheet.
-        undo: Enable/disable undo for this window's Variables (None = inherit from app).
-        undo_debounce_ms: Debounce time in ms (None = inherit from app).
-        undo_max: Max undo stack size (None = inherit from app).
         **kwargs: Extra properties applied via setXXX() methods.
     """
     if title is not None:
@@ -306,10 +293,6 @@ def window[W: Window[Any]](
         config.widget_props = kwargs
         config.object_name = name
         config.css_classes = classes or []
-        # Store undo config
-        config.undo = undo
-        config.undo_debounce_ms = undo_debounce_ms
-        config.undo_max = undo_max
 
         # Auto-wrap async methods (e.g., async def on_close)
         from qtpie.async_wrap import wrap_async_methods

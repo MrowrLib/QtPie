@@ -6,13 +6,11 @@ import sys
 from collections.abc import Sequence
 
 import qasync  # type: ignore[import-untyped]
-from observant import Observable
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
-from qtpie.undo import UNDO_DEFAULT_MAX, UndoStack
 
 
 def run_app(app: QApplication) -> int:
@@ -92,9 +90,6 @@ class App(QApplication):
         version: str = "1.0.0",
         dark_mode: bool = False,
         light_mode: bool = False,
-        undo: bool | None = None,
-        undo_debounce_ms: int | None = None,
-        undo_max: int | None = None,
         argv: Sequence[str] | None = None,
     ) -> None:
         """
@@ -105,9 +100,6 @@ class App(QApplication):
             version: Application version (sets QApplication.applicationVersion).
             dark_mode: Enable dark mode color scheme.
             light_mode: Enable light mode color scheme.
-            undo: Enable/disable undo (default True). Used as fallback for widgets.
-            undo_debounce_ms: Debounce time in ms (default 1000). Used as fallback.
-            undo_max: Max undo stack size (default 1000).
             argv: Command-line arguments. Defaults to sys.argv.
         """
         # Handle color scheme before QApplication init
@@ -124,15 +116,6 @@ class App(QApplication):
         # Set application metadata
         self.setApplicationName(name)
         self.setApplicationVersion(version)
-
-        # Store undo configuration (None means use defaults)
-        self._undo_enabled = undo
-        self._undo_debounce_ms = undo_debounce_ms
-        self._undo_max = undo_max
-
-        # Create undo stack
-        stack_max = undo_max if undo_max is not None else UNDO_DEFAULT_MAX
-        self._undo_stack = UndoStack(max_size=stack_max)
 
         # Apply color scheme if app now exists
         if dark_mode:
@@ -220,55 +203,3 @@ class App(QApplication):
         self.aboutToQuit.connect(quit_event.set)
         await quit_event.wait()
         return 0
-
-    # -------------------------------------------------------------------------
-    # Undo/Redo
-    # -------------------------------------------------------------------------
-
-    @property
-    def undo_stack(self) -> UndoStack:
-        """Get the application's undo stack."""
-        return self._undo_stack
-
-    @property
-    def undo_enabled(self) -> bool | None:
-        """App-level undo enabled setting (None = use default)."""
-        return self._undo_enabled
-
-    @property
-    def undo_debounce_ms(self) -> int | None:
-        """App-level debounce setting (None = use default)."""
-        return self._undo_debounce_ms
-
-    @property
-    def undo_max(self) -> int | None:
-        """App-level max stack size setting (None = use default)."""
-        return self._undo_max
-
-    def undo(self) -> bool:
-        """
-        Undo the last action.
-
-        Returns:
-            True if an action was undone, False if nothing to undo.
-        """
-        return self._undo_stack.undo()
-
-    def redo(self) -> bool:
-        """
-        Redo the last undone action.
-
-        Returns:
-            True if an action was redone, False if nothing to redo.
-        """
-        return self._undo_stack.redo()
-
-    @property
-    def can_undo(self) -> Observable[bool]:
-        """Observable indicating if undo is available."""
-        return self._undo_stack.can_undo
-
-    @property
-    def can_redo(self) -> Observable[bool]:
-        """Observable indicating if redo is available."""
-        return self._undo_stack.can_redo

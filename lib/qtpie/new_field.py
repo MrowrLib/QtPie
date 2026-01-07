@@ -42,10 +42,6 @@ class NewField:
         self.css_classes: list[str] = []  # CSS classes for the widget
         # Property bindings (visible="_is_visible", enabled="{_count > 0}")
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
-        # Undo configuration (None = inherit from widget)
-        self.undo: bool | None = None
-        self.undo_debounce_ms: int | None = None
-        self.undo_max: int | None = None
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -93,11 +89,6 @@ class NewField:
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
 
-            # Extract undo config (from main kwargs, not widget_kwargs)
-            field_undo: bool | None = self.kwargs.pop("undo", None)
-            field_undo_debounce_ms: int | None = self.kwargs.pop("undo_debounce_ms", None)
-            field_undo_max: int | None = self.kwargs.pop("undo_max", None)
-
             descriptor = create_variable_descriptor(
                 default,
                 name,
@@ -111,9 +102,6 @@ class NewField:
                 validators,
                 object_name,
                 css_classes,
-                field_undo,
-                field_undo_debounce_ms,
-                field_undo_max,
             )
             setattr(owner, name, descriptor)
             return

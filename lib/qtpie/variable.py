@@ -99,9 +99,6 @@ class Variable[T, W = None]:
             "_wrapper",
             "_widget_type",
             "_widget",
-            "_undo_enabled",
-            "_undo_debounce_ms",
-            "_field_id",
             "widget",
             "value",
             "observable",
@@ -115,26 +112,11 @@ class Variable[T, W = None]:
     _wrapper: AnyObservable[T]
     _widget_type: type | None
     _widget: Any  # Will be W | None where W is the widget type
-    _undo_enabled: bool
-    _undo_debounce_ms: int
-    _field_id: str
 
-    def __init__(
-        self,
-        wrapper: AnyObservable[T],
-        widget_type: type | None = None,
-        *,
-        undo_enabled: bool = True,
-        undo_debounce_ms: int = 1000,
-        field_id: str = "",
-    ) -> None:
+    def __init__(self, wrapper: AnyObservable[T], widget_type: type | None = None) -> None:
         object.__setattr__(self, "_wrapper", wrapper)
         object.__setattr__(self, "_widget_type", widget_type)
         object.__setattr__(self, "_widget", None)  # Populated later when widget is created
-        # Undo config
-        object.__setattr__(self, "_undo_enabled", undo_enabled)
-        object.__setattr__(self, "_undo_debounce_ms", undo_debounce_ms)
-        object.__setattr__(self, "_field_id", field_id)
 
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to ObservableProxy for field access.
@@ -197,11 +179,6 @@ class Variable[T, W = None]:
     @value.setter
     def value(self, val: T) -> None:
         """Set the value (triggers change notifications)."""
-        # Capture old value for undo before changing
-        old_value = self.value
-        new_value = val
-
-        # Actually set the value
         if isinstance(self._wrapper, Observable):
             self._wrapper.set(val)
         elif isinstance(self._wrapper, ObservableList):
@@ -217,9 +194,6 @@ class Variable[T, W = None]:
         else:
             # Must be ObservableProxy - replace target object
             self._wrapper.replace_target(val)
-
-        # Push to undo stack if enabled
-        self._push_undo_action(old_value, new_value)
 
     @property
     def observable(self) -> AnyObservable[T]:
@@ -262,42 +236,6 @@ class Variable[T, W = None]:
     def validation_error_messages(self) -> Observable[list[str]]:
         """Flat list of all error messages. Bindable."""
         return self._wrapper.validation_error_messages
-
-    # -------------------------------------------------------------------------
-    # Undo
-    # -------------------------------------------------------------------------
-
-    def _push_undo_action(self, old_value: T, new_value: T) -> None:
-        """Push an undo action if undo is enabled and values differ."""
-        if not self._undo_enabled:
-            return
-
-        # Don't push if values are the same
-        if old_value == new_value:
-            return
-
-        # Skip ObservableProxy - record field undo is handled by RecordVariable
-        if isinstance(self._wrapper, ObservableProxy):
-            return
-
-        # Get the undo stack from the app
-        from qtpie.undo import SetValueAction, get_undo_stack
-
-        stack = get_undo_stack()
-        if stack is None:
-            return
-
-        # Don't push during undo/redo operations
-        if stack.in_undo_redo:
-            return
-
-        # Create and push the action (Observable, ObservableList, or ObservableDict)
-        action = SetValueAction(
-            observable=self._wrapper,  # type: ignore[arg-type]
-            old_value=old_value,
-            new_value=new_value,
-        )
-        stack.push_debounced(action, self._field_id, self._undo_debounce_ms)
 
     # Descriptor protocol for pyright - tells it that assignment accepts T or Variable[T]
     if TYPE_CHECKING:
@@ -658,9 +596,6 @@ class _VariableDescriptor[T]:
         validators: list[str] | None = None,
         object_name: str | None = None,
         css_classes: list[str] | None = None,
-        undo: bool | None = None,
-        undo_debounce_ms: int | None = None,
-        undo_max: int | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -677,10 +612,6 @@ class _VariableDescriptor[T]:
         # Widget objectName and CSS classes
         self._object_name = object_name
         self._css_classes = css_classes or []
-        # Undo configuration (None = inherit from widget)
-        self.undo = undo
-        self.undo_debounce_ms = undo_debounce_ms
-        self.undo_max = undo_max
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -701,57 +632,7 @@ class _VariableDescriptor[T]:
 
         if self._name not in qtpie_state.variables:
             wrapper = _create_observable_for_type(self._inner_type, self._default)
-
-            # Resolve undo config through cascade: field -> widget -> app -> defaults
-            from .undo import resolve_undo_config
-
-            # Get widget-level config from class
-            widget_undo: bool | None = None
-            widget_debounce_ms: int | None = None
-            widget_max: int | None = None
-            owner_cls = type(obj)
-            if hasattr(owner_cls, "_qtpie_config"):
-                wc = owner_cls._qtpie_config  # type: ignore[attr-defined]
-                widget_undo = getattr(wc, "undo", None)  # pyright: ignore[reportUnknownArgumentType]
-                widget_debounce_ms = getattr(wc, "undo_debounce_ms", None)  # pyright: ignore[reportUnknownArgumentType]
-                widget_max = getattr(wc, "undo_max", None)  # pyright: ignore[reportUnknownArgumentType]
-
-            # Get app-level config
-            app_undo: bool | None = None
-            app_debounce_ms: int | None = None
-            app_max: int | None = None
-            from qtpy.QtWidgets import QApplication
-
-            from .app import App
-
-            qapp = QApplication.instance()
-            if isinstance(qapp, App):
-                app_undo = qapp.undo_enabled
-                app_debounce_ms = qapp.undo_debounce_ms
-                app_max = qapp.undo_max
-
-            undo_config = resolve_undo_config(
-                field_undo=self.undo,
-                field_debounce_ms=self.undo_debounce_ms,
-                field_max=self.undo_max,
-                widget_undo=widget_undo,
-                widget_debounce_ms=widget_debounce_ms,
-                widget_max=widget_max,
-                app_undo=app_undo,
-                app_debounce_ms=app_debounce_ms,
-                app_max=app_max,
-            )
-
-            # Generate unique field_id for debounce tracking
-            field_id = f"{id(obj)}:{self._name}"
-
-            var: Variable[T] = Variable(
-                wrapper,
-                widget_type=self._widget_type,
-                undo_enabled=undo_config.enabled,
-                undo_debounce_ms=undo_config.debounce_ms,
-                field_id=field_id,
-            )
+            var: Variable[T] = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
 
             # If widget_type is set, create the widget and bind it
@@ -891,25 +772,6 @@ def create_variable_descriptor(
     validators: list[Any] | None = None,
     object_name: str | None = None,
     css_classes: list[str] | None = None,
-    undo: bool | None = None,
-    undo_debounce_ms: int | None = None,
-    undo_max: int | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(
-        default,
-        name,
-        inner_type,
-        widget_type,
-        widget_args,
-        widget_kwargs,
-        label,
-        grid,
-        exclude_from_layout,
-        validators,
-        object_name,
-        css_classes,
-        undo,
-        undo_debounce_ms,
-        undo_max,
-    )
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes)
