@@ -82,13 +82,35 @@ class _RecordDescriptor[T]:
         if state._record is None:
             from observant import ObservableProxy
 
+            from .undo import resolve_undo_config
+
             try:
                 wrapper = _create_observable_for_type(self._record_type, None)
             except ValueError:
                 # Type requires constructor args - create proxy with None target
                 # User must set it in __setup__ or later
                 wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
-            record_var = RecordVariable(cast(ObservableProxy[T], wrapper))
+
+            # Resolve undo config from widget class
+            widget_undo: bool | None = None
+            widget_debounce_ms: int | None = None
+            owner_cls = type(obj)
+            if hasattr(owner_cls, "_qtpie_config"):
+                wc = owner_cls._qtpie_config
+                widget_undo = wc.undo  # pyright: ignore[reportUnknownMemberType]
+                widget_debounce_ms = wc.undo_debounce_ms  # pyright: ignore[reportUnknownMemberType]
+
+            undo_config = resolve_undo_config(
+                widget_undo=widget_undo,
+                widget_debounce_ms=widget_debounce_ms,
+            )
+
+            record_var = RecordVariable(
+                cast(ObservableProxy[T], wrapper),
+                undo_enabled=undo_config.enabled,
+                undo_debounce_ms=undo_config.debounce_ms,
+                field_id_prefix=f"record_{id(obj)}",
+            )
             state._record = record_var
             state.register_variable("record", record_var)
 
@@ -107,8 +129,30 @@ class _RecordDescriptor[T]:
             # the field-level observables that ObservableProxy caches
             from observant import ObservableProxy
 
+            from .undo import resolve_undo_config
+
             wrapper = ObservableProxy(value)
-            record_var = RecordVariable(wrapper)
+
+            # Resolve undo config from widget class
+            widget_undo: bool | None = None
+            widget_debounce_ms: int | None = None
+            owner_cls = type(obj)
+            if hasattr(owner_cls, "_qtpie_config"):
+                wc = owner_cls._qtpie_config
+                widget_undo = wc.undo  # pyright: ignore[reportUnknownMemberType]
+                widget_debounce_ms = wc.undo_debounce_ms  # pyright: ignore[reportUnknownMemberType]
+
+            undo_config = resolve_undo_config(
+                widget_undo=widget_undo,
+                widget_debounce_ms=widget_debounce_ms,
+            )
+
+            record_var = RecordVariable(
+                wrapper,
+                undo_enabled=undo_config.enabled,
+                undo_debounce_ms=undo_config.debounce_ms,
+                field_id_prefix=f"record_{id(obj)}",
+            )
             obj._qtpie._record = record_var
             obj._qtpie.register_variable("record", record_var)
 
