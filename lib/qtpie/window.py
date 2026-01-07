@@ -319,6 +319,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
     config = cls._qtpie_config
 
     def wrapped_init(self: Window[Any], *args: Any, **kwargs: Any) -> None:
+        # Set translation context to class name (used by t() markers)
+        from qtpie.translations import set_translation_context
+
+        set_translation_context(type(self).__name__)
+
         # Call original __init__
         original_init(self, *args, **kwargs)
 

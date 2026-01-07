@@ -51,6 +51,10 @@ class EntryConfig:
     watch_stylesheet: bool = False
     scss_search_paths: tuple[str, ...] = field(default_factory=tuple)
     window: type[QWidget] | None = None
+    # Translation support
+    translations: str | tuple[str, ...] | None = None
+    language: str = "en"
+    watch_translations: bool = False
 
 
 # Attribute name for storing entry config
@@ -147,6 +151,36 @@ def _apply_stylesheet(app: QApplication, config: EntryConfig) -> QssWatcher | Sc
     return None
 
 
+def _load_translations(app: QApplication, config: EntryConfig) -> Any:
+    """Load translations and optionally set up hot-reload watcher.
+
+    Returns the watcher if watch_translations=True, otherwise None.
+    """
+    if config.translations is None:
+        return None
+
+    from qtpie.translations import load_translations_from_yaml, set_language, watch_translations
+
+    # Set language
+    set_language(config.language)
+
+    # Load translation YAML files
+    if isinstance(config.translations, str):
+        paths: list[str | Path] = [config.translations]
+    else:
+        paths = list(config.translations)
+
+    load_translations_from_yaml(paths)
+
+    # Set up hot-reload if requested
+    if config.watch_translations:
+        # Convert to Path objects for watcher
+        path_objects = [Path(p) for p in paths]
+        return watch_translations(path_objects, config.language, parent=app)
+
+    return None
+
+
 def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     """Execute the entry point."""
     App = _get_app_class()
@@ -160,12 +194,16 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     window: QWidget | None = None
     app: QApplication
 
-    # Keep watcher alive for duration of app
+    # Keep watchers alive for duration of app
     _watcher: QssWatcher | ScssWatcher | None = None
+    _translation_watcher: Any = None
 
     if is_app_subclass:
         # Target is an App or QApplication subclass
         app = cast(QApplication, target())
+
+        # Load translations before creating widgets
+        _translation_watcher = _load_translations(app, config)
 
         # Apply stylesheet to the app
         _watcher = _apply_stylesheet(app, config)
@@ -185,6 +223,9 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             app_kwargs["light_mode"] = True
 
         app = App(**app_kwargs)
+
+        # Load translations before creating widgets
+        _translation_watcher = _load_translations(app, config)
 
         # Apply stylesheet to the app
         _watcher = _apply_stylesheet(app, config)
@@ -264,6 +305,9 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
+    translations: str | list[str] | None = ...,
+    language: str = ...,
+    watch_translations: bool = ...,
 ) -> type[T]: ...
 
 
@@ -279,6 +323,9 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
+    translations: str | list[str] | None = ...,
+    language: str = ...,
+    watch_translations: bool = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -294,6 +341,9 @@ def entrypoint[T](
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
     window: type[QWidget] | None = ...,
+    translations: str | list[str] | None = ...,
+    language: str = ...,
+    watch_translations: bool = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -308,6 +358,9 @@ def entrypoint(
     watch_stylesheet: bool = False,
     scss_search_paths: list[str] | None = None,
     window: type[QWidget] | None = None,
+    translations: str | list[str] | None = None,
+    language: str = "en",
+    watch_translations: bool = False,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -333,6 +386,9 @@ def entrypoint(
         scss_search_paths: Directories for SCSS @import resolution.
             If not provided, the SCSS file's parent folder is used.
         window: A widget class to instantiate as the main window.
+        translations: Path or list of paths to translation YAML files.
+        language: Language code to use (e.g., "en", "fr", "de"). Default is "en".
+        watch_translations: If True, hot-reload translations on file changes.
 
     Examples:
         # Simplest - function returning a widget
@@ -385,6 +441,9 @@ def entrypoint(
         watch_stylesheet=watch_stylesheet,
         scss_search_paths=tuple(scss_search_paths) if scss_search_paths else (),
         window=window,
+        translations=translations if isinstance(translations, str) else tuple(translations) if translations else None,
+        language=language,
+        watch_translations=watch_translations,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:

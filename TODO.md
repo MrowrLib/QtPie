@@ -15,8 +15,8 @@ Overview of TODOs, high-level ...
 - [ ] E2E tests, I think for App stuff mostly? skip by default.
 - [x] async stuff
 - [x] bind= using complex evaluations w/ reactive updates
-- [ ] undo/redo
-- [ ] serialization
+- [ ] undo/redo (meh, forget it)
+- [ ] serialization (meh, forget it)
 - [ ] translation
 
 ## New

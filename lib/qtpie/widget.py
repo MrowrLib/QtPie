@@ -383,6 +383,11 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
     config = cls._qtpie_config
 
     def wrapped_init(self: Widget[Any], *args: Any, **kwargs: Any) -> None:
+        # Set translation context to class name (used by t() markers)
+        from qtpie.translations import set_translation_context
+
+        set_translation_context(type(self).__name__)
+
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
 

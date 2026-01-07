@@ -24,7 +24,7 @@ class NewField:
         self.name: str = ""
         self.field_type: type | None = None
         self.exclude_from_layout = False
-        self.bind: str | None = None  # Extracted for QWidgets in __set_name__
+        self.bind: str | Any | None = None  # Extracted for QWidgets in __set_name__ (can be Translatable)
         self.signal_connections: dict[str, str | Callable[..., Any]] = {}  # signal_name -> method_name or callable
         self.widget_props: dict[str, Any] = {}  # propName -> value (becomes setPropName(value))
         # Layout params for form/grid layouts
@@ -42,6 +42,9 @@ class NewField:
         self.css_classes: list[str] = []  # CSS classes for the widget
         # Property bindings (visible="_is_visible", enabled="{_count > 0}")
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
+        # Translation support - track Translatable markers for binding registration
+        self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
+        self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -142,6 +145,9 @@ class NewField:
                 # Use list_widget_type for setter detection
                 self._extract_widget_props(self.list_widget_type)
 
+                # Extract Translatable markers for binding registration
+                self._extract_translatables()
+
                 # Remaining kwargs go to widget constructor
                 return
 
@@ -176,6 +182,9 @@ class NewField:
             # Extract widget props (e.g., windowTitle="Foo" → setWindowTitle("Foo"))
             self._extract_widget_props()
 
+            # Extract Translatable markers for binding registration
+            self._extract_translatables()
+
         # Handle QObject subclasses (not QWidget, but have signals and props)
         # This covers QAction, QMenu, etc.
         elif self._is_qobject_type():
@@ -184,6 +193,9 @@ class NewField:
 
             # Extract widget props (e.g., shortcut="Ctrl+N" → setShortcut)
             self._extract_widget_props()
+
+            # Extract Translatable markers for binding registration
+            self._extract_translatables()
 
     def _normalize_kwargs_aliases(self) -> None:
         """Normalize convenience aliases in kwargs.
@@ -320,6 +332,29 @@ class NewField:
 
         for key in to_remove:
             del self.kwargs[key]
+
+    def _extract_translatables(self) -> None:
+        """Extract Translatable markers from args and widget_props for binding registration.
+
+        Translatables are kept in place (not resolved here) - they're resolved
+        during widget instantiation in new_fields.py.
+        """
+        from qtpie.translations.translatable import Translatable
+
+        # Check positional args for Translatable markers
+        for i, arg in enumerate(self.args):
+            if isinstance(arg, Translatable):
+                self.translatable_args.append((i, arg))
+
+        # Check widget_props for Translatable markers
+        for key, value in self.widget_props.items():
+            if isinstance(value, Translatable):
+                self.translatable_kwargs[key] = value
+
+        # Also check remaining kwargs (for widgets that take text in constructor)
+        for key, value in self.kwargs.items():
+            if isinstance(value, Translatable):
+                self.translatable_kwargs[key] = value
 
     def _get_variable_default(self) -> Any:
         """Extract default value for a Variable field."""

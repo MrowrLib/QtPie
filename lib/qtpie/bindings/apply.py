@@ -37,6 +37,7 @@ def apply_auto_bindings(
         create_expression_binding_fn: Optional function to create expression bindings
     """
     from qtpie.bindings import bind, create_format_binding, is_format_string, resolve_binding_source
+    from qtpie.translations.translatable import Translatable
     from qtpie.variable import Variable as VarType
 
     for name, field_info in config.fields.items():
@@ -49,9 +50,16 @@ def apply_auto_bindings(
         if widget_instance is None or not isinstance(widget_instance, QWidget):
             continue
 
-        # Determine bind path
-        if field_info.bind is not None:
-            bind_path = field_info.bind
+        # Determine bind path - may be string or Translatable
+        bind_value = field_info.bind
+        translatable: Translatable | None = None
+
+        if isinstance(bind_value, Translatable):
+            # Resolve translatable to get format string
+            translatable = bind_value
+            bind_path = translatable.resolve()
+        elif bind_value is not None:
+            bind_path = bind_value
         elif config.auto_bind:
             bind_path = name.lstrip("_")
         else:
@@ -73,7 +81,21 @@ def apply_auto_bindings(
 
                     return setter_fn
 
-                create_format_binding(host, bind_path, make_setter(setter, widget_instance))  # type: ignore[arg-type]
+                widget_setter = make_setter(setter, widget_instance)
+                create_format_binding(host, bind_path, widget_setter)  # type: ignore[arg-type]
+
+                # Register for hot-reload if this was a Translatable
+                if translatable is not None:
+                    from qtpie.translations.store import register_format_binding
+
+                    register_format_binding(
+                        widget_instance,
+                        default_prop,
+                        translatable.text,
+                        translatable.context,
+                        host,  # type: ignore[arg-type]
+                        widget_setter,
+                    )
             continue
 
         # Resolve the binding source
@@ -182,12 +204,22 @@ def apply_reactive_widget_props(
 ) -> None:
     """Apply reactive widget properties from @widget/@window decorator.
 
-    For props like windowTitle="{title}", creates a format binding.
+    For props like windowTitle="{title}" or windowTitle=t("My App"), creates bindings.
     """
     from qtpie.bindings import create_format_binding, is_format_string
+    from qtpie.translations.translatable import Translatable
 
     for prop_name, value in config.widget_props.items():
-        if not isinstance(value, str) or not is_format_string(value):
+        translatable: Translatable | None = None
+        template: str | None = None
+
+        # Handle Translatable objects
+        if isinstance(value, Translatable):
+            translatable = value
+            template = translatable.resolve()
+        elif isinstance(value, str) and is_format_string(value):
+            template = value
+        else:
             continue
 
         setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
@@ -195,4 +227,22 @@ def apply_reactive_widget_props(
         if setter_method is None or not callable(setter_method):
             raise AttributeError(f"{type(host).__name__} has no setter '{setter_name}' for property '{prop_name}'")
 
-        create_format_binding(host, value, setter_method)  # type: ignore[arg-type]
+        # If it's a format string, create format binding
+        if is_format_string(template):
+            create_format_binding(host, template, setter_method)  # type: ignore[arg-type]
+        else:
+            # Static translated text - just set it
+            setter_method(template)
+
+        # Register for hot-reload if this was a Translatable
+        if translatable is not None:
+            from qtpie.translations.store import register_format_binding
+
+            register_format_binding(
+                host,
+                prop_name,
+                translatable.text,
+                translatable.context,
+                host,  # type: ignore[arg-type]
+                setter_method,  # type: ignore[arg-type]
+            )
