@@ -5,7 +5,7 @@ from typing import override
 from PySide6.QtGui import QAction
 from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, Window, entrypoint, menu, new, slot, widget, window
+from qtpie import Variable, Widget, Window, entrypoint, menu, new, set_language, slot, t, widget, window
 
 
 @dataclass
@@ -421,7 +421,6 @@ class FileMenu(QMenu):
             app.quit()
 
 
-@entrypoint
 @widget(record=Dog("Fido", 3))
 class SomeDogWidget(Widget[Dog]):
     name: QLineEdit = new(label="Dog's Name")
@@ -447,3 +446,14 @@ class MainWindow(Window[Dog]):
 
     # def __setup__(self) -> None:
     #     self.record = Dog(name="Rover", age=5)
+
+
+@entrypoint(translations="samples/example_translations.yml", watch_translations=True)
+@widget(record=Dog("Fido", 3), layout="form")
+class HasSomeTranslations(Widget[Dog]):
+    _name: QLineEdit = new(bind="name", label=t("Dog's Name"))
+    _lbl_dog_info: QLabel = new(bind=t("Dog's name is: {name}, age is {age}"), label=t("Dog Info"))
+    _btn_change_language: QPushButton = new(t("Change Language"), label=t("Options"), clicked="change_language")
+
+    def change_language(self) -> None:
+        set_language("fr")

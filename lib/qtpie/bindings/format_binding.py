@@ -269,30 +269,39 @@ def create_format_binding(
             context["var"] = get_observable_value(variable)
 
         # Add all variable values to context using root names
+        # Resolution order: exact match -> record -> underscore fallback
         for root_name in root_names:
-            # Try with underscore prefix first, then without
-            for attr_name in [f"_{root_name}", root_name]:
-                if hasattr(widget, attr_name):
-                    raw_attr: Any = getattr(widget, attr_name)
-                    if isinstance(raw_attr, Variable):
-                        context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
-                    else:
-                        context[root_name] = raw_attr
-                    break
+            # 1. Try exact match first (e.g., 'name' -> widget.name)
+            if hasattr(widget, root_name):
+                raw_attr: Any = getattr(widget, root_name)
+                if isinstance(raw_attr, Variable):
+                    context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                else:
+                    context[root_name] = raw_attr
+                continue
 
-        # Also add record fields if Widget[T]
-        if hasattr(widget, "_qtpie_config"):
-            config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
-            if config.record_type is not None:
-                try:
-                    record = widget.record
-                    for root_name in root_names:
-                        if root_name not in context and hasattr(record.observable, root_name):
+            # 2. Try record fields if Widget[T]
+            if hasattr(widget, "_qtpie_config"):
+                config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+                if config.record_type is not None:
+                    try:
+                        record = widget.record
+                        if hasattr(record.observable, root_name):
                             obs = getattr(record.observable, root_name)
                             if isinstance(obs, Observable):
                                 context[root_name] = obs.get()
-                except (TypeError, AttributeError):
-                    pass
+                                continue
+                    except (TypeError, AttributeError):
+                        pass
+
+            # 3. Underscore fallback (e.g., 'name' -> widget._name)
+            underscore_name = f"_{root_name}"
+            if hasattr(widget, underscore_name):
+                raw_attr = getattr(widget, underscore_name)
+                if isinstance(raw_attr, Variable):
+                    context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                else:
+                    context[root_name] = raw_attr
 
         # Process each field and build the result
         result_parts: list[str] = []
@@ -390,17 +399,18 @@ def get_static_value(widget: Widget[Any], path: str) -> Any:
     """Try to get a static (non-reactive) attribute value.
 
     Handles paths like 'title' or nested paths like 'config.name'.
+    Resolution order: exact match first, then underscore fallback.
     """
     lookup_path = path.lstrip("_")
     parts = lookup_path.split(".")
 
     current: Any = widget
     for part in parts:
-        # Try with underscore prefix first
-        if hasattr(current, f"_{part}"):
-            current = getattr(current, f"_{part}")
-        elif hasattr(current, part):
+        # Try exact match first, then underscore fallback
+        if hasattr(current, part):
             current = getattr(current, part)
+        elif hasattr(current, f"_{part}"):
+            current = getattr(current, f"_{part}")
         else:
             return None
     return current

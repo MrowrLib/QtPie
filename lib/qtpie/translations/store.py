@@ -33,10 +33,19 @@ FormatBindingCallback = Callable[[str], None]
 _format_bindings: list[tuple[ref[QObject], str, str | None, ref[QObject], Callable[..., None]]] = []
 
 
-def set_language(language: str) -> None:
-    """Set the current language for translation lookups."""
+def set_language(language: str, *, retranslate: bool = True) -> None:
+    """Set the current language for translation lookups.
+
+    Args:
+        language: Language code (e.g., "en", "fr", "de").
+        retranslate: If True (default), automatically retranslate all bound widgets.
+    """
     global _current_language
+    if _current_language == language:
+        return
     _current_language = language
+    if retranslate:
+        retranslate_all()
 
 
 def get_language() -> str:
@@ -224,8 +233,8 @@ def retranslate_all(context: str | None = None) -> None:
     """
     from qtpie.translations.translatable import get_translation_context
 
-    # Get context for lookups
-    ctx = context or get_translation_context()
+    # Get context for lookups - default to @default for global translations
+    ctx = context or get_translation_context() or "@default"
 
     # Process simple property bindings
     live_bindings: list[tuple[ref[QObject], str, str, str | None]] = []

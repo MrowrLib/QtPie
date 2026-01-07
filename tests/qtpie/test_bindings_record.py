@@ -272,3 +272,54 @@ class TestNoRecordNoAutoBind:
         w = qt.track(PlainWidget())
         # Just verify it works without error
         assert_that(w._label.text()).is_equal_to("Initial")
+
+
+class TestBindingResolutionOrder:
+    """Test that exact matches take priority over underscore fallback."""
+
+    def test_record_field_wins_over_underscore_widget(self, qt: QtDriver) -> None:
+        """When widget has _name field and record has name, {name} resolves to record.name."""
+
+        @widget
+        class PersonEditor(Widget[Person]):
+            # Widget has _name field (QLineEdit for editing)
+            _name: QLineEdit = new()
+            # Format binding uses {name} - should resolve to record.name, not _name widget
+            display: QLabel = new(bind="Name: {name}")
+
+        w = qt.track(PersonEditor())
+
+        # Set record name
+        w.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
+
+        # The label should show "Name: Alice" (from record.name)
+        # NOT "Name: <PySide6.QtWidgets.QLineEdit...>" (from _name widget)
+        assert_that(w.display.text()).is_equal_to("Name: Alice")
+
+    def test_exact_widget_attr_wins_over_record(self, qt: QtDriver) -> None:
+        """When widget has exact 'title' attribute (not _title), it wins over record."""
+
+        @widget
+        class TitledEditor(Widget[Person]):
+            title: str = "Static Title"
+            display: QLabel = new(bind="{title}: {name}")
+
+        w = qt.track(TitledEditor())
+        w.record_state.observable.name.set("Bob")  # type: ignore[union-attr]
+
+        # title comes from widget.title, name from record.name
+        assert_that(w.display.text()).is_equal_to("Static Title: Bob")
+
+    def test_underscore_fallback_when_no_record_match(self, qt: QtDriver) -> None:
+        """Underscore fallback works when there's no exact or record match."""
+
+        @widget
+        class CounterWidget(Widget):  # No record type
+            _count: Variable[int] = new(0)
+            display: QLabel = new(bind="Count: {count}")
+
+        w = qt.track(CounterWidget())
+        w._count.value = 42
+
+        # {count} should resolve to _count via underscore fallback
+        assert_that(w.display.text()).is_equal_to("Count: 42")

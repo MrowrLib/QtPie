@@ -38,13 +38,13 @@ We use `qtpy` for Qt abstraction so it works with PySide6 or PyQt6.
 uv run pytest tests/ -v
 
 # Type check
-uv run pyright lib/qtpie/ tests/unit/
+uv run pyright lib/qtpie/ tests/qtpie/
 
 # Lint
-uv run ruff check lib/qtpie/ tests/unit/
+uv run ruff check lib/qtpie/ tests/
 
 # Format
-uv run ruff format lib/qtpie/ tests/unit/
+uv run ruff format lib/qtpie/ tests/
 ```
 
 ---
@@ -58,7 +58,7 @@ uv run ruff format lib/qtpie/ tests/unit/
 uv run ruff check lib/qtpie/ tests/
 
 # 2. Pyright (type checking) - ENTIRE PROJECT
-uv run pyright lib/qtpie/ tests/unit/
+uv run pyright lib/qtpie/ tests/qtpie/
 
 # 3. Pytest (tests) - ENTIRE PROJECT
 uv run python -m pytest tests/ -v
@@ -603,6 +603,143 @@ class EditorWindow(Window):
     _app_name: Variable[str] = new("MyEditor")
     _filename: Variable[str] = new("untitled.txt")
 ```
+
+---
+
+## Translations (i18n)
+
+QtPie provides a declarative translation system using `t()` for marking translatable strings.
+
+### Basic Usage
+
+```python
+from qtpie import Widget, new, t, widget
+
+@widget
+class MyWidget(Widget):
+    # Mark strings for translation with t()
+    label: QLabel = new(t("Hello"))
+    button: QPushButton = new(t("Click Me"))
+```
+
+### With @entrypoint
+
+```python
+from qtpie import Widget, entrypoint, new, t, widget
+
+@entrypoint(
+    translations="translations.yml",  # Path to YAML file
+    language="fr",                    # Language code
+    watch_translations=True,          # Hot-reload in dev
+)
+@widget
+class MyApp(Widget):
+    label: QLabel = new(t("Hello"))  # Shows "Bonjour" when language="fr"
+```
+
+### Runtime Language Switching
+
+```python
+from qtpie import set_language
+
+def change_to_french(self) -> None:
+    set_language("fr")  # Automatically retranslates all t() widgets
+```
+
+### Translation YAML Format
+
+```yaml
+# translations.yml
+
+# Global translations (available to all widgets)
+:global:
+    Hello:
+        en: Hello
+        fr: Bonjour
+        de: Hallo
+
+    # Disambiguation - same source, different meanings
+    "Open|menu":
+        en: Open
+        fr: Ouvrir
+
+    "Open|status":
+        en: Open
+        fr: Ouvert
+
+    # Plurals - use %n for count
+    "%n file(s)":
+        en:
+            - "%n file"
+            - "%n files"
+        fr:
+            - "%n fichier"
+            - "%n fichiers"
+
+    # Translator notes
+    Submit:
+        :note: Button for form submission
+        en: Submit
+        fr: Soumettre
+
+# Widget-specific translations (context = class name)
+MainWindow:
+    Title:
+        en: My Application
+        fr: Mon Application
+```
+
+### Disambiguation
+
+When the same source text has different meanings:
+
+```python
+@widget
+class MyWidget(Widget):
+    # Use context= to disambiguate
+    menu_open: QAction = new(t("Open", context="menu"))    # "Ouvrir"
+    status_open: QLabel = new(t("Open", context="status")) # "Ouvert"
+```
+
+### Plurals
+
+```python
+# In code - call t() with count
+label.setText(t("%n file(s)")(5))  # "5 files" or "5 fichiers"
+```
+
+### CLI Commands
+
+```bash
+# Compile YAML to Qt .ts files
+uv run qtpie tr compile translations.yml -o ./i18n/
+
+# Also generate .qm binary files (requires lrelease)
+uv run qtpie tr compile translations.yml -o ./i18n/ --qm
+
+# Compile specific languages only
+uv run qtpie tr compile translations.yml -o ./i18n/ --lang fr --lang de
+
+# List all translations
+uv run qtpie tr list translations.yml
+```
+
+### Key Functions
+
+| Function | Description |
+|----------|-------------|
+| `t("text")` | Mark string for translation |
+| `t("text", context="x")` | Mark with disambiguation |
+| `t("%n item(s)")(n)` | Plural with count |
+| `set_language("fr")` | Change language (auto-retranslates) |
+
+### Architecture
+
+- `t()` returns a `Translatable` marker (lazy resolution)
+- Translation context defaults to widget class name
+- Falls back to `:global:` (`@default`) if no widget-specific translation
+- In-memory store for dev (hot-reload), QTranslator for production (.qm files)
+- Widgets using `t()` are registered for automatic retranslation
 
 ---
 

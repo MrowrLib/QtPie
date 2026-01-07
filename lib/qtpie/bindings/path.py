@@ -20,8 +20,9 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
     """Resolve a binding path to its source Observable/Variable.
 
     Resolution order:
-    1. self.<path> as attribute (Variable or regular value)
-    2. self.record.<path> if Widget[T]
+    1. Exact match: self.<path> as attribute (Variable or regular value)
+    2. Record: self.record.<path> if Widget[T]
+    3. Underscore fallback: self._<path> if no exact match or record match
 
     The path is normalized by stripping leading underscores.
     'dog.breed?.name' is passed through to observable_for_path().
@@ -43,11 +44,8 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
     first = parts[0]
     rest = parts[1] if len(parts) > 1 else None
 
-    # Also check with underscore prefix for private fields
-    first_with_underscore = f"_{first}"
-
-    # Try direct attribute (with underscore first, then without)
-    for attr_name in [first_with_underscore, first]:
+    # Helper to check if an attribute is a valid binding source
+    def try_resolve_attr(attr_name: str) -> BindingSource | None:
         if hasattr(widget, attr_name):
             raw_attr = getattr(widget, attr_name)
             if isinstance(raw_attr, Variable):
@@ -65,8 +63,12 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
                     if nested_path and isinstance(observable, ObservableProxy):
                         return observable.observable_for_path(nested_path)
                 return attr
-            # Regular attribute - not bindable for now
-            break
+        return None
+
+    # 1. Try exact match first (e.g., 'name' -> widget.name)
+    result = try_resolve_attr(first)
+    if result is not None:
+        return result
 
     # Ensure _qtpie state exists for widget-level property access
     from qtpie.state import QtPieState
@@ -86,7 +88,7 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
     if first == "validation_error_messages" and not rest:
         return widget._qtpie.validation_error_messages  # type: ignore[attr-defined]
 
-    # Try record if Widget[T]
+    # 2. Try record if Widget[T]
     if hasattr(widget, "_qtpie_config"):
         config = widget._qtpie_config
         if config.record_type is not None:
@@ -97,5 +99,11 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
             except (TypeError, AttributeError):
                 # record access failed (e.g., no type param)
                 pass
+
+    # 3. Underscore fallback (e.g., 'name' -> widget._name)
+    first_with_underscore = f"_{first}"
+    result = try_resolve_attr(first_with_underscore)
+    if result is not None:
+        return result
 
     return None

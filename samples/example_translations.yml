@@ -1,0 +1,176 @@
+# Example translations for QtPie
+# Use with: @entrypoint(translations="samples/example_translations.yml", language="fr")
+
+# Global translations (available to all widgets)
+:global:
+    # Simple translations
+    Hello:
+        en: Hello
+        fr: Bonjour
+        de: Hallo
+        es: Hola
+
+    Goodbye:
+        en: Goodbye
+        fr: Au revoir
+        de: Auf Wiedersehen
+        es: Adios
+
+    # Common UI elements
+    OK:
+        en: OK
+        fr: OK
+        de: OK
+        es: Aceptar
+
+    Cancel:
+        en: Cancel
+        fr: Annuler
+        de: Abbrechen
+        es: Cancelar
+
+    Save:
+        en: Save
+        fr: Enregistrer
+        de: Speichern
+        es: Guardar
+
+    # Disambiguation example - same source text, different meanings
+    "Open|menu":
+        en: Open
+        fr: Ouvrir
+        de: Oeffnen
+        es: Abrir
+
+    "Open|status":
+        en: Open
+        fr: Ouvert
+        de: Offen
+        es: Abierto
+
+    # Plurals - use %n for the count
+    "%n file(s)":
+        en:
+            - "%n file"
+            - "%n files"
+        fr:
+            - "%n fichier"
+            - "%n fichiers"
+        de:
+            - "%n Datei"
+            - "%n Dateien"
+        es:
+            - "%n archivo"
+            - "%n archivos"
+
+    "%n item(s) selected":
+        en:
+            - "%n item selected"
+            - "%n items selected"
+        fr:
+            - "%n element selectionne"
+            - "%n elements selectionnes"
+
+    # Translator notes
+    Submit:
+        :note: Button for form submission
+        en: Submit
+        fr: Soumettre
+        de: Absenden
+        es: Enviar
+
+# Widget-specific translations (context = class name)
+MainWindow:
+    Title:
+        en: My Application
+        fr: Mon Application
+        de: Meine Anwendung
+        es: Mi Aplicacion
+
+    "File":
+        en: File
+        fr: Fichier
+        de: Datei
+        es: Archivo
+
+    "Edit":
+        en: Edit
+        fr: Edition
+        de: Bearbeiten
+        es: Editar
+
+    "Help":
+        en: Help
+        fr: Aide
+        de: Hilfe
+        es: Ayuda
+
+SettingsDialog:
+    Title:
+        en: Settings
+        fr: Parametres
+        de: Einstellungen
+        es: Configuracion
+
+    "Language:":
+        en: "Language:"
+        fr: "Langue :"
+        de: "Sprache:"
+        es: "Idioma:"
+
+    "Theme:":
+        en: "Theme:"
+        fr: "Theme :"
+        de: "Design:"
+        es: "Tema:"
+
+    "Apply":
+        en: Apply
+        fr: Appliquer
+        de: Anwenden
+        es: Aplicar
+
+AboutDialog:
+    Title:
+        en: About
+        fr: A propos
+        de: Ueber
+        es: Acerca de
+
+    Version:
+        en: "Version 1.0.0"
+        fr: "Version 1.0.0"
+        de: "Version 1.0.0"
+        es: "Version 1.0.0"
+
+# Sample widget with translations
+HasSomeTranslations:
+    "Dog's Name":
+        en: "Dog's Name"
+        fr: "Nom du chien"
+        de: "Name des Hundes"
+        es: "Nombre del perro"
+
+    "Dog's name is: {name}, age is {age}":
+        en: "Dog's name is: {name}, age is {age}"
+        fr: "Le chien s'appelle {name}, il a {age} ans"
+        de: "Der Hund heisst {name}, Alter ist {age}"
+        es: "El perro se llama {name}, tiene {age} anos"
+
+    "Dog Info":
+        en: "Dog Info"
+        fr: "Info chien"
+        de: "Hund Info"
+        es: "Info del perro"
+
+    "Change Language":
+        en: "Change Language"
+        fr: "Changer la langue"
+        de: "Sprache aendern"
+        es: "Cambiar idioma"
+
+    "Options":
+        en: "Options"
+        fr: "Options"
+        de: "Optionen"
+        es: "Opciones"

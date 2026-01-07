@@ -11,7 +11,7 @@ from .new_fields import new_fields
 from .separator import separator
 from .slot import slot
 from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
-from .translations import Translatable, t
+from .translations import Translatable, set_language, t
 from .variable import RecordVariable, Variable
 from .widget import Widget, widget
 from .widget_base import WidgetBase
@@ -40,6 +40,7 @@ __all__ = [
     "run_app",
     "separator",
     "set_color_scheme",
+    "set_language",
     "slot",
     "t",
     "widget",
