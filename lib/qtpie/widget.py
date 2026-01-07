@@ -26,7 +26,7 @@ from .variable import RecordVariable, Variable, _create_observable_for_type, _Va
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "auto_bind", "widget_props", "object_name", "css_classes")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "record_default", "auto_bind", "widget_props", "object_name", "css_classes")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -35,6 +35,7 @@ class _QtPieConfig:
         self.variable_names: list[str] = []
         self.init_wrapped: bool = False
         self.record_type: type[Any] | None = None  # T from Widget[T]
+        self.record_default: Any | None = None  # Initial record value from @widget(record=...)
         self.auto_bind: bool = True  # Auto-bind QWidget fields to matching Variables/record fields
         self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
         self.object_name: str | None = None  # objectName for the widget
@@ -82,20 +83,15 @@ class _RecordDescriptor[T]:
             obj._qtpie._record = value
             obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
         else:
-            # Setting a value - create proper ObservableProxy wrapper
-            state = obj._qtpie
+            # Setting a value - always create a new ObservableProxy with the value
+            # We can't just set state._record.value because that doesn't update
+            # the field-level observables that ObservableProxy caches
             from observant import ObservableProxy
 
-            # Check if record doesn't exist yet or has None target
-            if state._record is None or state._record.value is None:
-                # Create proper ObservableProxy with the value
-                wrapper = ObservableProxy(value)
-                record_var = RecordVariable(wrapper)
-                state._record = record_var
-                state.register_variable("record", record_var)
-            else:
-                # Normal case - record exists, set value directly
-                state._record.value = value
+            wrapper = ObservableProxy(value)
+            record_var = RecordVariable(wrapper)
+            obj._qtpie._record = record_var
+            obj._qtpie.register_variable("record", record_var)
 
 
 class Widget[T = None](QWidget):
@@ -285,6 +281,7 @@ def widget(
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
 
@@ -298,6 +295,7 @@ def widget[W: Widget[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
@@ -353,6 +351,7 @@ def widget[W: Widget[Any]](
         target._qtpie_config.layout = layout
         target._qtpie_config.margins = margins
         target._qtpie_config.auto_bind = auto_bind
+        target._qtpie_config.record_default = record
         target._qtpie_config.widget_props = kwargs
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
@@ -440,6 +439,10 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
 
         # Register validators from validate= parameter (before __setup__ so they're active)
         _register_validators(self, config)
+
+        # Set initial record value if provided via @widget(record=...)
+        if config.record_default is not None and hasattr(self, "record"):
+            self.record = config.record_default
 
         # Call __setup__ hook if defined (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)

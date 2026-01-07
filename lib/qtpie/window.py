@@ -42,6 +42,8 @@ class WindowConfig:
     margins: int | tuple[int, int, int, int] | None = None
     # Record type from Window[T]
     record_type: type[Any] | None = None
+    # Initial record value from @window(record=...)
+    record_default: Any | None = None
 
 
 class Window[T = None](QMainWindow):
@@ -224,6 +226,7 @@ def window(
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[Window[Any]]], type[Window[Any]]]: ...
 
@@ -237,6 +240,7 @@ def window[W: Window[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
@@ -285,6 +289,7 @@ def window[W: Window[Any]](
         config.layout = layout
         config.margins = margins
         config.auto_bind = auto_bind
+        config.record_default = record
         config.widget_props = kwargs
         config.object_name = name
         config.css_classes = classes or []
@@ -406,6 +411,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Ensure QtPieState exists BEFORE bindings run (binding code checks hasattr)
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)
+
+        # Set initial record value if provided via @window(record=...)
+        if config.record_default is not None and hasattr(self, "record"):
+            self.record = config.record_default
 
         # Call __setup__ hook (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)

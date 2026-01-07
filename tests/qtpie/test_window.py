@@ -497,6 +497,96 @@ class TestWindowCssClasses:
         assert_that(class_prop).contains("main-window")
 
 
+class TestWindowRecordDecorator:
+    """Test @window(record=...) decorator parameter."""
+
+    def test_record_via_decorator(self, qt: QtDriver) -> None:
+        """@window(record=...) sets initial record value."""
+
+        @dataclass
+        class Dog:
+            name: str
+            breed: str
+
+        @window(record=Dog("Fido", "Lab"))
+        class DogWindow(Window[Dog]):
+            pass
+
+        w = qt.track(DogWindow())
+        assert_that(w.record.name).is_equal_to("Fido")
+        assert_that(w.record.breed).is_equal_to("Lab")
+
+    def test_record_via_decorator_accessible_in_setup(self, qt: QtDriver) -> None:
+        """Record from decorator is available in __setup__."""
+        captured_name: list[str] = []
+
+        @dataclass
+        class Dog:
+            name: str
+            age: int
+
+        @window(record=Dog("Buddy", 5))
+        class DogWindow(Window[Dog]):
+            def __setup__(self) -> None:
+                captured_name.append(self.record.name)
+
+        qt.track(DogWindow())
+        assert_that(captured_name[0]).is_equal_to("Buddy")
+
+    def test_record_via_decorator_modifiable(self, qt: QtDriver) -> None:
+        """Record from decorator can be modified."""
+
+        @dataclass
+        class Person:
+            name: str
+            age: int
+
+        @window(record=Person("Alice", 30))
+        class PersonWindow(Window[Person]):
+            pass
+
+        w = qt.track(PersonWindow())
+        w.record.name = "Bob"
+        w.record.age = 25
+
+        assert_that(w.record.name).is_equal_to("Bob")
+        assert_that(w.record.age).is_equal_to(25)
+
+    def test_record_via_decorator_dirty_tracking(self, qt: QtDriver) -> None:
+        """Record from decorator participates in dirty tracking."""
+
+        @dataclass
+        class Person:
+            name: str
+            age: int
+
+        @window(record=Person("Initial", 0))
+        class PersonWindow(Window[Person]):
+            pass
+
+        w = qt.track(PersonWindow())
+        assert_that(w.record_state.is_dirty.get()).is_false()
+
+        w.record.name = "Changed"
+        assert_that(w.record_state.is_dirty.get()).is_true()
+
+    def test_record_via_decorator_with_no_defaults(self, qt: QtDriver) -> None:
+        """@window(record=...) works with types that have no default values."""
+
+        @dataclass
+        class Cat:
+            name: str
+            lives: int
+
+        @window(record=Cat("Whiskers", 9))
+        class CatWindow(Window[Cat]):
+            pass
+
+        w = qt.track(CatWindow())
+        assert_that(w.record.name).is_equal_to("Whiskers")
+        assert_that(w.record.lives).is_equal_to(9)
+
+
 class TestWindowRecord:
     """Test Window[T] record support."""
 

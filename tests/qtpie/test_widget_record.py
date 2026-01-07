@@ -266,6 +266,71 @@ class TestWidgetRecordExplicit:
         assert_that(w.record_state.is_dirty.get()).is_true()
 
 
+class TestWidgetRecordDecorator:
+    """Test @widget(record=...) decorator parameter."""
+
+    def test_record_via_decorator(self, qt: QtDriver) -> None:
+        """@widget(record=...) sets initial record value."""
+
+        @widget(record=Dog("Fido", "Lab"))
+        class DogEditor(Widget[Dog]):
+            pass
+
+        w = qt.track(DogEditor())
+        assert_that(w.record.name).is_equal_to("Fido")
+        assert_that(w.record.breed).is_equal_to("Lab")
+
+    def test_record_via_decorator_accessible_in_setup(self, qt: QtDriver) -> None:
+        """Record from decorator is available in __setup__."""
+        captured_name: list[str] = []
+
+        @widget(record=Dog("Buddy", "Golden"))
+        class DogEditor(Widget[Dog]):
+            def __setup__(self) -> None:
+                captured_name.append(self.record.name)
+
+        qt.track(DogEditor())
+        assert_that(captured_name[0]).is_equal_to("Buddy")
+
+    def test_record_via_decorator_modifiable(self, qt: QtDriver) -> None:
+        """Record from decorator can be modified."""
+
+        @widget(record=Person("Alice", 30))
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+        w.record.name = "Bob"
+        w.record.age = 25
+
+        assert_that(w.record.name).is_equal_to("Bob")
+        assert_that(w.record.age).is_equal_to(25)
+
+    def test_record_via_decorator_dirty_tracking(self, qt: QtDriver) -> None:
+        """Record from decorator participates in dirty tracking."""
+
+        @widget(record=Person("Initial", 0))
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+        assert_that(w.record_state.is_dirty.get()).is_false()
+
+        w.record.name = "Changed"
+        assert_that(w.record_state.is_dirty.get()).is_true()
+
+    def test_record_via_decorator_with_no_defaults(self, qt: QtDriver) -> None:
+        """@widget(record=...) works with types that have no default values."""
+
+        @widget(record=Cat("Whiskers", 9))
+        class CatEditor(Widget[Cat]):
+            pass
+
+        w = qt.track(CatEditor())
+        assert_that(w.record.name).is_equal_to("Whiskers")
+        assert_that(w.record.lives).is_equal_to(9)
+
+
 class TestWidgetRecordDirtyHook:
     """Test dirty hook with record."""
 

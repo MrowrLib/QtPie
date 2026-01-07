@@ -422,12 +422,20 @@ class FileMenu(QMenu):
 
 
 @entrypoint
+@widget
+class SomeDogWidget(Widget[Dog]):
+    name: QLineEdit = new(label="Dog's Name")
+    age: QLineEdit = new(label="Dog's Age")
+
+    btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
+
+    def print_dog(self) -> None:
+        print(f"Dog Name: {self.record.name}, Age: {self.record.age}")
+
+
 @window(title="My App")
 class MainWindow(Window[Dog]):
-    # record: Variable[Dog] = new(Dog("Fido", 4))  # <--- Pyright is upset, but it works at runtime
-
     file_menu: FileMenu = new()
-
     btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
 
     def print_dog(self) -> None:
