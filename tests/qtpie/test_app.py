@@ -61,18 +61,18 @@ class TestAppLifecycleHooks:
     """Tests for App lifecycle hooks."""
 
     def test_setup_hook_called_on_subclass(self) -> None:
-        """setup() hook should be called when overridden in subclass."""
+        """__setup__() hook should be called when overridden in subclass."""
         setup_called = False
 
         class MyApp(App):
             @override
-            def setup(self) -> None:
+            def __setup__(self) -> None:
                 nonlocal setup_called
                 setup_called = True
 
         # We can't actually instantiate because QApplication already exists
         # But we can test the logic by checking the method
-        assert_that(hasattr(MyApp, "setup")).is_true()
+        assert_that(hasattr(MyApp, "__setup__")).is_true()
 
     def test_create_window_hook_exists(self) -> None:
         """create_window() hook should exist on App."""
