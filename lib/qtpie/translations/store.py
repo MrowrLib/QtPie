@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 from weakref import ref
 
 from qtpy.QtCore import QObject
@@ -19,9 +20,10 @@ _translations: dict[TranslationKey, dict[str, str | list[str]]] = {}
 # Current language for lookups
 _current_language: str = "en"
 
-# Bindings registry: (widget_weakref, property_name, source_text, disambiguation)
+# Bindings registry: (object_weakref, property_name, source_text, disambiguation)
 # We store source_text instead of Translatable to avoid circular import
-_translation_bindings: list[tuple[ref[QObject], str, str, str | None]] = []
+# Object can be any type (QObject, custom Python class, etc.)
+_translation_bindings: list[tuple[ref[Any], str, str, str | None]] = []
 
 # Loaded YAML paths (for reloading) - can be Path or str (for QRC paths)
 _loaded_paths: list[Path | str] = []
@@ -30,7 +32,7 @@ _loaded_paths: list[Path | str] = []
 # Each tuple: (widget_ref, source, disambiguation, host_ref, setter)
 # When language changes, we re-resolve the format string and re-create the format binding
 FormatBindingCallback = Callable[[str], None]
-_format_bindings: list[tuple[ref[QObject], str, str | None, ref[QObject], Callable[..., None]]] = []
+_format_bindings: list[tuple[ref[Any], str, str | None, ref[Any], Callable[..., None]]] = []
 
 
 def set_language(language: str, *, retranslate: bool = True) -> None:
@@ -182,7 +184,7 @@ def lookup_plural(
 
 
 def register_binding(
-    widget: QObject,
+    obj: Any,
     property_name: str,
     source: str,
     disambiguation: str | None = None,
@@ -190,20 +192,20 @@ def register_binding(
     """Register a translation binding for later retranslation.
 
     Args:
-        widget: The widget to update
+        obj: The object to update (QWidget, QObject, or any Python object)
         property_name: Property to set (e.g., "text", "placeholderText")
         source: Source text
         disambiguation: Optional disambiguation
     """
-    _translation_bindings.append((ref(widget), property_name, source, disambiguation))
+    _translation_bindings.append((ref(obj), property_name, source, disambiguation))
 
 
 def register_format_binding(
-    widget: QObject,
+    obj: Any,
     prop_name: str,
     source: str,
     disambiguation: str | None,
-    host: QObject,
+    host: Any,
     setter: Callable[..., None],
 ) -> None:
     """Register a format binding for later retranslation.
@@ -212,14 +214,65 @@ def register_format_binding(
     needs to be re-resolved when translations change.
 
     Args:
-        widget: The widget (used for weak reference to track lifetime)
+        obj: The object (used for weak reference to track lifetime)
         prop_name: Property name (for debugging)
         source: Source text of the Translatable
         disambiguation: Optional disambiguation
         host: The Widget/Window instance (for Variable resolution)
         setter: Setter function to call with formatted result
     """
-    _format_bindings.append((ref(widget), source, disambiguation, ref(host), setter))
+    _format_bindings.append((ref(obj), source, disambiguation, ref(host), setter))
+
+
+def _set_property_value(obj: Any, prop_name: str, value: str) -> bool:
+    """Set a property value on an object using best-effort approach.
+
+    Works with both Qt objects (QWidget, QObject) and plain Python objects.
+
+    Tries in order:
+    1. setXxx() method (Qt convention, e.g., setText, setPlaceholderText)
+    2. Direct attribute assignment (Python property/attribute)
+    3. setProperty() (Qt dynamic property, only for QObject subclasses)
+
+    Args:
+        obj: Object to set property on (any Python object)
+        prop_name: Property name (e.g., "text", "placeholderText", "whatever")
+        value: Value to set
+
+    Returns:
+        True if property was set, False otherwise
+    """
+    import logging
+
+    # 1. Try setXxx() method (e.g., setText, setPlaceholderText)
+    setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+    setter = getattr(obj, setter_name, None)
+    if setter is not None and callable(setter):
+        try:
+            setter(value)
+            return True
+        except Exception:
+            pass
+
+    # 2. Try direct attribute assignment (Python property/attribute)
+    if hasattr(obj, prop_name):
+        try:
+            setattr(obj, prop_name, value)
+            return True
+        except AttributeError:
+            pass  # Property is read-only
+
+    # 3. Try setProperty() for Qt objects (dynamic property)
+    if isinstance(obj, QObject):
+        try:
+            obj.setProperty(prop_name, value)
+            return True
+        except Exception:
+            pass
+
+    # None worked - log warning
+    logging.warning(f"Could not retranslate property '{prop_name}' on {type(obj).__name__}: no setter found")
+    return False
 
 
 def retranslate_all(context: str | None = None) -> None:
@@ -243,7 +296,7 @@ def retranslate_all(context: str | None = None) -> None:
         widget = widget_ref()
         if widget is not None:
             translated = lookup(ctx, source, disambiguation)
-            widget.setProperty(prop, translated)
+            _set_property_value(widget, prop, translated)
             live_bindings.append((widget_ref, prop, source, disambiguation))
 
     # Clean up dead references

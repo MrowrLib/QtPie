@@ -101,6 +101,47 @@ When in doubt, leave it out. Simpler is better.
 
 ---
 
+## ⚠️ Pyright Ignores Policy - CRITICAL ⚠️
+
+**This library MUST be perfectly typed. End users should NEVER need pyright ignores.**
+
+### In `lib/` (Library Code)
+
+- **INLINE ignores only** - when absolutely necessary, use targeted inline comments
+- **NEVER add file-header ignores** (like `# pyright: reportSomething=false`) blindly
+- Every ignore must be justified and as narrow as possible
+- The goal is ZERO ignores - each one is technical debt
+
+```python
+# GOOD - narrow, targeted, explained
+value = some_call()  # pyright: ignore[reportUnknownMemberType] - Qt returns Any here
+
+# BAD - never do this in lib/
+# pyright: reportPrivateUsage=false  ← NO! Not at file header!
+```
+
+### In `tests/` (Test Code)
+
+- **File-header ignores are OK** - tests often need relaxed typing
+- Prefer header-level over inline to keep test code clean
+- Common test file headers:
+
+```python
+# pyright: reportPrivateUsage=false
+# pyright: reportMissingTypeArgument=false
+```
+
+### For End Users - ABSOLUTE RULE
+
+**It is NEVER acceptable to ship library code that requires end users to add pyright ignores.**
+
+- Users importing `qtpie` must get perfect type inference
+- All public APIs must be fully typed with no `Any` leakage
+- If a user needs `# type: ignore` to use our library, WE FAILED
+- This is non-negotiable - we ship production-grade typed code
+
+---
+
 ## Widget Examples
 
 ### Basic Widget

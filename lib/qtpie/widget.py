@@ -421,23 +421,37 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
                             continue
                         widget_instance = getattr(self, name, None)
                         if widget_instance is not None and isinstance(widget_instance, QWidget):
-                            _validate_layout_params(name, config.layout, field.label, field.grid)
-                            _add_to_layout(qt_layout, widget_instance, config.layout, field.label, field.grid)
+                            # Resolve Translatable labels (keep original for retranslation)
+                            from qtpie.translations.translatable import Translatable
+
+                            label_translatable = field.label if isinstance(field.label, Translatable) else None
+                            label = field.label.resolve() if isinstance(field.label, Translatable) else field.label
+                            _validate_layout_params(name, config.layout, label, field.grid)
+                            _add_to_layout(qt_layout, widget_instance, config.layout, label, field.grid, label_translatable)
                     # Check if it's a Variable with a widget
                     elif name in config.variable_names:
                         var = getattr(self, name, None)
                         if isinstance(var, Variable) and var.widget is not None:
                             # Get label/grid/exclude_from_layout from the descriptor
                             descriptor: Any = getattr(cls, name, None)
-                            label: str | None = None
+                            var_label: str | None = None
+                            var_label_translatable: Any = None
                             grid: GridPosition | None = None
                             if isinstance(descriptor, _VariableDescriptor):
                                 if descriptor.exclude_from_layout:
                                     continue
-                                label = descriptor.label
+                                # Resolve Translatable labels (keep original for retranslation)
+                                from qtpie.translations.translatable import Translatable
+
+                                raw_label = descriptor.label
+                                if isinstance(raw_label, Translatable):
+                                    var_label = raw_label.resolve()
+                                    var_label_translatable = raw_label
+                                else:
+                                    var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
-                            _validate_layout_params(name, config.layout, label, grid)
-                            _add_to_layout(qt_layout, var.widget, config.layout, label, grid)
+                            _validate_layout_params(name, config.layout, var_label, grid)
+                            _add_to_layout(qt_layout, var.widget, config.layout, var_label, grid, var_label_translatable)
 
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)
@@ -511,6 +525,7 @@ def _add_to_layout(
     layout_type: LayoutType,
     label: str | None = None,
     grid: GridPosition | None = None,
+    label_translatable: Any | None = None,  # Original Translatable for retranslation
 ) -> None:
     """Add a widget to the layout.
 
@@ -520,6 +535,7 @@ def _add_to_layout(
         layout_type: The type of layout.
         label: For form layouts, the label text for this row.
         grid: For grid layouts, position as (row, col) or (row, col, rowspan, colspan).
+        label_translatable: Original Translatable for registering retranslation binding.
     """
     if layout_type in ("vertical", "horizontal"):
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
@@ -527,6 +543,21 @@ def _add_to_layout(
         form_layout = cast(QFormLayout, layout)
         if label is not None:
             form_layout.addRow(label, widget_instance)
+            # Register form label for retranslation if it was a Translatable
+            if label_translatable is not None:
+                from qtpie.translations.store import register_binding
+                from qtpie.translations.translatable import Translatable
+
+                if isinstance(label_translatable, Translatable):
+                    # Get the QLabel that Qt created for this row
+                    # (labelForField can return None if widget not in layout)
+                    label_widget = form_layout.labelForField(widget_instance)
+                    register_binding(
+                        label_widget,
+                        "text",
+                        label_translatable.text,
+                        label_translatable.context,
+                    )
         else:
             form_layout.addRow(widget_instance)
     elif layout_type == "grid":
@@ -761,6 +792,15 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         setattr(widget, name, repeater)
 
 
+def _make_bound_setter(setter: Callable[[Any, Any], None], widget: QWidget) -> Callable[[Any], None]:
+    """Create a bound setter function that captures the widget reference."""
+
+    def bound_setter(val: Any) -> None:
+        setter(widget, val)
+
+    return bound_setter
+
+
 def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Apply auto-bindings for QWidget fields.
 
@@ -773,6 +813,7 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
     from observant import Observable, ObservableProxy
 
     from .bindings import bind, create_format_binding, is_format_string, resolve_binding_source
+    from .translations.translatable import Translatable
     from .variable import Variable
 
     for name, field in config.fields.items():
@@ -789,10 +830,17 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
         if not isinstance(widget_instance, QWidget):
             continue
 
-        # Determine bind path
+        # Determine bind path (keep original Translatable for retranslation)
+        bind_path: str
+        bind_translatable: Translatable | None = None
         if field.bind is not None:
             # Explicit bind - always apply
-            bind_path = field.bind
+            # Resolve Translatable if needed
+            if isinstance(field.bind, Translatable):
+                bind_translatable = field.bind
+                bind_path = field.bind.resolve()
+            else:
+                bind_path = field.bind
         elif config.auto_bind:
             # Auto-bind: strip underscore prefix
             bind_path = name.lstrip("_")
@@ -809,15 +857,21 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
             adapter = registry.get(widget_instance, default_prop)
             if adapter is not None and adapter.setter is not None:
                 # Create a bound setter function
-                setter = adapter.setter
+                bound_setter = _make_bound_setter(adapter.setter, widget_instance)
+                create_format_binding(widget, bind_path, bound_setter)
 
-                def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
-                    def bound_setter(val: Any) -> None:
-                        s(w, val)
+                # Register for retranslation if bind was a Translatable
+                if bind_translatable is not None:
+                    from .translations.store import register_format_binding
 
-                    return bound_setter
-
-                create_format_binding(widget, bind_path, make_setter(setter, widget_instance))
+                    register_format_binding(
+                        widget_instance,
+                        default_prop or "text",
+                        bind_translatable.text,
+                        bind_translatable.context,
+                        widget,
+                        bound_setter,
+                    )
             continue
 
         # Resolve the binding source
