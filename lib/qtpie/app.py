@@ -4,12 +4,10 @@ import asyncio
 import signal
 import sys
 from collections.abc import Sequence
-from typing import cast, override
 
 import qasync  # type: ignore[import-untyped]
 from observant import Observable
-from qtpy.QtCore import QEvent, QObject, QTimer
-from qtpy.QtGui import QKeyEvent, QKeySequence
+from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
@@ -87,10 +85,6 @@ class App(QApplication):
                 return MyMainWindow()
     """
 
-    # Default undo/redo shortcuts (cross-platform)
-    DEFAULT_UNDO_SHORTCUTS: list[str] = ["Ctrl+Z"]
-    DEFAULT_REDO_SHORTCUTS: list[str] = ["Ctrl+Y", "Ctrl+Shift+Z"]
-
     def __init__(
         self,
         name: str = "Application",
@@ -101,8 +95,6 @@ class App(QApplication):
         undo: bool | None = None,
         undo_debounce_ms: int | None = None,
         undo_max: int | None = None,
-        undo_shortcuts: list[str] | None = None,
-        redo_shortcuts: list[str] | None = None,
         argv: Sequence[str] | None = None,
     ) -> None:
         """
@@ -116,10 +108,6 @@ class App(QApplication):
             undo: Enable/disable undo (default True). Used as fallback for widgets.
             undo_debounce_ms: Debounce time in ms (default 1000). Used as fallback.
             undo_max: Max undo stack size (default 1000).
-            undo_shortcuts: Keyboard shortcuts for undo. Default: ["Ctrl+Z"].
-                Use [] to disable. On macOS, Ctrl is automatically mapped to Cmd.
-            redo_shortcuts: Keyboard shortcuts for redo. Default: ["Ctrl+Y", "Ctrl+Shift+Z"].
-                Use [] to disable. On macOS, Ctrl is automatically mapped to Cmd.
             argv: Command-line arguments. Defaults to sys.argv.
         """
         # Handle color scheme before QApplication init
@@ -145,23 +133,6 @@ class App(QApplication):
         # Create undo stack
         stack_max = undo_max if undo_max is not None else UNDO_DEFAULT_MAX
         self._undo_stack = UndoStack(max_size=stack_max)
-
-        # Set up undo/redo keyboard shortcuts
-        self._undo_key_sequences: list[QKeySequence] = []
-        self._redo_key_sequences: list[QKeySequence] = []
-
-        # Use defaults if None, empty list disables
-        undo_keys = undo_shortcuts if undo_shortcuts is not None else self.DEFAULT_UNDO_SHORTCUTS
-        redo_keys = redo_shortcuts if redo_shortcuts is not None else self.DEFAULT_REDO_SHORTCUTS
-
-        for shortcut in undo_keys:
-            self._undo_key_sequences.append(QKeySequence(shortcut))
-        for shortcut in redo_keys:
-            self._redo_key_sequences.append(QKeySequence(shortcut))
-
-        # Install event filter for global shortcuts
-        if self._undo_key_sequences or self._redo_key_sequences:
-            self.installEventFilter(self)
 
         # Apply color scheme if app now exists
         if dark_mode:
@@ -281,10 +252,7 @@ class App(QApplication):
         Returns:
             True if an action was undone, False if nothing to undo.
         """
-        print(f"[DEBUG] App.undo() called, stack size={len(self._undo_stack._stack)}, pending={len(self._undo_stack._pending)}")  # pyright: ignore[reportPrivateUsage]
-        result = self._undo_stack.undo()
-        print(f"[DEBUG] App.undo() result={result}")
-        return result
+        return self._undo_stack.undo()
 
     def redo(self) -> bool:
         """
@@ -304,36 +272,3 @@ class App(QApplication):
     def can_redo(self) -> Observable[bool]:
         """Observable indicating if redo is available."""
         return self._undo_stack.can_redo
-
-    @override
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        """Handle global undo/redo keyboard shortcuts."""
-        if event.type() != QEvent.Type.KeyPress:
-            return super().eventFilter(watched, event)
-
-        key_event = cast(QKeyEvent, event)
-
-        # Build a key sequence from the event (key + modifiers)
-        key_with_mods = int(key_event.key()) | int(key_event.modifiers().value)
-        event_seq = QKeySequence(key_with_mods)
-
-        # DEBUG
-        print(f"[DEBUG] KeyPress: key={key_event.key()}, mods={key_event.modifiers()}, event_seq={event_seq.toString()}")
-        print(f"[DEBUG] Undo sequences: {[s.toString() for s in self._undo_key_sequences]}")
-
-        # Check undo shortcuts
-        for seq in self._undo_key_sequences:
-            print(f"[DEBUG] Comparing {event_seq.toString()} == {seq.toString()} ? {event_seq == seq}")
-            if event_seq == seq:
-                print("[DEBUG] UNDO TRIGGERED!")
-                self.undo()
-                return True
-
-        # Check redo shortcuts
-        for seq in self._redo_key_sequences:
-            if event_seq == seq:
-                print("[DEBUG] REDO TRIGGERED!")
-                self.redo()
-                return True
-
-        return super().eventFilter(watched, event)

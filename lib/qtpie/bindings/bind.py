@@ -115,7 +115,6 @@ class Binding[T]:
         if isinstance(observable, ObservableProxy):
             # Import here to avoid circular imports
             from ..state import QtPieState
-            from ..undo import resolve_undo_config
             from ..variable import RecordVariable
             from ..widget import _apply_auto_bindings  # pyright: ignore[reportPrivateUsage]
 
@@ -123,28 +122,9 @@ class Binding[T]:
             if not hasattr(widget, "_qtpie"):
                 widget._qtpie = QtPieState(widget)  # type: ignore[arg-type, attr-defined]
 
-            # Resolve undo config from widget class
-            widget_undo: bool | None = None
-            widget_debounce_ms: int | None = None
-            owner_cls = type(widget)
-            if hasattr(owner_cls, "_qtpie_config"):
-                wc = owner_cls._qtpie_config  # type: ignore[attr-defined]
-                widget_undo = getattr(wc, "undo", None)  # pyright: ignore[reportUnknownArgumentType]
-                widget_debounce_ms = getattr(wc, "undo_debounce_ms", None)  # pyright: ignore[reportUnknownArgumentType]
-
-            undo_config = resolve_undo_config(
-                widget_undo=widget_undo,
-                widget_debounce_ms=widget_debounce_ms,
-            )
-
             # Create a RecordVariable that wraps our same ObservableProxy
             # This shares the proxy so both sides see the same data
-            record_var = RecordVariable(
-                observable,
-                undo_enabled=undo_config.enabled,
-                undo_debounce_ms=undo_config.debounce_ms,
-                field_id_prefix=f"record_{id(widget)}",
-            )
+            record_var = RecordVariable(observable)
             widget._qtpie._record = record_var  # type: ignore[attr-defined, union-attr]
             widget._qtpie.register_variable("record", record_var)  # type: ignore[union-attr]
 

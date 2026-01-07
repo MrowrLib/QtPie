@@ -541,39 +541,10 @@ class RecordVariable[T]:
     Same interface as Variable[T] but specialized for records.
     """
 
-    __slots__ = (
-        "_wrapper",
-        "_undo_enabled",
-        "_undo_debounce_ms",
-        "_field_id_prefix",
-        "_last_values",
-        "_hooked_fields",
-    )
+    __slots__ = ("_wrapper",)
 
-    def __init__(
-        self,
-        wrapper: ObservableProxy[T],
-        *,
-        undo_enabled: bool = True,
-        undo_debounce_ms: int = 1000,
-        field_id_prefix: str | None = None,
-    ) -> None:
-        print(f"[DEBUG] RecordVariable.__init__: undo_enabled={undo_enabled}, debounce_ms={undo_debounce_ms}")
+    def __init__(self, wrapper: ObservableProxy[T]) -> None:
         object.__setattr__(self, "_wrapper", wrapper)
-        object.__setattr__(self, "_undo_enabled", undo_enabled)
-        object.__setattr__(self, "_undo_debounce_ms", undo_debounce_ms)
-        # Generate field_id_prefix from wrapper id if not provided
-        prefix = field_id_prefix if field_id_prefix else f"record_{id(wrapper)}"
-        object.__setattr__(self, "_field_id_prefix", prefix)
-        # Track last values for undo (captures old value before change)
-        object.__setattr__(self, "_last_values", {})
-        # Track which fields we've hooked for undo
-        object.__setattr__(self, "_hooked_fields", set())
-
-        # Hook all dataclass fields upfront for undo tracking
-        # This is needed because auto-bindings access Observable directly via
-        # record.observable.observable_for_path(), bypassing __getattr__
-        self._hook_all_fields()
 
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to the underlying proxy.
@@ -584,146 +555,16 @@ class RecordVariable[T]:
         result = getattr(self._wrapper, name)
         # Unwrap Observable to return actual value
         if isinstance(result, Observable):
-            # Hook this field for undo tracking (via binding changes)
-            self._hook_field_for_undo(name, result)
             return cast(Any, result.get())
         return result
-
-    def _hook_all_fields(self) -> None:
-        """Hook all dataclass fields for undo tracking upfront.
-
-        This is called at __init__ time to ensure fields are hooked before
-        auto-bindings access them directly via observable.observable_for_path().
-        """
-        import dataclasses
-
-        wrapper: ObservableProxy[Any] = object.__getattribute__(self, "_wrapper")
-
-        # Get the target object from the proxy
-        target = wrapper._target  # type: ignore[attr-defined]
-
-        # If it's a dataclass, hook all fields
-        if dataclasses.is_dataclass(target) and not isinstance(target, type):
-            for field in dataclasses.fields(target):
-                field_obs = getattr(wrapper, field.name)
-                if isinstance(field_obs, Observable):
-                    self._hook_field_for_undo(field.name, cast(Observable[Any], field_obs))
-
-    def _hook_field_for_undo(self, field_name: str, obs: Observable[Any]) -> None:
-        """Set up undo tracking for a field Observable."""
-        hooked: set[str] = object.__getattribute__(self, "_hooked_fields")
-        if field_name in hooked:
-            return
-
-        print(f"[DEBUG] RecordVariable._hook_field_for_undo: hooking field={field_name}")
-        hooked.add(field_name)
-
-        # Store initial value
-        last_values: dict[str, Any] = object.__getattribute__(self, "_last_values")
-        last_values[field_name] = obs.get()
-        print(f"[DEBUG] RecordVariable._hook_field_for_undo: initial value={last_values[field_name]}")
-
-        # Set up callback for when Observable changes (e.g., from binding)
-        def on_field_change(new_value: Any, fn: str = field_name) -> None:
-            print(f"[DEBUG] RecordVariable.on_field_change callback: field={fn}, new_value={new_value}")
-            self._on_observable_change(fn, new_value)
-
-        obs.on_change(on_field_change)
-        print("[DEBUG] RecordVariable._hook_field_for_undo: callback registered")
-
-    def _on_observable_change(self, field_name: str, new_value: Any) -> None:
-        """Handle Observable change (from bindings or direct set)."""
-        from .undo import SetValueAction, get_undo_stack
-
-        print(f"[DEBUG] RecordVariable._on_observable_change: field={field_name}, new_value={new_value}")
-
-        undo_enabled: bool = object.__getattribute__(self, "_undo_enabled")
-        if not undo_enabled:
-            print("[DEBUG] RecordVariable: undo disabled, skipping")
-            # Just update last_values
-            last_values: dict[str, Any] = object.__getattribute__(self, "_last_values")
-            last_values[field_name] = new_value
-            return
-
-        stack = get_undo_stack()
-        if stack is None:
-            print("[DEBUG] RecordVariable: no undo stack, skipping")
-            last_values = object.__getattribute__(self, "_last_values")
-            last_values[field_name] = new_value
-            return
-
-        # Don't push during undo/redo
-        if stack.in_undo_redo:
-            print("[DEBUG] RecordVariable: in undo/redo, skipping")
-            last_values = object.__getattribute__(self, "_last_values")
-            last_values[field_name] = new_value
-            return
-
-        last_values = object.__getattribute__(self, "_last_values")
-        old_value = last_values.get(field_name)
-
-        # Skip if value hasn't changed
-        if old_value == new_value:
-            print("[DEBUG] RecordVariable: value unchanged, skipping")
-            return
-
-        # Get the field Observable
-        field_obs = getattr(self._wrapper, field_name)
-        if not isinstance(field_obs, Observable):
-            print("[DEBUG] RecordVariable: not an Observable, skipping")
-            last_values[field_name] = new_value
-            return
-
-        # Create and push the undo action
-        print(f"[DEBUG] RecordVariable: pushing undo action old={old_value}, new={new_value}")
-        action = SetValueAction(observable=field_obs, old_value=old_value, new_value=new_value)
-        debounce_ms: int = object.__getattribute__(self, "_undo_debounce_ms")
-        field_id_prefix: str = object.__getattribute__(self, "_field_id_prefix")
-        field_id = f"{field_id_prefix}:{field_name}"
-        stack.push_debounced(action, field_id, debounce_ms)
-
-        # Update last value
-        last_values[field_name] = new_value
 
     @override
     def __setattr__(self, name: str, value: Any) -> None:
         """Forward attribute setting to the underlying proxy."""
-        internal_attrs = (
-            "_wrapper",
-            "_undo_enabled",
-            "_undo_debounce_ms",
-            "_field_id_prefix",
-            "_last_values",
-            "_hooked_fields",
-        )
-        if name in internal_attrs:
+        if name == "_wrapper":
             object.__setattr__(self, name, value)
         else:
-            self._push_record_undo_action(name, value)
-
-    def _push_record_undo_action(self, field_name: str, new_value: Any) -> None:
-        """Set a record field value. Undo is handled by on_change callback."""
-        # Get the target to find the Observable for this field
-        target = object.__getattribute__(self._wrapper, "_target")
-        if target is None:
-            # No target yet - just forward to wrapper
-            setattr(self._wrapper, field_name, new_value)
-            return
-
-        # Force the Observable to be created by accessing the field via __getattr__
-        # This also hooks up the undo callback via _hook_field_for_undo
-        field_obs = getattr(self._wrapper, field_name)
-        if not isinstance(field_obs, Observable):
-            # Complex type (list, dict, nested proxy) - just set directly
-            setattr(self._wrapper, field_name, new_value)
-            return
-
-        # Ensure field is hooked for undo (in case __getattr__ wasn't called on this instance)
-        self._hook_field_for_undo(field_name, field_obs)
-
-        # Apply the change via the Observable's set method
-        # The on_change callback will handle pushing to undo stack
-        field_obs.set(new_value)
+            setattr(self._wrapper, name, value)
 
     @property
     def value(self) -> T:

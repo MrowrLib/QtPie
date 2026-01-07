@@ -55,9 +55,6 @@ class EntryConfig:
     undo: bool | None = None
     undo_debounce_ms: int | None = None
     undo_max: int | None = None
-    # Undo keyboard shortcuts (None = use defaults, [] = disable)
-    undo_shortcuts: list[str] | None = None
-    redo_shortcuts: list[str] | None = None
 
 
 # Attribute name for storing entry config
@@ -196,10 +193,6 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             app_kwargs["undo_debounce_ms"] = config.undo_debounce_ms
         if config.undo_max is not None:
             app_kwargs["undo_max"] = config.undo_max
-        if config.undo_shortcuts is not None:
-            app_kwargs["undo_shortcuts"] = config.undo_shortcuts
-        if config.redo_shortcuts is not None:
-            app_kwargs["redo_shortcuts"] = config.redo_shortcuts
 
         app = App(**app_kwargs)
 
@@ -284,8 +277,6 @@ def entrypoint[T](
     undo: bool | None = ...,
     undo_debounce_ms: int | None = ...,
     undo_max: int | None = ...,
-    undo_shortcuts: list[str] | None = ...,
-    redo_shortcuts: list[str] | None = ...,
 ) -> type[T]: ...
 
 
@@ -304,8 +295,6 @@ def entrypoint[T](
     undo: bool | None = ...,
     undo_debounce_ms: int | None = ...,
     undo_max: int | None = ...,
-    undo_shortcuts: list[str] | None = ...,
-    redo_shortcuts: list[str] | None = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -324,8 +313,6 @@ def entrypoint[T](
     undo: bool | None = ...,
     undo_debounce_ms: int | None = ...,
     undo_max: int | None = ...,
-    undo_shortcuts: list[str] | None = ...,
-    redo_shortcuts: list[str] | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -343,8 +330,6 @@ def entrypoint(
     undo: bool | None = None,
     undo_debounce_ms: int | None = None,
     undo_max: int | None = None,
-    undo_shortcuts: list[str] | None = None,
-    redo_shortcuts: list[str] | None = None,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -373,10 +358,6 @@ def entrypoint(
         undo: Enable/disable undo (None = use default True).
         undo_debounce_ms: Debounce time in ms (None = use default 1000).
         undo_max: Max undo stack size (None = use default 1000).
-        undo_shortcuts: Keyboard shortcuts for undo. Default: ["Ctrl+Z"].
-            Use [] to disable. On macOS, Ctrl is automatically mapped to Cmd.
-        redo_shortcuts: Keyboard shortcuts for redo. Default: ["Ctrl+Y", "Ctrl+Shift+Z"].
-            Use [] to disable. On macOS, Ctrl is automatically mapped to Cmd.
 
     Examples:
         # Simplest - function returning a widget
@@ -432,8 +413,6 @@ def entrypoint(
         undo=undo,
         undo_debounce_ms=undo_debounce_ms,
         undo_max=undo_max,
-        undo_shortcuts=undo_shortcuts,
-        redo_shortcuts=redo_shortcuts,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:
