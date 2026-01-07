@@ -422,7 +422,7 @@ class FileMenu(QMenu):
 
 
 @entrypoint
-@widget
+@widget(record=Dog("Fido", 3))
 class SomeDogWidget(Widget[Dog]):
     name: QLineEdit = new(label="Dog's Name")
     age: QLineEdit = new(label="Dog's Age")

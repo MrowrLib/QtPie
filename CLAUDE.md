@@ -142,24 +142,35 @@ class Counter(Widget):
 ```python
 from dataclasses import dataclass
 from PySide6.QtWidgets import QLineEdit
-from qtpie import Widget, Variable, new, widget
+from qtpie import Widget, new, widget
 
 @dataclass
 class Person:
     name: str = ""
     age: int = 0
 
-@widget
+# Option 1: Use record= decorator parameter (preferred - full pyright support)
+@widget(record=Person("Alice", 30))
 class PersonEditor(Widget[Person]):
-    # self.record is automatically an ObservableProxy[Person]
-    # Fields auto-bind to record.name, record.age by convention
-    _name: Variable[str, QLineEdit] = new("")
-    _age: Variable[int, QLineEdit] = new(0)
+    # self.record.name and self.record.age autocomplete perfectly!
+    name: QLineEdit = new()  # Auto-binds to record.name
+    age: QLineEdit = new()   # Auto-binds to record.age
 
-    def __init__(self, person: Person | None = None):
-        super().__init__(person or Person())
-        # self.record.name, self.record.age are now reactive!
+# Option 2: Set record in __setup__ (for types without defaults)
+@widget
+class PersonEditor2(Widget[Person]):
+    name: QLineEdit = new()
+    age: QLineEdit = new()
+
+    def __setup__(self) -> None:
+        self.record = Person("Bob", 25)
 ```
+
+**Key points about `Widget[T]`:**
+- `self.record` is an `ObservableProxy[T]` - field access/assignment is reactive
+- `self.record_state` gives access to `.is_dirty`, `.value`, `.observable`
+- Fields named same as record properties auto-bind (e.g., `name: QLineEdit` binds to `record.name`)
+- Use `record=` decorator param to avoid pyright errors about overriding the `record` property
 
 ### List Binding with WidgetRepeater
 
@@ -436,3 +447,188 @@ class ReactiveExample(Widget):
     def update_x(self):
         self._x.value = 50  # _sum automatically updates to "Sum: 70"
 ```
+
+---
+
+## Window Examples
+
+`Window` is like `Widget` but for `QMainWindow`. Menus are auto-added to the menu bar.
+
+### Basic Window
+
+```python
+from PySide6.QtWidgets import QLabel, QPushButton
+from qtpie import Window, new, window
+
+@window(title="My App")
+class MainWindow(Window):
+    label: QLabel = new("Hello!")
+    button: QPushButton = new("Click")
+```
+
+### Window with Menus
+
+```python
+from PySide6.QtWidgets import QMenu
+from PySide6.QtGui import QAction
+from qtpie import Window, new, window, menu
+
+@menu("&File")
+class FileMenu(QMenu):
+    action_new: QAction = new("&New", triggered="on_new")
+    action_exit: QAction = new("E&xit", triggered="on_exit")
+
+    def on_new(self) -> None:
+        print("New!")
+
+    def on_exit(self) -> None:
+        print("Exit!")
+
+@window(title="My App")
+class MainWindow(Window):
+    file_menu: FileMenu = new()  # Auto-added to menu bar
+    label: QLabel = new("Content")
+```
+
+### Window with Record Type
+
+```python
+@dataclass
+class AppState:
+    username: str = ""
+    dark_mode: bool = False
+
+@window(title="Settings", record=AppState("admin", True))
+class SettingsWindow(Window[AppState]):
+    username: QLineEdit = new()  # Auto-binds to record.username
+```
+
+---
+
+## Property Bindings (visible=, enabled=)
+
+Control widget visibility and enabled state reactively:
+
+```python
+@widget
+class ConditionalUI(Widget):
+    _show_advanced: Variable[bool] = new(False)
+    _has_input: Variable[bool] = new(False)
+
+    # Simple variable binding
+    advanced_panel: QWidget = new(visible="_show_advanced")
+
+    # Expression binding
+    submit_btn: QPushButton = new("Submit", enabled="{len(_name) > 0}")
+
+    # With Variable
+    _name: Variable[str] = new("")
+    name_error: QLabel = new("Name required!", visible="{len(_name) == 0}")
+```
+
+---
+
+## Dirty Tracking
+
+Track whether fields have changed from their initial values:
+
+```python
+@widget
+class DirtyExample(Widget):
+    _name: Variable[str] = new("")
+    _age: Variable[int] = new(0)
+
+    def check_dirty(self):
+        # Check if any field changed
+        if self.view_model.is_dirty:
+            print(f"Changed fields: {self.view_model.dirty_fields}")
+
+        # Reset all to clean
+        self.view_model.reset_dirty()
+
+    # Optional lifecycle hook - fires on state transitions only
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        self.save_btn.setEnabled(is_dirty)
+```
+
+---
+
+## Validation
+
+Add validators to fields and check validity:
+
+```python
+@widget
+class ValidatedForm(Widget):
+    _name: Variable[str] = new("")
+    _age: Variable[int] = new(0)
+    _errors: QLabel = new(bind="{', '.join(validation_error_messages)}")
+
+    def __setup__(self) -> None:
+        # Add named validators (can be replaced/removed by name)
+        self.add_validator("_name", "required", lambda v: None if v else "Name required")
+        self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Min 3 chars")
+        self.add_validator("_age", "positive", lambda v: None if v > 0 else "Must be positive")
+
+    def on_submit(self):
+        if self.is_valid:
+            print("Form is valid!")
+        else:
+            # Structured: {field: {validator: [errors]}}
+            print(self.validation_errors)
+            # Flat list of all error messages
+            print(self.validation_error_messages)
+
+    # Optional lifecycle hook
+    def on_valid_changed(self, is_valid: bool) -> None:
+        self.submit_btn.setEnabled(is_valid)
+```
+
+---
+
+## Reactive Decorator Properties
+
+Decorator kwargs can reference Variables for reactive properties:
+
+```python
+@widget(windowTitle="{_title}")  # Reactive!
+class DynamicTitle(Widget):
+    _title: Variable[str] = new("Initial Title")
+
+    def update_title(self):
+        self._title.value = "New Title"  # Window title updates automatically
+
+@window(title="{_app_name} - {_filename}")
+class EditorWindow(Window):
+    _app_name: Variable[str] = new("MyEditor")
+    _filename: Variable[str] = new("untitled.txt")
+```
+
+---
+
+## Key Architecture Notes
+
+### Class Hierarchy
+- `Widget` → `QWidget` with declarative features
+- `Window` → `QMainWindow` with declarative features (menus auto-added to menu bar)
+- Both support `[T]` type parameter for record types
+
+### Config Objects
+- `Widget` uses `_QtPieConfig` (stored in `cls._qtpie_config`)
+- `Window` uses `WindowConfig` (dataclass, stored in `cls._qtpie_config`)
+- Instance state in `self._qtpie` (`QtPieState`)
+
+### Descriptor Pattern
+- `_RecordDescriptor` handles `self.record` access for `Widget[T]`/`Window[T]`
+- `_VariableDescriptor` handles `Variable[T]` field access
+- Both use lazy initialization
+
+### The `new()` Factory
+- Returns `NewField` instance at class definition time
+- Processed by `new_fields()` in `__init_subclass__`
+- Converted to proper descriptors or widget instances
+
+### Signal Auto-Connect
+- `clicked="method_name"` → connects to `self.method_name`
+- `clicked=lambda: ...` → connects directly
+- Happens in wrapped `__init__` after widget creation
