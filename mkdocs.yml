@@ -1,0 +1,101 @@
+site_name: QtPie
+site_description: Declarative UI framework for Qt/PySide6
+site_url: https://mrowrlib.github.io/QtPie
+
+repo_name: MrowrLib/QtPie
+repo_url: https://github.com/MrowrLib/QtPie
+
+theme:
+  name: material
+  favicon: images/favicon.ico
+  logo: images/QtPie%20256.png
+  palette:
+    - scheme: default
+      primary: light blue
+      accent: red
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: light blue
+      accent: red
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Fira Code
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Why QtPie?: why-qtpie.md
+  - Getting Started:
+      - Installation: start/install.md
+      - Hello World: start/hello-world.md
+      - Key Concepts: start/concepts.md
+  - Basics:
+      - Widgets: basics/widgets.md
+      - Layouts: basics/layouts.md
+      - Signals: basics/signals.md
+      - Styling: basics/styling.md
+  - Reactive State:
+      - Variables: state/variables.md
+      - Bindings: state/bindings.md
+      - Format Expressions: state/format-expressions.md
+      - Property Bindings: state/property-bindings.md
+  - Data & Forms:
+      - Record Widgets: data/records.md
+      - Lists & Dicts: data/lists-dicts.md
+      - Validation: data/validation.md
+      - Dirty Tracking: data/dirty-tracking.md
+  - Guides:
+      - Windows & Menus: guides/windows-menus.md
+      - Form Layouts: guides/forms.md
+      - Grid Layouts: guides/grids.md
+      - Translations: guides/translations.md
+      - App & Entry Points: guides/app.md
+      - Async: guides/async.md
+      - Testing: guides/testing.md
+  - Reference:
+      - Decorators:
+          - "@widget": reference/decorators/widget.md
+          - "@window": reference/decorators/window.md
+          - "@menu": reference/decorators/menu.md
+          - "@action": reference/decorators/action.md
+          - "@slot": reference/decorators/slot.md
+          - "@entrypoint": reference/decorators/entrypoint.md
+      - Factories:
+          - "new()": reference/factories/new.md
+          - "separator()": reference/factories/separator.md
+      - Classes:
+          - Widget: reference/classes/widget.md
+          - Window: reference/classes/window.md
+          - Variable: reference/classes/variable.md
+      - Styles:
+          - Color Schemes: reference/styles/color-schemes.md
+          - Class Helpers: reference/styles/class-helpers.md
+  - Examples: examples.md
+  - Qt Resources: qt-resources.md

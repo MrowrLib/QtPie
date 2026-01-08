@@ -30,8 +30,8 @@ class Counter(QWidget):
         self.count += 1
 ```
 
-| Light mode | Dark mode |
-|:--:|:--:|
+|                            Light mode                             |                            Dark mode                            |
+| :---------------------------------------------------------------: | :-------------------------------------------------------------: |
 | ![Light mode](docs/images/screenshots/hello-world-light-mode.png) | ![Dark mode](docs/images/screenshots/hello-world-dark-mode.png) |
 
 Click the button. State changes. Label updates. That's it.
