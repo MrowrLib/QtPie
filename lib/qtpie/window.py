@@ -154,11 +154,14 @@ class Window[T = None](QMainWindow):
         @record.setter
         def record(self, value: T) -> None: ...
 
-    def __getattr__(self, name: str) -> NoReturn:
-        """Handle attribute access for special cases."""
-        if name == "record":
-            raise TypeError(f"{type(self).__name__} has no record type. Use Window[YourModel] to enable record access.")
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+    if not TYPE_CHECKING:
+        # Runtime-only: provide better error messages for .record access
+        # Hidden from pyright so it doesn't disable attribute checking
+        def __getattr__(self, name: str) -> NoReturn:
+            """Handle attribute access for special cases."""
+            if name == "record":
+                raise TypeError(f"{type(self).__name__} has no record type. Use Window[YourModel] to enable record access.")
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     async def on_close(self) -> None:
         """Async hook called when the window is closing.

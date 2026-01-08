@@ -1,4 +1,5 @@
 # pyright: reportPrivateUsage=false, reportUnknownMemberType=false, reportUnknownLambdaType=false
+# pyright: reportAttributeAccessIssue=false
 """Tests for QtPie validation support."""
 
 from dataclasses import dataclass

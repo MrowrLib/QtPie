@@ -1,4 +1,5 @@
 # pyright: reportPrivateUsage=false, reportUnknownParameterType=false, reportMissingParameterType=false
+# pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 """Tests for widget name and classes parameters."""
 
 import pytest

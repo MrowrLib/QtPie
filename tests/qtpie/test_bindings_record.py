@@ -1,4 +1,4 @@
-# pyright: reportMissingTypeArgument=false
+# pyright: reportMissingTypeArgument=false, reportUnknownMemberType=false
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
 """Tests for auto-binding to record fields."""
 

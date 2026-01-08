@@ -1,4 +1,4 @@
-# pyright: reportPrivateUsage=false
+# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false
 """Tests for property bindings (visible=, enabled=, etc.)."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-# pyright: reportPrivateUsage=false
+# pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+# pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 """Integration tests for translations with widgets."""
 
 import tempfile

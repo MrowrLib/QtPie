@@ -219,7 +219,12 @@ class SimpleLists(Widget):
         print(f"Validity changed: {is_valid}")
         print(f"Whatever str is now: {self.whatever}")
 
-    # _save_btn: QPushButton = new("Save", enabled="{is_valid and view_model.is_dirty}")
+    _reset_dirty_btn: QPushButton = new("Reset Dirty", clicked="reset_dirty_fn")
+    _save_btn: QPushButton = new("Save", enabled="{is_valid and is_dirty}")
+
+    def reset_dirty_fn(self) -> None:
+        self.whatever.reset_dirty()  # <--- this exists
+        # self.reset_dirty() # <--- TODO
 
 
 @widget

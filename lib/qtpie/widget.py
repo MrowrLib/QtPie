@@ -280,11 +280,14 @@ class Widget[T = None](QWidget):
         # This should never run - @widget replaces __init__
         super().__init__(*args, **kwargs)  # pragma: no cover
 
-    def __getattr__(self, name: str) -> NoReturn:
-        """Handle attribute access for special cases."""
-        if name == "record":
-            raise TypeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+    if not TYPE_CHECKING:
+        # Runtime-only: provide better error messages for .record access
+        # Hidden from pyright so it doesn't disable attribute checking
+        def __getattr__(self, name: str) -> NoReturn:
+            """Handle attribute access for special cases."""
+            if name == "record":
+                raise TypeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 @overload
