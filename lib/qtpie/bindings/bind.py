@@ -127,6 +127,9 @@ class Binding[T]:
             record_var = RecordVariable(observable)
             widget._qtpie._record = record_var  # type: ignore[attr-defined, union-attr]
             widget._qtpie.register_variable("record", record_var)  # type: ignore[union-attr]
+            # Subscribe record to widget-level aggregation if active
+            widget._qtpie._subscribe_record_to_widget_dirty()  # type: ignore[union-attr]
+            widget._qtpie._subscribe_record_to_widget_valid()  # type: ignore[union-attr]
 
             # Re-apply auto-bindings now that record is populated
             # This is needed because the widget's __init__ ran before we set up the record

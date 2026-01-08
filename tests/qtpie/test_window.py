@@ -1741,3 +1741,110 @@ class TestWindowOnValidChangedHook:
 
         w._name.value = ""
         assert_that(valid_states).contains(False)
+
+
+class TestWindowIsDirty:
+    """Test Window.is_dirty property (aggregates Variables AND record)."""
+
+    def test_window_is_dirty_returns_observable(self, qt: QtDriver) -> None:
+        """Window.is_dirty should return Observable[bool]."""
+        from observant import Observable
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        assert_that(w.is_dirty).is_instance_of(Observable)
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_window_is_dirty_from_variables(self, qt: QtDriver) -> None:
+        """Window.is_dirty becomes True when Variables change."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        assert_that(w.is_dirty.get()).is_false()
+
+        w._name.value = "changed"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_window_is_dirty_from_record(self, qt: QtDriver) -> None:
+        """Window.is_dirty becomes True when record changes."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        @window(title="Test", record=Person())
+        class PersonWindow(Window[Person]):
+            pass
+
+        w = qt.track(PersonWindow())
+        assert_that(w.is_dirty.get()).is_false()
+
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_window_is_dirty_aggregates_both(self, qt: QtDriver) -> None:
+        """Window.is_dirty aggregates Variables AND record."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @window(title="Test", record=Person())
+        class PersonWindow(Window[Person]):
+            _extra: Variable[str] = new("")
+
+        w = qt.track(PersonWindow())
+        assert_that(w.is_dirty.get()).is_false()
+
+        # Modify Variable
+        w._extra.value = "extra"
+        assert_that(w.is_dirty.get()).is_true()
+
+        # Reset Variables
+        w.view_model.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+        # Modify record
+        w.record.name = "Bob"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_window_is_dirty_reactive_binding(self, qt: QtDriver) -> None:
+        """Window.is_dirty can be used in enabled= bindings."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+
+        w = qt.track(MainWindow())
+
+        # Initially clean - button should be disabled
+        assert_that(w._save_btn.isEnabled()).is_false()
+
+        # Become dirty - button should enable
+        w._name.value = "changed"
+        assert_that(w._save_btn.isEnabled()).is_true()
+
+    def test_window_is_dirty_subscribable(self, qt: QtDriver) -> None:
+        """Window.is_dirty Observable can be subscribed to."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        dirty_changes: list[bool] = []
+        w.is_dirty.on_change(lambda v: dirty_changes.append(v))
+
+        w._name.value = "changed"
+        assert_that(dirty_changes).contains(True)
+
+        w.view_model.reset_dirty()
+        assert_that(dirty_changes).contains(False)

@@ -72,6 +72,9 @@ class _RecordDescriptor[T]:
             record_var = RecordVariable(cast(ObservableProxy[T], wrapper))
             state._record = record_var
             state.register_variable("record", record_var)
+            # Subscribe record to widget-level aggregation if active
+            state._subscribe_record_to_widget_dirty()
+            state._subscribe_record_to_widget_valid()
 
         return state._record  # type: ignore[return-value]
 
@@ -92,6 +95,10 @@ class _RecordDescriptor[T]:
             record_var = RecordVariable(wrapper)
             obj._qtpie._record = record_var
             obj._qtpie.register_variable("record", record_var)
+
+        # Subscribe record to widget-level aggregation if active
+        obj._qtpie._subscribe_record_to_widget_dirty()
+        obj._qtpie._subscribe_record_to_widget_valid()
 
 
 class Widget[T = None](QWidget):
@@ -214,11 +221,24 @@ class Widget[T = None](QWidget):
         self._qtpie.add_validator(field, name, validator)
 
     @property
-    def is_valid(self) -> Observable[bool]:
-        """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any field has changed. Returns Observable[bool] for reactive bindings.
+
+        Aggregates dirty state from Variables AND record (if present).
+        """
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)
-        return self._qtpie.is_valid
+        return self._qtpie.widget_is_dirty
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Check if all fields are valid. Returns Observable[bool] for reactive bindings.
+
+        Aggregates validity from Variables AND record (if present).
+        """
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.widget_is_valid
 
     @property
     def validation_errors(self) -> dict[str, dict[str, list[str]]]:

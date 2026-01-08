@@ -219,3 +219,132 @@ class TestOnDirtyChangedHook:
         w._name.value = "changed"
         # Should not raise
         assert_that(w.view_model.is_dirty.get()).is_true()
+
+
+class TestWidgetIsDirty:
+    """Test Widget.is_dirty property (aggregates Variables AND record)."""
+
+    def test_widget_is_dirty_returns_observable(self, qt: QtDriver) -> None:
+        """Widget.is_dirty should return Observable[bool]."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MyWidget())
+        assert_that(w.is_dirty).is_instance_of(Observable)
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_widget_is_dirty_from_variables(self, qt: QtDriver) -> None:
+        """Widget.is_dirty becomes True when Variables change."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MyWidget())
+        assert_that(w.is_dirty.get()).is_false()
+
+        w._name.value = "changed"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_widget_is_dirty_from_record(self, qt: QtDriver) -> None:
+        """Widget.is_dirty becomes True when record changes."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+        assert_that(w.is_dirty.get()).is_false()
+
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_widget_is_dirty_aggregates_both(self, qt: QtDriver) -> None:
+        """Widget.is_dirty aggregates Variables AND record."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+        w = qt.track(PersonEditor())
+        assert_that(w.is_dirty.get()).is_false()
+
+        # Modify Variable
+        w._extra.value = "extra"
+        assert_that(w.is_dirty.get()).is_true()
+
+        # Reset Variables, still dirty from record access (triggers lazily)
+        w.view_model.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+        # Modify record
+        w.record.name = "Bob"
+        assert_that(w.is_dirty.get()).is_true()
+
+    def test_widget_is_dirty_reactive_binding(self, qt: QtDriver) -> None:
+        """Widget.is_dirty can be used in enabled= bindings."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+
+        w = qt.track(MyWidget())
+
+        # Initially clean - button should be disabled
+        assert_that(w._save_btn.isEnabled()).is_false()
+
+        # Become dirty - button should enable
+        w._name.value = "changed"
+        assert_that(w._save_btn.isEnabled()).is_true()
+
+    def test_widget_is_dirty_with_record_reactive(self, qt: QtDriver) -> None:
+        """Widget.is_dirty updates reactively when record changes."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+
+        w = qt.track(PersonEditor())
+
+        # Initially clean - button should be disabled
+        assert_that(w._save_btn.isEnabled()).is_false()
+
+        # Modify record - button should enable
+        w.record.name = "Alice"
+        assert_that(w._save_btn.isEnabled()).is_true()
+
+    def test_widget_is_dirty_subscribable(self, qt: QtDriver) -> None:
+        """Widget.is_dirty Observable can be subscribed to."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MyWidget())
+        dirty_changes: list[bool] = []
+        w.is_dirty.on_change(lambda v: dirty_changes.append(v))
+
+        w._name.value = "changed"
+        assert_that(dirty_changes).contains(True)
+
+        w.view_model.reset_dirty()
+        assert_that(dirty_changes).contains(False)

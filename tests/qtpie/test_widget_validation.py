@@ -454,3 +454,70 @@ class TestValidateParameter:
 
         w.name.widget.setText("Alice")
         assert_that(w.name.is_valid.get()).is_true()
+
+
+class TestWidgetIsValidAggregatesRecord:
+    """Test Widget.is_valid aggregates Variables AND record."""
+
+    def test_is_valid_from_record_validation(self, qt: QtDriver) -> None:
+        """Widget.is_valid includes record field validation."""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            def __setup__(self) -> None:
+                self.add_validator("name", "required", lambda v: None if v else "Name required")
+
+        w = qt.track(PersonEditor())
+        assert_that(w.is_valid.get()).is_false()
+
+        w.record.name = "Alice"
+        assert_that(w.is_valid.get()).is_true()
+
+    def test_is_valid_aggregates_variables_and_record(self, qt: QtDriver) -> None:
+        """Widget.is_valid aggregates both Variables and record validation."""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_extra", "required", lambda v: None if v else "Extra required")
+                self.add_validator("name", "required", lambda v: None if v else "Name required")
+
+        w = qt.track(PersonEditor())
+        assert_that(w.is_valid.get()).is_false()
+
+        # Fill in Variable
+        w._extra.value = "extra"
+        assert_that(w.is_valid.get()).is_false()  # Still invalid - record field empty
+
+        # Fill in record field
+        w.record.name = "Alice"
+        assert_that(w.is_valid.get()).is_true()
+
+        # Clear Variable
+        w._extra.value = ""
+        assert_that(w.is_valid.get()).is_false()
+
+    def test_is_valid_reactive_with_record(self, qt: QtDriver) -> None:
+        """Widget.is_valid reactively updates when record validation changes."""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _submit: QPushButton = new("Submit", enabled="{is_valid.get()}")
+
+            def __setup__(self) -> None:
+                self.add_validator("name", "required", lambda v: None if v else "Name required")
+
+        w = qt.track(PersonEditor())
+
+        # Initially invalid - button should be disabled
+        assert_that(w._submit.isEnabled()).is_false()
+
+        # Fill in record - button should enable
+        w.record.name = "Alice"
+        assert_that(w._submit.isEnabled()).is_true()
+
+        # Clear record - button should disable
+        w.record.name = ""
+        assert_that(w._submit.isEnabled()).is_false()

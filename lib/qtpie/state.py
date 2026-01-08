@@ -311,17 +311,115 @@ class QtPieViewModelBase:
 class QtPieState(QtPieStateBase):
     """Instance-level QtPie state for Widget/Window."""
 
-    __slots__ = ("_view_model",)
+    __slots__ = ("_view_model", "_widget_is_dirty", "_widget_is_valid")
 
     def __init__(self, host: Any) -> None:
         super().__init__(host)
         self._view_model: QtPieViewModel | None = None
+        self._widget_is_dirty: Observable[bool] | None = None
+        self._widget_is_valid: Observable[bool] | None = None
 
     @property
     def view_model(self) -> QtPieViewModel:
         if self._view_model is None:
             self._view_model = QtPieViewModel(self)
         return self._view_model
+
+    # -------------------------------------------------------------------------
+    # Widget-level aggregation (includes record if present)
+    # -------------------------------------------------------------------------
+
+    @property
+    def widget_is_dirty(self) -> Observable[bool]:
+        """Widget-level dirty state: aggregates Variables AND record (if present)."""
+        if self._widget_is_dirty is None:
+            self._widget_is_dirty = Observable[bool](False, dirty_tracking=False, validation=False)
+            self._setup_widget_is_dirty()
+        return self._widget_is_dirty
+
+    def _compute_widget_is_dirty(self) -> bool:
+        """Compute widget-level dirty: Variables OR record is dirty."""
+        # Check Variables via view_model
+        if self.is_dirty.get():
+            return True
+        # Check record if present
+        if self._record is not None:
+            return self._record.is_dirty.get()
+        return False
+
+    def _setup_widget_is_dirty(self) -> None:
+        """Subscribe to view_model.is_dirty and record.is_dirty."""
+
+        def update_widget_dirty(_: Any = None) -> None:
+            assert self._widget_is_dirty is not None
+            self._widget_is_dirty.set(self._compute_widget_is_dirty())
+
+        # Subscribe to view_model (Variables) dirty state
+        self.is_dirty.on_change(update_widget_dirty)
+
+        # Subscribe to record if present
+        if self._record is not None:
+            self._record.is_dirty.on_change(update_widget_dirty)
+
+        # Initial update
+        update_widget_dirty()
+
+    def _subscribe_record_to_widget_dirty(self) -> None:
+        """Subscribe record to widget-level dirty aggregation (called when record is created)."""
+        if self._widget_is_dirty is not None and self._record is not None:
+
+            def update_widget_dirty(_: Any = None) -> None:
+                assert self._widget_is_dirty is not None
+                self._widget_is_dirty.set(self._compute_widget_is_dirty())
+
+            self._record.is_dirty.on_change(update_widget_dirty)
+            update_widget_dirty()
+
+    @property
+    def widget_is_valid(self) -> Observable[bool]:
+        """Widget-level validity: aggregates Variables AND record (if present)."""
+        if self._widget_is_valid is None:
+            self._widget_is_valid = Observable[bool](True, dirty_tracking=False, validation=False)
+            self._setup_widget_is_valid()
+        return self._widget_is_valid
+
+    def _compute_widget_is_valid(self) -> bool:
+        """Compute widget-level validity: Variables AND record are valid."""
+        # Check Variables via view_model
+        if not self.is_valid.get():
+            return False
+        # Check record if present
+        if self._record is not None:
+            return self._record.is_valid.get()
+        return True
+
+    def _setup_widget_is_valid(self) -> None:
+        """Subscribe to view_model.is_valid and record.is_valid."""
+
+        def update_widget_valid(_: Any = None) -> None:
+            assert self._widget_is_valid is not None
+            self._widget_is_valid.set(self._compute_widget_is_valid())
+
+        # Subscribe to view_model (Variables) validity state
+        self.is_valid.on_change(update_widget_valid)
+
+        # Subscribe to record if present
+        if self._record is not None:
+            self._record.is_valid.on_change(update_widget_valid)
+
+        # Initial update
+        update_widget_valid()
+
+    def _subscribe_record_to_widget_valid(self) -> None:
+        """Subscribe record to widget-level validity aggregation (called when record is created)."""
+        if self._widget_is_valid is not None and self._record is not None:
+
+            def update_widget_valid(_: Any = None) -> None:
+                assert self._widget_is_valid is not None
+                self._widget_is_valid.set(self._compute_widget_is_valid())
+
+            self._record.is_valid.on_change(update_widget_valid)
+            update_widget_valid()
 
 
 class QtPieViewModel(QtPieViewModelBase):

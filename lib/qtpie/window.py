@@ -183,11 +183,24 @@ class Window[T = None](QMainWindow):
         self._qtpie.add_validator(field, name, validator)
 
     @property
-    def is_valid(self) -> Observable[bool]:
-        """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any field has changed. Returns Observable[bool] for reactive bindings.
+
+        Aggregates dirty state from Variables AND record (if present).
+        """
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)
-        return self._qtpie.is_valid
+        return self._qtpie.widget_is_dirty
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Check if all fields are valid. Returns Observable[bool] for reactive bindings.
+
+        Aggregates validity from Variables AND record (if present).
+        """
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.widget_is_valid
 
     @property
     def validation_errors(self) -> dict[str, dict[str, list[str]]]:
