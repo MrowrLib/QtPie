@@ -3,11 +3,21 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QApplication, QLabel, QPushButton
 
 from qtpie import Widget, new, widget
 from qtpie.variable import Variable
+
+
+# For test_observable_proxy_binding
+@dataclass
+class _TestSettings:
+    enabled: bool = False
+    name: str = ""
 
 
 @pytest.fixture(scope="module")
@@ -395,3 +405,159 @@ class TestReactiveWidgetDecoratorProps:
 
         w._app_name.value = "Super Editor"
         assert w.windowTitle() == "Super Editor - document.md"
+
+
+# =============================================================================
+# Raw reactive types as class attributes
+# =============================================================================
+
+
+class TestRawReactiveTypeBindings:
+    """Tests for using raw Observable/ObservableList/ObservableDict/ObservableProxy as class attributes."""
+
+    def test_observable_attribute_binding(self, qapp: QApplication) -> None:
+        """Test enabled= bound to a raw Observable[bool] class attribute."""
+
+        @widget
+        class TestWidget(Widget):
+            # Raw Observable (not Variable)
+            can_submit: Observable[bool] = Observable(False)
+            _button: QPushButton = new("Submit", enabled="{can_submit.get()}")
+
+        w = TestWidget()
+
+        # Initially disabled
+        assert w._button.isEnabled() is False
+
+        # Enable by setting Observable
+        w.can_submit.set(True)
+        assert w._button.isEnabled() is True
+
+        # Disable again
+        w.can_submit.set(False)
+        assert w._button.isEnabled() is False
+
+    def test_observable_list_binding(self, qapp: QApplication) -> None:
+        """Test visible= bound to a raw ObservableList with len() expression."""
+
+        @widget
+        class TestWidget(Widget):
+            # Raw ObservableList
+            items: ObservableList[str] = ObservableList()
+            _label: QLabel = new("Has items", visible="{len(items) > 0}")
+
+        w = TestWidget()
+
+        # Initially hidden (list empty)
+        assert is_widget_visible(w._label) is False
+
+        # Add item - becomes visible
+        w.items.append("item1")
+        assert is_widget_visible(w._label) is True
+
+        # Remove item - hidden again
+        w.items.pop()
+        assert is_widget_visible(w._label) is False
+
+    def test_observable_dict_binding(self, qapp: QApplication) -> None:
+        """Test enabled= bound to a raw ObservableDict with len() expression."""
+
+        @widget
+        class TestWidget(Widget):
+            # Raw ObservableDict
+            config: ObservableDict[str, int] = ObservableDict()
+            _button: QPushButton = new("Has Config", enabled="{len(config) > 0}")
+
+        w = TestWidget()
+
+        # Initially disabled (dict empty)
+        assert w._button.isEnabled() is False
+
+        # Add entry - becomes enabled
+        w.config["key1"] = 42
+        assert w._button.isEnabled() is True
+
+        # Remove entry - disabled again
+        del w.config["key1"]
+        assert w._button.isEnabled() is False
+
+    def test_observable_proxy_binding(self, qapp: QApplication) -> None:
+        """Test enabled= bound to a raw ObservableProxy checking a field."""
+
+        @widget
+        class TestWidget(Widget):
+            # Raw ObservableProxy
+            settings: ObservableProxy[_TestSettings] = ObservableProxy(_TestSettings())
+            _button: QPushButton = new("Action", enabled="{settings.enabled}")
+
+        w = TestWidget()
+
+        # Initially disabled
+        assert w._button.isEnabled() is False
+
+        # Enable via proxy field
+        w.settings.enabled = True
+        assert w._button.isEnabled() is True
+
+        # Disable again
+        w.settings.enabled = False
+        assert w._button.isEnabled() is False
+
+    def test_multiple_reactive_types_combined(self, qapp: QApplication) -> None:
+        """Test expression using multiple reactive types together."""
+
+        @widget
+        class TestWidget(Widget):
+            is_ready: Observable[bool] = Observable(False)
+            items: ObservableList[str] = ObservableList()
+            _button: QPushButton = new(
+                "Submit",
+                enabled="{is_ready.get() and len(items) > 0}",
+            )
+
+        w = TestWidget()
+
+        # Both conditions false - disabled
+        assert w._button.isEnabled() is False
+
+        # Only items - still disabled
+        w.items.append("item")
+        assert w._button.isEnabled() is False
+
+        # Both conditions true - enabled
+        w.is_ready.set(True)
+        assert w._button.isEnabled() is True
+
+        # Remove items - disabled again
+        w.items.clear()
+        assert w._button.isEnabled() is False
+
+    def test_observable_with_variable_combined(self, qapp: QApplication) -> None:
+        """Test expression combining raw Observable with Variable."""
+
+        @widget
+        class TestWidget(Widget):
+            # Mix of Variable and raw Observable
+            _name: Variable[str] = new("")
+            feature_enabled: Observable[bool] = Observable(True)
+            _button: QPushButton = new(
+                "Submit",
+                enabled="{len(_name) > 0 and feature_enabled.get()}",
+            )
+
+        w = TestWidget()
+
+        # Feature enabled but no name - disabled
+        assert w._button.isEnabled() is False
+
+        # Add name - enabled
+        w._name.value = "test"
+        assert w._button.isEnabled() is True
+
+        # Disable feature - disabled
+        w.feature_enabled.set(False)
+        assert w._button.isEnabled() is False
+
+        # Re-enable feature - enabled again
+        w.feature_enabled.set(True)
+        assert w._button.isEnabled() is True

@@ -228,6 +228,88 @@ class TestValidationWithUI:
         assert_that(w._submit.isEnabled()).is_false()
 
 
+class TestIsValidObservable:
+    """Test that Widget.is_valid is Observable[bool] for reactive bindings."""
+
+    def test_is_valid_is_observable(self, qt: QtDriver) -> None:
+        """Widget.is_valid should return Observable[bool]."""
+        from observant import Observable
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        w = qt.track(TestWidget())
+        # is_valid should be an Observable, not a plain bool
+        assert_that(w.is_valid).is_instance_of(Observable)
+        assert_that(w.is_valid.get()).is_false()
+
+    def test_is_valid_reactive_updates(self, qt: QtDriver) -> None:
+        """Widget.is_valid Observable should update when validity changes."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        w = qt.track(TestWidget())
+        validity_changes: list[bool] = []
+        w.is_valid.on_change(lambda v: validity_changes.append(v))
+
+        # Initially invalid
+        assert_that(w.is_valid.get()).is_false()
+
+        # Become valid
+        w._name.value = "hello"
+        assert_that(w.is_valid.get()).is_true()
+        assert_that(validity_changes).contains(True)
+
+        # Become invalid again
+        w._name.value = ""
+        assert_that(w.is_valid.get()).is_false()
+        assert_that(validity_changes).contains(False)
+
+    def test_is_valid_in_binding(self, qt: QtDriver) -> None:
+        """Widget.is_valid can be used in enabled= bindings."""
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("")
+            _submit: QPushButton = new("Submit", enabled="{is_valid.get()}")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        w = qt.track(TestWidget())
+        # Initially invalid - button should be disabled
+        assert_that(w._submit.isEnabled()).is_false()
+
+        # Become valid - button should enable
+        w._name.value = "hello"
+        assert_that(w._submit.isEnabled()).is_true()
+
+        # Become invalid - button should disable
+        w._name.value = ""
+        assert_that(w._submit.isEnabled()).is_false()
+
+    def test_is_valid_without_validators_is_observable(self, qt: QtDriver) -> None:
+        """Widget without validators still returns Observable[bool] for is_valid."""
+        from observant import Observable
+
+        @widget
+        class TestWidget(Widget):
+            _name: Variable[str] = new("")
+
+        w = qt.track(TestWidget())
+        assert_that(w.is_valid).is_instance_of(Observable)
+        assert_that(w.is_valid.get()).is_true()
+
+
 class TestValidateParameter:
     """Test validate= parameter on Variable fields."""
 

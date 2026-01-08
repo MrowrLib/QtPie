@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
+from observant import Observable
 from qtpy.QtWidgets import (
     QFormLayout,
     QGridLayout,
@@ -182,10 +183,10 @@ class Window[T = None](QMainWindow):
         self._qtpie.add_validator(field, name, validator)
 
     @property
-    def is_valid(self) -> bool:
-        """Check if all fields are valid."""
+    def is_valid(self) -> Observable[bool]:
+        """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""
         if not hasattr(self, "_qtpie"):
-            return True
+            self._qtpie = QtPieState(self)
         return self._qtpie.is_valid
 
     @property

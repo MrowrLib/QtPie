@@ -25,36 +25,59 @@ class QtPieStateBase:
         "_host",
         "variables",
         "_was_dirty",
-        "_check_dirty",
         "_record",
         "_was_valid",
         "_check_valid",
         "_aggregated_validation_errors",
+        "_aggregated_is_valid",
+        "_aggregated_is_dirty",
     )
 
     def __init__(self, host: Any) -> None:
         self._host = host
         self.variables: dict[str, Variable[Any]] = {}
         self._was_dirty: bool = False
-        self._check_dirty: Callable[[bool], None] | None = None
         self._record: RecordVariable[Any] | None = None
         self._was_valid: bool = True
         self._check_valid: Callable[[bool], None] | None = None
         self._aggregated_validation_errors: Observable[list[str]] | None = None
+        self._aggregated_is_valid: Observable[bool] | None = None
+        self._aggregated_is_dirty: Observable[bool] | None = None
 
     # -------------------------------------------------------------------------
     # Dirty tracking
     # -------------------------------------------------------------------------
 
     @property
-    def is_dirty(self) -> bool:
-        """Check if any Variable has changed from its clean state."""
-        return any(var.is_dirty for var in self.variables.values())
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any Variable has changed from its clean state. Returns Observable[bool] for reactive bindings."""
+        if self._aggregated_is_dirty is None:
+            self._aggregated_is_dirty = Observable[bool](False, dirty_tracking=False, validation=False)
+            self._setup_is_dirty_aggregation()
+        return self._aggregated_is_dirty
+
+    def _compute_is_dirty(self) -> bool:
+        """Compute the aggregated dirty state."""
+        return any(var.is_dirty.get() for var in self.variables.values())
+
+    def _setup_is_dirty_aggregation(self) -> None:
+        """Subscribe to all Variables' is_dirty and aggregate."""
+
+        def update_aggregated(_: Any = None) -> None:
+            assert self._aggregated_is_dirty is not None
+            self._aggregated_is_dirty.set(self._compute_is_dirty())
+
+        # Subscribe to existing variables
+        for var in self.variables.values():
+            var.is_dirty.on_change(update_aggregated)
+
+        # Initial update
+        update_aggregated()
 
     @property
     def dirty_fields(self) -> set[str]:
         """Return set of field names that have changed."""
-        return {name for name, var in self.variables.items() if var.is_dirty}
+        return {name for name, var in self.variables.items() if var.is_dirty.get()}
 
     def reset_dirty(self) -> None:
         """Mark all Variables as clean."""
@@ -64,28 +87,23 @@ class QtPieStateBase:
     def enable_dirty_hook(self) -> None:
         """Enable the on_dirty_changed hook (called after __setup__)."""
 
-        def check_dirty_transition(_: bool) -> None:
-            is_now_dirty = self.is_dirty
+        def check_dirty_transition(is_now_dirty: bool) -> None:
             if self._was_dirty != is_now_dirty:
                 self._was_dirty = is_now_dirty
                 hook = getattr(self._host, "on_dirty_changed", None)
                 if hook is not None:
                     hook(is_now_dirty)
 
-        self._check_dirty = check_dirty_transition
-
-        # Subscribe to each variable's is_dirty (including those registered before this)
-        for var in self.variables.values():
-            var.is_dirty.on_change(check_dirty_transition)
+        # Subscribe to the aggregated is_dirty Observable (not individual variables)
+        # This ensures the hook fires after all variable changes are aggregated
+        self.is_dirty.on_change(check_dirty_transition)
 
     def register_variable(self, name: str, var: Variable[Any] | RecordVariable[Any]) -> None:
         """Register a Variable and wire up dirty/valid hooks if enabled."""
         self.variables[name] = var  # type: ignore[assignment]
-        if self._check_dirty is not None:
-            var.is_dirty.on_change(self._check_dirty)
         if self._check_valid is not None:
             var.is_valid.on_change(self._check_valid)
-        # Subscribe to validation aggregation if active
+        # Subscribe to validation/dirty aggregation if active
         self._subscribe_variable_to_aggregation(var)  # type: ignore[arg-type]
 
     # -------------------------------------------------------------------------
@@ -93,9 +111,30 @@ class QtPieStateBase:
     # -------------------------------------------------------------------------
 
     @property
-    def is_valid(self) -> bool:
-        """Check if all Variables are valid."""
+    def is_valid(self) -> Observable[bool]:
+        """Check if all Variables are valid. Returns Observable[bool] for reactive bindings."""
+        if self._aggregated_is_valid is None:
+            self._aggregated_is_valid = Observable[bool](True, dirty_tracking=False, validation=False)
+            self._setup_is_valid_aggregation()
+        return self._aggregated_is_valid
+
+    def _compute_is_valid(self) -> bool:
+        """Compute the aggregated validity state."""
         return all(var.is_valid.get() for var in self.variables.values())
+
+    def _setup_is_valid_aggregation(self) -> None:
+        """Subscribe to all Variables' is_valid and aggregate."""
+
+        def update_aggregated(_: Any = None) -> None:
+            assert self._aggregated_is_valid is not None
+            self._aggregated_is_valid.set(self._compute_is_valid())
+
+        # Subscribe to existing variables
+        for var in self.variables.values():
+            var.is_valid.on_change(update_aggregated)
+
+        # Initial update
+        update_aggregated()
 
     @property
     def validation_errors(self) -> dict[str, dict[str, list[str]]]:
@@ -133,23 +172,44 @@ class QtPieStateBase:
 
     def _subscribe_variable_to_aggregation(self, var: Variable[Any]) -> None:
         """Subscribe a new variable to the aggregation (if active)."""
+        # Subscribe to validation error messages aggregation
         if self._aggregated_validation_errors is not None:
 
-            def update_aggregated(_: Any = None) -> None:
+            def update_error_msgs(_: Any = None) -> None:
                 msgs: list[str] = []
                 for v in self.variables.values():
                     msgs.extend(v.validation_error_messages.get())
                 assert self._aggregated_validation_errors is not None
                 self._aggregated_validation_errors.set(msgs)
 
-            var.validation_error_messages.on_change(update_aggregated)
-            update_aggregated()
+            var.validation_error_messages.on_change(update_error_msgs)
+            update_error_msgs()
+
+        # Subscribe to is_valid aggregation
+        if self._aggregated_is_valid is not None:
+
+            def update_is_valid(_: Any = None) -> None:
+                assert self._aggregated_is_valid is not None
+                self._aggregated_is_valid.set(self._compute_is_valid())
+
+            var.is_valid.on_change(update_is_valid)
+            update_is_valid()
+
+        # Subscribe to is_dirty aggregation
+        if self._aggregated_is_dirty is not None:
+
+            def update_is_dirty(_: Any = None) -> None:
+                assert self._aggregated_is_dirty is not None
+                self._aggregated_is_dirty.set(self._compute_is_dirty())
+
+            var.is_dirty.on_change(update_is_dirty)
+            update_is_dirty()
 
     def enable_valid_hook(self) -> None:
         """Enable the on_valid_changed hook (called after __setup__)."""
 
         def check_valid_transition(_: bool) -> None:
-            is_now_valid = self.is_valid
+            is_now_valid = self.is_valid.get()
             if self._was_valid != is_now_valid:
                 self._was_valid = is_now_valid
                 hook = getattr(self._host, "on_valid_changed", None)
@@ -159,7 +219,7 @@ class QtPieStateBase:
         self._check_valid = check_valid_transition
 
         # Sync _was_valid with current state (after __setup__ ran and added validators)
-        self._was_valid = self.is_valid
+        self._was_valid = self.is_valid.get()
 
         # Subscribe to each variable's is_valid
         for var in self.variables.values():
@@ -215,8 +275,8 @@ class QtPieViewModelBase:
     # -------------------------------------------------------------------------
 
     @property
-    def is_dirty(self) -> bool:
-        """Check if any Variable has changed from its clean state."""
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any Variable has changed from its clean state. Returns Observable[bool] for reactive bindings."""
         return self._state.is_dirty
 
     @property
@@ -233,8 +293,8 @@ class QtPieViewModelBase:
     # -------------------------------------------------------------------------
 
     @property
-    def is_valid(self) -> bool:
-        """Check if all Variables are valid."""
+    def is_valid(self) -> Observable[bool]:
+        """Check if all Variables are valid. Returns Observable[bool] for reactive bindings."""
         return self._state.is_valid
 
     @property

@@ -199,6 +199,7 @@ class HasListOfStrings:
     strings: list[str]
 
 
+@entrypoint
 @widget
 class SimpleLists(Widget):
     whatever: Variable[str, QLineEdit] = new("", validate=["validate_not_empty", "validate_length"])
@@ -213,6 +214,12 @@ class SimpleLists(Widget):
         if len(value) < 5:
             return "Value must be at least 5 characters long."
         return None
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        print(f"Validity changed: {is_valid}")
+        print(f"Whatever str is now: {self.whatever}")
+
+    # _save_btn: QPushButton = new("Save", enabled="{is_valid and view_model.is_dirty}")
 
 
 @widget
@@ -448,7 +455,7 @@ class MainWindow(Window[Dog]):
     #     self.record = Dog(name="Rover", age=5)
 
 
-@entrypoint(translations="samples/example_translations.yml", watch_translations=True)
+# @entrypoint(translations="samples/example_translations.yml", watch_translations=True)
 @widget(record=Dog("Fido", 3), layout="form")
 class HasSomeTranslations(Widget[Dog]):
     _name: QLineEdit = new(bind="name", label=t("Dog's Name"))

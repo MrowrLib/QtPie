@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
-from observant import Observable
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtWidgets import (
     QFormLayout,
     QGridLayout,
@@ -214,10 +214,10 @@ class Widget[T = None](QWidget):
         self._qtpie.add_validator(field, name, validator)
 
     @property
-    def is_valid(self) -> bool:
-        """Check if all fields are valid."""
+    def is_valid(self) -> Observable[bool]:
+        """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""
         if not hasattr(self, "_qtpie"):
-            return True
+            self._qtpie = QtPieState(self)
         return self._qtpie.is_valid
 
     @property
@@ -1041,18 +1041,61 @@ def _create_expression_binding(
     ast_names = _extract_ast_names(expr)
     var_names = ast_names - _BUILTINS
 
-    # Collect all observables to subscribe to
-    all_observables: list[Observable[Any]] = []
+    # Collect all reactive objects to subscribe to
+    # Observable has on_change(callback: Callable[[T], None])
+    # ObservableList/Dict/Proxy have on_change(callback: Callable[[], None])
+    observables: list[Observable[Any]] = []
+    reactive_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
 
     for var_name in var_names:
         source = resolve_binding_source(widget, var_name)
         if source is not None:
             if isinstance(source, Variable):
-                obs = source.observable
+                obs: Any = source.observable
                 if isinstance(obs, Observable):
-                    all_observables.append(obs)
+                    observables.append(cast(Observable[Any], obs))
+                elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
             elif isinstance(source, Observable):
-                all_observables.append(source)
+                observables.append(source)
+            elif isinstance(source, (ObservableList, ObservableDict, ObservableProxy)):  # pyright: ignore[reportUnnecessaryIsInstance] - runtime check for BindingSource union
+                reactive_collections.append(source)
+        else:
+            # Also check for reactive attributes directly on the widget
+            # (e.g., is_valid returns Observable[bool])
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(widget, attr_name):
+                    raw_attr: Any = getattr(widget, attr_name)
+                    if isinstance(raw_attr, Observable):
+                        observables.append(cast(Observable[Any], raw_attr))
+                        break
+                    elif isinstance(raw_attr, (ObservableList, ObservableDict, ObservableProxy)):
+                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
+                        break
+
+    # Also check for nested Observable paths like "view_model.is_dirty" or "record.is_valid"
+    # Find patterns like "name.attr" or "name.attr.method()" in the expression
+    import re
+
+    nested_patterns = re.findall(r"\b(\w+(?:\.\w+)+)(?:\s*\()?", expr)
+    for path in nested_patterns:
+        # Try to evaluate the path to find Observables
+        # Stop at paths that end with method calls like ".get()"
+        parts = path.split(".")
+        # Try progressively longer paths to find Observable
+        obj: Any = widget
+        for part in parts:
+            if not hasattr(obj, part):
+                break
+            obj = getattr(obj, part)
+            if isinstance(obj, Observable):
+                if obj not in observables:
+                    observables.append(cast(Observable[Any], obj))
+                break
+            elif isinstance(obj, (ObservableList, ObservableDict, ObservableProxy)):
+                if obj not in reactive_collections:
+                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obj))
+                break
 
     def compute() -> Any:
         # Build context with current values
@@ -1079,12 +1122,20 @@ def _create_expression_binding(
     # Set initial value
     setter(compute())
 
-    # Subscribe to ALL observables - when any changes, recompute
-    def on_any_change(_: Any) -> None:
+    # Subscribe to ALL reactive objects - when any changes, recompute
+    # Observable.on_change takes Callable[[T], None]
+    def on_observable_change(_: Any) -> None:
         setter(compute())
 
-    for obs in all_observables:
-        obs.on_change(on_any_change)
+    for obs in observables:
+        obs.on_change(on_observable_change)
+
+    # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
+    def on_collection_change() -> None:
+        setter(compute())
+
+    for coll in reactive_collections:
+        coll.on_change(on_collection_change)
 
 
 def _apply_reactive_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:

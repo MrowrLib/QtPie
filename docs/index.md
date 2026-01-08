@@ -68,9 +68,8 @@ class PersonEditor(Widget[Person]):
 ### Built-in Validation & Dirty Tracking
 
 ```python
-self.add_validator("name", "required", lambda v: None if v else "Required")
-if self.is_valid and self.view_model.is_dirty:
-    self.save()
+_name: Variable[str] = new("", validate=lambda v: None if v else "Required")
+_save_btn: QPushButton = new("Save", enabled="{is_valid and view_model.is_dirty}")
 ```
 
 ### Translations
