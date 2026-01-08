@@ -1848,3 +1848,58 @@ class TestWindowIsDirty:
 
         w.view_model.reset_dirty()
         assert_that(dirty_changes).contains(False)
+
+
+class TestWindowResetDirty:
+    """Test Window.reset_dirty() method."""
+
+    def test_reset_dirty_clears_variables(self, qt: QtDriver) -> None:
+        """Window.reset_dirty() clears Variable dirty state."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MainWindow())
+        w._name.value = "changed"
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_reset_dirty_clears_record(self, qt: QtDriver) -> None:
+        """Window.reset_dirty() clears record dirty state."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @window(title="Test", record=Person())
+        class PersonWindow(Window[Person]):
+            pass
+
+        w = qt.track(PersonWindow())
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_reset_dirty_clears_both(self, qt: QtDriver) -> None:
+        """Window.reset_dirty() clears both Variables and record."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @window(title="Test", record=Person())
+        class PersonWindow(Window[Person]):
+            _extra: Variable[str] = new("")
+
+        w = qt.track(PersonWindow())
+        w._extra.value = "extra"
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()

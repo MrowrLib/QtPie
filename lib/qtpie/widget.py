@@ -230,6 +230,16 @@ class Widget[T = None](QWidget):
             self._qtpie = QtPieState(self)
         return self._qtpie.widget_is_dirty
 
+    def reset_dirty(self) -> None:
+        """Mark all fields as clean (Variables and record)."""
+        if not hasattr(self, "_qtpie"):
+            return  # Nothing to reset
+        # Reset Variables
+        self._qtpie.reset_dirty()
+        # Reset record if present
+        if self._qtpie._record is not None:
+            self._qtpie._record.reset_dirty()
+
     @property
     def is_valid(self) -> Observable[bool]:
         """Check if all fields are valid. Returns Observable[bool] for reactive bindings.

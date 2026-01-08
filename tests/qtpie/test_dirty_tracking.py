@@ -348,3 +348,77 @@ class TestWidgetIsDirty:
 
         w.view_model.reset_dirty()
         assert_that(dirty_changes).contains(False)
+
+
+class TestWidgetResetDirty:
+    """Test Widget.reset_dirty() method."""
+
+    def test_reset_dirty_clears_variables(self, qt: QtDriver) -> None:
+        """Widget.reset_dirty() clears Variable dirty state."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+
+        w = qt.track(MyWidget())
+        w._name.value = "changed"
+        w._count.value = 42
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_reset_dirty_clears_record(self, qt: QtDriver) -> None:
+        """Widget.reset_dirty() clears record dirty state."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+
+    def test_reset_dirty_clears_both(self, qt: QtDriver) -> None:
+        """Widget.reset_dirty() clears both Variables and record."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+        w = qt.track(PersonEditor())
+        w._extra.value = "extra"
+        w.record.name = "Alice"
+        assert_that(w.is_dirty.get()).is_true()
+
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+        assert_that(w.view_model.is_dirty.get()).is_false()
+        assert_that(w.record_state.is_dirty.get()).is_false()
+
+    def test_reset_dirty_on_clean_widget(self, qt: QtDriver) -> None:
+        """Widget.reset_dirty() is safe on already-clean widget."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("")
+
+        w = qt.track(MyWidget())
+        assert_that(w.is_dirty.get()).is_false()
+
+        w.reset_dirty()  # Should not raise
+        assert_that(w.is_dirty.get()).is_false()

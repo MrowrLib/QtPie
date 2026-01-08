@@ -199,16 +199,17 @@ class HasListOfStrings:
     strings: list[str]
 
 
+def validate_not_empty(value: str) -> str | None:
+    if not value.strip():
+        return "Value cannot be empty, yo."
+    return None
+
+
 @entrypoint
 @widget
 class SimpleLists(Widget):
-    whatever: Variable[str, QLineEdit] = new("", validate=["validate_not_empty", "validate_length"])
+    whatever: Variable[str, QLineEdit] = new("", validate=[validate_not_empty, "validate_length"])
     variable_labels: list[QLabel] = new(bind="validation_error_messages")  # <--- this is a string array
-
-    def validate_not_empty(self, value: str) -> str | None:
-        if not value.strip():
-            return "Value cannot be empty."
-        return None
 
     def validate_length(self, value: str) -> str | None:
         if len(value) < 5:
@@ -219,12 +220,8 @@ class SimpleLists(Widget):
         print(f"Validity changed: {is_valid}")
         print(f"Whatever str is now: {self.whatever}")
 
-    _reset_dirty_btn: QPushButton = new("Reset Dirty", clicked="reset_dirty_fn")
+    _reset_dirty_btn: QPushButton = new("Reset Dirty", clicked="reset_dirty")
     _save_btn: QPushButton = new("Save", enabled="{is_valid and is_dirty}")
-
-    def reset_dirty_fn(self) -> None:
-        self.whatever.reset_dirty()  # <--- this exists
-        # self.reset_dirty() # <--- TODO
 
 
 @widget
