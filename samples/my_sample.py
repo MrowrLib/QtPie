@@ -208,20 +208,23 @@ def validate_not_empty(value: str) -> str | None:
 @entrypoint
 @widget
 class SimpleLists(Widget):
-    whatever: Variable[str, QLineEdit] = new("", validate=[validate_not_empty, "validate_length"])
-    variable_labels: list[QLabel] = new(bind="validation_error_messages")  # <--- this is a string array
+    _some_var: Variable[str, QLineEdit] = new("", validate=[validate_not_empty, "validate_length"])
+    _errors: list[QLabel] = new(bind="validation_error_messages")
+    _reset_dirty: QPushButton = new("Reset Dirty", clicked="reset_dirty")
+    _save: QPushButton = new("Save", enabled="{is_valid and is_dirty}")
 
     def validate_length(self, value: str) -> str | None:
         if len(value) < 5:
             return "Value must be at least 5 characters long."
         return None
 
+    @override
     def on_valid_changed(self, is_valid: bool) -> None:
         print(f"Validity changed: {is_valid}")
-        print(f"Whatever str is now: {self.whatever}")
 
-    _reset_dirty_btn: QPushButton = new("Reset Dirty", clicked="reset_dirty")
-    _save_btn: QPushButton = new("Save", enabled="{is_valid and is_dirty}")
+    @override
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        print(f"Dirty changed: {is_dirty}")
 
 
 @widget

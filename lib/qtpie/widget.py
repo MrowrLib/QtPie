@@ -265,8 +265,36 @@ class Widget[T = None](QWidget):
         return self._qtpie.validation_error_messages.get()
 
     # -------------------------------------------------------------------------
-    # Async Hooks
+    # Lifecycle Hooks
     # -------------------------------------------------------------------------
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """Called when dirty state transitions (clean→dirty or dirty→clean).
+
+        Override this to react to dirty state changes, e.g., enable/disable save button.
+
+        Example:
+            @widget
+            class MyWidget(Widget):
+                @override
+                def on_dirty_changed(self, is_dirty: bool) -> None:
+                    self._save_btn.setEnabled(is_dirty)
+        """
+        pass
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """Called when validity state transitions (valid→invalid or invalid→valid).
+
+        Override this to react to validation changes, e.g., show/hide error messages.
+
+        Example:
+            @widget
+            class MyWidget(Widget):
+                @override
+                def on_valid_changed(self, is_valid: bool) -> None:
+                    self._submit_btn.setEnabled(is_valid)
+        """
+        pass
 
     async def on_close(self) -> None:
         """Async hook called when the widget is closing.

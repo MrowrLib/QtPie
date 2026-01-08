@@ -3,6 +3,7 @@
 """Tests for Widget[T] with record support."""
 
 from dataclasses import dataclass
+from typing import override
 
 import pytest
 from assertpy import assert_that
@@ -340,6 +341,7 @@ class TestWidgetRecordDirtyHook:
 
         @widget
         class PersonEditor(Widget[Person]):
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 

@@ -3,6 +3,7 @@
 """Tests for QtPie validation support."""
 
 from dataclasses import dataclass
+from typing import override
 
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QPushButton
@@ -158,6 +159,7 @@ class TestWidgetValidation:
             def __setup__(self) -> None:
                 self.add_validator("_name", "required", lambda v: None if v else "Required")
 
+            @override
             def on_valid_changed(self, is_valid: bool) -> None:
                 valid_states.append(is_valid)
 
@@ -213,6 +215,7 @@ class TestValidationWithUI:
                 self.add_validator("_password", "required", lambda v: None if v else "Password required")
                 self._submit.setEnabled(False)
 
+            @override
             def on_valid_changed(self, is_valid: bool) -> None:
                 self._submit.setEnabled(is_valid)
 

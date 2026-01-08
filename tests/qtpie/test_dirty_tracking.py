@@ -2,6 +2,8 @@
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false
 """Tests for ViewModel dirty tracking."""
 
+from typing import override
+
 from assertpy import assert_that
 from observant import Observable
 from qtpy.QtWidgets import QPushButton
@@ -164,6 +166,7 @@ class TestOnDirtyChangedHook:
         class MyWidget(Widget):
             _name: Variable[str] = new("")
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 
@@ -180,6 +183,7 @@ class TestOnDirtyChangedHook:
         class MyWidget(Widget):
             _name: Variable[str] = new("")
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 
@@ -198,6 +202,7 @@ class TestOnDirtyChangedHook:
             _name: Variable[str] = new("")
             _count: Variable[int] = new(0)
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 

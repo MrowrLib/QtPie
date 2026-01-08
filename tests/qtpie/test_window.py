@@ -4,6 +4,7 @@
 """Tests for Window with auto-layout and menu bar integration."""
 
 from dataclasses import dataclass
+from typing import override
 
 from assertpy import assert_that
 from qtpy.QtGui import QAction
@@ -1551,6 +1552,7 @@ class TestWindowOnDirtyChangedHook:
         class MainWindow(Window):
             _name: Variable[str] = new("")
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 
@@ -1567,6 +1569,7 @@ class TestWindowOnDirtyChangedHook:
         class MainWindow(Window):
             _name: Variable[str] = new("")
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 
@@ -1585,6 +1588,7 @@ class TestWindowOnDirtyChangedHook:
             _name: Variable[str] = new("")
             _count: Variable[int] = new(0)
 
+            @override
             def on_dirty_changed(self, is_dirty: bool) -> None:
                 dirty_states.append(is_dirty)
 
@@ -1730,6 +1734,7 @@ class TestWindowOnValidChangedHook:
             def __setup__(self) -> None:
                 self.add_validator("_name", "required", lambda v: None if v else "Required")
 
+            @override
             def on_valid_changed(self, is_valid: bool) -> None:
                 valid_states.append(is_valid)
 

@@ -163,6 +163,24 @@ class Window[T = None](QMainWindow):
                 raise TypeError(f"{type(self).__name__} has no record type. Use Window[YourModel] to enable record access.")
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
+    # -------------------------------------------------------------------------
+    # Lifecycle Hooks
+    # -------------------------------------------------------------------------
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """Called when dirty state transitions (clean→dirty or dirty→clean).
+
+        Override this to react to dirty state changes, e.g., enable/disable save button.
+        """
+        pass
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """Called when validity state transitions (valid→invalid or invalid→valid).
+
+        Override this to react to validation changes, e.g., show/hide error messages.
+        """
+        pass
+
     async def on_close(self) -> None:
         """Async hook called when the window is closing.
 
