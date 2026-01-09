@@ -5,31 +5,47 @@
 - Python 3.13+
 - PySide6 or PyQt6
 
-## Install with pip
+## Install QtPie
 
-```bash
-pip install qtpie
-```
+=== "uv"
 
-## Install with uv (recommended)
+    ```bash
+    uv add qtpie
+    ```
 
-```bash
-uv add qtpie
-```
+=== "poetry"
+
+    ```bash
+    poetry add qtpie
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
 
 ## Install with test extras
 
 If you want to use QtPie's testing framework:
 
-```bash
-pip install "qtpie[test]"
-```
+=== "uv"
 
-Or with uv:
+    ```bash
+    uv add "qtpie[test]"
+    ```
 
-```bash
-uv add "qtpie[test]"
-```
+=== "poetry"
+
+    ```bash
+    poetry add qtpie --extras test
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "qtpie[test]"
+    ```
 
 ## Qt Backend
 
@@ -37,13 +53,35 @@ QtPie uses [qtpy](https://github.com/spyder-ide/qtpy) for Qt abstraction, so it 
 
 Install your preferred Qt binding:
 
-```bash
-# PySide6 (recommended)
-pip install PySide6
+=== "uv"
 
-# Or PyQt6
-pip install PyQt6
-```
+    ```bash
+    # PySide6 (recommended)
+    uv add PySide6
+
+    # Or PyQt6
+    uv add PyQt6
+    ```
+
+=== "poetry"
+
+    ```bash
+    # PySide6 (recommended)
+    poetry add PySide6
+
+    # Or PyQt6
+    poetry add PyQt6
+    ```
+
+=== "pip"
+
+    ```bash
+    # PySide6 (recommended)
+    pip install PySide6
+
+    # Or PyQt6
+    pip install PyQt6
+    ```
 
 ## Verify Installation
 
@@ -56,15 +94,6 @@ class Hello(Widget):
 
 print("QtPie installed successfully!")
 ```
-
-## Dependencies
-
-QtPie automatically installs:
-
-- `qtpy` - Qt abstraction layer
-- `qasync` - Async support for Qt
-- `pyyaml` - YAML parsing for translations
-- `typer` - CLI framework
 
 ## Next Steps
 

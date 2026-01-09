@@ -8,9 +8,23 @@ QtPie's async support is built on [qasync](https://github.com/CabbageDevelopment
 
 **Installation:**
 
-```bash
-pip install qasync
-```
+=== "uv"
+
+    ```bash
+    uv add qasync
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add qasync
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qasync
+    ```
 
 QtPie will automatically detect and use qasync when available. If qasync is not installed, attempting to use async features will raise a helpful error.
 

@@ -6,9 +6,23 @@ QtPie provides `qtpie.testing`, a strongly-typed testing library built on top of
 
 Install the testing dependencies:
 
-```bash
-pip install qtpie[test]
-```
+=== "uv"
+
+    ```bash
+    uv add "qtpie[test]"
+    ```
+
+=== "poetry"
+
+    ```bash
+    poetry add qtpie --extras test
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install "qtpie[test]"
+    ```
 
 Write tests using the `qt` fixture:
 

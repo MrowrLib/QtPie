@@ -190,7 +190,27 @@ class MyWidget(Widget):
 ## Requirements
 
 **For async support:**
-- `qasync` must be installed: `pip install qasync`
+
+- `qasync` must be installed:
+
+    === "uv"
+
+        ```bash
+        uv add qasync
+        ```
+
+    === "poetry"
+
+        ```bash
+        poetry add qasync
+        ```
+
+    === "pip"
+
+        ```bash
+        pip install qasync
+        ```
+
 - Your application must use qasync's event loop (automatic with `@entrypoint`)
 
 **For sync slots:**

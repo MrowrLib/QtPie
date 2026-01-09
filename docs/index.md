@@ -95,15 +95,23 @@ set_language("fr")  # Switch languages at runtime
 
 ## Installation
 
-```bash
-pip install qtpie
-```
+=== "uv"
 
-Or with uv:
+    ```bash
+    uv add qtpie
+    ```
 
-```bash
-uv add qtpie
-```
+=== "poetry"
+
+    ```bash
+    poetry add qtpie
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install qtpie
+    ```
 
 ## Next Steps
 
