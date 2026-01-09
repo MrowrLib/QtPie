@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_origin, overload, override
 
@@ -20,6 +20,18 @@ _ValT = TypeVar("_ValT")
 def _is_primitive_type(t: type | None) -> bool:
     """Check if type is a primitive."""
     return t in (str, int, float, bool, type(None))
+
+
+def _is_signal_on_type(name: str, target_type: type) -> bool:
+    """Check if name is a signal on the given type."""
+    try:
+        attr = getattr(target_type, name, None)
+        if attr is None:
+            return False
+        # qtpy signals at class level have type name 'Signal'
+        return type(attr).__name__ == "Signal"
+    except Exception:
+        return False
 
 
 def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObservable[Any]:
@@ -755,6 +767,17 @@ class _VariableDescriptor[T]:
                     widget_kwargs_copy = dict(self._widget_kwargs)
                     bind_expr = widget_kwargs_copy.pop("bind", None)
 
+                    # Extract signal connections (e.g., returnPressed="add_item")
+                    signal_connections: dict[str, str | Callable[..., Any]] = {}
+                    signal_keys_to_remove: list[str] = []
+                    for key, value in widget_kwargs_copy.items():
+                        if _is_signal_on_type(key, self._widget_type):
+                            if isinstance(value, str) or callable(value):
+                                signal_connections[key] = value
+                                signal_keys_to_remove.append(key)
+                    for key in signal_keys_to_remove:
+                        del widget_kwargs_copy[key]
+
                     try:
                         widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
@@ -771,6 +794,25 @@ class _VariableDescriptor[T]:
                         from .styles import set_classes
 
                         set_classes(widget_instance, self._css_classes)
+
+                    # Connect extracted signals to parent widget methods
+                    for signal_name, handler_spec in signal_connections.items():
+                        signal = getattr(widget_instance, signal_name, None)
+                        if signal is not None:
+                            if isinstance(handler_spec, str):
+                                # String handler - resolve on parent widget
+                                # Parse "method_name" or "method_name(...)"
+                                if "(" in handler_spec:
+                                    method_name = handler_spec[: handler_spec.index("(")]
+                                else:
+                                    method_name = handler_spec
+                                resolved_handler = getattr(obj, method_name, None)
+                                if resolved_handler is None:
+                                    raise RuntimeError(f"Handler '{method_name}' not found on {type(obj).__name__} for signal connection '{signal_name}=\"{handler_spec}\"'")
+                                signal.connect(resolved_handler)
+                            else:
+                                # Direct callable - connect directly
+                                signal.connect(handler_spec)
 
                     # Apply binding - format string or simple bind
                     if bind_expr is not None and "{" in bind_expr:

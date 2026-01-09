@@ -457,8 +457,6 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # And collect non-menu QWidget fields for central widget
         non_menu_widgets: list[tuple[str, QWidget]] = []
         for name in getattr(cls, "__annotations__", {}):
-            if name.startswith("_"):
-                continue
             instance = getattr(self, name, None)
             if isinstance(instance, QMenu):
                 self.menuBar().addMenu(instance)

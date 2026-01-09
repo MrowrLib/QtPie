@@ -558,3 +558,118 @@ class TestVariableProxyFieldAccess:
 
         assert w._dog.name == "Max"
         assert w._dog.age == 2
+
+
+class TestVariableWidgetSignalConnections:
+    """Test signal connections on Variable[T, W] widgets.
+
+    This tests that kwargs like `returnPressed="handler"` are properly
+    extracted and connected, rather than passed to the widget constructor
+    (which would cause Qt to mangle the handler name).
+    """
+
+    def test_signal_connection_string_handler(self, qt: QtDriver) -> None:
+        """Signal connection with string handler resolves to parent method."""
+        call_count = 0
+
+        @widget
+        class Test(Widget):
+            _input: Variable[str, QLineEdit] = new("")(returnPressed="on_submit")  # type: ignore[type-arg]
+
+            def on_submit(self) -> None:
+                nonlocal call_count
+                call_count += 1
+
+        w = qt.track(Test())
+
+        # Simulate pressing Enter in the line edit
+        w._input.widget.returnPressed.emit()
+
+        assert call_count == 1
+
+    def test_signal_connection_callable_handler(self, qt: QtDriver) -> None:
+        """Signal connection with callable handler connects directly."""
+        call_count = 0
+
+        def handler() -> None:
+            nonlocal call_count
+            call_count += 1
+
+        @widget
+        class Test(Widget):
+            _input: Variable[str, QLineEdit] = new("")(returnPressed=handler)  # type: ignore[type-arg]
+
+        w = qt.track(Test())
+
+        w._input.widget.returnPressed.emit()
+
+        assert call_count == 1
+
+    def test_signal_kwargs_not_passed_to_widget(self, qt: QtDriver) -> None:
+        """Signal kwargs are extracted, not passed to widget constructor.
+
+        This is the original bug - if signal kwargs are passed to the widget
+        constructor, Qt mangles the handler name (e.g., "add_item" -> "dd_item").
+        """
+
+        @widget
+        class Test(Widget):
+            # If returnPressed="on_submit" was passed to QLineEdit constructor,
+            # it would fail with a mangled name error
+            _input: Variable[str, QLineEdit] = new("")(  # type: ignore[type-arg]
+                placeholderText="Type here",
+                returnPressed="on_submit",
+            )
+
+            def on_submit(self) -> None:
+                pass
+
+        # Should not raise any Qt warnings about invalid method signatures
+        w = qt.track(Test())
+
+        # Verify the widget kwarg was applied correctly
+        assert w._input.widget.placeholderText() == "Type here"
+
+    def test_nonexistent_handler_raises_runtime_error(self, qt: QtDriver) -> None:
+        """Connecting to nonexistent handler raises RuntimeError."""
+        import pytest
+
+        @widget
+        class Test(Widget):
+            _input: Variable[str, QLineEdit] = new("")(returnPressed="nonexistent")  # type: ignore[type-arg]
+
+        # The error happens during widget creation when Variable is first accessed
+        # RuntimeError is used instead of AttributeError because getattr(self, name, None)
+        # in widget.py would swallow AttributeError during layout setup
+        with pytest.raises(RuntimeError, match="nonexistent"):
+            qt.track(Test())
+
+    def test_multiple_signal_connections(self, qt: QtDriver) -> None:
+        """Multiple signals can be connected on the same widget."""
+        return_pressed_count = 0
+        editing_finished_count = 0
+
+        @widget
+        class Test(Widget):
+            _input: Variable[str, QLineEdit] = new("")(  # type: ignore[type-arg]
+                returnPressed="on_return",
+                editingFinished="on_editing_finished",
+            )
+
+            def on_return(self) -> None:
+                nonlocal return_pressed_count
+                return_pressed_count += 1
+
+            def on_editing_finished(self) -> None:
+                nonlocal editing_finished_count
+                editing_finished_count += 1
+
+        w = qt.track(Test())
+
+        w._input.widget.returnPressed.emit()
+        assert return_pressed_count == 1
+        assert editing_finished_count == 0
+
+        w._input.widget.editingFinished.emit()
+        assert return_pressed_count == 1
+        assert editing_finished_count == 1

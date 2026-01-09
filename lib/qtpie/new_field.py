@@ -152,6 +152,12 @@ class NewField:
                 # Extract Translatable markers for binding registration
                 self._extract_translatables()
 
+                # Extract signal connections for the child widget type
+                # e.g., on_delete="remove_item" where on_delete is a Signal on list_widget_type
+                # list_widget_type is always set at this point (line 121)
+                assert self.list_widget_type is not None
+                self._extract_signal_connections_for_type(self.list_widget_type)
+
                 # Remaining kwargs go to widget constructor
                 return
 

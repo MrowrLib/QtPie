@@ -808,8 +808,61 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         obs_list: ObservableList[Any]
         item_type: type | None = None
 
+        # If source is None, check if it's a plain list/dict attribute
         if source is None:
-            raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
+            # Try to get raw attribute (handles plain list/dict fields)
+            bind_path = field.bind.lstrip("_")
+            raw_attr = None
+            if hasattr(widget, bind_path):
+                raw_attr = getattr(widget, bind_path)
+            elif hasattr(widget, f"_{bind_path}"):
+                raw_attr = getattr(widget, f"_{bind_path}")
+
+            if isinstance(raw_attr, list):
+                # Wrap plain list in ObservableList
+                obs_list = ObservableList(cast(list[Any], raw_attr))
+                setattr(widget, field.bind, obs_list)  # Replace with observable version
+                # Skip to repeater creation
+                plain_bind_expr: Any = field.list_format if field.list_format is not None else "{#self}"
+                repeater = WidgetRepeater(
+                    observable_list=obs_list,
+                    item_type=item_type,
+                    widget_type=field.list_widget_type,
+                    widget_args=field.args,
+                    widget_kwargs=field.kwargs,
+                    widget_props=field.widget_props,
+                    bind_expr=plain_bind_expr,
+                    object_name=field.object_name or name,
+                    css_classes=field.css_classes,
+                    signal_connections=field.signal_connections,
+                    parent_widget=widget,
+                )
+                setattr(widget, name, repeater)
+                continue
+            elif isinstance(raw_attr, dict):
+                from .dict_widget_repeater import DictWidgetRepeater
+
+                obs_dict: ObservableDict[Any, Any] = ObservableDict(cast(dict[Any, Any], raw_attr))
+                setattr(widget, field.bind, obs_dict)
+                bind_expr_dict: Any = field.list_format if field.list_format is not None else "{#key} = {#value}"
+                dict_repeater: DictWidgetRepeater[Any, Any] = DictWidgetRepeater(
+                    observable_dict=obs_dict,
+                    key_type=None,
+                    value_type=None,
+                    widget_type=field.list_widget_type,
+                    widget_args=field.args,
+                    widget_kwargs=field.kwargs,
+                    widget_props=field.widget_props,
+                    bind_expr=bind_expr_dict,
+                    object_name=field.object_name or name,
+                    css_classes=field.css_classes,
+                    signal_connections=field.signal_connections,
+                    parent_widget=widget,
+                )
+                setattr(widget, name, dict_repeater)
+                continue
+            else:
+                raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
 
         # Get the underlying observable from Variable or use source directly
         wrapper: Any = None
@@ -836,6 +889,8 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 bind_expr=bind_expr_dict,
                 object_name=field.object_name or name,
                 css_classes=field.css_classes,
+                signal_connections=field.signal_connections,
+                parent_widget=widget,
             )
             setattr(widget, name, dict_repeater)
             continue
@@ -879,6 +934,8 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             bind_expr=bind_expr,
             object_name=field.object_name or name,
             css_classes=field.css_classes,
+            signal_connections=field.signal_connections,
+            parent_widget=widget,
         )
 
         # Store the repeater on the widget

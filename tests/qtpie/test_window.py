@@ -2093,3 +2093,52 @@ class TestWindowVariableBindingsWithChildWidgets:
         # Changes propagate through the chain
         app._theme.value = "light"
         assert app.child.grandchild.theme.value == "light"
+
+
+class TestWindowVariableWidgetSignalConnections:
+    """Test signal connections on Variable[T, W] widgets in Window."""
+
+    def test_signal_connection_string_handler(self, qt: QtDriver) -> None:
+        """Signal connection with string handler resolves to parent window method."""
+        call_count = 0
+
+        @window(title="Test")
+        class App(Window):
+            _input: Variable[str, QLineEdit] = new("")(returnPressed="on_submit")  # type: ignore[type-arg]
+
+            def on_submit(self) -> None:
+                nonlocal call_count
+                call_count += 1
+
+        app = qt.track(App())
+        app._input.widget.returnPressed.emit()
+
+        assert_that(call_count).is_equal_to(1)
+
+    def test_signal_kwargs_not_passed_to_widget(self, qt: QtDriver) -> None:
+        """Signal kwargs are extracted, not passed to widget constructor."""
+
+        @window(title="Test")
+        class App(Window):
+            _input: Variable[str, QLineEdit] = new("")(  # type: ignore[type-arg]
+                placeholderText="Type here",
+                returnPressed="on_submit",
+            )
+
+            def on_submit(self) -> None:
+                pass
+
+        # Should not raise any Qt warnings about invalid method signatures
+        app = qt.track(App())
+        assert_that(app._input.widget.placeholderText()).is_equal_to("Type here")
+
+    def test_nonexistent_handler_raises_runtime_error(self, qt: QtDriver) -> None:
+        """Connecting to nonexistent handler raises RuntimeError."""
+        import pytest
+
+        @window(title="Test")
+        class App(Window):
+            _input: Variable[str, QLineEdit] = new("")(returnPressed="nonexistent")  # type: ignore[type-arg]
+
+        with pytest.raises(RuntimeError, match="nonexistent"):
+            qt.track(App())

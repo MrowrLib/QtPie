@@ -2,7 +2,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import override
 
-from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
+from qtpy.QtCore import Signal
+from qtpy.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QTabWidget
 
 from qtpie import Variable, Widget, entrypoint, new, set_language, slot, t, widget
 
@@ -614,7 +615,6 @@ class LiteralBindingDemo(Widget):
 
 
 # Uncomment and use as @entrypoint to run:
-@entrypoint
 @widget
 class VariableBindingsDemo(Widget):
     """Main demo widget showcasing all Variable binding features."""
@@ -632,3 +632,40 @@ class VariableBindingsDemo(Widget):
         self._tabs.addTab(self.expression_demo, "Expression Binding")
         self._tabs.addTab(self.nested_demo, "Nested Pass-Through")
         self._tabs.addTab(self.literal_demo, "Literal Values")
+
+
+@dataclass
+class TodoItem:
+    text: str
+    done: bool = False
+
+
+@widget(layout="horizontal")
+class TodoRow(Widget[TodoItem]):
+    on_delete = Signal()
+    on_toggle = Signal(bool)
+    checkbox: QCheckBox = new(bind="done", toggled="on_toggle")
+    label_text: QLabel = new(bind="{text}")
+    delete_btn: QPushButton = new("X", clicked="on_delete")
+
+
+@entrypoint(title="Todo List", size=(400, 500))
+@widget
+class TodoApp(Widget):
+    _items: Variable[list[TodoItem]] = new([])
+
+    _new_text: Variable[str, QLineEdit] = new("", validate=validate_not_empty)(placeholderText="What needs to be done?", returnPressed="add_item")
+    _add_btn: QPushButton = new("Add", clicked="add_item", enabled="{is_valid}")
+
+    # todo: support set. We need an ObservableSet for that
+    _todo_list: list[TodoRow] = new(bind="_items", on_delete="remove_item(#index)", on_toggle="on_toggle(#index, #args)")
+
+    def add_item(self) -> None:
+        self._items.append(TodoItem(text=self._new_text.value))
+
+    def remove_item(self, index: int) -> None:
+        if 0 <= index < len(self._items):
+            del self._items[index]
+
+    def on_toggle(self, index: int, done: bool) -> None:
+        print(f"Item at index {index} marked as {'done' if done else 'not done'}")

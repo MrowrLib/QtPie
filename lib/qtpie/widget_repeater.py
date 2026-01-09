@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -12,8 +12,14 @@ from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from .bindings import bind
 from .variable import Variable
 
+if TYPE_CHECKING:
+    from .widget import Widget
+
 # Regex to find placeholders like {#self}, {#index}, {name}, {age}, {#self.age}
 _PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
+
+# Regex to parse handler spec like "method_name(#value, #index, #args)"
+_HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -45,6 +51,8 @@ class WidgetRepeater[T](QWidget):
         layout_type: str = "vertical",
         object_name: str | None = None,
         css_classes: list[str] | None = None,
+        signal_connections: dict[str, str | Callable[..., Any]] | None = None,
+        parent_widget: Widget[Any] | None = None,
     ) -> None:
         """Initialize the widget repeater.
 
@@ -59,6 +67,10 @@ class WidgetRepeater[T](QWidget):
             layout_type: "vertical" or "horizontal".
             object_name: objectName to set on each created widget.
             css_classes: CSS classes to apply to each created widget.
+            signal_connections: Signal connections from child widget to parent handlers.
+                e.g., {"on_delete": "remove_item(#index)"} connects child.on_delete
+                to parent.remove_item with the item index.
+            parent_widget: The parent Widget instance for resolving handler methods.
         """
         super().__init__()
 
@@ -72,6 +84,8 @@ class WidgetRepeater[T](QWidget):
         self._is_primitive = _is_primitive_type(item_type)
         self._object_name = object_name
         self._css_classes = css_classes or []
+        self._signal_connections = signal_connections or {}
+        self._parent_widget = parent_widget
 
         # Track: (widget, item_wrapper, index_holder)
         # item_wrapper is Observable[T] for primitives, ObservableProxy[T] for objects
@@ -354,6 +368,110 @@ class WidgetRepeater[T](QWidget):
                     if isinstance(prop_obs, Observable):
                         prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
 
+    def _connect_child_signals(
+        self,
+        widget: QWidget,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        index_holder: list[int],
+    ) -> None:
+        """Connect child widget signals to parent handlers.
+
+        Args:
+            widget: The child widget instance.
+            wrapper: Observable or ObservableProxy wrapping the item.
+            index_holder: Mutable [int] for tracking index changes.
+        """
+        if not self._signal_connections or self._parent_widget is None:
+            return
+
+        for signal_name, handler_spec in self._signal_connections.items():
+            # Get the signal from child widget
+            signal = getattr(widget, signal_name, None)
+            if signal is None:
+                continue
+
+            # Create handler that resolves placeholders at call time
+            handler = self._create_signal_handler(handler_spec, wrapper, index_holder, widget)
+            signal.connect(handler)
+
+    def _create_signal_handler(
+        self,
+        spec: str | Callable[..., Any],
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        index_holder: list[int],
+        widget: QWidget,
+    ) -> Callable[..., Any]:
+        """Create a handler that resolves placeholders at call time.
+
+        Supports:
+        - "method_name" → passes signal's args only (shorthand for method_name(#args))
+        - "method_name()" → passes nothing
+        - "method_name(#args)" → passes signal's args
+        - "method_name(#value, #index, #args)" → passes item, index, then signal args
+
+        Placeholders:
+        - #value: The list item value
+        - #widget: The child widget instance
+        - #index: The list index
+        - #args: Spread of signal's own arguments
+        """
+        if callable(spec):
+            return spec
+
+        # Parse handler spec
+        match = _HANDLER_SPEC_RE.match(spec)
+        if not match:
+            raise ValueError(f"Invalid handler spec: {spec}")
+
+        method_name = match.group(1)
+        args_spec = match.group(2)  # May be None (no parens) or "" (empty parens)
+
+        # Get the method from parent widget
+        if self._parent_widget is None:
+            raise ValueError(f"Cannot connect signal: no parent widget for handler '{method_name}'")
+
+        parent_method = getattr(self._parent_widget, method_name, None)
+        if parent_method is None:
+            raise AttributeError(f"{type(self._parent_widget).__name__} has no method '{method_name}' for signal connection")
+        if not callable(parent_method):
+            raise AttributeError(f"{type(self._parent_widget).__name__}.{method_name} is not callable")
+
+        # Determine what args to pass
+        if args_spec is None:
+            # No parens: "method_name" → pass signal args only (like #args)
+            placeholders = ["#args"]
+        elif args_spec.strip() == "":
+            # Empty parens: "method_name()" → pass nothing
+            placeholders = []
+        else:
+            # Parse placeholders: "method_name(#value, #index, #args)"
+            placeholders = [p.strip() for p in args_spec.split(",") if p.strip()]
+
+        # Create the handler closure
+        def handler(*signal_args: Any) -> Any:
+            call_args: list[Any] = []
+            for placeholder in placeholders:
+                if placeholder == "#value":
+                    # Get the item value
+                    if isinstance(wrapper, Observable):
+                        call_args.append(wrapper.get())
+                    else:
+                        call_args.append(wrapper.unwrap())
+                elif placeholder == "#widget":
+                    call_args.append(widget)
+                elif placeholder == "#index":
+                    call_args.append(index_holder[0])
+                elif placeholder == "#args":
+                    # Spread signal args
+                    call_args.extend(signal_args)
+                else:
+                    # Unknown placeholder - pass as-is (could be a literal)
+                    call_args.append(placeholder)
+
+            return parent_method(*call_args)
+
+        return handler
+
     def _create_and_add_widget(self, index: int, item: T) -> None:
         """Create a widget for an item and add it to the layout."""
         wrapper = self._create_item_wrapper(item)
@@ -361,6 +479,7 @@ class WidgetRepeater[T](QWidget):
         index_holder = [index]
 
         self._bind_widget_to_item(widget, wrapper, index_holder)
+        self._connect_child_signals(widget, wrapper, index_holder)
 
         # Insert at correct position
         self._items.insert(index, (widget, wrapper, index_holder))
@@ -401,6 +520,7 @@ class WidgetRepeater[T](QWidget):
                 new_wrapper = self._create_item_wrapper(new_item)
                 new_widget = self._create_widget_for_item()
                 self._bind_widget_to_item(new_widget, new_wrapper, index_holder)
+                self._connect_child_signals(new_widget, new_wrapper, index_holder)
 
                 self._items[index] = (new_widget, new_wrapper, index_holder)
                 self._layout.insertWidget(index, new_widget)
