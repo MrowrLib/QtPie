@@ -14,8 +14,8 @@ from qtpie import Widget, new, widget
 
 @widget
 class MyWidget(Widget):
-    label: QLabel = new("Hello, World!")
-    button: QPushButton = new("Click Me")
+    _label: QLabel = new("Hello, World!")
+    _button: QPushButton = new("Click Me")
 ```
 
 **Important:** Attempting to instantiate a `Widget` subclass without the `@widget` decorator will raise a `TypeError`.
@@ -23,7 +23,7 @@ class MyWidget(Widget):
 ```python
 # This will raise TypeError: "MyWidget must be decorated with @widget"
 class MyWidget(Widget):
-    label: QLabel = new("Hello")
+    _label: QLabel = new("Hello")
 
 widget = MyWidget()  # Error!
 ```
@@ -38,8 +38,8 @@ The `new()` function is used to declare fields in your widget. It creates instan
 @widget
 class Example(Widget):
     # Positional args go to the widget constructor
-    label: QLabel = new("Label text")
-    button: QPushButton = new("Button text")
+    _label: QLabel = new("Label text")
+    _button: QPushButton = new("Button text")
 ```
 
 ### Constructor Arguments
@@ -51,9 +51,40 @@ from PySide6.QtWidgets import QLineEdit
 
 @widget
 class LoginForm(Widget):
-    username: QLineEdit = new(placeholderText="Enter username")
-    password: QLineEdit = new(echoMode=QLineEdit.EchoMode.Password)
+    _username: Variable[str, QLineEdit] = new("")(placeholderText="Enter username")
+    _password: Variable[str, QLineEdit] = new("")(echoMode=QLineEdit.EchoMode.Password)
+    _login_btn: QPushButton = new("Login", clicked="_on_login")
+
+    def _on_login(self):
+        print(f"Logging in as {self._username.value}")
 ```
+
+For `Variable[T, W]`, the first call sets the Variable's default, and the chained call configures the widget.
+
+### Binding to Child Widgets
+
+When creating child widgets, pass Variable and Signal bindings via `new()`:
+
+```python
+from PySide6.QtCore import Signal
+
+@widget
+class Slider(Widget):
+    value: Variable[int]          # Required - parent provides
+    on_change = Signal(int)       # Parent handles
+    _slider: QSlider = new(valueChanged="on_change")
+
+@widget
+class App(Widget):
+    _volume: Variable[int] = new(50)
+    _slider: Slider = new(value="_volume", on_change="_on_volume_change")
+    _label: QLabel = new(bind="Volume: {_volume}")
+
+    def _on_volume_change(self, val: int):
+        self._volume.value = val
+```
+
+The string `"_volume"` binds the child's `value` interface to the parent's `_volume` Variable. Same pattern for Signals.
 
 ### Non-Widget Fields
 
@@ -66,11 +97,11 @@ class Config:
 
 @widget
 class MyWidget(Widget):
-    config: Config = new(name="custom")
-    label: QLabel = new("Hello")
+    _config: Config = new(name="custom")
+    _label: QLabel = new("Hello")
 
-widget = MyWidget()
-assert widget.config.name == "custom"
+w = MyWidget()
+assert w._config.name == "custom"
 ```
 
 ## Widget Properties with new()
@@ -80,7 +111,7 @@ You can set Qt widget properties declaratively using keyword arguments in `new()
 ```python
 @widget
 class StyledWidget(Widget):
-    label: QLabel = new(
+    _label: QLabel = new(
         "Hello",
         toolTip="This is a label",
         styleSheet="color: red;",
@@ -162,7 +193,22 @@ You can set multiple properties at once:
     styleSheet="background-color: white;"
 )
 class Calculator(Widget):
-    display: QLabel = new("0")
+    _result: Variable[str] = new("0")
+    _display: QLabel = new(bind="{_result}")
+```
+
+### Reactive Decorator Properties
+
+Decorator properties can reference Variables for reactive updates:
+
+```python
+@widget(windowTitle="{_filename} - Editor")
+class Editor(Widget):
+    _filename: Variable[str] = new("untitled.txt")
+    _content: QTextEdit = new()
+
+    def open_file(self, path: str):
+        self._filename.value = path  # Window title updates automatically
 ```
 
 ### Invalid Properties
@@ -180,19 +226,19 @@ widget = MyWidget()
 
 ## Signal Connections
 
-Signals can be connected declaratively using keyword arguments in `new()`:
+Signals can be connected declaratively using keyword arguments in `new()`. The handler can be a method name, a callable, or a Signal to emit.
 
 ### Connect to Methods by Name
 
 ```python
 @widget
 class Counter(Widget):
-    button: QPushButton = new("Increment", clicked="on_button_clicked")
-    count: int = 0
+    _count: Variable[int] = new(0)
+    _label: QLabel = new(bind="Count: {_count}")
+    _button: QPushButton = new("Increment", clicked="_on_increment")
 
-    def on_button_clicked(self):
-        self.count += 1
-        print(f"Count: {self.count}")
+    def _on_increment(self):
+        self._count += 1
 ```
 
 If the method doesn't exist, you'll get an `AttributeError` during widget initialization:
@@ -232,12 +278,37 @@ You can connect multiple signals on the same widget:
 ```python
 @widget
 class Example(Widget):
-    button: QPushButton = new(
+    _button: QPushButton = new(
         "Click",
         pressed=lambda: print("Pressed!"),
         released=lambda: print("Released!"),
         clicked=lambda: print("Clicked!")
     )
+```
+
+### Connect to a Signal
+
+When the handler string refers to a Signal on your widget, the signals are connected directly. This is useful for forwarding events to parent widgets:
+
+```python
+from PySide6.QtCore import Signal
+
+@widget
+class IncrementButton(Widget):
+    on_click = Signal()  # Interface - parent connects to this
+    _button: QPushButton = new("+", clicked="on_click")  # Emits signal
+```
+
+The parent can then connect to `on_click`:
+
+```python
+@widget
+class App(Widget):
+    _count: Variable[int] = new(0)
+    _btn: IncrementButton = new(on_click="_increment")
+
+    def _increment(self):
+        self._count += 1
 ```
 
 ## Variable Fields
@@ -249,41 +320,84 @@ from qtpie import Variable
 
 @widget
 class Counter(Widget):
-    count: Variable[int] = new(0)
-    label: QLabel = new("Count: 0")
+    _count: Variable[int] = new(0)
+    _label: QLabel = new(bind="Count: {_count}")
+    _button: QPushButton = new("+", clicked="_increment")
 
-    def increment(self):
-        self.count += 1  # Direct assignment works
+    def _increment(self):
+        self._count += 1  # Label updates automatically
+```
+
+### Required vs Optional Variables
+
+Variables with `= new(default)` have a default value. Variables without a default are required - the parent must provide them:
+
+```python
+@widget
+class ProgressBar(Widget):
+    progress: Variable[int]                    # Required - parent must provide
+    show_percent: Variable[bool] = new(True)   # Optional - has default
+    _label: QLabel = new(bind="{progress}%", visible="show_percent")
+
+@widget
+class App(Widget):
+    _progress: Variable[int] = new(0)
+    _bar: ProgressBar = new(progress="_progress")  # Binds _progress to child's progress
 ```
 
 Variables are reactive and can trigger UI updates automatically. See the [Variables documentation](../reactive/variables.md) for details.
+
+## Validation
+
+Add validators to Variables using the `validate=` parameter:
+
+```python
+@widget
+class SignupForm(Widget):
+    _email: Variable[str, QLineEdit] = new("")(
+        placeholderText="Email",
+        validate=lambda v: None if "@" in v else "Invalid email"
+    )
+    _password: Variable[str, QLineEdit] = new("")(
+        placeholderText="Password",
+        validate="validate_password"
+    )
+    _errors: list[QLabel] = new(bind="validation_error_messages", stylesheet="color: red;")
+    _submit: QPushButton = new("Sign Up", enabled="{is_valid}", clicked="_on_submit")
+
+    def validate_password(self, value: str) -> str | None:
+        if len(value) < 8:
+            return "Password must be at least 8 characters"
+        return None
+
+    def _on_submit(self):
+        print(f"Signing up {self._email.value}")
+```
+
+Validators return `None` if valid, or an error message string. Use `is_valid` and `validation_error_messages` to bind UI state reactively. See the [Validation documentation](../data/validation.md) for details.
 
 ## The __setup__ Hook
 
 The `__setup__()` method is called after the widget is fully initialized and its layout is ready. Use this for:
 
-- Connecting signals manually
-- Initializing state based on widget properties
+- Setting initial focus or state
+- Loading data from external sources
 - Performing setup that requires the widget hierarchy to be complete
 
 ```python
 @widget
-class Example(Widget):
-    label: QLabel = new("Initial")
-    button: QPushButton = new("Click")
+class SearchForm(Widget):
+    _query: Variable[str, QLineEdit] = new("")(placeholderText="Search...")
+    _results: QLabel = new(bind="Results for: {_query}")
+    _search_btn: QPushButton = new("Search", clicked="_on_search")
 
     def __setup__(self):
-        # Layout is ready
-        assert self.layout() is not None
+        # Layout is ready, all fields exist
+        self._query.widget.setFocus()
+        self._query.widget.selectAll()
 
-        # Child widgets are accessible
-        assert self.label.text() == "Initial"
-
-        # Can perform additional setup
-        self.button.clicked.connect(self.on_click)
-
-    def on_click(self):
-        self.label.setText("Clicked!")
+    def _on_search(self):
+        print(f"Searching for: {self._query.value}")
 ```
 
 The `__setup__()` hook is called after `__init__()` completes, ensuring all fields are initialized.
@@ -295,15 +409,15 @@ Widgets are added to the layout in the order they're defined in the class:
 ```python
 @widget
 class OrderedWidget(Widget):
-    first: QLabel = new("First")
-    second: QLabel = new("Second")
-    third: QLabel = new("Third")
+    _first: QLabel = new("First")
+    _second: QLabel = new("Second")
+    _third: QLabel = new("Third")
 
-widget = OrderedWidget()
-layout = widget.layout()
-assert layout.itemAt(0).widget() == widget.first
-assert layout.itemAt(1).widget() == widget.second
-assert layout.itemAt(2).widget() == widget.third
+w = OrderedWidget()
+layout = w.layout()
+assert layout.itemAt(0).widget() == w._first
+assert layout.itemAt(1).widget() == w._second
+assert layout.itemAt(2).widget() == w._third
 ```
 
 This makes the UI structure predictable and easy to reason about.
@@ -341,9 +455,10 @@ Prefer composing widgets rather than inheriting from specific Qt widget types:
 # Good - composition
 @widget
 class UserCard(Widget):
-    name_label: QLabel = new()
-    email_label: QLabel = new()
-    avatar: QLabel = new()
+    name: Variable[str]   # Parent provides user data
+    email: Variable[str]
+    _name_label: QLabel = new(bind="{name}")
+    _email_label: QLabel = new(bind="{email}")
 
 # Avoid - inheritance (unless using WidgetBase for a specific Qt widget)
 class UserCard(QLabel):  # Don't do this with Widget
@@ -352,25 +467,37 @@ class UserCard(QLabel):  # Don't do this with Widget
 
 ### Organizing Complex Widgets
 
-For complex UIs, break them into smaller widget components:
+For complex UIs, break them into smaller widget components. Each component declares its interface:
 
 ```python
+from PySide6.QtCore import Signal
+
 @widget
 class HeaderBar(Widget):
-    logo: QLabel = new()
-    title: QLabel = new()
-    user_menu: QPushButton = new()
+    title: Variable[str]           # Parent provides
+    on_menu_click = Signal()       # Parent handles
+    _logo: QLabel = new("🏠")
+    _title: QLabel = new(bind="{title}")
+    _menu_btn: QPushButton = new("☰", clicked="on_menu_click")
 
 @widget
 class SidePanel(Widget):
-    nav_list: QListWidget = new()
-    settings_btn: QPushButton = new()
+    on_navigate = Signal(str)      # Emits page name
+    _home_btn: QPushButton = new("Home", clicked=lambda: self.on_navigate.emit("home"))
+    _settings_btn: QPushButton = new("Settings", clicked=lambda: self.on_navigate.emit("settings"))
 
 @widget
 class MainApp(Widget):
-    header: HeaderBar = new()
-    sidebar: SidePanel = new()
-    content: QLabel = new()
+    _page: Variable[str] = new("home")
+    _header: HeaderBar = new(title="_page", on_menu_click="_toggle_sidebar")
+    _sidebar: SidePanel = new(on_navigate="_navigate")
+    _content: QLabel = new(bind="Current page: {_page}")
+
+    def _toggle_sidebar(self):
+        self._sidebar.setVisible(not self._sidebar.isVisible())
+
+    def _navigate(self, page: str):
+        self._page.value = page
 ```
 
 ### Composable Widgets
@@ -466,8 +593,9 @@ class Example(Widget):
 - Every QtPie widget must use the `@widget` decorator
 - Use `new()` to declare widget fields and pass constructor arguments
 - Set widget properties via keyword arguments in `new()` or the decorator
-- Connect signals declaratively using keyword arguments
+- Connect signals to methods (`clicked="_on_click"`) or forward to Signals (`clicked="on_click"`)
+- Variables without defaults are required - parents provide them via `new(var_name="_parent_var")`
 - Use `__setup__()` for initialization after the widget hierarchy is ready
 - Fields are added to the layout in definition order
-- Variables provide reactive state but aren't added to layouts
+- Use underscore prefix for internal fields, no underscore for interface (Variables, Signals)
 - Use `WidgetBase` when extending existing Qt widget classes directly
