@@ -551,3 +551,196 @@ class TestRefEdgeCases:
         assert_that(w1._button.menu()).is_equal_to(w1._menu)
         assert_that(w2._button.menu()).is_equal_to(w2._menu)
         assert_that(w1._menu).is_not_equal_to(w2._menu)
+
+
+class TestRefExpressions:
+    """Test expression refs with {} syntax."""
+
+    def test_is_expression_detects_braces(self) -> None:
+        """is_expression returns True for expressions with {}."""
+        r = ref("{_name}")
+        assert_that(r.is_expression).is_true()
+
+        r2 = ref("Count: {_count}")
+        assert_that(r2.is_expression).is_true()
+
+        r3 = ref("_name")
+        assert_that(r3.is_expression).is_false()
+
+        r4 = ref("#parent._name")
+        assert_that(r4.is_expression).is_false()
+
+    def test_simple_expression_returns_string(self, qt: QtDriver) -> None:
+        """ref("{_attr}") returns stringified value."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("Alice")
+
+        w = qt.track(MyWidget())
+        r = ref("{_name}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Alice")
+
+    def test_expression_with_literal_text(self, qt: QtDriver) -> None:
+        """ref("Hello: {_name}") includes literal text."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("Bob")
+
+        w = qt.track(MyWidget())
+        r = ref("Hello: {_name}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Hello: Bob")
+
+    def test_expression_with_len_function(self, qt: QtDriver) -> None:
+        """ref("Count: {len(_items)}") evaluates len()."""
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str]] = new(["a", "b", "c"])
+
+        w = qt.track(MyWidget())
+        r = ref("Count: {len(_items)}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Count: 3")
+
+    def test_expression_with_method_call(self, qt: QtDriver) -> None:
+        """ref("{_name.upper()}") calls methods."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("alice")
+
+        w = qt.track(MyWidget())
+        r = ref("{_name.upper()}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("ALICE")
+
+    def test_expression_with_math(self, qt: QtDriver) -> None:
+        """ref("Double: {_x * 2}") does math."""
+
+        @widget
+        class MyWidget(Widget):
+            _x: Variable[int] = new(21)
+
+        w = qt.track(MyWidget())
+        r = ref("Double: {_x * 2}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Double: 42")
+
+    def test_expression_with_multiple_variables(self, qt: QtDriver) -> None:
+        """ref("{_a} + {_b} = {_a + _b}") uses multiple vars."""
+
+        @widget
+        class MyWidget(Widget):
+            _a: Variable[int] = new(10)
+            _b: Variable[int] = new(20)
+
+        w = qt.track(MyWidget())
+        r = ref("{_a} + {_b} = {_a + _b}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("10 + 20 = 30")
+
+    def test_expression_with_format_spec(self, qt: QtDriver) -> None:
+        """ref("{_price:.2f}") applies format spec."""
+
+        @widget
+        class MyWidget(Widget):
+            _price: Variable[float] = new(19.9)
+
+        w = qt.track(MyWidget())
+        r = ref("${_price:.2f}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("$19.90")
+
+    def test_expression_without_underscore_prefix(self, qt: QtDriver) -> None:
+        """ref("{name}") resolves attributes without underscore prefix."""
+
+        @widget
+        class MyWidget(Widget):
+            name: str = "TestWidget"
+
+        w = qt.track(MyWidget())
+        r = ref("Name: {name}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Name: TestWidget")
+
+    def test_expression_tries_underscore_fallback(self, qt: QtDriver) -> None:
+        """ref("{name}") falls back to _name if name doesn't exist."""
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str] = new("Fallback")
+
+        w = qt.track(MyWidget())
+        # name doesn't exist, should use _name
+        r = ref("Name: {name}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Name: Fallback")
+
+    def test_expression_with_nested_attribute(self, qt: QtDriver) -> None:
+        """ref("{_config.title}") accesses nested attributes."""
+
+        class Config:
+            def __init__(self) -> None:
+                self.title = "My App"
+
+        @widget
+        class MyWidget(Widget):
+            _config: Variable[Config] = new(Config())
+
+        w = qt.track(MyWidget())
+        r = ref("Title: {_config.title}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Title: My App")
+
+    def test_expression_error_shows_placeholder(self, qt: QtDriver) -> None:
+        """Expression errors show error placeholder."""
+
+        @widget
+        class MyWidget(Widget):
+            _x: Variable[int] = new(5)
+
+        w = qt.track(MyWidget())
+        # _nonexistent doesn't exist
+        r = ref("Value: {_nonexistent}")
+        result = r.resolve(w)
+        assert_that(result).contains("<error:")
+
+    def test_expression_with_self_placeholder(self, qt: QtDriver) -> None:
+        """ref("{#self}") refers to the instance."""
+
+        @widget
+        class MyWidget(Widget):
+            name: str = "TestWidget"
+
+        w = qt.track(MyWidget())
+        r = ref("Type: {type(#self).__name__}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("Type: MyWidget")
+
+    def test_expression_in_new_kwarg(self, qt: QtDriver) -> None:
+        """Expression ref works in new() kwargs."""
+
+        @widget
+        class MyWidget(Widget):
+            _count: Variable[int] = new(42)
+            _label: QLabel = new(text=ref("Count: {_count}"))
+
+        w = qt.track(MyWidget())
+        assert_that(w._label.text()).is_equal_to("Count: 42")
+
+    def test_expression_with_int_to_string(self, qt: QtDriver) -> None:
+        """Expression converts non-strings to strings."""
+
+        @widget
+        class MyWidget(Widget):
+            _count: Variable[int] = new(123)
+
+        w = qt.track(MyWidget())
+        r = ref("{_count}")
+        result = r.resolve(w)
+        assert_that(result).is_equal_to("123")
+        assert_that(result).is_instance_of(str)
