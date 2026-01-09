@@ -1,311 +1,419 @@
 # @menu
 
-Decorator for creating declarative `QMenu` subclasses with automatic action and submenu management.
+Decorator for creating declarative `Menu` subclasses with automatic action management, Variable bindings, separators, sections, and dynamic action lists.
 
 ## Signature
 
 ```python
-@menu(text: str | None = None) -> type[QMenu]
+@menu
+class FileMenu(Menu): ...
+
+@menu(text="&File")
+class FileMenu(Menu): ...
+
+@menu(text="&File", name="file-menu", record=SomeRecord())
+class FileMenu(Menu[SomeRecord]): ...
 ```
 
 ## Parameters
 
-**`text`** (positional or keyword)
-- Menu title text
-- Supports keyboard mnemonics with `&` (e.g., `"&File"`)
-- Default: Derived from class name (strips `"Menu"` suffix if present)
+**`text`** (keyword)
+:   Menu title text. Supports keyboard mnemonics with `&` (e.g., `"&File"`). If omitted, derived from class name (strips `"Menu"` suffix if present).
 
-## Behavior
+**`name`** (keyword)
+:   Object name for CSS/QSS styling. Defaults to class name.
 
-### Automatic Title
+**`classes`** (keyword)
+:   List of CSS class names for styling.
+
+**`record`** (keyword)
+:   Initial record value for `Menu[T]` record types.
+
+## The Menu Base Class
+
+Menus must inherit from `Menu`, not `QMenu`:
+
+```python
+from qtpie import Menu, menu, new
+
+@menu(text="&File")
+class FileMenu(Menu):  # Not QMenu!
+    new_action: QAction = new("&New")
+    open_action: QAction = new("&Open")
+```
+
+`Menu` is a QtPie-enhanced `QMenu` that provides:
+
+- Automatic action addition in declaration order
+- Variable binding support
+- Separator and Section markers
+- Dynamic action lists (ActionRepeater)
+- Checkable action two-way binding
+
+## Automatic Title
 
 If no `text` parameter is provided, the menu title is derived from the class name:
 
 ```python
 @menu
-class FileMenu(QMenu):  # Title: "File"
+class FileMenu(Menu):  # Title: "File"
     pass
 
 @menu
-class Edit(QMenu):  # Title: "Edit" (no suffix to strip)
+class Edit(Menu):  # Title: "Edit" (no suffix to strip)
     pass
 ```
 
-### Automatic Action Addition
+## Actions
 
-All `QAction` fields are automatically added to the menu via `addAction()` in declaration order:
+Actions are declared as `QAction` fields with `new()`:
 
 ```python
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")     # Added first
-    open_action: QAction = new("&Open")   # Added second
-    exit_action: QAction = new("E&xit")   # Added third
+from PySide6.QtGui import QAction
+
+@menu(text="&File")
+class FileMenu(Menu):
+    new_action: QAction = new("&New", shortcut="Ctrl+N")
+    open_action: QAction = new("&Open", shortcut="Ctrl+O")
+    save_action: QAction = new("&Save", shortcut="Ctrl+S", triggered="on_save")
+
+    def on_save(self) -> None:
+        print("Save triggered")
 ```
 
-Fields starting with underscore (`_`) are NOT added to the menu (useful for private state or helper actions).
+### Action Options
 
-### Automatic Submenu Addition
+- `text` (positional): Action text with mnemonics
+- `shortcut`: Keyboard shortcut (e.g., `"Ctrl+S"`)
+- `triggered`: Signal connection (method name or callable)
+- `enabled`: Enable/disable (can be binding expression)
+- `visible`: Show/hide (can be binding expression)
+- `checkable`: Whether action can be toggled
+- `checked`: Initial checked state or Variable binding
+- `toggled`: Handler for toggle state changes
+- `toolTip`: Tooltip text
 
-All `QMenu` fields are automatically added as submenus via `addMenu()`:
+## Separators
+
+Use the `Separator` marker class to add visual separators:
 
 ```python
-@menu
-class RecentMenu(QMenu):
+from qtpie import Menu, Separator, menu, new
+
+@menu(text="&File")
+class FileMenu(Menu):
+    new_action: QAction = new("&New")
+    open_action: QAction = new("&Open")
+    ____: Separator                       # Separator here
+    save_action: QAction = new("&Save")
+    _____: Separator                      # Another separator
+    exit_action: QAction = new("E&xit")
+```
+
+Separator field names are arbitrary but must be unique. Convention: use underscores (`____`, `_____`, etc.).
+
+## Sections
+
+Use the `Section` marker class to add labeled section headers:
+
+```python
+from qtpie import Menu, Section, Separator, menu, new
+
+@menu(text="&File")
+class FileMenu(Menu):
+    new_action: QAction = new("&New")
+    ____: Separator
+
+    ___recent___: Section                 # Text: "Recent"
     file1: QAction = new("file1.txt")
     file2: QAction = new("file2.txt")
 
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")
-    recent: RecentMenu = new()  # Submenu added here
+    ___projects___: Section = new("Recent Projects")  # Explicit text
+    project1: QAction = new("My Project")
 ```
 
-### Initialization Order
+Section naming:
 
-1. `QMenu.__init__()` called with title
-2. All field descriptors initialized
-3. Actions added to menu in order
-4. Submenus added to menu in order
-5. `__setup__()` hook called (if defined)
+- Format: `___text___` (leading and trailing triple underscores)
+- Text extracted from name: `___recent___` → "Recent"
+- Snake case converted: `___recent_files___` → "Recent Files"
+- Override with `= new("Explicit Text")`
 
-## Usage in Windows
+## Variables and Bindings
 
-`QMenu` fields in `Window` classes are automatically added to the menu bar:
+Menus support the same Variable system as widgets:
 
 ```python
-@menu("&File")
-class FileMenu(QMenu):
+@menu(text="&View")
+class ViewMenu(Menu):
+    _word_wrap: Variable[bool] = new(False)
+
+    word_wrap: QAction = new(
+        "Word Wrap",
+        checkable=True,
+        checked="_word_wrap"  # Two-way binding!
+    )
+```
+
+### Required Bindings
+
+Bare `Variable[T]` declarations (no `= new()`) are **required bindings** that must be provided by the parent Window:
+
+```python
+@menu(text="&File")
+class FileMenu(Menu):
+    is_dirty: Variable[bool]  # Required!
+    save: QAction = new("&Save", enabled="{is_dirty}")
+
+@window(title="App")
+class App(Window):
+    _is_dirty: Variable[bool] = new(False)
+    file_menu: FileMenu = new(is_dirty="_is_dirty")  # Provide binding
+```
+
+### Expression Bindings
+
+Action properties can use expression bindings:
+
+```python
+@menu(text="&Edit")
+class EditMenu(Menu):
+    can_undo: Variable[bool]
+    can_redo: Variable[bool]
+
+    undo: QAction = new("&Undo", enabled="{can_undo}")
+    redo: QAction = new("&Redo", enabled="{can_redo}")
+```
+
+## Checkable Actions
+
+Create toggle actions with two-way Variable binding:
+
+```python
+@menu(text="&View")
+class ViewMenu(Menu):
+    _word_wrap: Variable[bool] = new(False)
+
+    word_wrap: QAction = new(
+        "Word Wrap",
+        checkable=True,
+        checked="_word_wrap"  # Two-way binding
+    )
+```
+
+Changes to the Variable update the action's checked state, and toggling the action updates the Variable.
+
+### Toggle Handler
+
+Handle toggle events with `toggled=`:
+
+```python
+@menu(text="&View")
+class ViewMenu(Menu):
+    bold: QAction = new(
+        "Bold",
+        checkable=True,
+        toggled="on_bold"
+    )
+
+    def on_bold(self, checked: bool) -> bool | None:
+        """Handler receives checked state.
+
+        Return False to refuse the toggle (reverts action).
+        Return None (or nothing) to accept.
+        """
+        if not self.can_toggle():
+            return False  # Refuse
+        return None  # Accept
+```
+
+## Dynamic Action Lists
+
+Create actions dynamically from a list using `list[QAction]`:
+
+```python
+@menu(text="&Window")
+class WindowMenu(Menu):
+    _windows: Variable[list[str]] = new(["Win1", "Win2"])
+
+    tile: QAction = new("&Tile")
+    cascade: QAction = new("&Cascade")
+    ____: Separator
+
+    window_actions: list[QAction] = new(
+        bind="_windows",
+        format="{#self}",           # Format for action text
+        triggered="on_select"       # Handler receives the item
+    )
+
+    def on_select(self, window_name: str) -> None:
+        print(f"Selected: {window_name}")
+```
+
+Dynamic actions sync automatically when the list changes (append, remove, etc.).
+
+### Format Placeholders
+
+- `{#self}` - The item itself
+- `{#index}` - Item's index in the list
+- `{property}` - Property access on the item
+
+```python
+@dataclass
+class WindowInfo:
+    title: str
+    path: str
+
+@menu(text="&Window")
+class WindowMenu(Menu):
+    _windows: Variable[list[WindowInfo]] = new([])
+    window_actions: list[QAction] = new(
+        bind="_windows",
+        format="{#index}: {title}"  # "0: Main Window"
+    )
+```
+
+## Menu[T] Record Support
+
+Menus can use the `Menu[T]` pattern for record binding:
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class EditState:
+    can_undo: bool = False
+    can_redo: bool = False
+
+@menu(text="&Edit", record=EditState())
+class EditMenu(Menu[EditState]):
+    undo: QAction = new("&Undo", enabled="{record.can_undo}")
+    redo: QAction = new("&Redo", enabled="{record.can_redo}")
+```
+
+Access via `self.record`:
+
+```python
+def enable_undo(self) -> None:
+    self.record.can_undo = True  # Reactive!
+```
+
+## The #parent Placeholder
+
+Access the parent Window's variables with `#parent`:
+
+```python
+@menu(text="&File")
+class FileMenu(Menu):
+    save: QAction = new("&Save", enabled="{#parent._is_dirty}")
+
+@window(title="App")
+class App(Window):
+    _is_dirty: Variable[bool] = new(False)
+    file_menu: FileMenu = new()  # No explicit binding needed
+```
+
+!!! tip "Prefer Variable Bindings"
+    Variable bindings (`is_dirty="_is_dirty"`) make dependencies explicit and menus reusable. Use `#parent` as an escape hatch for tightly-coupled menus.
+
+## Window Integration
+
+Menu fields in `Window` classes are automatically added to the menu bar:
+
+```python
+@menu(text="&File")
+class FileMenu(Menu):
     new_action: QAction = new("&New")
 
-@menu("&Edit")
-class EditMenu(QMenu):
+@menu(text="&Edit")
+class EditMenu(Menu):
     undo: QAction = new("&Undo")
 
-@window
+@window(title="My App")
 class MainWindow(Window):
     file_menu: FileMenu = new()  # Added to menu bar
     edit_menu: EditMenu = new()  # Added to menu bar
 ```
 
-## Examples
+Menus appear in declaration order.
 
-### Basic Menu
-
-```python
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New", shortcut="Ctrl+N")
-    open_action: QAction = new("&Open", shortcut="Ctrl+O")
-    exit_action: QAction = new("E&xit")
-```
-
-### Menu with Title from Class Name
+## The `__setup__` Hook
 
 ```python
-@menu
-class FileMenu(QMenu):  # Title: "File"
-    pass
-
-@menu
-class Edit(QMenu):  # Title: "Edit"
-    pass
-```
-
-### Menu with Separators
-
-```python
-from qtpie import separator
-
-@menu("&File")
-class FileMenu(QMenu):
+@menu(text="&File")
+class FileMenu(Menu):
     new_action: QAction = new("&New")
-    open_action: QAction = new("&Open")
-    sep1: QAction = separator()  # Visual separator
-    save_action: QAction = new("&Save")
-    sep2: QAction = separator()
-    exit_action: QAction = new("E&xit")
-```
-
-### Menu with Signal Connections
-
-```python
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New", triggered="on_new")
-    exit_action: QAction = new("E&xit", triggered="on_exit")
-
-    def on_new(self) -> None:
-        print("New file")
-
-    def on_exit(self) -> None:
-        # Access parent window
-        window = self.parent()
-        if window:
-            window.close()
-```
-
-### Menu with Submenus
-
-```python
-@menu
-class RecentMenu(QMenu):  # Title: "Recent"
-    file1: QAction = new("document1.txt")
-    file2: QAction = new("document2.txt")
-    clear: QAction = separator()
-    clear_action: QAction = new("Clear Recent")
-
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")
-    recent: RecentMenu = new()  # Submenu
-    sep: QAction = separator()
-    exit_action: QAction = new("E&xit")
-```
-
-### Menu with Private Actions
-
-```python
-@menu("&Edit")
-class EditMenu(QMenu):
-    undo: QAction = new("&Undo")       # Added to menu
-    redo: QAction = new("&Redo")       # Added to menu
-    _helper: QAction = new("Helper")   # NOT added (underscore prefix)
 
     def __setup__(self) -> None:
-        # Can still use _helper programmatically
-        self._helper.triggered.connect(self.on_helper)
-
-    def on_helper(self) -> None:
-        print("Helper action")
-```
-
-### Menu with Action Configuration
-
-```python
-@menu("&Edit")
-class EditMenu(QMenu):
-    # With shortcut
-    undo: QAction = new("&Undo", shortcut="Ctrl+Z", triggered="on_undo")
-
-    # Checkable action
-    word_wrap: QAction = new("Word Wrap", checkable=True)
-
-    # With tooltip (also sets status tip)
-    find: QAction = new("&Find", shortcut="Ctrl+F", tooltip="Find text")
-
-    def on_undo(self) -> None:
-        print("Undo")
-```
-
-### Menu with `__setup__` Hook
-
-```python
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")
-    recent_menu: RecentMenu = new()
-
-    def __setup__(self) -> None:
-        # Actions and submenus are ready
+        # Actions are ready
         print(f"Menu has {len(self.actions())} actions")
-
-        # Can perform additional configuration
         self.setToolTipsVisible(True)
 ```
 
-### Complete Example in Window
+## Complete Example
 
 ```python
-@menu("&File")
-class FileMenu(QMenu):
+from dataclasses import dataclass
+from PySide6.QtGui import QAction
+from qtpie import Menu, Section, Separator, Variable, Window, menu, new, window
+
+@dataclass
+class WindowInfo:
+    title: str
+    widget: QWidget
+
+@menu(text="&File")
+class FileMenu(Menu):
+    # Required bindings from Window
+    is_dirty: Variable[bool]
+    recent_files: Variable[list[str]]
+
     new_action: QAction = new("&New", shortcut="Ctrl+N", triggered="on_new")
-    open_action: QAction = new("&Open", shortcut="Ctrl+O", triggered="on_open")
-    sep1: QAction = separator()
-    save_action: QAction = new("&Save", shortcut="Ctrl+S", triggered="on_save")
-    save_as_action: QAction = new("Save &As...", triggered="on_save_as")
-    sep2: QAction = separator()
+    open_action: QAction = new("&Open", shortcut="Ctrl+O")
+    ____: Separator
+    save_action: QAction = new("&Save", shortcut="Ctrl+S", enabled="{is_dirty}")
+    _____: Separator
+
+    ___recent___: Section
+    recent_actions: list[QAction] = new(
+        bind="recent_files",
+        format="{#self}",
+        triggered="open_recent"
+    )
+
+    ______: Separator
     exit_action: QAction = new("E&xit", triggered="on_exit")
 
     def on_new(self) -> None:
-        window = self.parent()
-        if hasattr(window, 'new_document'):
-            window.new_document()
+        print("New document")
 
-    def on_open(self) -> None:
-        print("Open file dialog")
-
-    def on_save(self) -> None:
-        print("Save file")
-
-    def on_save_as(self) -> None:
-        print("Save as dialog")
+    def open_recent(self, filename: str) -> None:
+        print(f"Opening: {filename}")
 
     def on_exit(self) -> None:
-        self.parent().close()
+        if parent := self.parent():
+            parent.close()
 
-@menu("&Edit")
-class EditMenu(QMenu):
-    undo: QAction = new("&Undo", shortcut="Ctrl+Z")
-    redo: QAction = new("&Redo", shortcut="Ctrl+Y")
-    sep: QAction = separator()
-    cut: QAction = new("Cu&t", shortcut="Ctrl+X")
-    copy: QAction = new("&Copy", shortcut="Ctrl+C")
-    paste: QAction = new("&Paste", shortcut="Ctrl+V")
+@menu(text="&View")
+class ViewMenu(Menu):
+    _word_wrap: Variable[bool] = new(True)
+    _line_numbers: Variable[bool] = new(True)
 
-@window(title="Text Editor")
+    word_wrap: QAction = new("Word Wrap", checkable=True, checked="_word_wrap")
+    line_numbers: QAction = new("Line Numbers", checkable=True, checked="_line_numbers")
+
+@window(title="My Editor")
 class EditorWindow(Window):
-    file_menu: FileMenu = new()
-    edit_menu: EditMenu = new()
+    _is_dirty: Variable[bool] = new(False)
+    _recent: Variable[list[str]] = new(["file1.txt", "file2.txt"])
 
-    editor: QTextEdit = new()
-
-    def new_document(self) -> None:
-        self.editor.clear()
-```
-
-## Action Declaration
-
-Actions are created with `new()` and support:
-
-- `text`: Action text with keyboard mnemonics
-- `shortcut`: Keyboard shortcut (e.g., `"Ctrl+S"`)
-- `triggered`: Signal connection (method name or callable)
-- `checkable`: Whether action can be toggled
-- `tooltip`: Tooltip text (also sets status tip)
-- `icon`: Action icon
-
-See [@action decorator](./action.md) for declarative action classes.
-
-## Separators
-
-Use `separator()` to create visual separators between menu items:
-
-```python
-from qtpie import separator
-
-@menu("&File")
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")
-    sep: QAction = separator()  # Creates separator action
-    exit_action: QAction = new("E&xit")
-```
-
-## Keyboard Mnemonics
-
-Use `&` before a letter to create keyboard mnemonics:
-
-```python
-@menu("&File")  # Alt+F activates menu
-class FileMenu(QMenu):
-    new_action: QAction = new("&New")   # N key in menu
-    open_action: QAction = new("&Open")  # O key in menu
+    file_menu: FileMenu = new(is_dirty="_is_dirty", recent_files="_recent")
+    view_menu: ViewMenu = new()
 ```
 
 ## See Also
 
-- [Windows & Menus guide](../../guides/windows-menus.md)
-- [@window decorator](./window.md)
-- [@action decorator](./action.md)
-- [new() factory](../factories/new.md)
-- [separator() factory](../factories/separator.md)
+- [Windows & Menus guide](../../guides/windows-menus.md) - Complete guide with examples
+- [@window decorator](./window.md) - Window decorator reference
+- [new() factory](../factories/new.md) - The `new()` factory
+- [Variables](../../state/variables.md) - Variable system documentation

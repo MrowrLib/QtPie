@@ -171,6 +171,43 @@ class MyWidget(Widget):
         self.label.setText("Setup complete!")
 ```
 
+## Composable Widgets
+
+Build complex UIs by composing smaller widgets. Parent widgets can pass state down to children using Variable bindings:
+
+```python
+@widget
+class CounterDisplay(Widget):
+    # Required binding - must be provided by parent
+    count: Variable[int]
+    _label: QLabel = new(bind="Count: {count}")
+
+@widget
+class App(Widget):
+    _my_count: Variable[int] = new(0)
+
+    # Pass state down to child widget
+    display: CounterDisplay = new(count="_my_count")
+    increment: QPushButton = new("+", clicked="on_inc")
+
+    def on_inc(self) -> None:
+        self._my_count += 1  # CounterDisplay updates automatically
+```
+
+This is similar to React props - state flows down from parent to child. Changes in either direction are synchronized.
+
+### Required vs Optional Bindings
+
+- **Required**: Bare `Variable[T]` (no `= new()`) must be provided by parent
+- **Optional**: `Variable[T] = new(default)` has a default, can be overridden
+
+```python
+@widget
+class StatusBar(Widget):
+    message: Variable[str]              # Required
+    show_icon: Variable[bool] = new(True)  # Optional with default
+```
+
 ## Decorators
 
 | Decorator     | Purpose                           |
@@ -178,7 +215,6 @@ class MyWidget(Widget):
 | `@widget`     | Transform class into QtPie widget |
 | `@window`     | Transform class into QMainWindow  |
 | `@menu`       | Define a menu for window menu bar |
-| `@action`     | Define a QAction                  |
 | `@slot`       | Mark async method as slot         |
 | `@entrypoint` | Make widget runnable as app       |
 

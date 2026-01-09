@@ -47,6 +47,22 @@ _name: Variable[str] = new("")
 _greeting: QLabel = new(bind="Hello, {_name}!")
 ```
 
+### Composable Widgets
+
+Pass state down to child widgets via Variable bindings—like React props:
+
+```python
+@widget
+class CounterDisplay(Widget):
+    count: Variable[int]  # Required binding from parent
+    _label: QLabel = new(bind="Count: {count}")
+
+@widget
+class App(Widget):
+    _my_count: Variable[int] = new(0)
+    display: CounterDisplay = new(count="_my_count")  # State flows down
+```
+
 ### Record Types
 
 Bind entire dataclasses to widgets with `Widget[T]`.

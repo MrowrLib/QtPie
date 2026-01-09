@@ -371,6 +371,99 @@ class MainApp(Widget):
     content: QLabel = new()
 ```
 
+### Composable Widgets with Variable Bindings
+
+Build reusable widgets by declaring what state they need. Parent widgets provide bindings when creating children—similar to React props.
+
+```python
+from qtpie import Variable
+
+@widget
+class CounterDisplay(Widget):
+    # Required binding - must be provided by parent
+    count: Variable[int]
+
+    _label: QLabel = new(bind="Count: {count}")
+
+@widget
+class App(Widget):
+    _my_count: Variable[int] = new(0)
+
+    # Pass state down: CounterDisplay.count binds to App._my_count
+    display: CounterDisplay = new(count="_my_count")
+    increment: QPushButton = new("+", clicked="on_inc")
+
+    def on_inc(self) -> None:
+        self._my_count += 1  # CounterDisplay updates automatically
+```
+
+#### Required vs Optional Bindings
+
+- **Required**: Bare `Variable[T]` (no `= new()`) must be provided by parent
+- **Optional**: `Variable[T] = new(default)` has a default, can be overridden
+
+```python
+@widget
+class StatusBar(Widget):
+    message: Variable[str]                   # Required
+    show_icon: Variable[bool] = new(True)    # Optional with default
+
+@widget
+class App(Widget):
+    _status: Variable[str] = new("Ready")
+
+    # Must provide 'message', 'show_icon' is optional
+    status_bar: StatusBar = new(message="_status")
+
+    # Or override the default
+    # status_bar: StatusBar = new(message="_status", show_icon=False)
+```
+
+If you forget a required binding, QtPie raises a clear error with instructions.
+
+#### Two-Way Synchronization
+
+Variable bindings are two-way. Changes on either side are synchronized:
+
+```python
+@widget
+class Editor(Widget):
+    content: Variable[str]
+
+@widget
+class App(Widget):
+    _text: Variable[str] = new("")
+    editor: Editor = new(content="_text")
+
+    def reset(self) -> None:
+        self._text.value = ""  # Editor.content also becomes ""
+```
+
+#### Nested Bindings
+
+State flows down through multiple levels:
+
+```python
+@widget
+class ThemeLabel(Widget):
+    theme: Variable[str]
+    _label: QLabel = new(bind="Theme: {theme}")
+
+@widget
+class ThemedPanel(Widget):
+    theme: Variable[str]  # Required, passed down to child
+    label: ThemeLabel = new(theme="theme")
+
+@widget
+class App(Widget):
+    _theme: Variable[str] = new("dark")
+    panel: ThemedPanel = new(theme="_theme")
+
+    def toggle(self) -> None:
+        self._theme.value = "light" if self._theme.value == "dark" else "dark"
+        # ThemeLabel updates automatically through the chain!
+```
+
 ### Private vs Public Fields
 
 Use naming conventions to indicate field visibility:
