@@ -1908,3 +1908,188 @@ class TestWindowResetDirty:
 
         w.reset_dirty()
         assert_that(w.is_dirty.get()).is_false()
+
+
+# =============================================================================
+# Variable Bindings in Window (Phase B) - Same as Widget
+# =============================================================================
+
+
+class TestWindowVariableBindingsDetection:
+    """Test bare Variable[T] detection as required bindings in Window."""
+
+    def test_bare_variable_detected_as_required(self, qt: QtDriver) -> None:
+        """Bare Variable[T] (no = new()) is a required binding."""
+        from qtpie import Widget, widget
+
+        @widget
+        class ChildWidget(Widget):
+            count: Variable[int]  # Required
+
+        assert "count" in ChildWidget._qtpie_config.required_bindings
+
+        @window(title="Test")
+        class MainWindow(Window):
+            count: Variable[int]  # Required
+
+        assert "count" in MainWindow._qtpie_config.required_bindings
+
+    def test_variable_with_default_is_optional(self, qt: QtDriver) -> None:
+        """Variable[T] = new(default) is optional (has a default)."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            count: Variable[int] = new(0)
+
+        assert "count" not in MainWindow._qtpie_config.required_bindings
+
+    def test_multiple_required_bindings(self, qt: QtDriver) -> None:
+        """Multiple bare Variables are all detected."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            count: Variable[int]
+            name: Variable[str]
+            enabled: Variable[bool]
+
+        assert MainWindow._qtpie_config.required_bindings == {"count", "name", "enabled"}
+
+    def test_mixed_required_and_optional(self, qt: QtDriver) -> None:
+        """Mix of required (bare) and optional (with default) Variables."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            required_var: Variable[int]
+            optional_var: Variable[str] = new("default")
+            another_required: Variable[bool]
+
+        assert MainWindow._qtpie_config.required_bindings == {"required_var", "another_required"}
+
+
+class TestWindowVariableBindingsWithChildWidgets:
+    """Test passing Variable bindings to child widgets from Window."""
+
+    def test_window_to_widget_binding(self, qt: QtDriver) -> None:
+        """Window can pass Variable bindings to child widgets."""
+        from qtpie import Widget, widget
+
+        @widget
+        class CounterDisplay(Widget):
+            count: Variable[int]  # Required
+            label: QLabel = new(bind="Count: {count}")
+
+        @window(title="Counter App")
+        class App(Window):
+            _my_count: Variable[int] = new(0)
+            display: CounterDisplay = new(count="_my_count")
+            btn: QPushButton = new("+1", clicked="on_inc")
+
+            def on_inc(self) -> None:
+                self._my_count += 1
+
+        app = qt.track(App())
+
+        # Initially synced
+        assert app.display.count.value == 0
+        assert app.display.label.text() == "Count: 0"
+
+        # Window changes -> widget updates
+        app._my_count.value = 42
+        assert app.display.count.value == 42
+        assert app.display.label.text() == "Count: 42"
+
+    def test_window_to_widget_two_way_binding(self, qt: QtDriver) -> None:
+        """Changes in child widget propagate back to window."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Editor(Widget):
+            value: Variable[str]  # Required
+
+        @window(title="Editor App")
+        class App(Window):
+            _text: Variable[str] = new("initial")
+            editor: Editor = new(value="_text")
+
+        app = qt.track(App())
+
+        # Child changes -> window updates
+        app.editor.value.value = "changed"
+        assert app._text.value == "changed"
+
+    def test_window_to_widget_expression_binding(self, qt: QtDriver) -> None:
+        """Expression binding works from Window to child widget."""
+        from qtpie import Widget, widget
+
+        @widget
+        class ConditionalWidget(Widget):
+            is_enabled: Variable[bool]
+
+        @window(title="Test")
+        class App(Window):
+            _items: Variable[list[str]] = new([])
+            child: ConditionalWidget = new(is_enabled="{len(_items) > 0}")
+
+        app = qt.track(App())
+        assert app.child.is_enabled.value is False
+
+        app._items.value = ["a", "b"]
+        assert app.child.is_enabled.value is True
+
+    def test_window_to_widget_literal_binding(self, qt: QtDriver) -> None:
+        """Literal value binding works from Window to child widget."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TextWidget(Widget):
+            text: Variable[str]
+
+        @window(title="Test")
+        class App(Window):
+            # "Hello World" is a literal (no _ prefix, no {})
+            child: TextWidget = new(text="Hello World")
+
+        app = qt.track(App())
+        assert app.child.text.value == "Hello World"
+
+    def test_missing_required_binding_raises_error(self, qt: QtDriver) -> None:
+        """Missing required binding on child widget raises error."""
+        import pytest
+
+        from qtpie import Widget, widget
+
+        @widget
+        class RequiresBinding(Widget):
+            count: Variable[int]  # Required
+
+        @window(title="Test")
+        class App(Window):
+            child: RequiresBinding = new()  # Missing count binding!
+
+        with pytest.raises(TypeError, match="requires binding for 'count'"):
+            App()
+
+    def test_nested_binding_through_widgets(self, qt: QtDriver) -> None:
+        """Bindings pass through nested widget hierarchy."""
+        from qtpie import Widget, widget
+
+        @widget
+        class GrandChild(Widget):
+            theme: Variable[str]
+
+        @widget
+        class Child(Widget):
+            theme: Variable[str]  # Required
+            grandchild: GrandChild = new(theme="theme")
+
+        @window(title="Test")
+        class App(Window):
+            _theme: Variable[str] = new("dark")
+            child: Child = new(theme="_theme")
+
+        app = qt.track(App())
+        assert app.child.grandchild.theme.value == "dark"
+
+        # Changes propagate through the chain
+        app._theme.value = "light"
+        assert app.child.grandchild.theme.value == "light"

@@ -4,8 +4,6 @@
 
 QtPie brings React/Vue-style declarative patterns to desktop app development. Define *what* your UI should look like, not *how* to build it.
 
-## Quick Example
-
 ```python
 from PySide6.QtWidgets import QLabel, QPushButton
 from qtpie import Widget, Variable, new, widget, entrypoint

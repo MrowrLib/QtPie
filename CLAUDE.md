@@ -266,8 +266,8 @@ class ScoreBoard(Widget):
 @widget
 class InlineWidgets(Widget):
     # Variable[T, W] - creates T observable + W widget, auto-bound
-    _username: Variable[str, QLineEdit] = new("")(placeholder="Username")
-    _password: Variable[str, QLineEdit] = new("")(placeholder="Password", echoMode=QLineEdit.EchoMode.Password)
+    _username: Variable[str, QLineEdit] = new("")(placeholderText="Username")
+    _password: Variable[str, QLineEdit] = new("")(placeholderText="Password", echoMode=QLineEdit.EchoMode.Password)
 
     # Access the widget via .widget property
     def focus_username(self):
@@ -320,7 +320,7 @@ _field: QLineEdit = new(
 )
 
 # For Variable[T, W], chain calls:
-_name: Variable[str, QLineEdit] = new("default")(placeholder="Name...")
+_name: Variable[str, QLineEdit] = new("default")(placeholderText="Name...")
 #                                     ^          ^
 #                                     |          Widget kwargs
 #                                     Variable default value
@@ -409,14 +409,14 @@ class Example(Widget):
 
 ### Special Placeholders
 
-| Placeholder | Description |
-|-------------|-------------|
-| `{#self}` | Variable's value (in `Variable[T,W]` context) or Widget instance |
-| `{#var}` | Explicit reference to Variable's value |
-| `{#widget}` | Explicit reference to parent Widget instance |
-| `{#index}` | Item index (in list/dict repeaters) |
-| `{#key}` | Dict key (in dict repeaters) |
-| `{#value}` | Dict value (in dict repeaters) |
+| Placeholder | Description                                                      |
+| ----------- | ---------------------------------------------------------------- |
+| `{#self}`   | Variable's value (in `Variable[T,W]` context) or Widget instance |
+| `{#var}`    | Explicit reference to Variable's value                           |
+| `{#widget}` | Explicit reference to parent Widget instance                     |
+| `{#index}`  | Item index (in list/dict repeaters)                              |
+| `{#key}`    | Dict key (in dict repeaters)                                     |
+| `{#value}`  | Dict value (in dict repeaters)                                   |
 
 ### Variable[T, W] with bind=
 
@@ -767,12 +767,12 @@ uv run qtpie tr list translations.yml
 
 ### Key Functions
 
-| Function | Description |
-|----------|-------------|
-| `t("text")` | Mark string for translation |
-| `t("text", context="x")` | Mark with disambiguation |
-| `t("%n item(s)")(n)` | Plural with count |
-| `set_language("fr")` | Change language (auto-retranslates) |
+| Function                 | Description                         |
+| ------------------------ | ----------------------------------- |
+| `t("text")`              | Mark string for translation         |
+| `t("text", context="x")` | Mark with disambiguation            |
+| `t("%n item(s)")(n)`     | Plural with count                   |
+| `set_language("fr")`     | Change language (auto-retranslates) |
 
 ### Architecture
 

@@ -576,6 +576,64 @@ class RecordVariable[T]:
         def __set__(self, obj: object, value: T | RecordVariable[T]) -> None: ...
 
 
+class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - used in widget.py
+    """Descriptor for bare Variable[T] annotations that require a binding.
+
+    When a widget declares `count: Variable[int]` (no = new()), this descriptor
+    is created. It expects the Observable to be injected via a binding from
+    the parent widget.
+    """
+
+    def __init__(self, name: str, inner_type: type | None = None) -> None:
+        self._name = name
+        self._inner_type = inner_type
+
+    @overload
+    def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
+    @overload
+    def __get__(self, obj: object, objtype: type | None) -> Variable[T]: ...
+    def __get__(self, obj: object | None, objtype: type | None = None) -> Variable[T]:
+        if obj is None:
+            # Class access - return self but typed as Variable for Pyright
+            return self  # type: ignore[return-value]
+
+        # Check if Variable was created by binding
+        from .state import QtPieState
+
+        if not hasattr(obj, "_qtpie"):
+            obj._qtpie = QtPieState(obj)  # type: ignore[attr-defined]
+        qtpie_state = cast(Any, obj._qtpie)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+
+        if self._name in qtpie_state.variables:
+            return qtpie_state.variables[self._name]
+
+        # No binding was provided - this is an error
+        raise AttributeError(f"'{self._name}' requires a binding. Use: child: {type(obj).__name__} = new({self._name}=\"_parent_var\")")
+
+    def __set__(self, obj: object, value: T | Variable[T]) -> None:
+        """Allow setting either a Variable (for binding injection) or a value."""
+        from .state import QtPieState
+
+        if not hasattr(obj, "_qtpie"):
+            obj._qtpie = QtPieState(obj)  # type: ignore[attr-defined]
+        qtpie_state = cast(Any, obj._qtpie)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+
+        if isinstance(value, Variable):
+            # Binding injection - store the Variable directly
+            qtpie_state.variables[self._name] = value
+            qtpie_state.register_variable(self._name, value)
+        else:
+            # Value assignment - get or create Variable first
+            if self._name not in qtpie_state.variables:
+                # Need to create a Variable - but we don't have a binding!
+                # Create one with the provided value as default
+                wrapper = _create_observable_for_type(self._inner_type, value)
+                var: Variable[T] = Variable(wrapper)
+                qtpie_state.register_variable(self._name, var)
+            else:
+                qtpie_state.variables[self._name].value = value
+
+
 class _VariableDescriptor[T]:
     """Descriptor that returns per-instance Variable objects.
 

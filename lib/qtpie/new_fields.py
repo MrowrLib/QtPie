@@ -3,7 +3,7 @@
 from typing import Any, get_origin
 
 from .new_field import NewField
-from .variable import Variable
+from .variable import AnyObservable, Variable
 
 # Default property mapping for common widget types
 # Used to determine which property to set for positional Translatable args
@@ -68,6 +68,9 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 if field.is_list_widget:
                     continue
                 if field.field_type is not None:
+                    # Validate required bindings for QtPie Widget subclasses
+                    _validate_required_bindings(field)
+
                     # Resolve Translatable markers in args before construction
                     resolved_args = list(field.args)
                     for idx, translatable in field.translatable_args:
@@ -81,6 +84,18 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             resolved_kwargs[key] = translatable.resolve()
 
                     instance = field.field_type(*resolved_args, **resolved_kwargs)
+
+                    # Apply variable bindings (wire up parent Variables to child)
+                    if field.variable_bindings:
+                        _apply_variable_bindings(self, instance, field)
+
+                    # Resolve any deferred bindings on the child (its grandchildren may have
+                    # been waiting for the child's Variable bindings to be applied)
+                    _resolve_deferred_bindings(instance)
+
+                    # Apply pending auto-bindings on the child (deferred because required
+                    # Variables weren't set up during child's __init__)
+                    _apply_pending_bindings(instance)
 
                     # Apply objectName: use explicit name if set, otherwise default to field name for QWidgets
                     from qtpy.QtWidgets import QWidget
@@ -148,3 +163,320 @@ def new_fields[T](cls: type[T]) -> type[T]:
     cls.__new_fields_processed__ = True  # type: ignore[attr-defined]
 
     return cls
+
+
+def _validate_required_bindings(field: NewField) -> None:
+    """Validate that all required bindings are provided for QtPie Widget subclasses.
+
+    Raises TypeError if any required binding is missing.
+    """
+    if field.field_type is None:
+        return
+
+    # Check if the field type has _qtpie_config (is a QtPie Widget)
+    config = getattr(field.field_type, "_qtpie_config", None)
+    if config is None:
+        return
+
+    required: set[str] = getattr(config, "required_bindings", set())
+    if not required:
+        return
+
+    # Check which required bindings are provided
+    provided: set[str] = set(field.variable_bindings.keys())
+    missing: set[str] = required - provided
+
+    if missing:
+        # Create clear error message
+        missing_list = ", ".join(f"'{name}'" for name in sorted(missing))
+        raise TypeError(
+            f"{field.field_type.__name__} requires binding for {missing_list}. Use: {field.name}: {field.field_type.__name__} = new({', '.join(f'{m}="_parent_var"' for m in sorted(missing))})"
+        )
+
+
+def _apply_variable_bindings(parent: Any, child: Any, field: NewField) -> None:
+    """Wire up variable bindings between parent and child widgets.
+
+    For each binding in field.variable_bindings:
+    - Direct variable reference (e.g., count="_my_count") -> share Observable (two-way)
+    - Expression binding (e.g., enabled="{len(_items) > 0}") -> computed (one-way)
+    - Literal value (e.g., label_text="Hello") -> set as default value
+
+    Args:
+        parent: The parent widget instance
+        child: The child widget instance
+        field: The NewField with variable_bindings
+    """
+    for child_var_name, binding_value in field.variable_bindings.items():
+        # Determine binding type
+        if isinstance(binding_value, str):
+            if "{" in binding_value and "}" in binding_value:
+                # Expression binding - computed one-way (A.6)
+                _apply_expression_binding(parent, child, child_var_name, binding_value)
+            elif binding_value.startswith("_"):
+                # Direct variable reference (starts with _) - two-way binding
+                _apply_direct_binding(parent, child, child_var_name, binding_value)
+            elif _is_variable_reference(parent, binding_value):
+                # Direct variable reference (non-underscore, but exists on parent)
+                _apply_direct_binding(parent, child, child_var_name, binding_value)
+            else:
+                # Literal string value (A.7)
+                _apply_literal_binding(child, child_var_name, binding_value)
+        else:
+            # Literal non-string value (int, bool, etc.) (A.7)
+            _apply_literal_binding(child, child_var_name, binding_value)
+
+
+def _is_variable_reference(parent: Any, value: str) -> bool:
+    """Check if value is a reference to a Variable on parent.
+
+    Returns True if value is a simple identifier that matches a Variable on parent,
+    or if it's a required binding on the parent class (may not be populated yet).
+    """
+    # Must be a valid Python identifier
+    if not value.isidentifier():
+        return False
+
+    # Check if parent has this as a Variable (already populated)
+    parent_attr = getattr(parent, value, None)
+    if isinstance(parent_attr, Variable):
+        return True
+
+    # Check if parent class has this as a required binding (may not be populated yet)
+    parent_class = type(parent)  # pyright: ignore[reportUnknownVariableType]
+    config = getattr(parent_class, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+    if config is not None:
+        required: set[str] = getattr(config, "required_bindings", set())
+        if value in required:
+            return True
+
+    return False
+
+
+def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_var_name: str) -> None:
+    """Create two-way binding between parent Variable and child Variable.
+
+    The child's Variable will share the parent's Observable, so changes
+    to either side are reflected on both.
+
+    If the parent's Variable doesn't exist yet (it's a required binding that
+    will be populated later), we store a deferred binding to be resolved after
+    the parent's bindings are applied.
+    """
+    from observant import Observable
+
+    # Try to get the parent's Variable
+    parent_var: Variable[Any] | Observable[Any] | None = None
+    try:
+        parent_var = getattr(parent, parent_var_name)
+    except AttributeError:
+        pass
+
+    if parent_var is not None and isinstance(parent_var, (Variable, Observable)):  # pyright: ignore[reportUnnecessaryIsInstance]
+        # Parent has the Variable - share its Observable
+        parent_observable: AnyObservable[Any]
+        if isinstance(parent_var, Variable):
+            parent_observable = parent_var.observable
+        else:
+            parent_observable = parent_var
+
+        # Create a Variable for the child that shares the parent's Observable
+        child_var: Variable[Any] = Variable(parent_observable)
+        setattr(child, child_var_name, child_var)
+        return
+
+    # Check if this is a required binding that will be populated later
+    parent_class = type(parent)  # pyright: ignore[reportUnknownVariableType]
+    config = getattr(parent_class, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+    if config is not None:
+        required: set[str] = getattr(config, "required_bindings", set())
+        if parent_var_name in required:
+            # Store deferred binding to be resolved later
+            _store_deferred_binding(parent, child, child_var_name, parent_var_name)
+            return
+
+    # Not found and not a required binding
+    raise AttributeError(f"Cannot bind '{child_var_name}' to '{parent_var_name}': '{parent_var_name}' not found on {type(parent).__name__}")
+
+
+def _store_deferred_binding(parent: Any, child: Any, child_var_name: str, parent_var_name: str) -> None:
+    """Store a deferred binding to be resolved after parent's bindings are applied."""
+    deferred_list: list[tuple[Any, str, str]]
+    if not hasattr(parent, "_qtpie_deferred_bindings"):
+        deferred_list = []
+        parent._qtpie_deferred_bindings = deferred_list
+    else:
+        deferred_list = parent._qtpie_deferred_bindings
+    deferred_list.append((child, child_var_name, parent_var_name))
+
+
+def _apply_pending_bindings(instance: Any) -> None:
+    """Apply pending auto-bindings on the instance.
+
+    If the instance has `_qtpie_pending_auto_bindings = True`, it means the child widget
+    deferred its binding application because required Variables weren't set up during init.
+    Now that the parent has applied variable bindings, we can apply those bindings.
+    """
+    if not getattr(instance, "_qtpie_pending_auto_bindings", False):
+        return
+
+    # Get the child's config
+    instance_type = type(instance)  # pyright: ignore[reportUnknownVariableType]
+    child_config = getattr(instance_type, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+    if child_config is None:
+        return
+
+    # Import the binding functions from widget (internal cross-module usage)
+    from .widget import (
+        _apply_auto_bindings,  # pyright: ignore[reportPrivateUsage]
+        _apply_property_bindings,  # pyright: ignore[reportPrivateUsage]
+        _apply_reactive_widget_props,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    # Apply the deferred bindings
+    _apply_auto_bindings(instance, child_config)
+    _apply_property_bindings(instance, child_config)
+    _apply_reactive_widget_props(instance, child_config)
+
+    # Clear the flag
+    del instance._qtpie_pending_auto_bindings
+
+
+def _resolve_deferred_bindings(widget: Any) -> None:
+    """Resolve any deferred bindings on the widget.
+
+    Called after a widget's own Variable bindings are applied, so its children
+    can now access the newly-bound Variables.
+    """
+    from observant import Observable
+
+    deferred: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_deferred_bindings", None)
+    if not deferred:
+        return
+
+    for child, child_var_name, parent_var_name in deferred:
+        # Now the parent's Variable should exist
+        parent_var = getattr(widget, parent_var_name, None)
+        if parent_var is None:
+            raise AttributeError(f"Deferred binding failed: '{parent_var_name}' still not found on {type(widget).__name__}")
+
+        parent_observable: AnyObservable[Any]
+        if isinstance(parent_var, Variable):
+            parent_observable = parent_var.observable  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        elif isinstance(parent_var, Observable):
+            parent_observable = parent_var  # pyright: ignore[reportUnknownVariableType]
+        else:
+            raise TypeError(f"Deferred binding failed: expected Variable or Observable, got {type(parent_var).__name__}")
+
+        # Create the child's Variable sharing the parent's Observable
+        child_var: Variable[Any] = Variable(parent_observable)
+        setattr(child, child_var_name, child_var)
+
+        # Recursively resolve any deferred bindings on the child
+        _resolve_deferred_bindings(child)
+
+    # Clear the deferred bindings
+    del widget._qtpie_deferred_bindings
+
+
+def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expression: str) -> None:
+    """Create one-way computed binding from expression to child Variable.
+
+    The expression is evaluated with parent's context, and the result
+    is set on the child's Variable. Updates when any referenced Variable changes.
+    """
+    from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+
+    # Extract the expression from {expr}
+    expr = expression.strip()
+    if expr.startswith("{") and expr.endswith("}"):
+        expr = expr[1:-1].strip()
+
+    # Extract variable names from the expression
+    # Simple approach: find all identifiers that might be Variables
+    import re
+
+    # Find potential variable names (identifiers, possibly with underscore prefix)
+    potential_vars = set(re.findall(r"\b_?[a-zA-Z_][a-zA-Z0-9_]*\b", expr))
+
+    # Filter to only those that exist on parent
+    # Track both Observable (takes value arg) and others (no arg)
+    observables: list[Observable[Any]] = []
+    observable_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
+    for var_name in potential_vars:
+        parent_attr = getattr(parent, var_name, None)
+        if parent_attr is None:
+            # Try with underscore prefix
+            parent_attr = getattr(parent, f"_{var_name}", None)
+        if isinstance(parent_attr, Variable):
+            obs: AnyObservable[Any] = parent_attr.observable  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            if isinstance(obs, Observable):
+                observables.append(obs)  # pyright: ignore[reportUnknownArgumentType]
+            else:
+                # ObservableList, ObservableDict, or ObservableProxy have on_change with different signature (no args)
+                observable_collections.append(obs)
+        elif isinstance(parent_attr, Observable):
+            observables.append(parent_attr)  # pyright: ignore[reportUnknownArgumentType]
+
+    def compute() -> Any:
+        """Evaluate the expression with parent's context."""
+        context: dict[str, Any] = {}
+
+        for var_name in potential_vars:
+            # Try with underscore prefix first, then without
+            for attr_name in [f"_{var_name}", var_name]:
+                if hasattr(parent, attr_name):
+                    attr = getattr(parent, attr_name)
+                    if isinstance(attr, Variable):
+                        context[var_name] = attr.value  # pyright: ignore[reportUnknownMemberType]
+                    else:
+                        context[var_name] = attr
+                    break
+
+        try:
+            return eval(expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+        except Exception:
+            return None
+
+    # Create an Observable with the initial computed value
+    initial_value = compute()
+    child_observable: Observable[Any] = Observable(initial_value)
+
+    # Create the child's Variable with this Observable
+    child_var: Variable[Any] = Variable(child_observable)
+
+    # Assign to the child
+    setattr(child, child_var_name, child_var)
+
+    # Subscribe to parent's Observables to update when they change
+    def on_parent_change(_: Any) -> None:
+        new_value = compute()
+        child_observable.set(new_value)
+
+    def on_collection_change() -> None:
+        new_value = compute()
+        child_observable.set(new_value)
+
+    for obs in observables:
+        obs.on_change(on_parent_change)
+
+    for obs_coll in observable_collections:
+        obs_coll.on_change(on_collection_change)
+
+
+def _apply_literal_binding(child: Any, child_var_name: str, value: Any) -> None:
+    """Set a literal value as the child Variable's default.
+
+    Unlike expression or variable bindings, this just sets the initial value
+    and does not create any reactive connection.
+    """
+    from observant import Observable
+
+    # Create an Observable with the literal value
+    observable: Observable[Any] = Observable(value)
+
+    # Create a Variable with the Observable
+    child_var: Variable[Any] = Variable(observable)
+
+    # Assign to the child - triggers descriptor's __set__
+    setattr(child, child_var_name, child_var)

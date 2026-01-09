@@ -38,7 +38,7 @@ btn: QPushButton = new("Save", clicked="on_save")
 count: Variable[int] = new(0)
 
 # Variable with widget (chained call)
-name: Variable[str, QLineEdit] = new("default")(placeholder="Enter name")
+name: Variable[str, QLineEdit] = new("default")(placeholderText="Enter name")
 ```
 
 ## Variable[T] - Reactive State
@@ -173,14 +173,14 @@ class MyWidget(Widget):
 
 ## Decorators
 
-| Decorator | Purpose |
-|-----------|---------|
-| `@widget` | Transform class into QtPie widget |
-| `@window` | Transform class into QMainWindow |
-| `@menu` | Define a menu for window menu bar |
-| `@action` | Define a QAction |
-| `@slot` | Mark async method as slot |
-| `@entrypoint` | Make widget runnable as app |
+| Decorator     | Purpose                           |
+| ------------- | --------------------------------- |
+| `@widget`     | Transform class into QtPie widget |
+| `@window`     | Transform class into QMainWindow  |
+| `@menu`       | Define a menu for window menu bar |
+| `@action`     | Define a QAction                  |
+| `@slot`       | Mark async method as slot         |
+| `@entrypoint` | Make widget runnable as app       |
 
 ## Validation
 

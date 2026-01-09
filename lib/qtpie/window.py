@@ -23,7 +23,7 @@ from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
 from .state import QtPieState, QtPieViewModel
-from .variable import RecordVariable, Variable
+from .variable import RecordVariable, Variable, _RequiredBindingDescriptor
 
 
 @dataclass
@@ -45,6 +45,8 @@ class WindowConfig:
     record_type: type[Any] | None = None
     # Initial record value from @window(record=...)
     record_default: Any | None = None
+    # Required bindings - bare Variable[T] fields that must be provided
+    required_bindings: set[str] = field(default_factory=lambda: set[str]())
 
 
 class Window[T = None](QMainWindow):
@@ -93,6 +95,10 @@ class Window[T = None](QMainWindow):
 
         # Collect NewField instances (must happen before new_fields processes them)
         _collect_fields(cls)
+
+        # Detect bare Variable[T] annotations (no = new())
+        # These are required bindings - must be provided by parent
+        _detect_required_bindings_for_window(cls)
 
         # Apply new_fields to handle Variable and QWidget instantiation
         new_fields(cls)
@@ -255,6 +261,43 @@ def _collect_fields(cls: type[Window[Any]]) -> None:
         value = getattr(cls, name, None)
         if isinstance(value, NewField):
             config.fields[name] = value
+
+
+def _detect_required_bindings_for_window(cls: type[Window[Any]]) -> None:
+    """Detect bare Variable[T] annotations as required bindings.
+
+    A bare annotation like `count: Variable[int]` (no `= new()`) indicates
+    the Variable must be provided by the parent widget/window via binding.
+
+    Creates a _RequiredBindingDescriptor for each bare Variable annotation.
+    """
+    # Get annotations from this class only (not inherited)
+    annotations = getattr(cls, "__annotations__", {})
+
+    for name, annotation in annotations.items():
+        # Check if annotation is Variable[T] or Variable
+        origin = get_origin(annotation)
+        if origin is not Variable and annotation is not Variable:
+            continue
+
+        # Check if there's a value in __dict__ for this name
+        # If there is, it's either a NewField (= new(...)) or a descriptor (already processed)
+        if name in cls.__dict__:
+            # Has a value - not a bare annotation
+            continue
+
+        # This is a bare Variable[T] annotation - mark as required binding
+        cls._qtpie_config.required_bindings.add(name)
+
+        # Extract inner type from Variable[T]
+        inner_type: type | None = None
+        if origin is Variable:
+            args = get_args(annotation)
+            inner_type = args[0] if args else None
+
+        # Create a _RequiredBindingDescriptor for this annotation
+        descriptor: _RequiredBindingDescriptor[Any] = _RequiredBindingDescriptor(name, inner_type)
+        setattr(cls, name, descriptor)
 
 
 @overload

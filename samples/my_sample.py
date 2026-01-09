@@ -469,3 +469,162 @@ class HasSomeTranslations(Widget[Dog]):
 
     def change_language(self) -> None:
         set_language("fr")
+
+
+# =============================================================================
+# Variable Bindings Demo - React-style props for QtPie!
+# =============================================================================
+
+
+@widget
+class CounterDisplay(Widget):
+    """A reusable counter display that REQUIRES a count binding from parent."""
+
+    # Required binding - no = new(), so parent MUST provide it
+    count: Variable[int]
+
+    # Optional binding - has default, parent can override
+    prefix: Variable[str] = new("Count: ")
+
+    # Display combines prefix and count
+    _label: QLabel = new(bind="{prefix}{count}")
+
+
+@widget
+class CounterApp(Widget):
+    """Parent widget that provides the count binding."""
+
+    # Our count state
+    _my_count: Variable[int] = new(0)
+
+    # Pass our _my_count to CounterDisplay's required 'count' binding
+    # This creates a TWO-WAY binding - changes sync both directions!
+    display: CounterDisplay = new(count="_my_count")
+
+    # Another display with a custom prefix
+    display2: CounterDisplay = new(count="_my_count", prefix="Value = ")
+
+    # Buttons to change the count
+    btn_increment: QPushButton = new("+1", clicked="increment")
+    btn_decrement: QPushButton = new("-1", clicked="decrement")
+
+    # Show that we can also read the child's value
+    btn_print: QPushButton = new("Print from child", clicked="print_child_value")
+
+    def increment(self) -> None:
+        self._my_count.value += 1
+
+    def decrement(self) -> None:
+        self._my_count.value -= 1
+
+    def print_child_value(self) -> None:
+        # Two-way binding means child's value IS parent's value
+        print(f"Child's count value: {self.display.count.value}")
+
+
+@widget
+class ConditionalChild(Widget):
+    """Child that shows/hides based on a binding."""
+
+    # Required - parent must tell us if we're enabled
+    is_enabled: Variable[bool]
+
+    _status: QLabel = new(bind="Status: {'Enabled!' if is_enabled else 'Disabled'}")
+
+
+@widget
+class ExpressionBindingDemo(Widget):
+    """Demo of expression bindings - one-way computed values."""
+
+    # Our list of items
+    _items: Variable[list[str]] = new([])
+
+    # Input for adding items
+    _new_item: Variable[str, QLineEdit] = new("")(placeholderText="Enter item name")
+
+    # Buttons
+    btn_add: QPushButton = new("Add Item", clicked="add_item")
+    btn_clear: QPushButton = new("Clear All", clicked="clear_items")
+
+    # Child with expression binding - enabled only when we have items
+    # This is ONE-WAY (computed), not two-way
+    child: ConditionalChild = new(is_enabled="{len(_items) > 0}")
+
+    # Show item count
+    _count_label: QLabel = new(bind="Items: {len(_items)}")
+
+    def add_item(self) -> None:
+        if self._new_item.value.strip():
+            self._items.append(self._new_item.value)
+            self._new_item.value = ""
+
+    def clear_items(self) -> None:
+        self._items.value = []
+
+
+@widget
+class GrandChild(Widget):
+    """Grandchild that receives a binding passed through an intermediate widget."""
+
+    theme: Variable[str]  # Required!
+    _label: QLabel = new(bind="Theme: {theme}")
+
+
+@widget
+class Child(Widget):
+    """Intermediate widget that passes bindings through to grandchild."""
+
+    theme: Variable[str]  # Required from parent, passed to grandchild
+    grandchild: GrandChild = new(theme="theme")  # Pass our theme down
+
+
+@widget
+class NestedBindingDemo(Widget):
+    """Demo of nested binding pass-through - state flows down the tree."""
+
+    _theme: Variable[str] = new("dark")
+
+    # Pass _theme -> Child.theme -> GrandChild.theme
+    child: Child = new(theme="_theme")
+
+    btn_toggle: QPushButton = new("Toggle Theme", clicked="toggle_theme")
+
+    def toggle_theme(self) -> None:
+        self._theme.value = "light" if self._theme.value == "dark" else "dark"
+        print(f"Theme changed to: {self._theme.value}")
+        print(f"Child sees: {self.child.theme.value}")
+        print(f"Grandchild sees: {self.child.grandchild.theme.value}")
+
+
+@widget
+class LiteralBindingDemo(Widget):
+    """Demo of literal value bindings."""
+
+    # Child with a literal string (not a variable reference)
+    display1: CounterDisplay = new(count=42, prefix="Literal count: ")
+
+    # Child with literal from a different source
+    display2: CounterDisplay = new(count=100)
+
+    _label: QLabel = new("These counts are literals, not bound to any variable")
+
+
+# Uncomment and use as @entrypoint to run:
+# @entrypoint
+@widget
+class VariableBindingsDemo(Widget):
+    """Main demo widget showcasing all Variable binding features."""
+
+    _tabs: QTabWidget = new()
+
+    # The demos (layout=False because we add them to tabs manually)
+    counter_demo: CounterApp = new(layout=False)
+    expression_demo: ExpressionBindingDemo = new(layout=False)
+    nested_demo: NestedBindingDemo = new(layout=False)
+    literal_demo: LiteralBindingDemo = new(layout=False)
+
+    def __setup__(self) -> None:
+        self._tabs.addTab(self.counter_demo, "Two-Way Binding")
+        self._tabs.addTab(self.expression_demo, "Expression Binding")
+        self._tabs.addTab(self.nested_demo, "Nested Pass-Through")
+        self._tabs.addTab(self.literal_demo, "Literal Values")

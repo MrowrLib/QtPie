@@ -45,6 +45,8 @@ class NewField:
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
+        # Variable bindings - maps child's required Variable names to parent's values/expressions
+        self.variable_bindings: dict[str, Any] = {}  # child_var_name -> binding_value
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -175,6 +177,10 @@ class NewField:
             classes = self.kwargs.pop("classes", None)
             if classes is not None:
                 self.css_classes = classes
+
+            # Extract variable bindings for QtPie Widget subclasses
+            # e.g., child: Child = new(count="_my_count")
+            self._extract_variable_bindings()
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()
@@ -355,6 +361,53 @@ class NewField:
         for key, value in self.kwargs.items():
             if isinstance(value, Translatable):
                 self.translatable_kwargs[key] = value
+
+    def _extract_variable_bindings(self) -> None:
+        """Extract variable bindings for QtPie Widget subclasses.
+
+        When the field type is a QtPie Widget with required/optional Variable bindings,
+        extract matching kwargs as variable_bindings instead of passing to constructor.
+
+        Example:
+            child: Child = new(count="_my_count")  # count is extracted as a binding
+        """
+        if self.field_type is None:
+            return
+
+        # Check if the field type is a QtPie Widget subclass
+        if not self._is_qtpie_widget():
+            return
+
+        # Get the child's required bindings and all Variable annotations
+        config = getattr(self.field_type, "_qtpie_config", None)
+        if config is None:
+            return
+
+        # Collect all Variable names from the child (required and optional)
+        variable_names: set[str] = set(config.required_bindings)
+
+        # Also check annotations for Variable types (including optional ones with defaults)
+        child_annotations = getattr(self.field_type, "__annotations__", {})
+        for name, annotation in child_annotations.items():
+            origin = get_origin(annotation)
+            if origin is Variable or annotation is Variable:
+                variable_names.add(name)
+
+        # Extract kwargs that match Variable names
+        to_remove: list[str] = []
+        for key, value in self.kwargs.items():
+            if key in variable_names:
+                self.variable_bindings[key] = value
+                to_remove.append(key)
+
+        for key in to_remove:
+            del self.kwargs[key]
+
+    def _is_qtpie_widget(self) -> bool:
+        """Check if the field type is a QtPie Widget subclass (has _qtpie_config)."""
+        if self.field_type is None:
+            return False
+        return hasattr(self.field_type, "_qtpie_config")
 
     def _get_variable_default(self) -> Any:
         """Extract default value for a Variable field."""

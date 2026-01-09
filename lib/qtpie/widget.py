@@ -20,13 +20,13 @@ from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
 from .state import QtPieState, QtPieViewModel
-from .variable import RecordVariable, Variable, _create_observable_for_type, _VariableDescriptor
+from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 
 
 class _QtPieConfig:
     """Class-level QtPie configuration."""
 
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "record_default", "auto_bind", "widget_props", "object_name", "css_classes")
+    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "record_default", "auto_bind", "widget_props", "object_name", "css_classes", "required_bindings")
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
@@ -40,6 +40,7 @@ class _QtPieConfig:
         self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
+        self.required_bindings: set[str] = set()  # Bare Variable[T] fields that must be provided
 
 
 class _RecordDescriptor[T]:
@@ -157,6 +158,10 @@ class Widget[T = None](QWidget):
                 cls._qtpie_config.fields[name] = value
             elif isinstance(value, _VariableDescriptor):
                 cls._qtpie_config.variable_names.append(name)
+
+        # Detect bare Variable[T] annotations (no = new())
+        # These are required bindings - must be provided by parent
+        _detect_required_bindings(cls)
 
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
@@ -530,13 +535,18 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
             setup_method()
 
         # Apply bindings (after __setup__ so record is available)
-        _apply_auto_bindings(self, config)
+        # BUT: if we have required bindings that haven't been set up yet (provided by parent),
+        # defer binding application until after the parent applies Variable bindings
+        if _has_unset_required_bindings(self, config):
+            self._qtpie_pending_auto_bindings = True  # type: ignore[attr-defined]
+        else:
+            _apply_auto_bindings(self, config)
 
-        # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
-        _apply_property_bindings(self, config)
+            # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
+            _apply_property_bindings(self, config)
 
-        # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
-        _apply_reactive_widget_props(self, config)
+            # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
+            _apply_reactive_widget_props(self, config)
 
         # Enable on_dirty_changed and on_valid_changed hooks (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
@@ -548,6 +558,28 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._qtpie_config.init_wrapped = True
+
+
+def _has_unset_required_bindings(widget: Widget[Any], config: _QtPieConfig) -> bool:
+    """Check if the widget has required bindings that haven't been set up yet.
+
+    Returns True if any required Variable binding is missing (not yet provided by parent).
+    """
+    if not config.required_bindings:
+        return False
+
+    # Check if _qtpie state exists and has the required Variables
+    state = getattr(widget, "_qtpie", None)
+    if state is None:
+        # No state yet - all required bindings are unset
+        return True
+
+    # Check each required binding
+    for name in config.required_bindings:
+        if name not in state.variables:
+            return True
+
+    return False
 
 
 def _create_layout(layout_type: LayoutType) -> QLayout | None:
@@ -1227,3 +1259,40 @@ def _apply_reactive_widget_props(widget: Widget[Any], config: _QtPieConfig) -> N
             return wrapped
 
         create_format_binding(widget, value, make_setter(setter_method))
+
+
+def _detect_required_bindings(cls: type[Widget[Any]]) -> None:
+    """Detect bare Variable[T] annotations as required bindings.
+
+    A bare annotation like `count: Variable[int]` (no `= new()`) indicates
+    the Variable must be provided by the parent widget via binding.
+
+    Creates a _RequiredBindingDescriptor for each bare Variable annotation.
+    """
+    # Get annotations from this class only (not inherited)
+    annotations = getattr(cls, "__annotations__", {})
+
+    for name, annotation in annotations.items():
+        # Check if annotation is Variable[T] or Variable
+        origin = get_origin(annotation)
+        if origin is not Variable and annotation is not Variable:
+            continue
+
+        # Check if there's a value in __dict__ for this name
+        # If there is, it's either a NewField (= new(...)) or a descriptor (already processed)
+        if name in cls.__dict__:
+            # Has a value - not a bare annotation
+            continue
+
+        # This is a bare Variable[T] annotation - mark as required binding
+        cls._qtpie_config.required_bindings.add(name)
+
+        # Extract inner type from Variable[T]
+        inner_type: type | None = None
+        if origin is Variable:
+            args = get_args(annotation)
+            inner_type = args[0] if args else None
+
+        # Create a _RequiredBindingDescriptor for this annotation
+        descriptor: _RequiredBindingDescriptor[Any] = _RequiredBindingDescriptor(name, inner_type)
+        setattr(cls, name, descriptor)
