@@ -2,10 +2,9 @@ import asyncio
 from dataclasses import dataclass
 from typing import override
 
-from PySide6.QtGui import QAction
-from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QMenu, QPushButton, QTabWidget
+from qtpy.QtWidgets import QLabel, QLineEdit, QPushButton, QTabWidget
 
-from qtpie import Variable, Widget, Window, entrypoint, menu, new, set_language, slot, t, widget, window
+from qtpie import Variable, Widget, entrypoint, new, set_language, slot, t, widget
 
 
 @dataclass
@@ -422,15 +421,15 @@ class AsyncExample(Widget):
         print("Cleanup complete.")
 
 
-@menu("&File")
-class FileMenu(QMenu):
-    action_exit: QAction = new("E&xit", triggered="on_exit")
+# @menu("&File")
+# class FileMenu(QMenu):
+#     action_exit: QAction = new("E&xit", triggered="on_exit")
 
-    def on_exit(self) -> None:
-        print("Exit action triggered.")
-        app = QApplication.instance()
-        if app:
-            app.quit()
+#     def on_exit(self) -> None:
+#         print("Exit action triggered.")
+#         app = QApplication.instance()
+#         if app:
+#             app.quit()
 
 
 @widget(record=Dog("Fido", 3))
@@ -444,20 +443,20 @@ class SomeDogWidget(Widget[Dog]):
         print(f"Dog Name: {self.record.name}, Age: {self.record.age}")
 
 
-@window(title="My App")
-class MainWindow(Window[Dog]):
-    file_menu: FileMenu = new()
-    btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
+# @window(title="My App")
+# class MainWindow(Window[Dog]):
+#     file_menu: FileMenu = new()
+#     btn_print_dog: QPushButton = new("Print Dog", clicked="print_dog")
 
-    def print_dog(self) -> None:
-        print(f"Dog Name: {self.record.name}, Age: {self.record.age}")
+#     def print_dog(self) -> None:
+#         print(f"Dog Name: {self.record.name}, Age: {self.record.age}")
 
-    # add some regular widgets:
-    name: QLineEdit = new()
-    age: QLineEdit = new()
+#     # add some regular widgets:
+#     name: QLineEdit = new()
+#     age: QLineEdit = new()
 
-    # def __setup__(self) -> None:
-    #     self.record = Dog(name="Rover", age=5)
+#     # def __setup__(self) -> None:
+#     #     self.record = Dog(name="Rover", age=5)
 
 
 # @entrypoint(translations="samples/example_translations.yml", watch_translations=True)

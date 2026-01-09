@@ -25,7 +25,7 @@ class ActionRepeater[T]:
     with the underlying ObservableList.
 
     Usage:
-        # In a Menu with @newmenu decorator
+        # In a Menu with @menu decorator
         window_actions: list[QAction] = new(bind="_windows")
     """
 

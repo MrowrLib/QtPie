@@ -67,10 +67,10 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 # Skip list[QWidget] fields - they're created as WidgetRepeaters in widget.py
                 if field.is_list_widget:
                     continue
-                # Skip list[QAction] fields - they're created as ActionRepeaters in newmenu
+                # Skip list[QAction] fields - they're created as ActionRepeaters in @menu
                 if _is_action_list_type(field.field_type):
                     continue
-                # Skip menu marker types (Separator, Section) - handled by newmenu
+                # Skip menu marker types (Separator, Section) - handled by @menu
                 if _is_menu_marker_type(field.field_type):
                     continue
                 if field.field_type is not None:
@@ -600,14 +600,14 @@ def _apply_literal_binding(child: Any, child_var_name: str, value: Any) -> None:
 def _is_menu_marker_type(field_type: type | None) -> bool:
     """Check if the field type is a menu marker (Separator, Section).
 
-    These types are handled specially by newmenu and shouldn't be instantiated
+    These types are handled specially by @menu and shouldn't be instantiated
     by new_fields.
     """
     if field_type is None:
         return False
 
     # Import here to avoid circular import
-    from .newmenu import Section, Separator
+    from .menu import Section, Separator
 
     return field_type is Separator or field_type is Section
 
@@ -615,7 +615,7 @@ def _is_menu_marker_type(field_type: type | None) -> bool:
 def _is_action_list_type(field_type: type | None) -> bool:
     """Check if the field type is list[QAction].
 
-    These types are handled specially by newmenu as ActionRepeaters
+    These types are handled specially by @menu as ActionRepeaters
     and shouldn't be instantiated by new_fields.
     """
     if field_type is None:

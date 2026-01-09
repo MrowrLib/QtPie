@@ -8,9 +8,9 @@ from typing import override
 
 from assertpy import assert_that
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QVBoxLayout
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
-from qtpie import Variable, Window, menu, new, window
+from qtpie import Menu, Variable, Window, menu, new, window
 from qtpie.testing import QtDriver
 
 
@@ -76,8 +76,8 @@ class TestWindowBasicLayout:
     def test_no_widgets_no_central(self, qt: QtDriver) -> None:
         """Window with only menus has no central widget."""
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             pass
 
         @window
@@ -127,8 +127,8 @@ class TestWindowMenuBar:
     def test_qmenu_added_to_menubar(self, qt: QtDriver) -> None:
         """QMenu fields are automatically added to menu bar."""
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             pass
 
         @window
@@ -144,16 +144,16 @@ class TestWindowMenuBar:
     def test_multiple_menus_in_order(self, qt: QtDriver) -> None:
         """Multiple QMenu fields added in declaration order."""
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             pass
 
-        @menu("&Edit")
-        class EditMenu(QMenu):
+        @menu(text="&Edit")
+        class EditMenu(Menu):
             pass
 
-        @menu("&Help")
-        class HelpMenu(QMenu):
+        @menu(text="&Help")
+        class HelpMenu(Menu):
             pass
 
         @window
@@ -173,8 +173,8 @@ class TestWindowMenuBar:
     def test_menus_and_widgets_together(self, qt: QtDriver) -> None:
         """Menus go to menubar, widgets go to central widget."""
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             pass
 
         @window
@@ -342,8 +342,8 @@ class TestWindowSetup:
     def test_setup_called_after_menus(self, qt: QtDriver) -> None:
         """__setup__ is called after menus are added to menubar."""
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             pass
 
         setup_menu_count = 0
@@ -674,8 +674,8 @@ class TestMenuSignalConnections:
         """Menu actions with triggered= connect properly."""
         exit_called = False
 
-        @menu("&File")
-        class FileMenu(QMenu):
+        @menu(text="&File")
+        class FileMenu(Menu):
             action_exit: QAction = new("E&xit", triggered="on_exit")
 
             def on_exit(self) -> None:

@@ -153,7 +153,7 @@ class NewField:
                 # Remaining kwargs go to widget constructor
                 return
 
-            # Handle list[QAction] - creates an ActionRepeater in newmenu
+            # Handle list[QAction] - creates an ActionRepeater in @menu
             if type_args and self._is_qaction_class(type_args[0]):
                 # Mark as action list (not widget list, but similar handling)
                 self.is_list_widget = False  # Not a widget list
