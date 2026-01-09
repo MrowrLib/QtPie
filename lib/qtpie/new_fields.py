@@ -363,18 +363,30 @@ def _resolve_deferred_bindings(widget: Any) -> None:
 
     Called after a widget's own Variable bindings are applied, so its children
     can now access the newly-bound Variables.
+
+    If a parent variable still doesn't exist (because the parent itself has
+    unresolved required bindings), those bindings are kept deferred for later
+    resolution when the parent's binding is eventually resolved.
     """
     from observant import Observable
 
     deferred: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_deferred_bindings", None)
     if not deferred:
+        # Still need to check expression bindings even if no regular deferred bindings
+        _resolve_deferred_expression_bindings(widget)
         return
 
+    # Track which bindings couldn't be resolved yet
+    still_deferred: list[tuple[Any, str, str]] = []
+
     for child, child_var_name, parent_var_name in deferred:
-        # Now the parent's Variable should exist
+        # Check if the parent's Variable exists now
         parent_var = getattr(widget, parent_var_name, None)
         if parent_var is None:
-            raise AttributeError(f"Deferred binding failed: '{parent_var_name}' still not found on {type(widget).__name__}")
+            # Parent variable still doesn't exist (parent has unresolved required binding)
+            # Keep this binding deferred for later resolution
+            still_deferred.append((child, child_var_name, parent_var_name))
+            continue
 
         parent_observable: AnyObservable[Any]
         if isinstance(parent_var, Variable):
@@ -384,9 +396,37 @@ def _resolve_deferred_bindings(widget: Any) -> None:
         else:
             raise TypeError(f"Deferred binding failed: expected Variable or Observable, got {type(parent_var).__name__}")
 
-        # Create the child's Variable sharing the parent's Observable
-        child_var: Variable[Any] = Variable(parent_observable)
-        setattr(child, child_var_name, child_var)
+        # Check if the child already has a Variable (e.g., optional with default)
+        existing_var = getattr(child, child_var_name, None)
+        if existing_var is not None and isinstance(existing_var, Variable):
+            # Child has an existing Variable (optional with default)
+            # We need to sync it with the parent's Observable, NOT replace it
+            # because format bindings are already subscribed to the existing Observable
+            child_obs: AnyObservable[Any] = existing_var.observable  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+
+            # Initial sync: set child's Observable to parent's value
+            if isinstance(child_obs, Observable) and isinstance(parent_observable, Observable):
+                child_obs.set(parent_observable.get())
+
+                # Two-way binding: parent <-> child Observables
+                # When parent changes, update child
+                def on_parent_change(v: Any, child_obs: Observable[Any] = child_obs) -> None:
+                    child_obs.set(v)
+
+                parent_observable.on_change(on_parent_change)
+
+                # When child changes, update parent
+                def on_child_change(v: Any, parent_obs: Observable[Any] = parent_observable) -> None:
+                    parent_obs.set(v)
+
+                child_obs.on_change(on_child_change)
+            else:
+                # For non-Observable wrappers (ObservableList, etc.), just replace
+                object.__setattr__(existing_var, "_wrapper", parent_observable)  # pyright: ignore[reportUnknownArgumentType]
+        else:
+            # Create new Variable sharing the parent's Observable
+            child_var: Variable[Any] = Variable(parent_observable)
+            setattr(child, child_var_name, child_var)
 
         # Recursively resolve any deferred bindings on the child
         _resolve_deferred_bindings(child)
@@ -396,8 +436,40 @@ def _resolve_deferred_bindings(widget: Any) -> None:
         # when the child's required Variables weren't yet populated
         _apply_pending_bindings(child)
 
-    # Clear the deferred bindings
-    del widget._qtpie_deferred_bindings
+    # Update the deferred list - keep only those that couldn't be resolved
+    if still_deferred:
+        widget._qtpie_deferred_bindings = still_deferred
+    else:
+        if hasattr(widget, "_qtpie_deferred_bindings"):
+            del widget._qtpie_deferred_bindings
+
+    # Also resolve any deferred expression bindings
+    _resolve_deferred_expression_bindings(widget)
+
+
+def _resolve_deferred_expression_bindings(widget: Any) -> None:
+    """Resolve any deferred expression bindings on the widget.
+
+    Expression bindings can be deferred if they reference required variables
+    that don't exist yet. This function is called after direct bindings are
+    resolved, so the required variables should now be available.
+    """
+    deferred: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_deferred_expression_bindings", None)
+    if not deferred:
+        return
+
+    # Clear the list before attempting resolution
+    # _apply_expression_binding may add back to it if still deferred
+    del widget._qtpie_deferred_expression_bindings
+
+    for child, child_var_name, expression in deferred:
+        # Try to apply the expression binding
+        # _apply_expression_binding will check if variables exist and may re-defer
+        _apply_expression_binding(widget, child, child_var_name, expression)
+
+        # After creating the child's Variable, apply any pending bindings on the child
+        # (the child may have deferred its format bindings waiting for this Variable)
+        _apply_pending_bindings(child)
 
 
 def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expression: str) -> None:
@@ -405,6 +477,9 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
 
     The expression is evaluated with parent's context, and the result
     is set on the child's Variable. Updates when any referenced Variable changes.
+
+    If the expression references variables that don't exist yet (required bindings
+    on the parent that haven't been populated), this binding is deferred.
     """
     from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
@@ -419,6 +494,25 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
 
     # Find potential variable names (identifiers, possibly with underscore prefix)
     potential_vars = set(re.findall(r"\b_?[a-zA-Z_][a-zA-Z0-9_]*\b", expr))
+
+    # Check if any referenced variable is a required binding that doesn't exist yet
+    parent_class = type(parent)  # pyright: ignore[reportUnknownVariableType]
+    parent_config = getattr(parent_class, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+    parent_required: set[str] = set()
+    if parent_config is not None:
+        parent_required = getattr(parent_config, "required_bindings", set())
+
+    for var_name in potential_vars:
+        # Check both with and without underscore prefix
+        for check_name in [var_name, f"_{var_name}"]:
+            if check_name in parent_required:
+                # This is a required binding
+                if not hasattr(parent, check_name) or getattr(parent, check_name, None) is None:
+                    # The required binding hasn't been populated yet - defer this expression binding
+                    deferred: list[tuple[Any, str, str]] = getattr(parent, "_qtpie_deferred_expression_bindings", [])
+                    deferred.append((child, child_var_name, expression))
+                    parent._qtpie_deferred_expression_bindings = deferred
+                    return  # Don't apply now, will be applied later
 
     # Filter to only those that exist on parent
     # Track both Observable (takes value arg) and others (no arg)

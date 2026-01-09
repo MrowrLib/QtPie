@@ -186,17 +186,20 @@ class NewField:
             # Extract grid= for grid layouts
             self.grid = self.kwargs.pop("grid", None)
 
-            # Extract name= for objectName
-            self.object_name = self.kwargs.pop("name", None)
+            # Extract variable bindings for QtPie Widget subclasses BEFORE extracting name=
+            # This ensures that if a child widget has a required Variable called "name",
+            # it gets treated as a variable binding, not as objectName
+            # e.g., child: Child = new(count="_my_count", name="_my_name")
+            self._extract_variable_bindings()
+
+            # Extract name= for objectName (only if it wasn't already extracted as a variable binding)
+            if "name" not in self.variable_bindings:
+                self.object_name = self.kwargs.pop("name", None)
 
             # Extract classes= for CSS classes
             classes = self.kwargs.pop("classes", None)
             if classes is not None:
                 self.css_classes = classes
-
-            # Extract variable bindings for QtPie Widget subclasses
-            # e.g., child: Child = new(count="_my_count")
-            self._extract_variable_bindings()
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()
