@@ -153,6 +153,22 @@ class NewField:
                 # Remaining kwargs go to widget constructor
                 return
 
+            # Handle list[QAction] - creates an ActionRepeater in newmenu
+            if type_args and self._is_qaction_class(type_args[0]):
+                # Mark as action list (not widget list, but similar handling)
+                self.is_list_widget = False  # Not a widget list
+
+                # Extract bind= (required for action lists)
+                self.bind = self.kwargs.pop("bind", None)
+
+                # Extract format= for list item formatting
+                self.list_format = self.kwargs.pop("format", None)
+
+                # Extract signal connections (e.g., triggered="on_select")
+                self._extract_signal_connections_for_type(type_args[0])
+
+                return
+
         # Handle QWidget-specific kwargs only
         # For non-QWidgets: leave bind= and layout= in kwargs so they pass to constructor
         if self._is_qwidget_type():
@@ -250,6 +266,17 @@ class NewField:
         except (ImportError, TypeError):
             return False
 
+    def _is_qaction_class(self, cls: type | None) -> bool:
+        """Check if cls is QAction."""
+        if cls is None:
+            return False
+        try:
+            from qtpy.QtGui import QAction
+
+            return cls is QAction or (isinstance(cls, type) and issubclass(cls, QAction))  # pyright: ignore[reportUnnecessaryIsInstance]
+        except (ImportError, TypeError):
+            return False
+
     def _is_signal(self, name: str) -> bool:
         """Check if name is a signal on the field type."""
         if self.field_type is None:
@@ -281,6 +308,35 @@ class NewField:
 
         for key in to_remove:
             del self.kwargs[key]
+
+    def _extract_signal_connections_for_type(self, target_type: type) -> None:
+        """Extract signal=handler kwargs for a specific type (e.g., QAction for list[QAction]).
+
+        Args:
+            target_type: The type to check for signals (e.g., QAction)
+        """
+        to_remove: list[str] = []
+        for key, value in self.kwargs.items():
+            # Check if this kwarg name matches a signal on the target type
+            if self._is_signal_on_type(key, target_type):
+                # Value must be a string (method name) or callable
+                if isinstance(value, str) or callable(value):
+                    self.signal_connections[key] = value
+                    to_remove.append(key)
+
+        for key in to_remove:
+            del self.kwargs[key]
+
+    def _is_signal_on_type(self, name: str, target_type: type) -> bool:
+        """Check if name is a signal on the given type."""
+        try:
+            attr = getattr(target_type, name, None)
+            if attr is None:
+                return False
+            # qtpy signals at class level have type name 'Signal'
+            return type(attr).__name__ == "Signal"
+        except Exception:
+            return False
 
     def _has_setter(self, prop_name: str, widget_type: type | None = None) -> bool:
         """Check if the widget type has a setXxx method for the given property name."""
@@ -322,8 +378,8 @@ class NewField:
         Args:
             widget_type: The widget type to check for setters. If None, uses self.field_type.
         """
-        # Properties that support binding (common QWidget properties)
-        bindable_props = {"visible", "enabled", "windowModified", "acceptDrops", "updatesEnabled"}
+        # Properties that support binding (common QWidget/QAction properties)
+        bindable_props = {"visible", "enabled", "windowModified", "acceptDrops", "updatesEnabled", "checked"}
 
         to_remove: list[str] = []
         for key, value in self.kwargs.items():

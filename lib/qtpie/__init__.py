@@ -8,6 +8,7 @@ from .entrypoint import entrypoint
 from .menu import menu
 from .new import new
 from .new_fields import new_fields
+from .newmenu import Menu, MenuConfig, Section, Separator, newmenu
 from .separator import separator
 from .slot import slot
 from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
@@ -22,7 +23,11 @@ __all__ = [
     "App",
     "ColorScheme",
     "DictWidgetRepeater",
+    "Menu",
+    "MenuConfig",
     "RecordVariable",
+    "Section",
+    "Separator",
     "Translatable",
     "Variable",
     "Widget",
@@ -36,6 +41,7 @@ __all__ = [
     "menu",
     "new",
     "new_fields",
+    "newmenu",
     "register_binding",
     "run_app",
     "separator",

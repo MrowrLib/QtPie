@@ -305,7 +305,7 @@ def window[W: Window[Any]](cls: type[W]) -> type[W]: ...
 
 
 @overload
-def window(
+def window[W: Window[Any]](
     cls: None = None,
     *,
     layout: LayoutType = "vertical",
@@ -316,7 +316,7 @@ def window(
     title: str | None = None,
     record: Any | None = None,
     **kwargs: Any,
-) -> Callable[[type[Window[Any]]], type[Window[Any]]]: ...
+) -> Callable[[type[W]], type[W]]: ...
 
 
 def window[W: Window[Any]](
@@ -462,6 +462,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
             instance = getattr(self, name, None)
             if isinstance(instance, QMenu):
                 self.menuBar().addMenu(instance)
+                # Store reference to parent window for #parent bindings
+                instance._parent_window = self  # type: ignore[attr-defined]
+                # Refresh parent-dependent bindings now that menu has a parent
+                if hasattr(instance, "_refresh_parent_bindings"):
+                    instance._refresh_parent_bindings()  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
             elif isinstance(instance, QWidget) and name != "central_widget":
                 non_menu_widgets.append((name, instance))
             elif isinstance(instance, Variable) and instance.widget is not None and name != "central_widget":

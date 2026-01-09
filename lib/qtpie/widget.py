@@ -338,7 +338,7 @@ def widget[W: Widget[Any]](cls: type[W]) -> type[W]: ...
 
 
 @overload
-def widget(
+def widget[W: Widget[Any]](
     cls: None = None,
     *,
     layout: LayoutType = "vertical",
@@ -349,7 +349,7 @@ def widget(
     title: str | None = None,
     record: Any | None = None,
     **kwargs: Any,
-) -> Callable[[type[Widget[Any]]], type[Widget[Any]]]: ...
+) -> Callable[[type[W]], type[W]]: ...
 
 
 def widget[W: Widget[Any]](

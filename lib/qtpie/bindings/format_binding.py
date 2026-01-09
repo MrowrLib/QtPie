@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import ast
-import string
 from typing import TYPE_CHECKING, Any
 
-from observant import Observable, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
 from .path import BindingSource, resolve_binding_source
 
@@ -106,19 +105,256 @@ class _FormatField:
 
 
 def _parse_format_fields(format_string: str) -> list[_FormatField]:
-    """Extract fields from a format string using string.Formatter.
+    """Extract fields from a format string with balanced brace parsing.
+
+    This custom parser handles complex Python expressions including those with
+    string literals containing special characters like '!' that would confuse
+    Python's string.Formatter.
 
     Example: "Count: {count}" → [_FormatField("count", "", False)]
     Example: "{price * 1.1:.2f}" → [_FormatField("price * 1.1", ".2f", True)]
     Example: "{name.upper()}" → [_FormatField("name.upper()", "", True)]
+    Example: "{'Yes!' if x else 'No'}" → [_FormatField("'Yes!' if x else 'No'", "", True)]
     """
-    formatter = string.Formatter()
     fields: list[_FormatField] = []
-    for _, field_name, format_spec, _ in formatter.parse(format_string):
-        if field_name is not None and field_name != "":
-            is_expr = not _is_simple_name(field_name)
-            fields.append(_FormatField(field_name, format_spec or "", is_expr))
+    i = 0
+    n = len(format_string)
+
+    while i < n:
+        # Find next '{' that isn't escaped (not '{{')
+        if format_string[i] == "{":
+            if i + 1 < n and format_string[i + 1] == "{":
+                # Escaped brace, skip both
+                i += 2
+                continue
+
+            # Start of a field - find the matching '}'
+            start = i + 1
+            brace_depth = 1
+            in_string: str | None = None  # Track if we're inside a string literal
+            j = start
+
+            while j < n and brace_depth > 0:
+                ch = format_string[j]
+
+                # Handle string literals
+                if in_string is None:
+                    if ch in ("'", '"'):
+                        # Check for triple quotes
+                        if j + 2 < n and format_string[j : j + 3] in ('"""', "'''"):
+                            in_string = format_string[j : j + 3]
+                            j += 3
+                            continue
+                        else:
+                            in_string = ch
+                            j += 1
+                            continue
+                    elif ch == "{":
+                        brace_depth += 1
+                    elif ch == "}":
+                        brace_depth -= 1
+                        if brace_depth == 0:
+                            break
+                else:
+                    # Inside a string - look for the closing quote
+                    if len(in_string) == 3:
+                        # Triple-quoted string
+                        if format_string[j : j + 3] == in_string:
+                            in_string = None
+                            j += 3
+                            continue
+                    else:
+                        # Single-quoted string - handle escapes
+                        if ch == "\\":
+                            j += 2  # Skip escape sequence
+                            continue
+                        elif ch == in_string:
+                            in_string = None
+
+                j += 1
+
+            if brace_depth == 0:
+                # Found matching brace - extract field content
+                field_content = format_string[start:j]
+
+                # Now parse for format spec - find ':' that's not inside expression
+                expr, format_spec = _split_field_content(field_content)
+
+                if expr:
+                    is_expr = not _is_simple_name(expr)
+                    fields.append(_FormatField(expr, format_spec, is_expr))
+
+                i = j + 1
+            else:
+                # Unmatched brace, skip it
+                i += 1
+        else:
+            i += 1
+
     return fields
+
+
+def _parse_format_template(format_string: str) -> list[tuple[str, _FormatField | None]]:
+    """Parse format string into literal text and field pairs.
+
+    Returns a list of (literal_text, field) tuples where field may be None
+    for trailing literal text. This is similar to string.Formatter.parse()
+    but handles complex Python expressions properly.
+
+    Example: "Count: {count}" → [("Count: ", field), ("", None)]
+    Example: "{'Yes!' if x else 'No'}" → [("", field), ("", None)]
+    """
+    result: list[tuple[str, _FormatField | None]] = []
+    i = 0
+    n = len(format_string)
+    literal_start = 0
+
+    while i < n:
+        if format_string[i] == "{":
+            if i + 1 < n and format_string[i + 1] == "{":
+                # Escaped brace - include one brace in literal
+                # We'll handle this by including up to i, then skip one brace
+                i += 2
+                continue
+
+            # Found field start - capture literal text before it
+            literal_text = format_string[literal_start:i]
+            # Handle escaped braces in literal
+            literal_text = literal_text.replace("{{", "{").replace("}}", "}")
+
+            # Find matching brace
+            start = i + 1
+            brace_depth = 1
+            in_string: str | None = None
+            j = start
+
+            while j < n and brace_depth > 0:
+                ch = format_string[j]
+
+                if in_string is None:
+                    if ch in ("'", '"'):
+                        if j + 2 < n and format_string[j : j + 3] in ('"""', "'''"):
+                            in_string = format_string[j : j + 3]
+                            j += 3
+                            continue
+                        else:
+                            in_string = ch
+                            j += 1
+                            continue
+                    elif ch == "{":
+                        brace_depth += 1
+                    elif ch == "}":
+                        brace_depth -= 1
+                        if brace_depth == 0:
+                            break
+                else:
+                    if len(in_string) == 3:
+                        if format_string[j : j + 3] == in_string:
+                            in_string = None
+                            j += 3
+                            continue
+                    else:
+                        if ch == "\\":
+                            j += 2
+                            continue
+                        elif ch == in_string:
+                            in_string = None
+
+                j += 1
+
+            if brace_depth == 0:
+                field_content = format_string[start:j]
+                expr, format_spec = _split_field_content(field_content)
+
+                if expr:
+                    is_expr = not _is_simple_name(expr)
+                    field = _FormatField(expr, format_spec, is_expr)
+                    result.append((literal_text, field))
+                else:
+                    # Empty field like {} - just add literal
+                    result.append((literal_text, None))
+
+                i = j + 1
+                literal_start = i
+            else:
+                i += 1
+        else:
+            i += 1
+
+    # Add any remaining literal text
+    if literal_start < n:
+        remaining = format_string[literal_start:]
+        remaining = remaining.replace("{{", "{").replace("}}", "}")
+        result.append((remaining, None))
+    elif not result or result[-1][1] is not None:
+        # Ensure we have a trailing entry for consistency
+        result.append(("", None))
+
+    return result
+
+
+def _split_field_content(content: str) -> tuple[str, str]:
+    """Split field content into expression and format spec.
+
+    The format spec follows a ':' that is not inside parens, brackets, braces, or strings.
+    Example: "price * 1.1:.2f" → ("price * 1.1", ".2f")
+    Example: "'Hello'" → ("'Hello'", "")
+    Example: "d['key']" → ("d['key']", "")
+    """
+    paren_depth = 0
+    bracket_depth = 0
+    brace_depth = 0
+    in_string: str | None = None
+    i = 0
+    n = len(content)
+
+    while i < n:
+        ch = content[i]
+
+        # Handle string literals
+        if in_string is None:
+            if ch in ("'", '"'):
+                if i + 2 < n and content[i : i + 3] in ('"""', "'''"):
+                    in_string = content[i : i + 3]
+                    i += 3
+                    continue
+                else:
+                    in_string = ch
+                    i += 1
+                    continue
+            elif ch == "(":
+                paren_depth += 1
+            elif ch == ")":
+                paren_depth -= 1
+            elif ch == "[":
+                bracket_depth += 1
+            elif ch == "]":
+                bracket_depth -= 1
+            elif ch == "{":
+                brace_depth += 1
+            elif ch == "}":
+                brace_depth -= 1
+            elif ch == ":" and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0:
+                # Found format spec separator
+                return content[:i], content[i + 1 :]
+        else:
+            # Inside string
+            if len(in_string) == 3:
+                if content[i : i + 3] == in_string:
+                    in_string = None
+                    i += 3
+                    continue
+            else:
+                if ch == "\\":
+                    i += 2
+                    continue
+                elif ch == in_string:
+                    in_string = None
+
+        i += 1
+
+    # No format spec found
+    return content, ""
 
 
 def _get_variable_names(fields: list[_FormatField]) -> set[str]:
@@ -147,14 +383,15 @@ def _get_variable_names(fields: list[_FormatField]) -> set[str]:
     return names
 
 
-def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable[Any]]:
+def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]]:
     """Get observables for a variable name (may be nested path).
 
-    Returns a list of observables to subscribe to.
+    Returns a list of observables to subscribe to. This includes Observable,
+    ObservableList, and ObservableDict since they all have on_change methods.
     """
     from qtpie.variable import Variable
 
-    result: list[Observable[Any]] = []
+    result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]] = []
 
     # Try to resolve as binding source
     source = resolve_binding_source(widget, name)
@@ -163,15 +400,18 @@ def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable
             obs = source.observable
             if isinstance(obs, Observable):
                 result.append(obs)
-            elif isinstance(obs, ObservableProxy):
-                # Subscribe to proxy changes
-                # ObservableProxy doesn't directly fit Observable[Any], skip for now
-                pass
+            elif isinstance(obs, ObservableList):
+                result.append(obs)
+            elif isinstance(obs, ObservableDict):
+                result.append(obs)
+            # else: ObservableProxy - doesn't directly fit Observable[Any], skip
         elif isinstance(source, Observable):
             result.append(source)
-        elif isinstance(source, ObservableProxy):
-            # For nested paths, the proxy field observable is what we want
-            pass
+        elif isinstance(source, ObservableList):
+            result.append(source)
+        elif isinstance(source, ObservableDict):
+            result.append(source)
+        # else: ObservableProxy - for nested paths, skip for now
 
     return result
 
@@ -233,7 +473,8 @@ def create_format_binding(
     root_names = _get_root_names(var_names)
 
     # Collect all observables to subscribe to
-    all_observables: list[Observable[Any]] = []
+    # Include ObservableList and ObservableDict since they also have on_change
+    all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]] = []
 
     for name in var_names:
         obs_list = _get_observables_for_name(widget, name)
@@ -245,7 +486,15 @@ def create_format_binding(
             obs = variable.observable
             if isinstance(obs, Observable):
                 all_observables.append(obs)
+            elif isinstance(obs, ObservableList):
+                all_observables.append(obs)
+            elif isinstance(obs, ObservableDict):
+                all_observables.append(obs)
         elif isinstance(variable, Observable):
+            all_observables.append(variable)
+        elif isinstance(variable, ObservableList):
+            all_observables.append(variable)
+        elif isinstance(variable, ObservableDict):
             all_observables.append(variable)
 
     # Build the compute function
@@ -306,13 +555,12 @@ def create_format_binding(
         # Process each field and build the result
         result_parts: list[str] = []
 
-        formatter = string.Formatter()
-        for literal_text, field_name, format_spec, _ in formatter.parse(template):
+        for literal_text, field in _parse_format_template(template):
             result_parts.append(literal_text)
 
-            if field_name is not None and field_name != "":
+            if field is not None:
                 # Handle special # placeholders - replace all occurrences
-                eval_expr = field_name
+                eval_expr = field.expression
                 eval_expr = eval_expr.replace("#self", "self")
                 eval_expr = eval_expr.replace("#var", "var")
                 eval_expr = eval_expr.replace("#widget", "widget_ref")
@@ -325,12 +573,12 @@ def create_format_binding(
                     if callable(value) and not isinstance(value, type):
                         value = value()
                 except Exception:
-                    value = f"<error: {field_name}>"
+                    value = f"<error: {field.expression}>"
 
                 # Apply format spec if present
-                if format_spec:
+                if field.format_spec:
                     try:
-                        value = format(value, format_spec)
+                        value = format(value, field.format_spec)
                     except Exception:
                         value = str(value)
                 else:
@@ -344,7 +592,8 @@ def create_format_binding(
     setter(compute())
 
     # Subscribe to ALL observables - when any changes, recompute
-    def on_any_change(_: Any) -> None:
+    # Use *args because Observable passes value, but ObservableList/Dict pass nothing
+    def on_any_change(*_: Any) -> None:
         setter(compute())
 
     for obs in all_observables:

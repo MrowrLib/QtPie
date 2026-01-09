@@ -205,7 +205,7 @@ def validate_not_empty(value: str) -> str | None:
     return None
 
 
-@entrypoint
+# @entrypoint
 @widget
 class SimpleLists(Widget):
     _some_var: Variable[str, QLineEdit] = new("", validate=[validate_not_empty, "validate_length"])
@@ -561,6 +561,11 @@ class ExpressionBindingDemo(Widget):
     def clear_items(self) -> None:
         self._items.value = []
 
+    btn_print_items: QPushButton = new("Print Items", clicked="print_items")
+
+    def print_items(self) -> None:
+        print("Items:", self._items.value)
+
 
 @widget
 class GrandChild(Widget):
@@ -610,7 +615,7 @@ class LiteralBindingDemo(Widget):
 
 
 # Uncomment and use as @entrypoint to run:
-# @entrypoint
+@entrypoint
 @widget
 class VariableBindingsDemo(Widget):
     """Main demo widget showcasing all Variable binding features."""
