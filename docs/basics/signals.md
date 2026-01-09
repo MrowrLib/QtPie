@@ -166,13 +166,100 @@ class VariableSignals(Widget):
         print(f"Submitted: {self._name.value}")
 ```
 
+## Emitting Custom Signals
+
+When the handler string refers to a Qt `Signal` on your widget (instead of a method), QtPie connects the signals directly. This lets you forward or re-emit signals declaratively.
+
+### Basic Signal Forwarding
+
+```python
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QPushButton
+from qtpie import Widget, new, widget
+
+@widget
+class Counter(Widget):
+    increment_requested = Signal()  # Custom signal
+    _button: QPushButton = new("+", clicked="increment_requested")  # Emits signal!
+```
+
+When the button is clicked, `increment_requested` is emitted. No method needed.
+
+### Parent-Child Signal Pattern
+
+This is powerful for composable widgets. The child emits a signal, and the parent connects to it:
+
+```python
+from PySide6.QtCore import Signal
+
+@widget
+class Counter(Widget):
+    increment_requested = Signal()
+    _button: QPushButton = new("+", clicked="increment_requested")
+
+@widget
+class App(Widget):
+    _count: Variable[int] = new(0)
+    counter: Counter = new(increment_requested="_on_increment")
+
+    def _on_increment(self) -> None:
+        self._count += 1
+```
+
+The flow: button click → `Counter.increment_requested` emits → `App._on_increment` called.
+
+### Signal Arguments
+
+Qt handles argument forwarding automatically:
+
+```python
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QSlider
+
+@widget
+class ValueEditor(Widget):
+    value_changed = Signal(int)  # Takes int
+    _slider: QSlider = new(valueChanged="value_changed")  # int is forwarded
+
+@widget
+class App(Widget):
+    editor: ValueEditor = new(value_changed="_on_value")
+
+    def _on_value(self, value: int) -> None:
+        print(f"Value: {value}")
+```
+
+If the target signal has fewer arguments than the source, extra arguments are ignored:
+
+```python
+@widget
+class MyWidget(Widget):
+    button_pressed = Signal()  # No args
+    _button: QPushButton = new(clicked="button_pressed")  # clicked emits bool, ignored
+```
+
+### Signal Chains
+
+You can even connect a child's signal to a parent's signal:
+
+```python
+@widget
+class App(Widget):
+    app_incremented = Signal()  # Parent's signal
+    counter: Counter = new(increment_requested="app_incremented")  # Chain signals
+```
+
+Now external code can connect to `app.app_incremented` to know when the child's button was clicked.
+
 ## How It Works
 
 QtPie processes signal parameters during widget initialization:
 
 1. For each `signal_name=handler` pair in `new()`
 2. QtPie looks for `widget.signal_name` (e.g., `button.clicked`)
-3. If the handler is a string, QtPie looks up `self.handler_name`
+3. If the handler is a string, QtPie looks up `self.handler_name`:
+   - If it's a `Signal`, QtPie connects signal-to-signal
+   - If it's callable (method), QtPie connects to the method
 4. If the handler is callable (lambda/function), QtPie uses it directly
 5. QtPie calls `signal.connect(handler)`
 
