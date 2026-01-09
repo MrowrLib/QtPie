@@ -60,6 +60,10 @@ def new_fields[T](cls: type[T]) -> type[T]:
     def new_init(self: Any, *args: Any, **kwargs: Any) -> None:
         from qtpie.translations.translatable import Translatable
 
+        # Track refs to resolve after all fields are created
+        # Format: (field_name, instance, ref_kwarg_name, Ref)
+        pending_refs: list[tuple[str, Any, str, Any]] = []
+
         # Instantiate non-Variable fields (skip list widgets - handled in widget.py)
         for fname, field in fields.items():
             origin = get_origin(field.field_type)
@@ -90,6 +94,9 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             resolved_kwargs[key] = translatable.resolve()
 
                     instance = field.field_type(*resolved_args, **resolved_kwargs)
+
+                    # Resolve any #parent refs on the child now that we know the parent
+                    _resolve_parent_refs(self, instance)
 
                     # Apply variable bindings (wire up parent Variables to child)
                     if field.variable_bindings:
@@ -159,7 +166,15 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             translatable.context,
                         )
 
+                    # Collect refs for deferred resolution
+                    if field.ref_bindings:
+                        for ref_kwarg, ref_obj in field.ref_bindings.items():
+                            pending_refs.append((fname, instance, ref_kwarg, ref_obj))
+
                     setattr(self, fname, instance)
+
+        # Resolve refs now that all fields exist
+        _resolve_refs(self, pending_refs)
 
         # Call original __init__
         if original_init is not None:
@@ -634,3 +649,100 @@ def _is_action_list_type(field_type: type | None) -> bool:
         return False
 
     return type_args[0] is QAction
+
+
+def _resolve_refs(widget: Any, pending_refs: list[tuple[str, Any, str, Any]]) -> None:
+    """Resolve deferred ref bindings after all fields are created.
+
+    Args:
+        widget: The widget instance (self) where fields were created
+        pending_refs: List of (field_name, instance, ref_kwarg_name, Ref) tuples
+    """
+    from .ref import Ref
+
+    for field_name, instance, ref_kwarg, ref_obj in pending_refs:
+        if not isinstance(ref_obj, Ref):
+            continue
+
+        # For #parent refs, the "parent" in this context is the widget creating
+        # child widgets - but we're in that widget's __init__, so the parent
+        # would need to be passed differently. For now, #parent refs in this
+        # context don't make sense - they're for nested widget composition.
+        # Store them for later resolution if needed.
+        if ref_obj.is_parent_ref:
+            # Store for later resolution when parent relationship is established
+            _store_deferred_parent_ref(widget, instance, ref_kwarg, ref_obj)
+            continue
+
+        try:
+            # Resolve the ref against the widget (sibling fields)
+            resolved_value = ref_obj.resolve(widget)
+
+            # Apply to the instance via setter
+            setter_name = f"set{ref_kwarg[0].upper()}{ref_kwarg[1:]}"
+            setter = getattr(instance, setter_name, None)
+            if setter is not None and callable(setter):
+                setter(resolved_value)
+            else:
+                raise AttributeError(f"Cannot apply ref('{ref_obj.name}'): {type(instance).__name__} has no '{setter_name}' method")
+        except (AttributeError, ValueError) as e:
+            raise type(e)(f"In field '{field_name}': {e}") from e
+
+
+def _store_deferred_parent_ref(widget: Any, instance: Any, ref_kwarg: str, ref_obj: Any) -> None:
+    """Store a #parent ref for later resolution.
+
+    When a widget uses ref("#parent.something"), we can't resolve it during
+    __init__ because the parent-child relationship isn't established yet.
+    Store it on the containing widget (not the instance) to be resolved when
+    that widget is created by its parent.
+
+    Args:
+        widget: The widget being initialized (self) - stores the deferred ref
+        instance: The specific field instance that needs the setter called
+        ref_kwarg: The kwarg name (determines the setter to call)
+        ref_obj: The Ref object to resolve later
+    """
+    # Store on the widget (not instance) for later resolution
+    # Format: (instance, ref_kwarg, ref_obj)
+    deferred: list[tuple[Any, str, Any]] = getattr(widget, "_qtpie_deferred_parent_refs", [])
+    deferred.append((instance, ref_kwarg, ref_obj))
+    widget._qtpie_deferred_parent_refs = deferred
+
+
+def _resolve_parent_refs(parent: Any, child: Any) -> None:
+    """Resolve #parent refs on a child widget now that the parent is known.
+
+    Called when a parent widget creates a child widget.
+    At this point we know the parent-child relationship and can resolve #parent refs.
+
+    Args:
+        parent: The parent widget instance (provides the #parent attributes)
+        child: The child widget instance that may have deferred #parent refs
+    """
+    from .ref import Ref
+
+    deferred: list[tuple[Any, str, Any]] | None = getattr(child, "_qtpie_deferred_parent_refs", None)
+    if not deferred:
+        return
+
+    for instance, ref_kwarg, ref_obj in deferred:
+        if not isinstance(ref_obj, Ref):
+            continue
+
+        try:
+            # Resolve against the parent (that's what #parent refers to)
+            resolved_value = ref_obj.resolve(child, parent=parent)
+
+            # Apply to the specific instance via setter
+            setter_name = f"set{ref_kwarg[0].upper()}{ref_kwarg[1:]}"
+            setter = getattr(instance, setter_name, None)
+            if setter is not None and callable(setter):
+                setter(resolved_value)
+            else:
+                raise AttributeError(f"Cannot apply ref('{ref_obj.name}'): {type(instance).__name__} has no '{setter_name}' method")
+        except (AttributeError, ValueError) as e:
+            raise type(e)(f"Resolving #parent ref: {e}") from e
+
+    # Clean up
+    del child._qtpie_deferred_parent_refs

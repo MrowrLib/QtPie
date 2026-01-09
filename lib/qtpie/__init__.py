@@ -7,6 +7,7 @@ from .entrypoint import entrypoint
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .new import new
 from .new_fields import new_fields
+from .ref import Ref, ref
 from .slot import slot
 from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
 from .translations import Translatable, set_language, t
@@ -23,6 +24,7 @@ __all__ = [
     "Menu",
     "MenuConfig",
     "RecordVariable",
+    "Ref",
     "Section",
     "Separator",
     "Translatable",
@@ -37,6 +39,7 @@ __all__ = [
     "menu",
     "new",
     "new_fields",
+    "ref",
     "register_binding",
     "run_app",
     "set_color_scheme",

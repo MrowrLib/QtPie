@@ -47,6 +47,8 @@ class NewField:
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
         # Variable bindings - maps child's required Variable names to parent's values/expressions
         self.variable_bindings: dict[str, Any] = {}  # child_var_name -> binding_value
+        # Ref bindings - deferred attribute references to resolve after field instantiation
+        self.ref_bindings: dict[str, Any] = {}  # kwarg_name -> Ref instance
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -172,6 +174,9 @@ class NewField:
         # Handle QWidget-specific kwargs only
         # For non-QWidgets: leave bind= and layout= in kwargs so they pass to constructor
         if self._is_qwidget_type():
+            # Extract refs FIRST (before other extractions might modify kwargs)
+            self._extract_refs()
+
             # Extract bind= for QtPie binding system
             self.bind = self.kwargs.pop("bind", None)
 
@@ -213,6 +218,9 @@ class NewField:
         # Handle QObject subclasses (not QWidget, but have signals and props)
         # This covers QAction, QMenu, etc.
         elif self._is_qobject_type():
+            # Extract refs FIRST (before other extractions might modify kwargs)
+            self._extract_refs()
+
             # Extract signal connections (e.g., triggered="on_triggered")
             self._extract_signal_connections()
 
@@ -477,3 +485,20 @@ class NewField:
         if len(self.args) == 1:
             return self.args[0]
         return None
+
+    def _extract_refs(self) -> None:
+        """Extract Ref markers from kwargs for deferred resolution.
+
+        Ref instances are removed from kwargs and stored in ref_bindings.
+        They will be resolved after field instantiation when sibling fields exist.
+        """
+        from .ref import Ref
+
+        to_remove: list[str] = []
+        for key, value in self.kwargs.items():
+            if isinstance(value, Ref):
+                self.ref_bindings[key] = value
+                to_remove.append(key)
+
+        for key in to_remove:
+            del self.kwargs[key]
