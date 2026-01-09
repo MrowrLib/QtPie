@@ -64,6 +64,7 @@ class Counter(Widget):
 - Automatic layout (vertical by default)
 - Declarative signal connections (`clicked="on_click"`)
 - Reactive updates (change `_count`, label updates)
+- Composable: pass state to children via Variable bindings
 
 ## Feature Comparison
 
@@ -72,11 +73,16 @@ class Counter(Widget):
 | Layout setup | Manual | Automatic |
 | Widget creation | Imperative | Declarative |
 | Signal connections | `.connect()` calls | `clicked="method"` |
+| Signal forwarding | Manual wiring | `clicked="my_signal"` |
 | State management | Manual updates | Reactive `Variable[T]` |
+| Parent-child state | Signals/callbacks | Variable bindings |
 | Data binding | DIY | Built-in `bind=` |
 | Form layouts | Manual `addRow()` | `label=` parameter |
+| Menus | Manual QMenu/QAction | Declarative `@menu` |
 | Validation | DIY | Built-in validators |
 | Dirty tracking | DIY | Built-in |
+| Translations | QTranslator setup | `t()` + YAML |
+| Async handlers | Manual threading | `@slot` decorator |
 | Type safety | Partial | Full (pyright strict) |
 
 ## Design Philosophy
@@ -101,10 +107,11 @@ Sensible defaults that just work:
 
 A few powerful primitives that compose well:
 
-- `@widget` / `@window` decorators
-- `new()` factory
-- `Variable[T]` for state
-- `Widget[T]` for records
+- `@widget` / `@window` / `@menu` decorators
+- `Widget`, `Window`, `Menu` base classes
+- `Widget[T]`, `Window[T]`, `Menu[T]` for record-bound views
+- `new()` factory for declaring fields
+- `Variable[T]` for reactive state
 - `bind=` for data binding
 
 ## When to Use QtPie
@@ -114,8 +121,11 @@ A few powerful primitives that compose well:
 - Form-heavy applications
 - Data entry and editing
 - CRUD interfaces
+- Apps with complex parent-child widget communication
+- Menu-driven applications
 - Prototyping
 - Apps with reactive state
+- Internationalized apps
 
 **Consider plain Qt for:**
 
