@@ -173,28 +173,37 @@ class MyWidget(Widget):
 
 ## Composable Widgets
 
-Build complex UIs by composing smaller widgets. Parent widgets can pass state down to children using Variable bindings:
+Build complex UIs by composing smaller widgets. Children declare their interface (required Variables and Signals), parents provide bindings.
 
 ```python
+from PySide6.QtCore import Signal
+
 @widget
 class CounterDisplay(Widget):
-    # Required binding - must be provided by parent
+    # Interface - parent provides these
     count: Variable[int]
-    _label: QLabel = new(bind="Count: {count}")
+    on_increment = Signal()
 
+    # Internal
+    _label: QLabel = new(bind="Count: {count}")
+    _button: QPushButton = new("+", clicked="on_increment")
+
+@entrypoint
 @widget
 class App(Widget):
-    _my_count: Variable[int] = new(0)
+    # Example: state in parent, passed to child
+    _count: Variable[int] = new(0)
 
-    # Pass state down to child widget
-    display: CounterDisplay = new(count="_my_count")
-    increment: QPushButton = new("+", clicked="on_inc")
+    _display: CounterDisplay = new(
+        count="_count",
+        on_increment="_on_increment"
+    )
 
-    def on_inc(self) -> None:
-        self._my_count += 1  # CounterDisplay updates automatically
+    def _on_increment(self) -> None:
+        self._count += 1
 ```
 
-This is similar to React props - state flows down from parent to child. Changes in either direction are synchronized.
+State flows down via Variable bindings. Events flow up via Signals. The child doesn't know or care where `count` comes from or what happens on increment.
 
 ### Required vs Optional Bindings
 

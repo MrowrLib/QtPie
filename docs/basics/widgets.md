@@ -2,6 +2,8 @@
 
 Widgets are the building blocks of QtPie applications. The `Widget` class provides a declarative way to define Qt widgets with automatic layout, reactive state, and signal connections.
 
+QtPie widgets are **composable**: child widgets declare their interface (Variables and Signals), parents provide bindings. State flows down, events flow up. See [Composable Widgets](#composable-widgets) for the full pattern.
+
 ## The @widget Decorator
 
 Every QtPie widget must be decorated with `@widget`. This decorator processes field definitions and sets up the reactive system.
@@ -371,77 +373,59 @@ class MainApp(Widget):
     content: QLabel = new()
 ```
 
-### Composable Widgets with Variable Bindings
+### Composable Widgets
 
-Build reusable widgets by declaring what state they need. Parent widgets provide bindings when creating children—similar to React props.
+Build reusable widgets by declaring their interface: required Variables for state and Signals for events. Parents provide bindings when creating children.
 
 ```python
-from qtpie import Variable
+from PySide6.QtCore import Signal
 
 @widget
 class CounterDisplay(Widget):
-    # Required binding - must be provided by parent
+    # Interface - parent provides these
     count: Variable[int]
+    on_increment = Signal()
 
+    # Internal
     _label: QLabel = new(bind="Count: {count}")
+    _button: QPushButton = new("+", clicked="on_increment")
 
+@entrypoint
 @widget
 class App(Widget):
-    _my_count: Variable[int] = new(0)
+    # Example: state in parent, passed to child
+    _count: Variable[int] = new(0)
 
-    # Pass state down: CounterDisplay.count binds to App._my_count
-    display: CounterDisplay = new(count="_my_count")
-    increment: QPushButton = new("+", clicked="on_inc")
+    _display: CounterDisplay = new(
+        count="_count",
+        on_increment="_on_increment"
+    )
 
-    def on_inc(self) -> None:
-        self._my_count += 1  # CounterDisplay updates automatically
+    def _on_increment(self) -> None:
+        self._count += 1
 ```
 
-#### Required vs Optional Bindings
+State flows down via Variable bindings. Events flow up via Signals. The child doesn't know where `count` comes from or what happens on increment.
 
-- **Required**: Bare `Variable[T]` (no `= new()`) must be provided by parent
-- **Optional**: `Variable[T] = new(default)` has a default, can be overridden
+#### Interface vs Internal
+
+- **No underscore**: Interface (required Variables, Signals) - what parents connect to
+- **Underscore**: Internal implementation (state, widgets, handlers)
+
+#### Required vs Optional Bindings
 
 ```python
 @widget
 class StatusBar(Widget):
-    message: Variable[str]                   # Required
-    show_icon: Variable[bool] = new(True)    # Optional with default
-
-@widget
-class App(Widget):
-    _status: Variable[str] = new("Ready")
-
-    # Must provide 'message', 'show_icon' is optional
-    status_bar: StatusBar = new(message="_status")
-
-    # Or override the default
-    # status_bar: StatusBar = new(message="_status", show_icon=False)
+    message: Variable[str]                   # Required - no default
+    show_icon: Variable[bool] = new(True)    # Optional - has default
 ```
 
-If you forget a required binding, QtPie raises a clear error with instructions.
-
-#### Two-Way Synchronization
-
-Variable bindings are two-way. Changes on either side are synchronized:
-
-```python
-@widget
-class Editor(Widget):
-    content: Variable[str]
-
-@widget
-class App(Widget):
-    _text: Variable[str] = new("")
-    editor: Editor = new(content="_text")
-
-    def reset(self) -> None:
-        self._text.value = ""  # Editor.content also becomes ""
-```
+If you forget a required binding, QtPie raises a clear error.
 
 #### Nested Bindings
 
-State flows down through multiple levels:
+State flows through multiple levels:
 
 ```python
 @widget
@@ -451,18 +435,16 @@ class ThemeLabel(Widget):
 
 @widget
 class ThemedPanel(Widget):
-    theme: Variable[str]  # Required, passed down to child
-    label: ThemeLabel = new(theme="theme")
+    theme: Variable[str]
+    _label: ThemeLabel = new(theme="theme")  # Pass through
 
 @widget
 class App(Widget):
     _theme: Variable[str] = new("dark")
-    panel: ThemedPanel = new(theme="_theme")
-
-    def toggle(self) -> None:
-        self._theme.value = "light" if self._theme.value == "dark" else "dark"
-        # ThemeLabel updates automatically through the chain!
+    _panel: ThemedPanel = new(theme="_theme")
 ```
+
+Changing `App._theme` updates `ThemeLabel` automatically through the chain.
 
 ### Private vs Public Fields
 

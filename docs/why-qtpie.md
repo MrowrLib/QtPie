@@ -39,6 +39,8 @@ class Counter(QWidget):
 - Manual layout creation and widget adding
 - Manual signal connections
 - Manual UI updates when state changes
+- Passing state to child widgets requires manual wiring
+- No built-in composition pattern for reusable components
 
 ## The Solution
 
@@ -64,7 +66,6 @@ class Counter(Widget):
 - Automatic layout (vertical by default)
 - Declarative signal connections (`clicked="on_click"`)
 - Reactive updates (change `_count`, label updates)
-- Composable: pass state to children via Variable bindings
 
 ## Feature Comparison
 
