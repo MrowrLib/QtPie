@@ -1016,12 +1016,22 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
             pass
 
 
+def _is_signal(obj: object) -> bool:
+    """Check if obj is a Qt Signal (bound signal instance).
+
+    Works with both PySide6 (SignalInstance) and PyQt6 (pyqtBoundSignal).
+    """
+    type_name = type(obj).__name__
+    return type_name in ("SignalInstance", "pyqtBoundSignal")
+
+
 def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Connect signals declared in new() to handlers.
 
-    Supports both callables and string method names:
+    Supports callables, string method names, and string signal names:
         clicked=lambda: print("clicked")
         clicked="on_clicked"
+        clicked="my_custom_signal"  # If my_custom_signal is a Signal, emits it
     """
     for name, field in config.fields.items():
         if not field.signal_connections:
@@ -1037,12 +1047,19 @@ def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
                 continue
 
             if isinstance(handler, str):
-                # Method name - resolve on the parent widget
-                method = getattr(widget, handler, None)
-                if method is not None and callable(method):
-                    signal.connect(method)
+                # String handler - could be method name or signal name
+                target = getattr(widget, handler, None)
+                if target is None:
+                    raise AttributeError(f"{type(widget).__name__} has no method or signal '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
+
+                if _is_signal(target):
+                    # Target is a Signal - connect signal-to-signal
+                    signal.connect(target)
+                elif callable(target):
+                    # Target is a method
+                    signal.connect(target)
                 else:
-                    raise AttributeError(f"{type(widget).__name__} has no method '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
+                    raise AttributeError(f'{type(widget).__name__}.{handler} is not callable or a Signal for signal connection {name}.{signal_name}="{handler}"')
             else:
                 # Direct callable (lambda, function, etc.)
                 signal.connect(handler)
