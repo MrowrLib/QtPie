@@ -322,6 +322,9 @@ def _apply_pending_bindings(instance: Any) -> None:
     If the instance has `_qtpie_pending_auto_bindings = True`, it means the child widget
     deferred its binding application because required Variables weren't set up during init.
     Now that the parent has applied variable bindings, we can apply those bindings.
+
+    This function can be called multiple times safely - it checks whether required
+    bindings are actually satisfied before applying.
     """
     if not getattr(instance, "_qtpie_pending_auto_bindings", False):
         return
@@ -331,6 +334,13 @@ def _apply_pending_bindings(instance: Any) -> None:
     child_config = getattr(instance_type, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
     if child_config is None:
         return
+
+    # Check if all required bindings are now satisfied
+    required: set[str] = getattr(child_config, "required_bindings", set())
+    for name in required:
+        if not hasattr(instance, name):
+            # Still missing required bindings - keep the flag and return
+            return
 
     # Import the binding functions from widget (internal cross-module usage)
     from .widget import (
@@ -344,7 +354,7 @@ def _apply_pending_bindings(instance: Any) -> None:
     _apply_property_bindings(instance, child_config)
     _apply_reactive_widget_props(instance, child_config)
 
-    # Clear the flag
+    # Clear the flag - all bindings applied successfully
     del instance._qtpie_pending_auto_bindings
 
 
@@ -380,6 +390,11 @@ def _resolve_deferred_bindings(widget: Any) -> None:
 
         # Recursively resolve any deferred bindings on the child
         _resolve_deferred_bindings(child)
+
+        # Re-apply pending bindings on the child now that its Variable is set
+        # This is needed because _apply_pending_bindings may have run earlier
+        # when the child's required Variables weren't yet populated
+        _apply_pending_bindings(child)
 
     # Clear the deferred bindings
     del widget._qtpie_deferred_bindings
