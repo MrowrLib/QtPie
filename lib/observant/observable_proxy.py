@@ -593,14 +593,13 @@ class ObservableProxy[T]:
 
         target = object.__getattribute__(self, "_target")
 
-        # Check if we have an existing Observable for this field
-        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
-
-        if name in field_observables:
-            # Update through the Observable
-            field_observables[name].set(value)
+        # For primitives, always go through an Observable to track dirty state properly
+        if _is_primitive(value):
+            # This creates the Observable if it doesn't exist, ensuring dirty_fields works
+            obs = self._get_or_create_field_observable(name)
+            obs.set(value)
         else:
-            # Set directly on target and notify
+            # For complex types (lists, dicts, objects), set directly and notify
             setattr(target, name, value)
             # Mark as dirty since we modified a field directly
             dirty_tracking: bool = object.__getattribute__(self, "_dirty_tracking")

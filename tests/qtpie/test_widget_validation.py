@@ -525,3 +525,82 @@ class TestWidgetIsValidAggregatesRecord:
         # Clear record - button should disable
         w.record.name = ""
         assert_that(w._submit.isEnabled()).is_false()
+
+
+class TestCombinedValidation:
+    """Test combined validation from Variables and record."""
+
+    def test_validation_errors_includes_record(self, qt: QtDriver) -> None:
+        """Widget.validation_errors includes record validation errors."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_extra", "required", lambda v: None if v else "Extra required")
+                self._qtpie.record_state.add_validator("name_required", lambda p: None if p and p.name else "Name required")
+
+        w = qt.track(PersonEditor())
+
+        errors = w.validation_errors
+        # Variable validation error
+        assert_that(errors).contains_key("_extra")
+        assert_that(errors["_extra"]["required"]).is_equal_to(["Extra required"])
+        # Record validation error
+        assert_that(errors).contains_key("record")
+        assert_that(errors["record"]["name_required"]).is_equal_to(["Name required"])
+
+    def test_validation_error_messages_includes_record(self, qt: QtDriver) -> None:
+        """Widget.validation_error_messages includes record error messages."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_extra", "required", lambda v: None if v else "Extra required")
+                self._qtpie.record_state.add_validator("name_required", lambda p: None if p and p.name else "Name required")
+
+        w = qt.track(PersonEditor())
+
+        msgs = w.validation_error_messages.get()
+        assert_that(msgs).contains("Extra required", "Name required")
+
+    def test_is_valid_combines_variable_and_record(self, qt: QtDriver) -> None:
+        """Widget.is_valid is False if either Variable or record is invalid."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+            def __setup__(self) -> None:
+                self.add_validator("_extra", "required", lambda v: None if v else "Extra required")
+                self._qtpie.record_state.add_validator("name_required", lambda p: None if p and p.name else "Name required")
+
+        w = qt.track(PersonEditor())
+        assert_that(w.is_valid.get()).is_false()
+
+        # Fix Variable - still invalid (record)
+        w._extra.value = "filled"
+        assert_that(w.is_valid.get()).is_false()
+
+        # Fix record - now valid
+        w.record.name = "Alice"
+        assert_that(w.is_valid.get()).is_true()
+
+        # Break Variable again - invalid
+        w._extra.value = ""
+        assert_that(w.is_valid.get()).is_false()

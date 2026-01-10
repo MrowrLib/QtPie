@@ -76,8 +76,14 @@ class QtPieStateBase:
 
     @property
     def dirty_fields(self) -> set[str]:
-        """Return set of field names that have changed."""
-        return {name for name, var in self.variables.items() if var.is_dirty.get()}
+        """Return set of field names that have changed (Variables + record fields)."""
+        # Exclude "record" from variables - we handle it specially below
+        result = {name for name, var in self.variables.items() if name != "record" and var.is_dirty.get()}
+        # Include record dirty fields (prefixed with "record.")
+        if self._record is not None:
+            for field_name in self._record.dirty_fields:
+                result.add(f"record.{field_name}")
+        return result
 
     def reset_dirty(self) -> None:
         """Mark all Variables as clean."""
@@ -159,11 +165,17 @@ class QtPieStateBase:
     @property
     def validation_errors(self) -> dict[str, dict[str, list[str]]]:
         """Get validation errors: {field: {validator: [errors]}}."""
-        return {
+        result = {
             name: var.validation_errors.get()
             for name, var in self.variables.items()
             if var.validation_error_messages.get()  # only include fields with errors
         }
+        # Include record validation errors under "record" key
+        if self._record is not None:
+            record_errors = self._record.validation_errors.get()
+            if record_errors:
+                result["record"] = record_errors
+        return result
 
     @property
     def validation_error_messages(self) -> Observable[list[str]]:
@@ -174,18 +186,25 @@ class QtPieStateBase:
         return self._aggregated_validation_errors
 
     def _setup_validation_aggregation(self) -> None:
-        """Subscribe to all Variables' validation_error_messages and aggregate."""
+        """Subscribe to all Variables' and record's validation_error_messages and aggregate."""
 
         def update_aggregated(_: Any = None) -> None:
             msgs: list[str] = []
             for var in self.variables.values():
                 msgs.extend(var.validation_error_messages.get())
+            # Include record validation errors
+            if self._record is not None:
+                msgs.extend(self._record.validation_error_messages.get())
             assert self._aggregated_validation_errors is not None
             self._aggregated_validation_errors.set(msgs)
 
         # Subscribe to existing variables
         for var in self.variables.values():
             var.validation_error_messages.on_change(update_aggregated)
+
+        # Subscribe to record if present
+        if self._record is not None:
+            self._record.validation_error_messages.on_change(update_aggregated)
 
         # Initial update
         update_aggregated()
@@ -199,6 +218,9 @@ class QtPieStateBase:
                 msgs: list[str] = []
                 for v in self.variables.values():
                     msgs.extend(v.validation_error_messages.get())
+                # Include record validation errors
+                if self._record is not None:
+                    msgs.extend(self._record.validation_error_messages.get())
                 assert self._aggregated_validation_errors is not None
                 self._aggregated_validation_errors.set(msgs)
 

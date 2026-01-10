@@ -587,6 +587,11 @@ class RecordVariable[T]:
         """Dirty state - usable as bool or Observable."""
         return cast(Observable[bool], self._wrapper.is_dirty)
 
+    @property
+    def dirty_fields(self) -> list[str]:
+        """Get list of dirty field names."""
+        return cast(list[str], self._wrapper.dirty_fields)
+
     def reset_dirty(self) -> None:
         """Mark current value as clean."""
         self._wrapper.reset_dirty()

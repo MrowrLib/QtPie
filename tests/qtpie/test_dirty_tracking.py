@@ -427,3 +427,53 @@ class TestWidgetResetDirty:
 
         w.reset_dirty()  # Should not raise
         assert_that(w.is_dirty.get()).is_false()
+
+    def test_dirty_fields_includes_record_fields(self, qt: QtDriver) -> None:
+        """dirty_fields includes both Variable names and record.field names."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            _extra: Variable[str] = new("")
+
+        w = qt.track(PersonEditor())
+
+        # Modify Variable
+        w._extra.value = "extra"
+        assert_that(w.dirty_fields).contains("_extra")
+
+        # Modify record field
+        w.record.name = "Alice"
+        assert_that(w.dirty_fields).contains("record.name")
+        assert_that(w.dirty_fields).is_equal_to({"_extra", "record.name"})
+
+        # Modify another record field
+        w.record.age = 30
+        assert_that(w.dirty_fields).is_equal_to({"_extra", "record.name", "record.age"})
+
+        # Reset clears all
+        w.reset_dirty()
+        assert_that(w.dirty_fields).is_equal_to(set())
+
+    def test_dirty_fields_only_record(self, qt: QtDriver) -> None:
+        """dirty_fields works for widget with only record (no Variables)."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(record=Person())
+        class PersonEditor(Widget[Person]):
+            pass
+
+        w = qt.track(PersonEditor())
+        assert_that(w.dirty_fields).is_equal_to(set())
+
+        w.record.name = "Alice"
+        assert_that(w.dirty_fields).is_equal_to({"record.name"})
