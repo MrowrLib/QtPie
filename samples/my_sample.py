@@ -4,9 +4,9 @@ from typing import override
 
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QApplication, QCheckBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
+from qtpy.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
 
-from qtpie import App, Menu, Section, Separator, Variable, Widget, app, entrypoint, menu, new, set_language, slot, t, widget
+from qtpie import App, Menu, Variable, Widget, app, entrypoint, menu, new, ref, set_language, slot, t, widget
 
 
 @dataclass
@@ -655,33 +655,27 @@ class TodoApp(Widget):
 
 @menu(text="&File")
 class FileMenu(Menu):
-    exit_action: QAction = new("E&xit", triggered="on_exit")
-    ___: Separator
-    ___hello_section_name___: Section
-    another_action: QAction = new("Say Hello", triggered="say_hello")
+    dog: Variable[Dog]
 
-    def on_exit(self) -> None:
-        print("Exit action triggered.")
-        app = QApplication.instance()
-        if app:
-            app.quit()
+    print_dog_action: QAction = new(text=ref("Dog name: {dog.name}"), triggered="print_dog")
 
-    def say_hello(self) -> None:
-        print("Hello from the menu action!")
+    def print_dog(self) -> None:
+        print(f"DOG: {self.dog}")
+        print(f"DOG Value: {self.dog.value}")
+        print(f"Dog Name: {self.dog.name}, Age: {self.dog.age}")
 
 
 @entrypoint
-@app(title="My QtPie App with Menu Action", icon=QStyle.StandardPixmap.SP_BrowserReload, minimize_to_tray=False)
-class MyApp(App):
-    _say_hello: QAction = new("Say Hello", triggered="say_hello")
-    ___: Separator
-    ___hello_section_name___: Section = new("Hello Section")
-    _quit: QAction = new("Quit", triggered="quit")
+@app(title="My QtPie App with Menu Action", icon=QStyle.StandardPixmap.SP_BrowserReload, minimize_to_tray=False, record=Dog("Rover", 5))
+class MyApp(App[Dog]):
+    _header: QLabel = new("Welcome to My QtPie App!", stylesheet="font-size: 18px; font-weight: bold;")
+    _name: QLineEdit = new()
+    _age: QLineEdit = new()
 
-    file_menu: FileMenu = new()
-
-    def __setup__(self) -> None:
-        print("App setup complete.")
+    file_menu: FileMenu = new(dog="record")
 
     def say_hello(self) -> None:
         print("Hello from the menu action!")
+
+    # _say_hello: QAction = new("Say Hello", triggered="say_hello")
+    # _quit: QAction = new("Quit", triggered="quit")

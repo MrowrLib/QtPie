@@ -681,16 +681,16 @@ class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - use
         # No binding was provided - this is an error
         raise AttributeError(f"'{self._name}' requires a binding. Use: child: {type(obj).__name__} = new({self._name}=\"_parent_var\")")
 
-    def __set__(self, obj: object, value: T | Variable[T]) -> None:
-        """Allow setting either a Variable (for binding injection) or a value."""
+    def __set__(self, obj: object, value: T | Variable[T] | RecordVariable[T]) -> None:
+        """Allow setting either a Variable/RecordVariable (for binding injection) or a value."""
         from .state import QtPieState
 
         if not hasattr(obj, "_qtpie"):
             obj._qtpie = QtPieState(obj)  # type: ignore[attr-defined]
         qtpie_state = cast(Any, obj._qtpie)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
-        if isinstance(value, Variable):
-            # Binding injection - store the Variable directly
+        if isinstance(value, (Variable, RecordVariable)):
+            # Binding injection - store the Variable/RecordVariable directly
             qtpie_state.variables[self._name] = value
             qtpie_state.register_variable(self._name, value)
         else:

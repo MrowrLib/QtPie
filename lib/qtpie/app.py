@@ -712,8 +712,14 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
                             signal.connect(handler)
 
         # Set initial record value if provided via @app(record=...)
-        if config.record_default is not None and hasattr(self, "record"):
-            self.record = config.record_default
+        # new_fields may have already set this (so child widgets can bind to parent.record)
+        # Only set if _qtpie doesn't exist yet (indicating new_fields didn't set it)
+        if config.record_default is not None and config.record_type is not None:
+            # Check _qtpie WITHOUT triggering the record descriptor
+            # (hasattr(self, "record") would trigger lazy creation!)
+            qtpie = getattr(self, "_qtpie", None)
+            if qtpie is None or qtpie._record is None:  # pyright: ignore[reportPrivateUsage, reportUnknownMemberType]
+                self.record = config.record_default
 
         # Call __setup__ hook (before bindings, so record can be initialized)
         setup_method = getattr(self, "__setup__", None)

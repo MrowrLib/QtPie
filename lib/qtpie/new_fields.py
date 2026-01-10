@@ -3,7 +3,7 @@
 from typing import Any, get_origin
 
 from .new_field import NewField
-from .variable import AnyObservable, Variable
+from .variable import AnyObservable, RecordVariable, Variable
 
 # Default property mapping for common widget types
 # Used to determine which property to set for positional Translatable args
@@ -71,6 +71,14 @@ def new_fields[T](cls: type[T]) -> type[T]:
         # because Qt requires QApplication to exist before any QWidget can be created
         if is_qapp_subclass and original_init is not None:
             original_init(self, *args, **kwargs)
+
+        # Initialize record_default BEFORE processing child fields
+        # This ensures child widgets can bind to parent.record
+        config = getattr(cls, "_qtpie_config", None)
+        if config is not None:
+            record_default = getattr(config, "record_default", None)
+            if record_default is not None and hasattr(self, "record"):
+                self.record = record_default  # pyright: ignore[reportAttributeAccessIssue]
 
         # Track refs to resolve after all fields are created
         # Format: (field_name, instance, ref_kwarg_name, Ref)
@@ -246,11 +254,8 @@ def _apply_variable_bindings(parent: Any, child: Any, field: NewField) -> None:
             if "{" in binding_value and "}" in binding_value:
                 # Expression binding - computed one-way (A.6)
                 _apply_expression_binding(parent, child, child_var_name, binding_value)
-            elif binding_value.startswith("_"):
-                # Direct variable reference (starts with _) - two-way binding
-                _apply_direct_binding(parent, child, child_var_name, binding_value)
             elif _is_variable_reference(parent, binding_value):
-                # Direct variable reference (non-underscore, but exists on parent)
+                # Direct variable reference - two-way binding
                 _apply_direct_binding(parent, child, child_var_name, binding_value)
             else:
                 # Literal string value (A.7)
@@ -261,18 +266,18 @@ def _apply_variable_bindings(parent: Any, child: Any, field: NewField) -> None:
 
 
 def _is_variable_reference(parent: Any, value: str) -> bool:
-    """Check if value is a reference to a Variable on parent.
+    """Check if value is a reference to a Variable or RecordVariable on parent.
 
-    Returns True if value is a simple identifier that matches a Variable on parent,
+    Returns True if value is a simple identifier that matches a Variable/RecordVariable on parent,
     or if it's a required binding on the parent class (may not be populated yet).
     """
     # Must be a valid Python identifier
     if not value.isidentifier():
         return False
 
-    # Check if parent has this as a Variable (already populated)
+    # Check if parent has this as a Variable or RecordVariable (already populated)
     parent_attr = getattr(parent, value, None)
-    if isinstance(parent_attr, Variable):
+    if isinstance(parent_attr, (Variable, RecordVariable)):
         return True
 
     # Check if parent class has this as a required binding (may not be populated yet)
@@ -287,7 +292,7 @@ def _is_variable_reference(parent: Any, value: str) -> bool:
 
 
 def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_var_name: str) -> None:
-    """Create two-way binding between parent Variable and child Variable.
+    """Create two-way binding between parent Variable/RecordVariable and child.
 
     The child's Variable will share the parent's Observable, so changes
     to either side are reflected on both.
@@ -298,25 +303,33 @@ def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_v
     """
     from observant import Observable
 
-    # Try to get the parent's Variable
-    parent_var: Variable[Any] | Observable[Any] | None = None
+    # Try to get the parent's Variable/RecordVariable
+    parent_var: Variable[Any] | RecordVariable[Any] | Observable[Any] | None = None
     try:
         parent_var = getattr(parent, parent_var_name)
     except AttributeError:
         pass
 
-    if parent_var is not None and isinstance(parent_var, (Variable, Observable)):  # pyright: ignore[reportUnnecessaryIsInstance]
-        # Parent has the Variable - share its Observable
-        parent_observable: AnyObservable[Any]
-        if isinstance(parent_var, Variable):
-            parent_observable = parent_var.observable
-        else:
-            parent_observable = parent_var
+    if parent_var is not None:
+        # Check for RecordVariable first (specialized type for records)
+        if isinstance(parent_var, RecordVariable):
+            # Share the ObservableProxy - create a RecordVariable for the child
+            child_record_var: RecordVariable[Any] = RecordVariable(parent_var.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+            setattr(child, child_var_name, child_record_var)
+            return
 
-        # Create a Variable for the child that shares the parent's Observable
-        child_var: Variable[Any] = Variable(parent_observable)
-        setattr(child, child_var_name, child_var)
-        return
+        if isinstance(parent_var, (Variable, Observable)):  # pyright: ignore[reportUnnecessaryIsInstance]
+            # Parent has the Variable - share its Observable
+            parent_observable: AnyObservable[Any]
+            if isinstance(parent_var, Variable):
+                parent_observable = parent_var.observable
+            else:
+                parent_observable = parent_var
+
+            # Create a Variable for the child that shares the parent's Observable
+            child_var: Variable[Any] = Variable(parent_observable)
+            setattr(child, child_var_name, child_var)
+            return
 
     # Check if this is a required binding that will be populated later
     parent_class = type(parent)  # pyright: ignore[reportUnknownVariableType]
@@ -380,6 +393,9 @@ def _apply_pending_bindings(instance: Any) -> None:
     _apply_auto_bindings(instance, child_config)
     _apply_property_bindings(instance, child_config)
     _apply_reactive_widget_props(instance, child_config)
+
+    # Resolve deferred refs now that required bindings are set
+    _resolve_deferred_refs(instance)
 
     # Clear the flag - all bindings applied successfully
     del instance._qtpie_pending_auto_bindings
@@ -505,6 +521,9 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
     The expression is evaluated with parent's context, and the result
     is set on the child's Variable. Updates when any referenced Variable changes.
 
+    Special case: If the expression is a simple reference to a Variable or RecordVariable
+    (like "{record}" or "{_my_var}"), we share the underlying Observable for two-way binding.
+
     If the expression references variables that don't exist yet (required bindings
     on the parent that haven't been populated), this binding is deferred.
     """
@@ -514,6 +533,26 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
     expr = expression.strip()
     if expr.startswith("{") and expr.endswith("}"):
         expr = expr[1:-1].strip()
+
+    # Special case: simple variable reference like "{record}" or "{_my_var}"
+    # In this case, share the Observable directly for two-way binding
+    if expr.isidentifier():
+        parent_attr = getattr(parent, expr, None)
+        if parent_attr is None:
+            # Try with underscore prefix
+            parent_attr = getattr(parent, f"_{expr}", None)
+
+        if parent_attr is not None:
+            # Check if it's a Variable or RecordVariable - share the Observable
+            if isinstance(parent_attr, Variable):
+                child_var: Variable[Any] = Variable(parent_attr.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+                setattr(child, child_var_name, child_var)
+                return
+            if isinstance(parent_attr, RecordVariable):
+                # Share the ObservableProxy - create a RecordVariable for the child
+                child_record_var: RecordVariable[Any] = RecordVariable(parent_attr.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+                setattr(child, child_var_name, child_record_var)
+                return
 
     # Extract variable names from the expression
     # Simple approach: find all identifiers that might be Variables
@@ -557,6 +596,9 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
             else:
                 # ObservableList, ObservableDict, or ObservableProxy have on_change with different signature (no args)
                 observable_collections.append(obs)
+        elif isinstance(parent_attr, RecordVariable):
+            # RecordVariable wraps ObservableProxy
+            observable_collections.append(parent_attr.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         elif isinstance(parent_attr, Observable):
             observables.append(parent_attr)  # pyright: ignore[reportUnknownArgumentType]
 
@@ -570,6 +612,8 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
                 if hasattr(parent, attr_name):
                     attr = getattr(parent, attr_name)
                     if isinstance(attr, Variable):
+                        context[var_name] = attr.value  # pyright: ignore[reportUnknownMemberType]
+                    elif isinstance(attr, RecordVariable):
                         context[var_name] = attr.value  # pyright: ignore[reportUnknownMemberType]
                     else:
                         context[var_name] = attr
@@ -585,10 +629,10 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
     child_observable: Observable[Any] = Observable(initial_value)
 
     # Create the child's Variable with this Observable
-    child_var: Variable[Any] = Variable(child_observable)
+    child_var_computed: Variable[Any] = Variable(child_observable)
 
     # Assign to the child
-    setattr(child, child_var_name, child_var)
+    setattr(child, child_var_name, child_var_computed)
 
     # Subscribe to parent's Observables to update when they change
     def on_parent_change(_: Any) -> None:
@@ -686,6 +730,12 @@ def _resolve_refs(widget: Any, pending_refs: list[tuple[str, Any, str, Any]]) ->
             _store_deferred_parent_ref(widget, instance, ref_kwarg, ref_obj)
             continue
 
+        # Check if this ref depends on an unset required binding
+        # If so, defer resolution until after bindings are applied
+        if _ref_depends_on_unset_required_binding(widget, ref_obj):
+            _store_deferred_ref(widget, instance, ref_kwarg, ref_obj)
+            continue
+
         try:
             # Resolve the ref against the widget (sibling fields)
             resolved_value = ref_obj.resolve(widget)
@@ -699,6 +749,84 @@ def _resolve_refs(widget: Any, pending_refs: list[tuple[str, Any, str, Any]]) ->
                 raise AttributeError(f"Cannot apply ref('{ref_obj.name}'): {type(instance).__name__} has no '{setter_name}' method")
         except (AttributeError, ValueError) as e:
             raise type(e)(f"In field '{field_name}': {e}") from e
+
+
+def _ref_depends_on_unset_required_binding(widget: Any, ref_obj: Any) -> bool:
+    """Check if a ref depends on a required binding that hasn't been set yet."""
+    from .ref import _extract_ast_names  # pyright: ignore[reportPrivateUsage]
+
+    # Get the widget's required bindings
+    widget_class = type(widget)  # pyright: ignore[reportUnknownVariableType]
+    config = getattr(widget_class, "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+    if config is None:
+        return False
+
+    required: set[str] = getattr(config, "required_bindings", set())
+    if not required:
+        return False
+
+    # Extract names referenced in the ref
+    names: set[str] = set()
+    if ref_obj.is_expression:
+        # For expression refs like "Dog name: {dog.name}", parse the format template
+        # to extract expressions, then extract names from each expression
+        from .bindings.format_binding import _parse_format_template  # pyright: ignore[reportPrivateUsage]
+
+        parsed = _parse_format_template(ref_obj.name)
+        for _literal, field in parsed:
+            if field is not None:
+                expr_names = _extract_ast_names(field.expression)
+                names.update(expr_names)
+    else:
+        # For path refs like "dog.name", get the root name
+        target = ref_obj.target_name
+        names = {target.split(".")[0].split("?")[0]}
+
+    # Check if any referenced name is an unset required binding
+    for name in names:
+        if name in required:
+            # Check if it's actually set in _qtpie state
+            qtpie = getattr(widget, "_qtpie", None)
+            if qtpie is None:
+                return True
+            variables = getattr(qtpie, "variables", {})
+            if name not in variables:
+                return True
+
+    return False
+
+
+def _store_deferred_ref(widget: Any, instance: Any, ref_kwarg: str, ref_obj: Any) -> None:
+    """Store a ref for deferred resolution after required bindings are applied."""
+    deferred: list[tuple[Any, str, Any]] = getattr(widget, "_qtpie_deferred_refs", [])
+    deferred.append((instance, ref_kwarg, ref_obj))
+    widget._qtpie_deferred_refs = deferred
+
+
+def _resolve_deferred_refs(widget: Any) -> None:
+    """Resolve refs that were deferred because they depended on required bindings."""
+    deferred: list[tuple[Any, str, Any]] = getattr(widget, "_qtpie_deferred_refs", [])
+    if not deferred:
+        return
+
+    for instance, ref_kwarg, ref_obj in deferred:
+        try:
+            # Resolve the ref against the widget
+            resolved_value = ref_obj.resolve(widget)
+
+            # Apply to the instance via setter
+            setter_name = f"set{ref_kwarg[0].upper()}{ref_kwarg[1:]}"
+            setter = getattr(instance, setter_name, None)
+            if setter is not None and callable(setter):
+                setter(resolved_value)
+        except (AttributeError, ValueError) as e:
+            # Log or handle error - ref resolution failed
+            import warnings
+
+            warnings.warn(f"Failed to resolve deferred ref: {e}", stacklevel=2)
+
+    # Clear the deferred refs
+    del widget._qtpie_deferred_refs
 
 
 def _store_deferred_parent_ref(widget: Any, instance: Any, ref_kwarg: str, ref_obj: Any) -> None:

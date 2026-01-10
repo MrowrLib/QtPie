@@ -420,6 +420,64 @@ class TestAppBaseWidgetPlaceholder:
         assert_that(instance._label.text()).is_equal_to("Hello!")
 
 
+class TestAppBaseWindowPlaceholder:
+    """Tests for #window placeholder (alias for #widget)."""
+
+    def test_window_accesses_parent(self, qt: QtDriver) -> None:
+        """#window refers to the parent AppBase instance (alias for #widget)."""
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            title: str = "My App"
+            _label: QLabel = new(bind="{#window.title}")
+
+        instance = MyApp()
+        assert_that(instance._label.text()).is_equal_to("My App")
+
+    def test_window_with_method(self, qt: QtDriver) -> None:
+        """#window can call methods."""
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            def get_greeting(self) -> str:
+                return "Hello from window!"
+
+            _label: QLabel = new(bind="{#window.get_greeting()}")
+
+        instance = MyApp()
+        assert_that(instance._label.text()).is_equal_to("Hello from window!")
+
+
+class TestAppBaseAppPlaceholder:
+    """Tests for #app placeholder (QApplication instance)."""
+
+    def test_app_accesses_qapplication(self, qt: QtDriver) -> None:
+        """#app refers to the QApplication instance."""
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            _label: QLabel = new(bind="{#app.applicationName()}")
+
+        instance = MyApp()
+        # Application name comes from pytest-qt's qapp fixture
+        assert_that(instance._label.text()).is_not_empty()
+
+    def test_app_accesses_application_version(self, qt: QtDriver) -> None:
+        """#app can access applicationVersion."""
+        from qtpy.QtWidgets import QApplication
+
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setApplicationVersion("1.2.3")
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            _label: QLabel = new(bind="Version: {#app.applicationVersion()}")
+
+        instance = MyApp()
+        assert_that(instance._label.text()).is_equal_to("Version: 1.2.3")
+
+
 class TestAppBaseListBinding:
     """Tests for list[QWidget] bindings."""
 
@@ -593,6 +651,84 @@ class TestAppBaseRecord:
         instance = MyApp()
         with pytest.raises(TypeError, match="has no record type"):
             _ = instance.record
+
+    def test_record_passed_to_child_menu(self, qt: QtDriver) -> None:
+        """Record can be passed to a child Menu via dog=record binding."""
+        from qtpie import Menu, menu
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @menu
+        class DogMenu(Menu):
+            dog: Variable[Dog]
+
+        @app(show=False, system_tray=False, window=False, record=Dog("Rover", 5))
+        class MyApp(AppBase[Dog]):
+            dog_menu: DogMenu = new(dog="record")
+
+        instance = MyApp()
+        # The menu's dog Variable should share the App's record
+        assert_that(instance.dog_menu.dog.name).is_equal_to("Rover")
+        assert_that(instance.dog_menu.dog.age).is_equal_to(5)
+
+        # Changes to the menu's dog should reflect in the app's record
+        instance.dog_menu.dog.name = "Max"
+        assert_that(instance.record.name).is_equal_to("Max")
+
+        # Changes to the app's record should reflect in the menu's dog
+        instance.record.age = 10
+        assert_that(instance.dog_menu.dog.age).is_equal_to(10)
+
+    def test_ref_with_required_binding(self, qt: QtDriver) -> None:
+        """ref() can reference required binding fields after they're bound."""
+        from PySide6.QtGui import QAction
+
+        from qtpie import Menu, menu, ref
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @menu
+        class DogMenu(Menu):
+            dog: Variable[Dog]
+            dog_action: QAction = new(text=ref("{dog.name}"))
+
+        @app(show=False, system_tray=False, window=False, record=Dog("Fido", 3))
+        class MyApp(AppBase[Dog]):
+            dog_menu: DogMenu = new(dog="record")
+
+        instance = MyApp()
+        # The ref should resolve after the binding is applied
+        assert_that(instance.dog_menu.dog_action.text()).is_equal_to("Fido")
+
+    def test_ref_with_literal_text_and_required_binding(self, qt: QtDriver) -> None:
+        """ref() with literal text + expression works with required bindings."""
+        from PySide6.QtGui import QAction
+
+        from qtpie import Menu, menu, ref
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @menu
+        class DogMenu(Menu):
+            dog: Variable[Dog]
+            dog_action: QAction = new(text=ref("Dog name: {dog.name}"))
+
+        @app(show=False, system_tray=False, window=False, record=Dog("Buddy", 4))
+        class MyApp(AppBase[Dog]):
+            dog_menu: DogMenu = new(dog="record")
+
+        instance = MyApp()
+        # The ref should resolve with literal text preserved
+        assert_that(instance.dog_menu.dog_action.text()).is_equal_to("Dog name: Buddy")
 
 
 class TestAppBaseSignals:
