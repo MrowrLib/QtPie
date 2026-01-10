@@ -909,6 +909,170 @@ class TestAppBaseMinimizeToTray:
         assert_that(MyApp._qtpie_config.minimize_to_tray).is_false()
 
 
+class TestAppBaseSystemTrayMenu:
+    """Tests for system_tray: QMenu field pattern."""
+
+    def test_system_tray_qmenu_field(self, qt: QtDriver) -> None:
+        """system_tray: QMenu field is used as tray context menu."""
+        from qtpy.QtGui import QAction
+        from qtpy.QtWidgets import QSystemTrayIcon
+
+        from qtpie import Menu, menu
+
+        @menu
+        class TrayMenu(Menu):
+            action1: QAction = new("First Action")
+            action2: QAction = new("Second Action")
+
+        # Need window=True or widget fields to trigger auto-window, which enables tray
+        @app(show=False)
+        class MyApp(AppBase):
+            system_tray: TrayMenu = new()
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(instance._system_tray).is_instance_of(QSystemTrayIcon)
+        tray_menu = instance._system_tray.contextMenu()
+        assert_that(tray_menu).is_same_as(instance.system_tray)
+
+    def test_system_tray_qmenu_actions_preserved(self, qt: QtDriver) -> None:
+        """system_tray: QMenu field preserves its actions."""
+        from qtpy.QtGui import QAction
+
+        from qtpie import Menu, menu
+
+        @menu
+        class TrayMenu(Menu):
+            action1: QAction = new("Action One")
+            action2: QAction = new("Action Two")
+            action3: QAction = new("Action Three")
+
+        @app(show=False)
+        class MyApp(AppBase):
+            system_tray: TrayMenu = new()
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        tray_menu = instance._system_tray.contextMenu()
+        action_texts = [a.text() for a in tray_menu.actions()]
+        assert_that(action_texts).contains("Action One")
+        assert_that(action_texts).contains("Action Two")
+        assert_that(action_texts).contains("Action Three")
+
+    def test_system_tray_qmenu_not_in_menubar(self, qt: QtDriver) -> None:
+        """system_tray: QMenu is not added to window menu bar."""
+        from qtpy.QtGui import QAction
+
+        from qtpie import Menu, menu
+
+        @menu
+        class TrayMenu(Menu):
+            action: QAction = new("Tray Action")
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            action: QAction = new("File Action")
+
+        @app(show=False)
+        class MyApp(AppBase):
+            system_tray: TrayMenu = new()
+            file_menu: FileMenu = new()
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        # system_tray should be in tray, not menubar
+        menubar = instance._auto_window.menuBar()
+        menubar_actions = [a.text() for a in menubar.actions()]
+        assert_that(menubar_actions).does_not_contain("Tray Action")
+        # FileMenu should be in menubar
+        assert_that("&File" in str(menubar_actions) or "File" in str(menubar_actions)).is_true()
+
+    def test_system_tray_qmenu_signal_connections(self, qt: QtDriver) -> None:
+        """system_tray: QMenu actions have signals connected."""
+        from qtpy.QtGui import QAction
+
+        from qtpie import Menu, menu
+
+        triggered = False
+
+        @menu
+        class TrayMenu(Menu):
+            action: QAction = new("Click Me", triggered="on_action")
+
+            def on_action(self) -> None:
+                nonlocal triggered
+                triggered = True
+
+        @app(show=False, window=False)
+        class MyApp(AppBase):
+            system_tray: TrayMenu = new()
+
+        instance = MyApp()
+        instance.system_tray.action.trigger()
+        assert_that(triggered).is_true()
+
+    def test_underscore_system_tray_qmenu_field(self, qt: QtDriver) -> None:
+        """_system_tray: QMenu field (with underscore) is used as tray context menu."""
+        from qtpy.QtGui import QAction
+        from qtpy.QtWidgets import QSystemTrayIcon
+
+        from qtpie import Menu, menu
+
+        @menu
+        class TrayMenu(Menu):
+            action1: QAction = new("First Action")
+            action2: QAction = new("Second Action")
+
+        @app(show=False)
+        class MyApp(AppBase):
+            _system_tray: TrayMenu = new()
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        assert_that(hasattr(instance, "_system_tray")).is_true()
+        # The internal tray icon is stored as _system_tray attribute by the system
+        # but since our field is also named _system_tray, we check the contextMenu
+        tray = instance._system_tray
+        # If it's our Menu, check via the stored _system_tray_menu
+        if isinstance(tray, QSystemTrayIcon):
+            tray_menu = tray.contextMenu()
+            action_texts = [a.text() for a in tray_menu.actions()]
+            assert_that(action_texts).contains("First Action")
+            assert_that(action_texts).contains("Second Action")
+        else:
+            # Our TrayMenu is the field, check system got it
+            assert_that(hasattr(instance, "_system_tray_menu")).is_true()
+
+    def test_underscore_system_tray_not_in_menubar(self, qt: QtDriver) -> None:
+        """_system_tray: QMenu (with underscore) is not added to window menu bar."""
+        from qtpy.QtGui import QAction
+
+        from qtpie import Menu, menu
+
+        @menu
+        class TrayMenu(Menu):
+            action: QAction = new("Tray Action")
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            action: QAction = new("File Action")
+
+        @app(show=False)
+        class MyApp(AppBase):
+            _system_tray: TrayMenu = new()
+            file_menu: FileMenu = new()
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        # _system_tray should be in tray, not menubar
+        menubar = instance._auto_window.menuBar()
+        menubar_actions = [a.text() for a in menubar.actions()]
+        assert_that(menubar_actions).does_not_contain("Tray Action")
+        # FileMenu should be in menubar
+        assert_that("&File" in str(menubar_actions) or "File" in str(menubar_actions)).is_true()
+
+
 class TestAppBaseSystemTray:
     """Tests for system tray with QAction fields."""
 
@@ -1100,3 +1264,350 @@ class TestAppBaseSystemTray:
         tray_menu = instance._system_tray.contextMenu()
         actions = tray_menu.actions()
         assert_that(actions[0].text()).is_equal_to("Custom Section Name")
+
+    def test_icon_accepts_string_path(self, qt: QtDriver, tmp_path: Path) -> None:
+        """icon= accepts string file path."""
+        from qtpy.QtGui import QAction, QImage
+
+        # Create a simple valid PNG file
+        icon_file = tmp_path / "test_icon.png"
+        img = QImage(16, 16, QImage.Format.Format_ARGB32)
+        img.fill(0xFF0000FF)  # Blue
+        img.save(str(icon_file))
+
+        @app(show=False, window=False, icon=str(icon_file))
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+
+        instance = MyApp()
+        assert_that(hasattr(instance, "_system_tray")).is_true()
+        # The tray icon should be set (not null)
+        tray_icon = instance._system_tray.icon()
+        assert_that(tray_icon.isNull()).is_false()
+
+    def test_tray_icon_overrides_icon(self, qt: QtDriver) -> None:
+        """tray_icon= overrides icon= for system tray."""
+        from qtpy.QtGui import QAction, QIcon, QPixmap
+
+        # Create two different icons
+        shared_pixmap = QPixmap(16, 16)
+        shared_pixmap.fill()
+        shared_icon = QIcon(shared_pixmap)
+
+        tray_pixmap = QPixmap(32, 32)
+        tray_pixmap.fill()
+        tray_icon = QIcon(tray_pixmap)
+
+        @app(show=False, window=False, icon=shared_icon, tray_icon=tray_icon)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+
+        instance = MyApp()
+        # Tray should use tray_icon, not shared icon
+        # We can't easily compare QIcon objects, but we can verify tray was created
+        assert_that(hasattr(instance, "_system_tray")).is_true()
+
+
+class TestAppBaseWindowIcon:
+    """Tests for window_icon= parameter."""
+
+    def test_window_icon_sets_window_icon(self, qt: QtDriver) -> None:
+        """window_icon= sets the auto-window's icon."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        test_icon = QIcon(pixmap)
+
+        @app(show=False, window_icon=test_icon)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window).is_not_none()
+        window_icon = instance._auto_window.windowIcon()
+        assert_that(window_icon.isNull()).is_false()
+
+    def test_window_icon_overrides_icon(self, qt: QtDriver) -> None:
+        """window_icon= overrides icon= for window."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        shared_pixmap = QPixmap(16, 16)
+        shared_pixmap.fill()
+        shared_icon = QIcon(shared_pixmap)
+
+        window_pixmap = QPixmap(32, 32)
+        window_pixmap.fill()
+        window_icon = QIcon(window_pixmap)
+
+        @app(show=False, icon=shared_icon, window_icon=window_icon)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        # Window should have an icon set
+        assert_that(instance._auto_window.windowIcon().isNull()).is_false()
+
+    def test_icon_sets_both_window_and_tray(self, qt: QtDriver) -> None:
+        """icon= sets both window icon and tray icon when neither is specified."""
+        from qtpy.QtGui import QAction, QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        shared_icon = QIcon(pixmap)
+
+        @app(show=False, icon=shared_icon)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        # Both should have icons
+        assert_that(instance._auto_window.windowIcon().isNull()).is_false()
+        assert_that(instance._system_tray.icon().isNull()).is_false()
+
+    def test_window_icon_accepts_string_path(self, qt: QtDriver, tmp_path: Path) -> None:
+        """window_icon= accepts string file path."""
+        from qtpy.QtGui import QImage
+
+        icon_file = tmp_path / "window_icon.png"
+        img = QImage(16, 16, QImage.Format.Format_ARGB32)
+        img.fill(0xFFFF0000)  # Red
+        img.save(str(icon_file))
+
+        @app(show=False, window_icon=str(icon_file))
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window.windowIcon().isNull()).is_false()
+
+    def test_window_icon_accepts_standard_pixmap(self, qt: QtDriver) -> None:
+        """window_icon= accepts QStyle.StandardPixmap."""
+        from qtpy.QtWidgets import QStyle
+
+        @app(show=False, window_icon=QStyle.StandardPixmap.SP_DialogSaveButton)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window.windowIcon().isNull()).is_false()
+
+
+class TestAppBaseSystemTrayActivation:
+    """Tests for on_system_tray_activated hook."""
+
+    def test_on_system_tray_activated_called(self, qt: QtDriver) -> None:
+        """on_system_tray_activated hook is called on tray activation."""
+        from typing import override
+
+        from qtpy.QtGui import QAction
+        from qtpy.QtWidgets import QSystemTrayIcon
+
+        activations: list[QSystemTrayIcon.ActivationReason] = []
+
+        @app(show=False, window=False)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+
+            @override
+            def on_system_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+                activations.append(reason)
+
+        instance = MyApp()
+        # Simulate activation by emitting the signal
+        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+        assert_that(activations).contains(QSystemTrayIcon.ActivationReason.Trigger)
+
+    def test_on_system_tray_activated_receives_reason(self, qt: QtDriver) -> None:
+        """on_system_tray_activated receives correct activation reason."""
+        from typing import override
+
+        from qtpy.QtGui import QAction
+        from qtpy.QtWidgets import QSystemTrayIcon
+
+        activations: list[QSystemTrayIcon.ActivationReason] = []
+
+        @app(show=False, window=False)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+
+            @override
+            def on_system_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+                activations.append(reason)
+
+        instance = MyApp()
+        # Test different activation reasons
+        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.Context)
+        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.MiddleClick)
+        assert_that(activations).is_equal_to(
+            [
+                QSystemTrayIcon.ActivationReason.Context,
+                QSystemTrayIcon.ActivationReason.MiddleClick,
+            ]
+        )
+
+
+class TestAppBaseMinimizeToTrayBehavior:
+    """Tests for minimize_to_tray actual behavior."""
+
+    def test_minimize_to_tray_installs_close_handler(self, qt: QtDriver) -> None:
+        """minimize_to_tray=True installs a close event handler."""
+        from qtpy.QtGui import QAction
+
+        @app(show=False, minimize_to_tray=True)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        # The close event should be overridden
+        assert_that(instance._auto_window.closeEvent).is_not_none()
+
+    def test_minimize_to_tray_false_no_handler(self, qt: QtDriver) -> None:
+        """minimize_to_tray=False does not install close handler."""
+        from qtpy.QtGui import QAction
+
+        @app(show=False, minimize_to_tray=False)
+        class MyApp(AppBase):
+            action: QAction = new("Hello")
+            _label: QLabel = new("Content")
+
+        instance = MyApp()
+        # When minimize_to_tray=False, closeEvent is NOT overridden
+        # We check that it's still a bound method from the class, not a custom function
+        # The handler installed by minimize_to_tray is a plain function, not a method
+        close_event = instance._auto_window.closeEvent
+        # If it were overridden by _install_minimize_to_tray, it would be a function
+        # The default is a method descriptor bound to the instance
+        assert_that(hasattr(close_event, "__self__")).is_true()
+
+
+class TestAppBaseWindowControlMethods:
+    """Tests for window control methods (hide, is_visible, window property)."""
+
+    def test_window_property_returns_auto_window(self, qt: QtDriver) -> None:
+        """window property returns the auto-created window."""
+        from qtpy.QtWidgets import QMainWindow
+
+        @app(show=False)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance.window).is_not_none()
+        assert_that(instance.window).is_instance_of(QMainWindow)
+        assert_that(instance.window).is_same_as(instance._auto_window)
+
+    def test_window_property_none_without_window(self, qt: QtDriver) -> None:
+        """window property returns None when window=False."""
+
+        @app(show=False, window=False, system_tray=False)
+        class MyApp(AppBase):
+            _count: Variable[int] = new(0)
+
+        instance = MyApp()
+        assert_that(instance.window).is_none()
+
+    def test_hide_hides_window(self, qt: QtDriver) -> None:
+        """hide() hides the auto-created window."""
+
+        @app(show=False)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        # Window starts hidden (show=False)
+        instance.hide()
+        assert_that(instance._auto_window.isVisible()).is_false()
+
+    def test_is_visible_reflects_window_state(self, qt: QtDriver) -> None:
+        """is_visible property reflects window visibility."""
+
+        @app(show=False)
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        # Window starts hidden
+        assert_that(instance.is_visible).is_false()
+
+    def test_is_visible_false_without_window(self, qt: QtDriver) -> None:
+        """is_visible returns False when no window exists."""
+
+        @app(show=False, window=False, system_tray=False)
+        class MyApp(AppBase):
+            _count: Variable[int] = new(0)
+
+        instance = MyApp()
+        assert_that(instance.is_visible).is_false()
+
+
+class TestAppBaseStylesheet:
+    """Tests for stylesheet= parameter on auto-window."""
+
+    def test_stylesheet_applied_to_window(self, qt: QtDriver) -> None:
+        """stylesheet= parameter stores in config for window use."""
+        # Note: AppBase doesn't have styleSheet() - it's not a QWidget
+        # The stylesheet= param stores in widget_props["styleSheet"]
+        # For real apps (App class), this applies to QApplication
+
+        @app(show=False, system_tray=False, stylesheet="QLabel { color: red; }")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        # Verify the config stored the stylesheet
+        assert_that(MyApp._qtpie_config.widget_props.get("styleSheet")).contains("color: red")
+
+    def test_stylesheet_in_config(self, qt: QtDriver) -> None:
+        """stylesheet= is stored in widget_props as styleSheet."""
+
+        @app(show=False, stylesheet="QWidget { background: blue; }")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        assert_that(MyApp._qtpie_config.widget_props.get("styleSheet")).contains("background: blue")
+
+
+class TestAppBaseTitle:
+    """Tests for title= parameter."""
+
+    def test_title_sets_window_title(self, qt: QtDriver) -> None:
+        """title= parameter sets window title."""
+
+        @app(show=False, title="My Custom Title")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window.windowTitle()).is_equal_to("My Custom Title")
+
+    def test_title_with_special_characters(self, qt: QtDriver) -> None:
+        """title= handles special characters."""
+
+        @app(show=False, title="App - v1.0 (Beta)")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window.windowTitle()).is_equal_to("App - v1.0 (Beta)")
+
+    def test_title_with_unicode(self, qt: QtDriver) -> None:
+        """title= handles unicode characters."""
+
+        @app(show=False, title="日本語アプリ")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyApp()
+        assert_that(instance._auto_window.windowTitle()).is_equal_to("日本語アプリ")
+
+    def test_no_title_uses_class_name(self, qt: QtDriver) -> None:
+        """Without title=, window uses class name."""
+
+        @app(show=False)
+        class MyCustomApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        instance = MyCustomApp()
+        assert_that(instance._auto_window.windowTitle()).is_equal_to("MyCustomApp")

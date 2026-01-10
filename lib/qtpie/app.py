@@ -779,8 +779,8 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     for name in getattr(cls, "__annotations__", {}):
         instance = getattr(app, name, None)
 
-        # Check for system_tray field
-        if name == "system_tray" and isinstance(instance, QMenu):
+        # Check for system_tray field (with or without underscore prefix)
+        if name in ("system_tray", "_system_tray") and isinstance(instance, QMenu):
             system_tray_menu = instance
             continue
 

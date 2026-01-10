@@ -7,11 +7,14 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
+from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
+    QApplication,
     QFormLayout,
     QGridLayout,
     QHBoxLayout,
     QLayout,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -21,6 +24,35 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .state import QtPieState
 from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
+
+# Type alias for icon parameter
+IconType = str | QIcon | QPixmap | QStyle.StandardPixmap | None
+
+
+def _resolve_icon(value: IconType) -> QIcon | None:
+    """Convert str/QIcon/QPixmap/StandardPixmap to QIcon, or return None.
+
+    Accepts:
+        - str: File path or Qt resource path (e.g., ":/icons/app.png")
+        - QIcon: Passed through unchanged
+        - QPixmap: Converted to QIcon
+        - QStyle.StandardPixmap: Resolved via application style
+        - None: Returns None
+    """
+    if value is None:
+        return None
+    if isinstance(value, QIcon):
+        return value
+    if isinstance(value, QPixmap):
+        return QIcon(value)
+    if isinstance(value, QStyle.StandardPixmap):
+        # Need QApplication instance to get style
+        qapp = QApplication.instance()
+        if qapp is not None and isinstance(qapp, QApplication):
+            return qapp.style().standardIcon(value)
+        return None
+    # str path (file path or Qt resource path like ":/icons/app.png")
+    return QIcon(value)
 
 
 class _QtPieConfig:
@@ -323,6 +355,7 @@ def widget[W: Widget[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    icon: IconType = None,
     record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
@@ -337,6 +370,7 @@ def widget[W: Widget[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    icon: IconType = None,
     record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
@@ -362,7 +396,7 @@ def widget[W: Widget[Any]](
             # No auto-binding, must use bind="field" explicitly
             ...
 
-        @widget(title="My App", minimumWidth=400)
+        @widget(title="My App", icon=":/icons/app.png")
         class MyWidget(Widget):
             # Extra kwargs become setXXX() calls on the widget
             ...
@@ -377,6 +411,8 @@ def widget[W: Widget[Any]](
         name: Set the widget's objectName.
         classes: List of CSS classes to apply to the widget.
         title: Shorthand for windowTitle.
+        icon: Window icon. Accepts str path (file or Qt resource ":/..."),
+              QIcon, QPixmap, or QStyle.StandardPixmap.
         stylesheet: Shorthand for styleSheet.
         **kwargs: Extra properties applied via setXXX() methods.
                   e.g., windowTitle="Foo" calls self.setWindowTitle("Foo")
@@ -384,6 +420,10 @@ def widget[W: Widget[Any]](
     # title is an alias for windowTitle
     if title is not None:
         kwargs["windowTitle"] = title
+    # icon is resolved and stored for later application
+    resolved_icon = _resolve_icon(icon)
+    if resolved_icon is not None:
+        kwargs["windowIcon"] = resolved_icon
     # stylesheet is an alias for styleSheet
     if stylesheet is not None:
         kwargs["styleSheet"] = stylesheet

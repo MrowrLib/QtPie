@@ -4,6 +4,7 @@
 """Tests for Window with auto-layout and menu bar integration."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import override
 
 from assertpy import assert_that
@@ -262,6 +263,127 @@ class TestWindowCentralWidget:
 
         central.setText("typed")
         assert_that(w.central_widget.value).is_equal_to("typed")
+
+    def test_underscore_central_widget(self, qt: QtDriver) -> None:
+        """_central_widget field (with underscore) becomes the central widget directly."""
+
+        @window
+        class MainWindow(Window):
+            _central_widget: QLabel = new("UNDERSCORE CENTRAL")
+
+        w = qt.track(MainWindow())
+        central = w.centralWidget()
+        assert_that(central).is_same_as(w._central_widget)
+        assert_that(central.text()).is_equal_to("UNDERSCORE CENTRAL")
+
+    def test_underscore_central_widget_no_container(self, qt: QtDriver) -> None:
+        """With _central_widget, other widgets are NOT added to layout."""
+
+        @window
+        class MainWindow(Window):
+            _central_widget: QLabel = new("Central")
+            other_label: QLabel = new("Other")  # Not added to layout
+
+        w = qt.track(MainWindow())
+        central = w.centralWidget()
+        # _central_widget is the central widget directly
+        assert_that(central).is_same_as(w._central_widget)
+        # other_label exists but not in any layout
+        assert_that(w.other_label).is_not_none()
+        assert_that(w.other_label.text()).is_equal_to("Other")
+
+    def test_underscore_variable_central_widget(self, qt: QtDriver) -> None:
+        """_central_widget: Variable[str, QLabel] works."""
+
+        @window
+        class MainWindow(Window):
+            _central_widget: Variable[str, QLabel] = new("Initial")(bind="{#self.upper()}")
+
+        w = qt.track(MainWindow())
+        central = w.centralWidget()
+        # The central widget should be the Variable's widget
+        assert_that(central).is_same_as(w._central_widget.widget)
+        assert_that(central.text()).is_equal_to("INITIAL")
+
+        # Reactive update
+        w._central_widget.value = "updated"
+        assert_that(central.text()).is_equal_to("UPDATED")
+
+
+class TestWindowIcon:
+    """Tests for icon= parameter on @window decorator."""
+
+    def test_icon_accepts_qicon(self, qt: QtDriver) -> None:
+        """icon= accepts QIcon."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        test_icon = QIcon(pixmap)
+
+        @window(icon=test_icon)
+        class MainWindow(Window):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_qpixmap(self, qt: QtDriver) -> None:
+        """icon= accepts QPixmap."""
+        from qtpy.QtGui import QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+
+        @window(icon=pixmap)
+        class MainWindow(Window):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_string_path(self, qt: QtDriver, tmp_path: Path) -> None:
+        """icon= accepts string file path."""
+        from qtpy.QtGui import QImage
+
+        icon_file = tmp_path / "window_icon.png"
+        img = QImage(16, 16, QImage.Format.Format_ARGB32)
+        img.fill(0xFF0000FF)  # Blue
+        img.save(str(icon_file))
+
+        @window(icon=str(icon_file))
+        class MainWindow(Window):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_standard_pixmap(self, qt: QtDriver) -> None:
+        """icon= accepts QStyle.StandardPixmap."""
+        from qtpy.QtWidgets import QStyle
+
+        @window(icon=QStyle.StandardPixmap.SP_ComputerIcon)
+        class MainWindow(Window):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_with_title(self, qt: QtDriver) -> None:
+        """icon= works together with title=."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        test_icon = QIcon(pixmap)
+
+        @window(title="My Window", icon=test_icon)
+        class MainWindow(Window):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        assert_that(w.windowTitle()).is_equal_to("My Window")
+        assert_that(w.windowIcon().isNull()).is_false()
 
 
 class TestWindowLayoutExclusion:

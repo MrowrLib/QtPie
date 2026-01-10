@@ -52,48 +52,29 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Why QtPie?: why-qtpie.md
-  - Getting Started:
-      - Installation: start/install.md
-      - Hello World: start/hello-world.md
-      - Key Concepts: start/concepts.md
   - Basics:
       - Widgets: basics/widgets.md
-      - Layouts: basics/layouts.md
-      - Signals: basics/signals.md
-      - Styling: basics/styling.md
   - Reactive State:
       - Variables: state/variables.md
       - Bindings: state/bindings.md
       - Format Expressions: state/format-expressions.md
       - Property Bindings: state/property-bindings.md
+      - Widget Bindings: state/widget-bindings.md
+      - List Bindings: state/list-bindings.md
+      - References: state/references.md
   - Data & Forms:
-      - Record Widgets: data/records.md
-      - Lists & Dicts: data/lists-dicts.md
+      - Records: data/records.md
+      - Record Bindings: data/record-bindings.md
+      - View Model: data/view-model.md
+      - Repeaters: data/repeaters.md
       - Validation: data/validation.md
       - Dirty Tracking: data/dirty-tracking.md
   - Guides:
+      - Entry Points: guides/entrypoint.md
+      - App: guides/app.md
       - Windows & Menus: guides/windows-menus.md
-      - Form Layouts: guides/forms.md
-      - Grid Layouts: guides/grids.md
+      - Styling: guides/styling.md
       - Translations: guides/translations.md
-      - App & Entry Points: guides/app.md
-      - Async: guides/async.md
-      - Testing: guides/testing.md
   - Reference:
-      - Decorators:
-          - "@widget": reference/decorators/widget.md
-          - "@window": reference/decorators/window.md
-          - "@menu": reference/decorators/menu.md
-          - "@slot": reference/decorators/slot.md
-          - "@entrypoint": reference/decorators/entrypoint.md
-      - Factories:
-          - "new()": reference/factories/new.md
-      - Classes:
-          - Widget: reference/classes/widget.md
-          - Window: reference/classes/window.md
-          - Variable: reference/classes/variable.md
-      - Styles:
-          - Color Schemes: reference/styles/color-schemes.md
-          - Class Helpers: reference/styles/class-helpers.md
-  - Examples: examples.md
+      - Observant Library: reference/observant.md
   - Qt Resources: qt-resources.md

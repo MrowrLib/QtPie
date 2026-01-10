@@ -2,6 +2,8 @@
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnknownMemberType=false
 """Tests for Widget with auto-layout."""
 
+from pathlib import Path
+
 from assertpy import assert_that
 from qtpy.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
@@ -515,3 +517,79 @@ class TestWidgetRefWithRequiredBinding:
         parent = qt.track(ParentWidget())
         # The ref should resolve with literal text preserved
         assert_that(parent.dog_display.name_label.text()).is_equal_to("Dog name: Rover")
+
+
+class TestWidgetIcon:
+    """Tests for icon= parameter on @widget decorator."""
+
+    def test_icon_accepts_qicon(self, qt: QtDriver) -> None:
+        """icon= accepts QIcon."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        test_icon = QIcon(pixmap)
+
+        @widget(icon=test_icon)
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_qpixmap(self, qt: QtDriver) -> None:
+        """icon= accepts QPixmap."""
+        from qtpy.QtGui import QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+
+        @widget(icon=pixmap)
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_string_path(self, qt: QtDriver, tmp_path: Path) -> None:
+        """icon= accepts string file path."""
+        from qtpy.QtGui import QImage
+
+        icon_file = tmp_path / "widget_icon.png"
+        img = QImage(16, 16, QImage.Format.Format_ARGB32)
+        img.fill(0xFF00FF00)  # Green
+        img.save(str(icon_file))
+
+        @widget(icon=str(icon_file))
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_accepts_standard_pixmap(self, qt: QtDriver) -> None:
+        """icon= accepts QStyle.StandardPixmap."""
+        from qtpy.QtWidgets import QStyle
+
+        @widget(icon=QStyle.StandardPixmap.SP_FileIcon)
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_with_title(self, qt: QtDriver) -> None:
+        """icon= works together with title=."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        test_icon = QIcon(pixmap)
+
+        @widget(title="My Widget", icon=test_icon)
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(MyWidget())
+        assert_that(w.windowTitle()).is_equal_to("My Widget")
+        assert_that(w.windowIcon().isNull()).is_false()

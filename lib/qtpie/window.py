@@ -24,6 +24,7 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .state import QtPieState
 from .variable import Variable, _RequiredBindingDescriptor
+from .widget import IconType, _resolve_icon
 
 
 @dataclass
@@ -290,6 +291,7 @@ def window[W: Window[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    icon: IconType = None,
     record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
@@ -304,6 +306,7 @@ def window[W: Window[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     title: str | None = None,
+    icon: IconType = None,
     record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
@@ -315,7 +318,7 @@ def window[W: Window[Any]](
         class MainWindow(Window):
             file_menu: FileMenu = new()
 
-        @window(title="My App")
+        @window(title="My App", icon=":/icons/app.png")
         class MainWindow(Window):
             file_menu: FileMenu = new()
             edit_menu: EditMenu = new()
@@ -340,11 +343,17 @@ def window[W: Window[Any]](
         name: Set the window's objectName.
         classes: List of CSS classes to apply.
         title: Shorthand for windowTitle.
+        icon: Window icon. Accepts str path (file or Qt resource ":/..."),
+              QIcon, QPixmap, or QStyle.StandardPixmap.
         stylesheet: Shorthand for styleSheet.
         **kwargs: Extra properties applied via setXXX() methods.
     """
     if title is not None:
         kwargs["windowTitle"] = title
+    # icon is resolved and stored for later application
+    resolved_icon = _resolve_icon(icon)
+    if resolved_icon is not None:
+        kwargs["windowIcon"] = resolved_icon
     if stylesheet is not None:
         kwargs["styleSheet"] = stylesheet
 
@@ -452,15 +461,18 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 # Refresh parent-dependent bindings now that menu has a parent
                 if hasattr(instance, "_refresh_parent_bindings"):
                     instance._refresh_parent_bindings()  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
-            elif isinstance(instance, QWidget) and name != "central_widget":
+            elif isinstance(instance, QWidget) and name not in ("central_widget", "_central_widget"):
                 non_menu_widgets.append((name, instance))
-            elif isinstance(instance, Variable) and instance.widget is not None and name != "central_widget":
+            elif isinstance(instance, Variable) and instance.widget is not None and name not in ("central_widget", "_central_widget"):
                 # Variable[T, W] - add the widget to layout
                 non_menu_widgets.append((name, instance.widget))
 
         # Set up central widget
-        # Option 1: If there's an explicit central_widget field, use it
+        # Option 1: If there's an explicit central_widget or _central_widget field, use it
+        # Note: Use `is None` check, not `or`, because Variable can be falsy (empty value)
         explicit_central = getattr(self, "central_widget", None)
+        if explicit_central is None:
+            explicit_central = getattr(self, "_central_widget", None)
         # Handle Variable[T, W] as central_widget
         if isinstance(explicit_central, Variable) and explicit_central.widget is not None:
             explicit_central = explicit_central.widget
