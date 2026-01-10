@@ -413,7 +413,7 @@ class TestWidgetResetDirty:
         w.reset_dirty()
         assert_that(w.is_dirty.get()).is_false()
         assert_that(w.is_dirty.get()).is_false()
-        assert_that(w.record_state.is_dirty.get()).is_false()
+        assert_that(w._qtpie.record_state.is_dirty.get()).is_false()
 
     def test_reset_dirty_on_clean_widget(self, qt: QtDriver) -> None:
         """Widget.reset_dirty() is safe on already-clean widget."""

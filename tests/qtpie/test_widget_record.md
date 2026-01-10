@@ -11,7 +11,7 @@ class PersonEditor(Widget[Person]):
 
 w = qt.track(PersonEditor())
 assert_that(w._qtpie_config.record_type).is_equal_to(Person)
-assert_that(w.record_state).is_instance_of(RecordVariable)
+assert_that(w._qtpie.record_state).is_instance_of(RecordVariable)
 ```
 
 ## Record Field Access
@@ -45,11 +45,11 @@ class PersonEditor(Widget[Person]):
 
 w = qt.track(PersonEditor())
 
-assert_that(w.record_state.is_dirty.get()).is_false()
+assert_that(w._qtpie.record_state.is_dirty.get()).is_false()
 
 w.record.name = "Changed"
-assert_that(w.record_state.is_dirty.get()).is_true()
-assert_that(w.record_state.value.name).is_equal_to("Changed")
+assert_that(w._qtpie.record_state.is_dirty.get()).is_true()
+assert_that(w._qtpie.record_state.value.name).is_equal_to("Changed")
 ```
 
 ## Dirty Tracking
@@ -62,10 +62,10 @@ class PersonEditor(Widget[Person]):
     pass
 
 w = qt.track(PersonEditor())
-assert_that(w.record_state.is_dirty.get()).is_false()
+assert_that(w._qtpie.record_state.is_dirty.get()).is_false()
 
-w.record_state.observable.name.set("Bob")
-assert_that(w.record_state.is_dirty.get()).is_true()
+w._qtpie.record_state.observable.name.set("Bob")
+assert_that(w._qtpie.record_state.is_dirty.get()).is_true()
 ```
 
 ## Record + Other Variables
@@ -81,8 +81,8 @@ class PersonEditor(Widget[Person]):
 w = qt.track(PersonEditor())
 
 # Record works
-w.record_state.observable.name.set("Charlie")
-assert_that(w.record_state.value.name).is_equal_to("Charlie")
+w._qtpie.record_state.observable.name.set("Charlie")
+assert_that(w._qtpie.record_state.value.name).is_equal_to("Charlie")
 
 # Other variable works independently
 w._status.value = "editing"
@@ -100,7 +100,7 @@ class CatEditor(Widget[Cat]):
         self.record = Cat(name="Whiskers", lives=9)
 
 w = qt.track(CatEditor())
-assert_that(w.record_state.value.name).is_equal_to("Whiskers")
+assert_that(w._qtpie.record_state.value.name).is_equal_to("Whiskers")
 ```
 
 ## Explicit Record Declaration
@@ -113,8 +113,8 @@ class CatEditor(Widget[Cat]):
     record: Variable[Cat] = new(default=Cat("Whiskers", 9))  # type: ignore[assignment]
 
 w = qt.track(CatEditor())
-assert_that(w.record_state.value.name).is_equal_to("Whiskers")
-assert_that(w.record_state.value.lives).is_equal_to(9)
+assert_that(w._qtpie.record_state.value.name).is_equal_to("Whiskers")
+assert_that(w._qtpie.record_state.value.lives).is_equal_to(9)
 ```
 
 ## Decorator Record Parameter
@@ -155,7 +155,7 @@ class PersonEditor(Widget[Person]):
         dirty_states.append(is_dirty)
 
 w = qt.track(PersonEditor())
-_ = w.record_state  # Touch record to register it
-w.record_state.observable.name.set("Dirty")
+_ = w._qtpie.record_state  # Touch record to register it
+w._qtpie.record_state.observable.name.set("Dirty")
 assert_that(dirty_states).contains(True)
 ```

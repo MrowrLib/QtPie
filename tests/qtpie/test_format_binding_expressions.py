@@ -460,7 +460,7 @@ class TestObjectPropertyBinding:
             _label: QLabel = new(bind="{name.upper()}")
 
         w = qt.track(Test())
-        w.record_state.observable.name.set("alice")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("alice")  # type: ignore[union-attr]
         assert_that(w._label.text()).is_equal_to("ALICE")
 
     def test_expression_with_record_field(self, qt: QtDriver) -> None:
@@ -475,7 +475,7 @@ class TestObjectPropertyBinding:
             _label: QLabel = new(bind="{count * 2}")
 
         w = qt.track(Test())
-        w.record_state.observable.count.set(21)  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.count.set(21)  # type: ignore[union-attr]
         assert_that(w._label.text()).is_equal_to("42")
 
 

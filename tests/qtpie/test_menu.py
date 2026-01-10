@@ -3,6 +3,8 @@
 # pyright: reportUnknownMemberType=false
 """Tests for the Menu system (@menu decorator)."""
 
+from typing import override
+
 from assertpy import assert_that
 from qtpy.QtGui import QAction
 
@@ -446,22 +448,22 @@ class TestWindowIntegration:
 
         @menu(text="&File")
         class FileMenu(Menu):
-            is_dirty: Variable[bool]  # Required binding
-            save: QAction = new("&Save", enabled="{is_dirty}")
+            doc_dirty: Variable[bool]  # Required binding
+            save: QAction = new("&Save", enabled="{doc_dirty}")
 
         @window(title="Test App")
         class App(Window):
-            _is_dirty: Variable[bool] = new(False)
-            file_menu: FileMenu = new(is_dirty="_is_dirty")
+            _doc_dirty: Variable[bool] = new(False)
+            file_menu: FileMenu = new(doc_dirty="_doc_dirty")
 
         app = qt.track(App())
 
         # Initially disabled
-        assert_that(app.file_menu.is_dirty.value).is_false()
+        assert_that(app.file_menu.doc_dirty.value).is_false()
 
         # Window changes -> menu updates
-        app._is_dirty.value = True
-        assert_that(app.file_menu.is_dirty.value).is_true()
+        app._doc_dirty.value = True
+        assert_that(app.file_menu.doc_dirty.value).is_true()
 
 
 # =============================================================================
@@ -755,3 +757,302 @@ class TestParentPlaceholder:
 
         editor._can_redo.value = True
         assert_that(editor.edit_menu.redo.isEnabled()).is_true()
+
+
+# =============================================================================
+# Menu Dirty Tracking
+# =============================================================================
+
+
+class TestMenuDirtyTracking:
+    """Test Menu dirty tracking (is_dirty, reset_dirty, dirty_fields)."""
+
+    def test_initially_not_dirty(self, qt: QtDriver) -> None:
+        """New menu is not dirty."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        assert_that(m.is_dirty.get()).is_false()
+
+    def test_dirty_after_variable_change(self, qt: QtDriver) -> None:
+        """Menu becomes dirty after Variable change."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        m._count.value = 42
+        assert_that(m.is_dirty.get()).is_true()
+
+    def test_dirty_fields_tracks_which_changed(self, qt: QtDriver) -> None:
+        """dirty_fields returns only the changed fields."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        m._name.value = "changed"
+
+        assert_that(m.dirty_fields).is_equal_to({"_name"})
+
+    def test_dirty_fields_multiple(self, qt: QtDriver) -> None:
+        """dirty_fields returns all changed fields."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        m._name.value = "changed"
+        m._count.value = 42
+
+        assert_that(m.dirty_fields).is_equal_to({"_name", "_count"})
+
+    def test_reset_dirty_clears_all(self, qt: QtDriver) -> None:
+        """reset_dirty() marks all Variables as clean."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        m._name.value = "changed"
+        m._count.value = 42
+        assert_that(m.is_dirty.get()).is_true()
+
+        m.reset_dirty()
+        assert_that(m.is_dirty.get()).is_false()
+        assert_that(m.dirty_fields).is_equal_to(set())
+
+    def test_dirty_after_reset_and_change(self, qt: QtDriver) -> None:
+        """After reset, changing a value makes it dirty again."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        m._name.value = "first"
+        m.reset_dirty()
+
+        m._name.value = "second"
+        assert_that(m.is_dirty.get()).is_true()
+
+    def test_is_dirty_is_observable(self, qt: QtDriver) -> None:
+        """is_dirty is Observable[bool] for reactive bindings."""
+        from observant import Observable
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        assert_that(m.is_dirty).is_instance_of(Observable)
+
+
+# =============================================================================
+# Menu Validation
+# =============================================================================
+
+
+class TestMenuValidation:
+    """Test Menu validation (is_valid, validation_errors, add_validator)."""
+
+    def test_add_validator_to_field(self, qt: QtDriver) -> None:
+        """Menu.add_validator adds validator to field."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        m = qt.track(FileMenu())
+        assert_that(m._name.is_valid.get()).is_false()
+
+    def test_is_valid_aggregates(self, qt: QtDriver) -> None:
+        """Menu.is_valid aggregates from all fields."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+                self.add_validator("_count", "positive", lambda v: None if v > 0 else "Must be positive")
+
+        m = qt.track(FileMenu())
+        assert_that(m.is_valid.get()).is_false()
+
+        m._name.value = "Alice"
+        assert_that(m.is_valid.get()).is_false()  # still invalid (count)
+
+        m._count.value = 5
+        assert_that(m.is_valid.get()).is_true()
+
+    def test_validation_errors_nested_dict(self, qt: QtDriver) -> None:
+        """Menu.validation_errors returns {field: {validator: [errors]}}."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+        m = qt.track(FileMenu())
+        errors = m.validation_errors
+        assert_that(errors).contains_key("_name")
+        assert_that(errors["_name"]).contains_key("required")
+        assert_that(errors["_name"]["required"]).is_equal_to(["Required"])
+
+    def test_validation_error_messages_flat_list(self, qt: QtDriver) -> None:
+        """Menu.validation_error_messages returns flat list of messages."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+                self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Too short")
+
+        m = qt.track(FileMenu())
+        msgs = m.validation_error_messages.get()
+        assert_that(msgs).contains("Required", "Too short")
+
+    def test_is_valid_is_observable(self, qt: QtDriver) -> None:
+        """is_valid is Observable[bool] for reactive bindings."""
+        from observant import Observable
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        assert_that(m.is_valid).is_instance_of(Observable)
+
+    def test_validation_error_messages_is_observable(self, qt: QtDriver) -> None:
+        """validation_error_messages is Observable[list[str]]."""
+        from observant import Observable
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _count: Variable[int] = new(0)
+            action: QAction = new("Action")
+
+        m = qt.track(FileMenu())
+        assert_that(m.validation_error_messages).is_instance_of(Observable)
+
+
+# =============================================================================
+# Menu Lifecycle Hooks
+# =============================================================================
+
+
+class TestMenuLifecycleHooks:
+    """Test Menu lifecycle hooks (on_dirty_changed, on_valid_changed)."""
+
+    def test_on_dirty_changed_fires_on_transition(self, qt: QtDriver) -> None:
+        """on_dirty_changed fires when dirty state transitions."""
+        dirty_states: list[bool] = []
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            @override
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        m = qt.track(FileMenu())
+        m._name.value = "changed"
+
+        assert_that(dirty_states).contains(True)
+
+    def test_on_dirty_changed_fires_on_reset(self, qt: QtDriver) -> None:
+        """on_dirty_changed fires when reset to clean."""
+        dirty_states: list[bool] = []
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            @override
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        m = qt.track(FileMenu())
+        m._name.value = "changed"
+        m.reset_dirty()
+
+        assert_that(dirty_states).is_equal_to([True, False])
+
+    def test_on_valid_changed_fires_on_transition(self, qt: QtDriver) -> None:
+        """on_valid_changed fires when validity state transitions."""
+        valid_states: list[bool] = []
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("")
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+            @override
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        m = qt.track(FileMenu())
+        # Initially invalid, but hook only fires on transitions after setup
+        m._name.value = "valid"  # invalid -> valid
+
+        assert_that(valid_states).contains(True)
+
+    def test_on_valid_changed_fires_both_directions(self, qt: QtDriver) -> None:
+        """on_valid_changed fires when going valid->invalid and invalid->valid."""
+        valid_states: list[bool] = []
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            _name: Variable[str] = new("initial")
+            action: QAction = new("Action")
+
+            def __setup__(self) -> None:
+                self.add_validator("_name", "required", lambda v: None if v else "Required")
+
+            @override
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        m = qt.track(FileMenu())
+        # Starts valid
+        m._name.value = ""  # valid -> invalid
+        m._name.value = "valid again"  # invalid -> valid
+
+        assert_that(valid_states).is_equal_to([False, True])

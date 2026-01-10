@@ -93,7 +93,7 @@ assert_that(w.is_dirty.get()).is_true()
 w.reset_dirty()
 assert_that(w.is_dirty.get()).is_false()
 assert_that(w.is_dirty.get()).is_false()
-assert_that(w.record_state.is_dirty.get()).is_false()
+assert_that(w._qtpie.record_state.is_dirty.get()).is_false()
 ```
 
 ```python

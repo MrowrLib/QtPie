@@ -191,7 +191,7 @@ class Test(Widget[Person]):
     _label: QLabel = new(bind="{name.upper()}")
 
 w = qt.track(Test())
-w.record_state.observable.name.set("alice")
+w._qtpie.record_state.observable.name.set("alice")
 assert_that(w._label.text()).is_equal_to("ALICE")
 ```
 
@@ -205,7 +205,7 @@ class Test(Widget[Counter]):
     _label: QLabel = new(bind="{count * 2}")
 
 w = qt.track(Test())
-w.record_state.observable.count.set(21)
+w._qtpie.record_state.observable.count.set(21)
 assert_that(w._label.text()).is_equal_to("42")
 ```
 

@@ -566,10 +566,10 @@ class TestWindowRecordDecorator:
             pass
 
         w = qt.track(PersonWindow())
-        assert_that(w.record_state.is_dirty.get()).is_false()
+        assert_that(w._qtpie.record_state.is_dirty.get()).is_false()
 
         w.record.name = "Changed"
-        assert_that(w.record_state.is_dirty.get()).is_true()
+        assert_that(w._qtpie.record_state.is_dirty.get()).is_true()
 
     def test_record_via_decorator_with_no_defaults(self, qt: QtDriver) -> None:
         """@window(record=...) works with types that have no default values."""
@@ -625,7 +625,7 @@ class TestWindowRecord:
         w.record = Dog("Buddy", 5)
 
         # record_state gives access to the Variable wrapper
-        state = w.record_state
+        state = w._qtpie.record_state
         assert_that(state.value.name).is_equal_to("Buddy")
         assert_that(state.value.age).is_equal_to(5)
 

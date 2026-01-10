@@ -13,12 +13,12 @@ class PersonEditor(Widget[Person]):
 w = qt.track(PersonEditor())
 
 # Record to widget
-w.record_state.observable.name.set("Charlie")
+w._qtpie.record_state.observable.name.set("Charlie")
 assert_that(w._name.text()).is_equal_to("Charlie")
 
 # Widget to record
 w._name.setText("Typed")
-assert_that(w.record_state.value.name).is_equal_to("Typed")
+assert_that(w._qtpie.record_state.value.name).is_equal_to("Typed")
 ```
 
 ## Explicit Binding
@@ -31,7 +31,7 @@ class PersonEditor(Widget[Person]):
     email_input: QLineEdit = new(bind="email")
 
 w = qt.track(PersonEditor())
-w.record_state.observable.email.set("test@example.com")
+w._qtpie.record_state.observable.email.set("test@example.com")
 assert_that(w.email_input.text()).is_equal_to("test@example.com")
 ```
 
@@ -46,7 +46,7 @@ class PersonEditor(Widget[Person]):
     name_field: QLineEdit = new(bind="name")  # Explicit bind works
 
 w = qt.track(PersonEditor())
-w.record_state.observable.name.set("NoBinding")
+w._qtpie.record_state.observable.name.set("NoBinding")
 assert_that(w._name.text()).is_equal_to("")  # Still empty
 assert_that(w.name_field.text()).is_equal_to("NoBinding")
 ```
@@ -63,8 +63,8 @@ class PersonView(Widget[Person]):
     summary: QLabel = new(bind="{name}, age {age}")
 
 w = qt.track(PersonView())
-w.record_state.observable.name.set("Eve")
-w.record_state.observable.age.set(25)
+w._qtpie.record_state.observable.name.set("Eve")
+w._qtpie.record_state.observable.age.set(25)
 assert_that(w.summary.text()).is_equal_to("Eve, age 25")
 ```
 
@@ -111,7 +111,7 @@ class PersonEditor(Widget[Person]):
     display: QLabel = new(bind="Name: {name}")
 
 w = qt.track(PersonEditor())
-w.record_state.observable.name.set("Alice")
+w._qtpie.record_state.observable.name.set("Alice")
 # {name} resolves to record.name, not _name widget
 assert_that(w.display.text()).is_equal_to("Name: Alice")
 ```

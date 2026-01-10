@@ -23,7 +23,7 @@ from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
 from .state import QtPieState
-from .variable import RecordVariable, Variable, _RequiredBindingDescriptor
+from .variable import Variable, _RequiredBindingDescriptor
 
 
 @dataclass
@@ -121,30 +121,6 @@ class Window[T = None](QMainWindow):
         if not self._qtpie_config.init_wrapped:
             raise TypeError(f"{type(self).__name__} must be decorated with @window")
         super().__init__(*args, **kwargs)
-
-    @property
-    def record_state(self: Window[T]) -> RecordVariable[T] | Variable[T]:
-        """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
-        if not hasattr(self, "_qtpie"):
-            self._qtpie = QtPieState(self)
-        state = self._qtpie
-
-        # If we have a RecordVariable already, return it
-        if state._record is not None:
-            return cast(RecordVariable[T], state._record)
-
-        # Trigger access to create/register the record
-        _ = self.record
-
-        # Check if it's now a RecordVariable (auto-created)
-        if state._record is not None:
-            return cast(RecordVariable[T], state._record)
-
-        # Otherwise it's an explicit Variable declaration
-        if "record" in state.variables:
-            return cast(Variable[T], state.variables["record"])
-
-        raise TypeError(f"{type(self).__name__} has no record. Use Window[YourModel] to enable record access.")
 
     if TYPE_CHECKING:
         # Lie to pyright: say record returns T for field autocomplete

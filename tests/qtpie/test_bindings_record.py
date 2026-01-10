@@ -52,7 +52,7 @@ class TestAutoBindToRecord:
         assert_that(w.name.text()).is_equal_to("")
 
         # Modify record, widget updates
-        w.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
         assert_that(w.name.text()).is_equal_to("Alice")
 
     def test_auto_bind_strips_underscore(self, qt: QtDriver) -> None:
@@ -64,7 +64,7 @@ class TestAutoBindToRecord:
 
         w = qt.track(PersonEditor())
 
-        w.record_state.observable.name.set("Bob")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Bob")  # type: ignore[union-attr]
         assert_that(w._name.text()).is_equal_to("Bob")
 
     def test_auto_bind_multiple_fields(self, qt: QtDriver) -> None:
@@ -80,8 +80,8 @@ class TestAutoBindToRecord:
 
         w = qt.track(PersonEditor())
 
-        w.record_state.observable.name.set("Charlie")  # type: ignore[union-attr]
-        w.record_state.observable.age.set(30)  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Charlie")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.age.set(30)  # type: ignore[union-attr]
 
         assert_that(w._name.text()).is_equal_to("Charlie")
         assert_that(w._age.value()).is_equal_to(30)
@@ -97,7 +97,7 @@ class TestAutoBindToRecord:
 
         # User types in widget
         w._name.setText("Typed")
-        assert_that(w.record_state.value.name).is_equal_to("Typed")
+        assert_that(w._qtpie.record_state.value.name).is_equal_to("Typed")
 
 
 class TestExplicitBind:
@@ -112,7 +112,7 @@ class TestExplicitBind:
 
         w = qt.track(PersonEditor())
 
-        w.record_state.observable.email.set("test@example.com")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.email.set("test@example.com")  # type: ignore[union-attr]
         assert_that(w.email_input.text()).is_equal_to("test@example.com")
 
 
@@ -129,7 +129,7 @@ class TestAutoBindDisabled:
         w = qt.track(PersonEditor())
 
         # Record changes, but widget doesn't update (no binding)
-        w.record_state.observable.name.set("NoBinding")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("NoBinding")  # type: ignore[union-attr]
         assert_that(w._name.text()).is_equal_to("")  # Still empty
 
     def test_explicit_bind_still_works_with_auto_bind_false(self, qt: QtDriver) -> None:
@@ -141,7 +141,7 @@ class TestAutoBindDisabled:
 
         w = qt.track(PersonEditor())
 
-        w.record_state.observable.name.set("Explicit")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Explicit")  # type: ignore[union-attr]
         assert_that(w.name_field.text()).is_equal_to("Explicit")
 
 
@@ -177,7 +177,7 @@ class TestFormatStringBinding:
 
         w = qt.track(PersonView())
 
-        w.record_state.observable.name.set("Diana")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Diana")  # type: ignore[union-attr]
         assert_that(w.display.text()).is_equal_to("Diana")
 
     def test_format_string_with_static_field(self, qt: QtDriver) -> None:
@@ -194,7 +194,7 @@ class TestFormatStringBinding:
         assert_that(w.display.text()).is_equal_to("Profile: ")
 
         # Reactive field change triggers update, static is re-read
-        w.record_state.observable.name.set("Eve")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Eve")  # type: ignore[union-attr]
         assert_that(w.display.text()).is_equal_to("Profile: Eve")
 
     def test_format_string_multiple_fields(self, qt: QtDriver) -> None:
@@ -206,8 +206,8 @@ class TestFormatStringBinding:
 
         w = qt.track(PersonView())
 
-        w.record_state.observable.name.set("Eve")  # type: ignore[union-attr]
-        w.record_state.observable.age.set(25)  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Eve")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.age.set(25)  # type: ignore[union-attr]
 
         assert_that(w.summary.text()).is_equal_to("Eve, age 25")
 
@@ -220,12 +220,12 @@ class TestFormatStringBinding:
 
         w = qt.track(PersonView())
 
-        w.record_state.observable.name.set("Frank")  # type: ignore[union-attr]
-        w.record_state.observable.age.set(40)  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Frank")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.age.set(40)  # type: ignore[union-attr]
         assert_that(w.summary.text()).is_equal_to("Frank (40)")
 
         # Change just age
-        w.record_state.observable.age.set(41)  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.age.set(41)  # type: ignore[union-attr]
         assert_that(w.summary.text()).is_equal_to("Frank (41)")
 
 
@@ -242,7 +242,7 @@ class TestOptionalChaining:
         w = qt.track(EmployeeEditor())
 
         # Set address first
-        w.record_state.observable.address.set(Address(city="NYC"))  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.address.set(Address(city="NYC"))  # type: ignore[union-attr]
         # Re-access to get updated binding
         # Note: The binding was created when address was None, so this test
         # demonstrates that we need dynamic path re-evaluation
@@ -290,7 +290,7 @@ class TestBindingResolutionOrder:
         w = qt.track(PersonEditor())
 
         # Set record name
-        w.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
 
         # The label should show "Name: Alice" (from record.name)
         # NOT "Name: <PySide6.QtWidgets.QLineEdit...>" (from _name widget)
@@ -305,7 +305,7 @@ class TestBindingResolutionOrder:
             display: QLabel = new(bind="{title}: {name}")
 
         w = qt.track(TitledEditor())
-        w.record_state.observable.name.set("Bob")  # type: ignore[union-attr]
+        w._qtpie.record_state.observable.name.set("Bob")  # type: ignore[union-attr]
 
         # title comes from widget.title, name from record.name
         assert_that(w.display.text()).is_equal_to("Static Title: Bob")

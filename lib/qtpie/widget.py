@@ -171,30 +171,6 @@ class Widget[T = None](QWidget):
             # Create a descriptor that will lazily create the record
             cls.record = _RecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
 
-    @property
-    def record_state(self: Widget[T]) -> RecordVariable[T] | Variable[T]:
-        """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
-        if not hasattr(self, "_qtpie"):
-            self._qtpie = QtPieState(self)
-        state = self._qtpie
-
-        # If we have a RecordVariable already, return it
-        if state._record is not None:
-            return cast(RecordVariable[T], state._record)
-
-        # Trigger access to create/register the record
-        _ = self.record
-
-        # Check if it's now a RecordVariable (auto-created)
-        if state._record is not None:
-            return cast(RecordVariable[T], state._record)
-
-        # Otherwise it's an explicit Variable declaration
-        if "record" in state.variables:
-            return cast(Variable[T], state.variables["record"])
-
-        raise TypeError(f"{type(self).__name__} has no record. Use Widget[YourModel] to enable record access.")
-
     if TYPE_CHECKING:
         # Lie to pyright: say record returns T for field autocomplete
         # Runtime: _RecordDescriptor returns RecordVariable which forwards via __getattr__

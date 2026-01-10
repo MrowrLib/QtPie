@@ -84,6 +84,26 @@ class QtPieStateBase:
         for var in self.variables.values():
             var.reset_dirty()
 
+    @property
+    def record_state(self) -> RecordVariable[Any] | Variable[Any]:
+        """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
+        # If we have a RecordVariable already, return it
+        if self._record is not None:
+            return self._record
+
+        # Trigger access to create/register the record
+        _ = self._host.record
+
+        # Check if it's now a RecordVariable (auto-created)
+        if self._record is not None:
+            return self._record
+
+        # Otherwise it's an explicit Variable declaration
+        if "record" in self.variables:
+            return self.variables["record"]
+
+        raise TypeError(f"{type(self._host).__name__} has no record. Use Widget[YourModel] to enable record access.")
+
     def enable_dirty_hook(self) -> None:
         """Enable the on_dirty_changed hook (called after __setup__)."""
 

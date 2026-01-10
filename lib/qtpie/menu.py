@@ -195,10 +195,6 @@ class Menu[T = None](QMenu):
         @record.setter
         def record(self, value: T) -> None: ...
 
-    def __setup__(self) -> None:
-        """Override this method for custom setup after menu initialization."""
-        pass
-
     def _refresh_parent_bindings(self) -> None:
         """Refresh bindings that depend on #parent.
 
@@ -212,6 +208,75 @@ class Menu[T = None](QMenu):
 
         # Re-apply action property bindings now that parent is set
         _apply_action_property_bindings(self, config)
+
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add a named validator to a field."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        self._qtpie.add_validator(field, name, validator)
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.widget_is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Errors: {field: {validator: [errors]}}."""
+        if not hasattr(self, "_qtpie"):
+            return {}
+        return self._qtpie.validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Returns Observable[list[str]] for reactive bindings."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.validation_error_messages
+
+    # -------------------------------------------------------------------------
+    # Dirty Tracking
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any field has changed. Returns Observable[bool] for reactive bindings."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        return self._qtpie.widget_is_dirty
+
+    def reset_dirty(self) -> None:
+        """Mark all fields as clean (Variables and record)."""
+        if not hasattr(self, "_qtpie"):
+            return
+        self._qtpie.reset_dirty()
+        if self._qtpie._record is not None:
+            self._qtpie._record.reset_dirty()
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        if not hasattr(self, "_qtpie"):
+            return set()
+        return self._qtpie.dirty_fields
+
+    # -------------------------------------------------------------------------
+    # Lifecycle Hooks
+    # -------------------------------------------------------------------------
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """Called when dirty state transitions (clean→dirty or dirty→clean)."""
+        pass
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """Called when validity state transitions (valid→invalid or invalid→valid)."""
+        pass
 
 
 def _collect_menu_fields(cls: type[Menu[Any]]) -> None:

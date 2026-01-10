@@ -55,7 +55,7 @@ class TestSingleWidgetBinding:
         editor = w.dog.widget
 
         # The underlying observable should be shared
-        assert w.dog.observable is editor.record_state.observable
+        assert w.dog.observable is editor._qtpie.record_state.observable
 
     def test_variable_change_updates_widget_record(self, qt: QtDriver) -> None:
         """Changing Variable fields updates Widget[T].record."""

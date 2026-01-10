@@ -13,7 +13,7 @@ w = qt.track(TestWidget())
 editor = w.dog.widget
 
 # Shares the same proxy
-assert w.dog.observable is editor.record_state.observable
+assert w.dog.observable is editor._qtpie.record_state.observable
 
 # Change via Variable updates widget
 w.dog.observable.name.set("Buddy")
