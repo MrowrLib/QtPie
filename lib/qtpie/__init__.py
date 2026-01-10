@@ -8,6 +8,7 @@ from .menu import Menu, MenuConfig, Section, Separator, menu
 from .new import new
 from .new_fields import new_fields
 from .ref import Ref, ref
+from .set_widget_repeater import SetWidgetRepeater
 from .slot import slot
 from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
 from .translations import Translatable, set_language, t
@@ -27,6 +28,7 @@ __all__ = [
     "Ref",
     "Section",
     "Separator",
+    "SetWidgetRepeater",
     "Translatable",
     "Variable",
     "Widget",

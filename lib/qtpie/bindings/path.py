@@ -6,14 +6,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
 if TYPE_CHECKING:
     from qtpie.variable import Variable
     from qtpie.widget import Widget
 
 # Return type for binding sources
-type BindingSource = Variable[Any] | Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]
+type BindingSource = Variable[Any] | Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]
 
 
 def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | None:
@@ -54,7 +54,7 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
                     # Check if rest is a property on Variable itself (e.g., validation_error_messages)
                     if hasattr(attr, rest) and not rest.startswith("_"):
                         prop_val = getattr(attr, rest)
-                        if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+                        if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
                             return cast(BindingSource, prop_val)
                     # Nested path into Variable[ComplexType]
                     # Rebuild the path with optional chaining preserved
@@ -81,7 +81,7 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
         view_model = widget._qtpie.view_model  # type: ignore[attr-defined]
         if hasattr(view_model, rest):
             prop_val = getattr(view_model, rest)
-            if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+            if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
                 return cast(BindingSource, prop_val)
 
     # Try widget-level Observable properties (e.g., validation_error_messages)

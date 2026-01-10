@@ -37,6 +37,12 @@ class NewField:
         self.is_list_widget: bool = False
         self.list_widget_type: type | None = None  # The QWidget type inside list[QWidget]
         self.list_format: str | Callable[[Any], str] | None = None  # Format for list items
+        # set[QWidget] support
+        self.is_set_widget: bool = False
+        self.set_widget_type: type | None = None  # The QWidget type inside set[QWidget]
+        self.set_format: str | Callable[[Any], str] | None = None  # Format for set items
+        # Sort parameter for list/dict/set repeaters
+        self.sort: bool | str | Callable[[Any], Any] | None = None
         # Object name and CSS classes
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
@@ -126,6 +132,9 @@ class NewField:
                 # Extract format= for list item formatting (string template or callable)
                 self.list_format = self.kwargs.pop("format", None)
 
+                # Extract sort= for display ordering
+                self.sort = self.kwargs.pop("sort", None)
+
                 # layout=False → exclude from layout
                 layout_kwarg = self.kwargs.pop("layout", None)
                 if layout_kwarg is False:
@@ -175,6 +184,56 @@ class NewField:
                 # Extract signal connections (e.g., triggered="on_select")
                 self._extract_signal_connections_for_type(type_args[0])
 
+                return
+
+        # Handle set[QWidget] - creates a SetWidgetRepeater bound to a set source
+        if origin is set:
+            type_args = get_args(self.field_type)
+            if type_args and self._is_qwidget_class(type_args[0]):
+                self.is_set_widget = True
+                self.set_widget_type = type_args[0]
+
+                # Extract bind= (required for set widgets)
+                self.bind = self.kwargs.pop("bind", None)
+
+                # Extract format= for set item formatting (string template or callable)
+                self.set_format = self.kwargs.pop("format", None)
+
+                # Extract sort= for display ordering
+                self.sort = self.kwargs.pop("sort", None)
+
+                # layout=False → exclude from layout
+                layout_kwarg = self.kwargs.pop("layout", None)
+                if layout_kwarg is False:
+                    self.exclude_from_layout = True
+
+                # Extract label= for form layouts
+                self.label = self.kwargs.pop("label", None)
+
+                # Extract grid= for grid layouts
+                self.grid = self.kwargs.pop("grid", None)
+
+                # Extract name= for objectName (applied to each widget in set)
+                self.object_name = self.kwargs.pop("name", None)
+
+                # Extract classes= for CSS classes (applied to each widget in set)
+                classes = self.kwargs.pop("classes", None)
+                if classes is not None:
+                    self.css_classes = classes
+
+                # Extract widget props (e.g., styleSheet="..." → setStyleSheet)
+                # Use set_widget_type for setter detection
+                self._extract_widget_props(self.set_widget_type)
+
+                # Extract Translatable markers for binding registration
+                self._extract_translatables()
+
+                # Extract signal connections for the child widget type
+                # e.g., on_delete="remove_item" where on_delete is a Signal on set_widget_type
+                assert self.set_widget_type is not None
+                self._extract_signal_connections_for_type(self.set_widget_type)
+
+                # Remaining kwargs go to widget constructor
                 return
 
         # Handle QWidget-specific kwargs only

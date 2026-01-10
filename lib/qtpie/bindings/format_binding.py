@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING, Any
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableSet
 
 from .path import BindingSource, resolve_binding_source
 
@@ -383,15 +383,15 @@ def _get_variable_names(fields: list[_FormatField]) -> set[str]:
     return names
 
 
-def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]]:
+def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]]:
     """Get observables for a variable name (may be nested path).
 
     Returns a list of observables to subscribe to. This includes Observable,
-    ObservableList, and ObservableDict since they all have on_change methods.
+    ObservableList, ObservableDict, and ObservableSet since they all have on_change methods.
     """
     from qtpie.variable import Variable
 
-    result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]] = []
+    result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]] = []
 
     # Try to resolve as binding source
     source = resolve_binding_source(widget, name)
@@ -404,12 +404,16 @@ def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable
                 result.append(obs)
             elif isinstance(obs, ObservableDict):
                 result.append(obs)
+            elif isinstance(obs, ObservableSet):
+                result.append(obs)
             # else: ObservableProxy - doesn't directly fit Observable[Any], skip
         elif isinstance(source, Observable):
             result.append(source)
         elif isinstance(source, ObservableList):
             result.append(source)
         elif isinstance(source, ObservableDict):
+            result.append(source)
+        elif isinstance(source, ObservableSet):
             result.append(source)
         # else: ObservableProxy - for nested paths, skip for now
 
@@ -473,8 +477,8 @@ def create_format_binding(
     root_names = _get_root_names(var_names)
 
     # Collect all observables to subscribe to
-    # Include ObservableList and ObservableDict since they also have on_change
-    all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any]] = []
+    # Include ObservableList, ObservableDict, and ObservableSet since they also have on_change
+    all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]] = []
 
     for name in var_names:
         obs_list = _get_observables_for_name(widget, name)
@@ -490,11 +494,15 @@ def create_format_binding(
                 all_observables.append(obs)
             elif isinstance(obs, ObservableDict):
                 all_observables.append(obs)
+            elif isinstance(obs, ObservableSet):
+                all_observables.append(obs)
         elif isinstance(variable, Observable):
             all_observables.append(variable)
         elif isinstance(variable, ObservableList):
             all_observables.append(variable)
         elif isinstance(variable, ObservableDict):
+            all_observables.append(variable)
+        elif isinstance(variable, ObservableSet):
             all_observables.append(variable)
 
     # Build the compute function
@@ -639,9 +647,15 @@ def get_observable_value(source: BindingSource) -> Any:
         return source.value
     elif isinstance(source, Observable):
         return source.get()
-    elif isinstance(source, ObservableProxy):
+    elif isinstance(source, ObservableList):
+        return source.to_list()
+    elif isinstance(source, ObservableDict):
+        return source.to_dict()
+    elif isinstance(source, ObservableSet):
+        return source.to_set()
+    else:
+        # ObservableProxy
         return source.unwrap()
-    return None
 
 
 def get_static_value(widget: Widget[Any], path: str) -> Any:

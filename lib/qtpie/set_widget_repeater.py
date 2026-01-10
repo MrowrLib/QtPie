@@ -1,4 +1,4 @@
-"""WidgetRepeater - Container that manages repeated widgets bound to list items."""
+"""SetWidgetRepeater - Container that manages repeated widgets bound to set items."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from observant import Observable, ObservableList, ObservableProxy
+from observant import Observable, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from .bindings import bind
@@ -15,10 +15,11 @@ from .variable import Variable
 if TYPE_CHECKING:
     from .widget import Widget
 
-# Regex to find placeholders like {#self}, {#index}, {name}, {age}, {#self.age}
+# Regex to find placeholders like {#self}, {name}, {age}, {#self.age}
+# Note: No {#index} for sets - sets are unordered
 _PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
 
-# Regex to parse handler spec like "method_name(#value, #index, #args)"
+# Regex to parse handler spec like "method_name(#value, #args)"
 _HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
 
 
@@ -27,21 +28,26 @@ def _is_primitive_type(t: type | None) -> bool:
     return t in (str, int, float, bool, type(None))
 
 
-class WidgetRepeater[T](QWidget):
-    """Container that manages repeated widgets bound to list items.
+class SetWidgetRepeater[T](QWidget):
+    """Container that manages repeated widgets bound to set items.
 
-    Creates one widget per list item. Uses granular callbacks (on_insert,
-    on_remove, on_replace, on_clear) to efficiently sync the widget list
-    with the underlying ObservableList.
+    Creates one widget per set item. Uses granular callbacks (on_add,
+    on_remove, on_clear) to efficiently sync the widget list
+    with the underlying ObservableSet.
+
+    Key differences from WidgetRepeater:
+    - No {#index} placeholder (sets have no indices)
+    - Display order: insertion order by default, or sorted if sort= is set
+    - Uses widget_for_item(item) instead of widget_at(index)
 
     Usage:
-        # Variable[list[int], QLineEdit] creates this automatically
-        # Each QLineEdit is bound to one list item
+        # Variable[set[int], QLabel] creates this automatically
+        # Each QLabel is bound to one set item
     """
 
     def __init__(
         self,
-        observable_list: ObservableList[T],
+        observable_set: ObservableSet[T],
         item_type: type | None,
         widget_type: type,
         widget_args: tuple[Any, ...] = (),
@@ -55,30 +61,27 @@ class WidgetRepeater[T](QWidget):
         signal_connections: dict[str, str | Callable[..., Any]] | None = None,
         parent_widget: Widget[Any] | None = None,
     ) -> None:
-        """Initialize the widget repeater.
+        """Initialize the set widget repeater.
 
         Args:
-            observable_list: The ObservableList to sync with.
-            item_type: The type of items in the list (e.g., int, str, Dog).
+            observable_set: The ObservableSet to sync with.
+            item_type: The type of items in the set (e.g., int, str, Dog).
             widget_type: The widget type to create for each item.
             widget_args: Positional args for widget constructor.
             widget_kwargs: Keyword args for widget constructor.
             widget_props: Widget properties to apply via setXxx() after creation.
             bind_expr: Binding expression or callable formatter (default "{#self}").
-            sort: Sorting option - False/None (list order), True (sorted()),
-                  callable (key function), or string method name. Note: {#index} still
-                  refers to the underlying list index, not display position.
+            sort: Sorting option - False/None (insertion order), True (sorted()),
+                  or callable (key function for sorted()).
             layout_type: "vertical" or "horizontal".
             object_name: objectName to set on each created widget.
             css_classes: CSS classes to apply to each created widget.
             signal_connections: Signal connections from child widget to parent handlers.
-                e.g., {"on_delete": "remove_item(#index)"} connects child.on_delete
-                to parent.remove_item with the item index.
             parent_widget: The parent Widget instance for resolving handler methods.
         """
         super().__init__()
 
-        self._obs_list = observable_list
+        self._obs_set = observable_set
         self._item_type = item_type
         self._widget_type = widget_type
         self._widget_args = widget_args
@@ -93,13 +96,11 @@ class WidgetRepeater[T](QWidget):
         self._signal_connections = signal_connections or {}
         self._parent_widget = parent_widget
 
-        # Track: (widget, item_wrapper, index_holder)
+        # Track: item -> (widget, item_wrapper)
         # item_wrapper is Observable[T] for primitives, ObservableProxy[T] for objects
-        # index_holder is [int] so closures can access updated index
-        self._items: list[tuple[QWidget, Observable[Any] | ObservableProxy[Any], list[int]]] = []
-
-        # Track layout ordering for sorted display
-        self._layout_indices: list[int] = []  # Maps layout position -> list index
+        self._entries: dict[T, tuple[QWidget, Observable[Any] | ObservableProxy[Any]]] = {}
+        # Maintain insertion order for layout (like dict's _key_order)
+        self._item_order: list[T] = []
 
         # Setup layout
         if layout_type == "horizontal":
@@ -109,19 +110,15 @@ class WidgetRepeater[T](QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
 
-        # Create initial widgets for existing items
-        for i, item in enumerate(observable_list):
-            self._create_and_add_widget(i, item)
-
-        # Apply sorting if enabled
-        if self._sort:
-            self._rebuild_layout_order()
+        # Create initial widgets for existing items (in display order)
+        for item in self._get_display_order(list(observable_set)):
+            self._item_order.append(item)
+            self._create_and_add_widget(item)
 
         # Subscribe to granular callbacks
-        observable_list.on_insert(self._on_insert)
-        observable_list.on_remove(self._on_remove)
-        observable_list.on_replace(self._on_replace)
-        observable_list.on_clear(self._on_clear)
+        observable_set.on_add(self._on_add)
+        observable_set.on_remove(self._on_remove)
+        observable_set.on_clear(self._on_clear)
 
     def _resolve_sort(
         self,
@@ -140,67 +137,55 @@ class WidgetRepeater[T](QWidget):
             raise AttributeError(f"sort='{sort}' - method not found on {type(parent_widget).__name__}")
         raise AttributeError(f"sort='{sort}' - cannot resolve method name without parent widget")
 
+    def _get_display_order(self, items: list[T]) -> list[T]:
+        """Get items in display order based on sort= setting.
+
+        Args:
+            items: Items to order.
+
+        Returns:
+            Items in display order.
+        """
+        if not self._sort:
+            # No sorting - return as-is (insertion order)
+            return items
+
+        if self._sort is True:
+            # Use default sorted()
+            try:
+                return sorted(items)  # type: ignore[type-var]
+            except TypeError:
+                # Items not comparable - fall back to original order
+                return items
+
+        # Custom key function
+        try:
+            return sorted(items, key=self._sort)  # type: ignore[type-var]
+        except TypeError:
+            return items
+
+    def _find_insert_position(self, item: T) -> int:
+        """Find where to insert a new item in the layout based on sort order."""
+        if not self._sort:
+            # No sorting - append at end
+            return len(self._item_order)
+
+        # Get display order including new item
+        all_items = list(self._item_order) + [item]
+        ordered = self._get_display_order(all_items)
+
+        # Find position of item in ordered list
+        try:
+            return ordered.index(item)
+        except ValueError:
+            return len(self._item_order)
+
     def _create_item_wrapper(self, item: T) -> Observable[Any] | ObservableProxy[Any]:
         """Create the appropriate wrapper for an item."""
         if self._is_primitive:
             return Observable(item)
         else:
             return ObservableProxy(item)
-
-    def _get_display_order(self) -> list[int]:
-        """Get the display order of items (list indices in display order).
-
-        Returns indices into self._items for layout ordering.
-        If sort=False/None, returns natural order [0, 1, 2, ...].
-        If sort=True, returns sorted order using default comparison.
-        If sort=callable, uses it as key function for sorting.
-        """
-        n = len(self._items)
-        if n == 0:
-            return []
-
-        if not self._sort:
-            # No sorting - natural list order
-            return list(range(n))
-
-        # Build (index, item_value) pairs for sorting
-        pairs: list[tuple[int, Any]] = []
-        for i, (_, wrapper, _) in enumerate(self._items):
-            if isinstance(wrapper, Observable):
-                value = wrapper.get()
-            else:
-                value = wrapper.unwrap()
-            pairs.append((i, value))
-
-        # Sort by value
-        if callable(self._sort):
-            # Use provided key function
-            sort_fn = self._sort
-            pairs.sort(key=lambda p: sort_fn(p[1]))  # pyright: ignore[reportOptionalCall, reportUnknownLambdaType]
-        else:
-            # sort=True, use default sorted()
-            pairs.sort(key=lambda p: p[1])
-
-        return [idx for idx, _ in pairs]
-
-    def _rebuild_layout_order(self) -> None:
-        """Rebuild the layout widget order based on current sort settings."""
-        new_order = self._get_display_order()
-
-        # Only rebuild if order changed
-        if new_order == self._layout_indices:
-            return
-
-        self._layout_indices = new_order
-
-        # Remove all widgets from layout (but don't delete them)
-        for widget, _, _ in self._items:
-            self._layout.removeWidget(widget)
-
-        # Re-add widgets in sorted order
-        for list_idx in self._layout_indices:
-            widget = self._items[list_idx][0]
-            self._layout.addWidget(widget)
 
     def _create_widget_for_item(self) -> QWidget:
         """Create a new widget instance."""
@@ -216,7 +201,7 @@ class WidgetRepeater[T](QWidget):
 
             set_classes(widget, list(self._css_classes))
 
-        # Apply widget props (styleSheet="X" → setStyleSheet("X"))
+        # Apply widget props (styleSheet="X" -> setStyleSheet("X"))
         for prop_name, value in self._widget_props.items():
             setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
             setter = getattr(widget, setter_name, None)
@@ -227,21 +212,15 @@ class WidgetRepeater[T](QWidget):
     def _bind_widget_to_item(
         self,
         widget: QWidget,
+        item: T,
         wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
     ) -> None:
-        """Bind a widget to an item wrapper with two-way sync to the list.
-
-        Args:
-            widget: The widget to bind.
-            wrapper: Observable or ObservableProxy wrapping the item.
-            index_holder: Mutable [int] for tracking index changes.
-        """
+        """Bind a widget to an item wrapper."""
         bind_expr = self._bind_expr
 
         # Case 0: Callable formatter - one-way computed binding
         if callable(bind_expr):
-            self._bind_callable_format(widget, wrapper, index_holder, bind_expr)
+            self._bind_callable_format(widget, wrapper, bind_expr)
             return
 
         # Find all placeholders in the bind expression
@@ -251,68 +230,36 @@ class WidgetRepeater[T](QWidget):
         if bind_expr == "{#self}":
             var: Variable[Any] = Variable(wrapper)
             bind(var).to(widget)
-            self._setup_primitive_sync(wrapper, index_holder)
             return
 
         # Case 2: Single property {name} - bind to that property (two-way for objects)
         if len(placeholders) == 1 and bind_expr == f"{{{placeholders[0]}}}":
             prop_name = placeholders[0]
             if prop_name.startswith("#"):
-                # Special placeholder like {#index} - one-way computed
-                self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
+                # Special placeholder like {#self} - one-way computed
+                self._bind_computed_format(widget, wrapper, bind_expr)
             elif isinstance(wrapper, ObservableProxy):
                 # Property on object - get Observable for that property
                 prop_obs: Observable[Any] = getattr(wrapper, prop_name)
                 var = Variable(prop_obs)
                 bind(var).to(widget)
-                # No need for sync - ObservableProxy auto-syncs to object
             else:
                 # Primitive with property access doesn't make sense, fall back to format
-                self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
+                self._bind_computed_format(widget, wrapper, bind_expr)
             return
 
         # Case 3: Format string with multiple placeholders - one-way computed binding
-        self._bind_computed_format(widget, wrapper, index_holder, bind_expr)
-
-    def _setup_primitive_sync(
-        self,
-        wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
-    ) -> None:
-        """Set up sync from primitive Observable back to list."""
-        if isinstance(wrapper, Observable):
-            # Prevent infinite loop: track if we're updating
-            updating = {"active": False}
-
-            def sync_to_list(new_val: Any, idx: list[int] = index_holder, upd: dict[str, bool] = updating) -> None:
-                if upd["active"]:
-                    return
-                upd["active"] = True
-                try:
-                    self._obs_list[idx[0]] = new_val
-                finally:
-                    upd["active"] = False
-
-            wrapper.on_change(sync_to_list)
+        self._bind_computed_format(widget, wrapper, bind_expr)
 
     def _bind_callable_format(
         self,
         widget: QWidget,
         wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
         formatter: Callable[[Any], str],
     ) -> None:
-        """Bind using a callable formatter (one-way only).
-
-        Args:
-            widget: The widget to bind.
-            wrapper: Observable or ObservableProxy wrapping the item.
-            index_holder: Mutable [int] for tracking index changes.
-            formatter: Callable that takes the item and returns a string.
-        """
+        """Bind using a callable formatter (one-way only)."""
         from .bindings.registry import get_binding_registry
 
-        # Get the setter for the widget's default property
         registry = get_binding_registry()
         default_prop = registry.get_default_prop(widget)
         adapter = registry.get(widget, default_prop)
@@ -322,7 +269,6 @@ class WidgetRepeater[T](QWidget):
         setter = adapter.setter
 
         def compute_value() -> str:
-            """Compute the formatted string using the callable."""
             if isinstance(wrapper, Observable):
                 item = wrapper.get()
             else:
@@ -332,14 +278,13 @@ class WidgetRepeater[T](QWidget):
         # Set initial value
         setter(widget, compute_value())
 
-        # Subscribe to changes and update widget
+        # Subscribe to changes
         def on_change(_: Any) -> None:
             setter(widget, compute_value())
 
         if isinstance(wrapper, Observable):
             wrapper.on_change(on_change)
         else:
-            # For ObservableProxy, subscribe to on_change which fires for any field change
             wrapper.on_change(lambda: on_change(None))
 
     def _resolve_nested_property(self, obj: Any, path: str) -> Any:
@@ -348,11 +293,11 @@ class WidgetRepeater[T](QWidget):
         current: Any = obj
         for part in parts:
             if isinstance(current, Observable):
-                current = current.get()  # pyright: ignore[reportUnknownVariableType]
+                current = current.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
             if isinstance(current, ObservableProxy):
                 prop_obs = getattr(current, part, None)  # pyright: ignore[reportUnknownArgumentType]
                 if isinstance(prop_obs, Observable):
-                    current = prop_obs.get()  # pyright: ignore[reportUnknownVariableType]
+                    current = prop_obs.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
                 else:
                     current = prop_obs  # pyright: ignore[reportUnknownVariableType]
             elif hasattr(current, part):  # pyright: ignore[reportUnknownArgumentType]
@@ -360,28 +305,27 @@ class WidgetRepeater[T](QWidget):
             else:
                 return f"<unknown:{path}>"
         if isinstance(current, Observable):
-            current = current.get()  # pyright: ignore[reportUnknownVariableType]
+            current = current.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         return current  # pyright: ignore[reportUnknownVariableType]
 
     def _bind_computed_format(
         self,
         widget: QWidget,
         wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
         format_str: str,
     ) -> None:
         """Bind a computed format string to widget (one-way only).
 
         Supports placeholders:
         - {#self} - the item value
-        - {#index} - the item index
         - {#self.property} - nested property on item
         - {property} - item.property (for objects)
         - {property.nested} - nested property access
+
+        Note: No {#index} - sets are unordered.
         """
         from .bindings.registry import get_binding_registry
 
-        # Get the setter for the widget's default property
         registry = get_binding_registry()
         default_prop = registry.get_default_prop(widget)
         adapter = registry.get(widget, default_prop)
@@ -391,10 +335,8 @@ class WidgetRepeater[T](QWidget):
         setter = adapter.setter
 
         def compute_value() -> str:
-            """Compute the formatted string from current values."""
             result = format_str
 
-            # Find and replace all placeholders
             for match in _PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 full_match = match.group(0)
@@ -405,49 +347,42 @@ class WidgetRepeater[T](QWidget):
                         value = wrapper.get()
                     else:
                         value = wrapper.unwrap()
-                elif placeholder == "#index":
-                    value = index_holder[0]
                 elif placeholder.startswith("#self."):
-                    # Nested property on item: #self.age -> item.age
                     prop_path = placeholder[6:]  # Remove "#self."
                     if isinstance(wrapper, Observable):
                         value = self._resolve_nested_property(wrapper.get(), prop_path)
                     else:
                         value = self._resolve_nested_property(wrapper, prop_path)
                 elif isinstance(wrapper, ObservableProxy):
-                    # Property access on object (may be nested like breed.name)
                     value = self._resolve_nested_property(wrapper, placeholder)
                 else:
                     value = f"<unknown:{placeholder}>"
 
-                result = result.replace(full_match, str(value), 1)  # pyright: ignore[reportUnknownArgumentType]
+                result = result.replace(full_match, str(value), 1)
 
             return result
 
         # Set initial value
         setter(widget, compute_value())
 
-        # Subscribe to changes and update widget
+        # Subscribe to changes
         def on_change(_: Any) -> None:
             setter(widget, compute_value())
 
         if isinstance(wrapper, Observable):
             wrapper.on_change(on_change)
         else:
-            # For ObservableProxy, subscribe to all property observables mentioned
+            # Subscribe to property observables mentioned in format
             for match in _PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
-                # Skip special placeholders
-                if placeholder in ("#self", "#index"):
+                if placeholder in ("#self",):
                     continue
-                # Handle #self.prop
                 if placeholder.startswith("#self."):
                     prop_name = placeholder[6:].split(".")[0]
                     prop_obs: Any = getattr(wrapper, prop_name, None)
                     if isinstance(prop_obs, Observable):
                         prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
                 elif not placeholder.startswith("#"):
-                    # Direct property (may be nested)
                     prop_name = placeholder.split(".")[0]
                     prop_obs = getattr(wrapper, prop_name, None)
                     if isinstance(prop_obs, Observable):
@@ -456,202 +391,150 @@ class WidgetRepeater[T](QWidget):
     def _connect_child_signals(
         self,
         widget: QWidget,
+        item: T,
         wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
     ) -> None:
-        """Connect child widget signals to parent handlers.
-
-        Args:
-            widget: The child widget instance.
-            wrapper: Observable or ObservableProxy wrapping the item.
-            index_holder: Mutable [int] for tracking index changes.
-        """
+        """Connect child widget signals to parent handlers."""
         if not self._signal_connections or self._parent_widget is None:
             return
 
         for signal_name, handler_spec in self._signal_connections.items():
-            # Get the signal from child widget
             signal = getattr(widget, signal_name, None)
             if signal is None:
                 continue
 
-            # Create handler that resolves placeholders at call time
-            handler = self._create_signal_handler(handler_spec, wrapper, index_holder, widget)
+            handler = self._create_signal_handler(handler_spec, item, wrapper, widget)
             signal.connect(handler)
 
     def _create_signal_handler(
         self,
         spec: str | Callable[..., Any],
+        item: T,
         wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
         widget: QWidget,
     ) -> Callable[..., Any]:
         """Create a handler that resolves placeholders at call time.
 
-        Supports:
-        - "method_name" → passes signal's args only (shorthand for method_name(#args))
-        - "method_name()" → passes nothing
-        - "method_name(#args)" → passes signal's args
-        - "method_name(#value, #index, #args)" → passes item, index, then signal args
-
         Placeholders:
-        - #value: The list item value
+        - #value: The set item value
         - #widget: The child widget instance
-        - #index: The list index
         - #args: Spread of signal's own arguments
+
+        Note: No #index - sets are unordered.
         """
         if callable(spec):
             return spec
 
-        # Parse handler spec
         match = _HANDLER_SPEC_RE.match(spec)
         if not match:
             raise ValueError(f"Invalid handler spec: {spec}")
 
         method_name = match.group(1)
-        args_spec = match.group(2)  # May be None (no parens) or "" (empty parens)
+        args_spec = match.group(2)
 
-        # Get the method from parent widget
         if self._parent_widget is None:
             raise ValueError(f"Cannot connect signal: no parent widget for handler '{method_name}'")
 
         parent_method = getattr(self._parent_widget, method_name, None)
         if parent_method is None:
-            raise AttributeError(f"{type(self._parent_widget).__name__} has no method '{method_name}' for signal connection")
+            raise AttributeError(f"{type(self._parent_widget).__name__} has no method '{method_name}'")
         if not callable(parent_method):
             raise AttributeError(f"{type(self._parent_widget).__name__}.{method_name} is not callable")
 
-        # Determine what args to pass
         if args_spec is None:
-            # No parens: "method_name" → pass signal args only (like #args)
             placeholders = ["#args"]
         elif args_spec.strip() == "":
-            # Empty parens: "method_name()" → pass nothing
             placeholders = []
         else:
-            # Parse placeholders: "method_name(#value, #index, #args)"
             placeholders = [p.strip() for p in args_spec.split(",") if p.strip()]
 
-        # Create the handler closure
         def handler(*signal_args: Any) -> Any:
             call_args: list[Any] = []
             for placeholder in placeholders:
                 if placeholder == "#value":
-                    # Get the item value
                     if isinstance(wrapper, Observable):
                         call_args.append(wrapper.get())
                     else:
                         call_args.append(wrapper.unwrap())
                 elif placeholder == "#widget":
                     call_args.append(widget)
-                elif placeholder == "#index":
-                    call_args.append(index_holder[0])
                 elif placeholder == "#args":
-                    # Spread signal args
                     call_args.extend(signal_args)
                 else:
-                    # Unknown placeholder - pass as-is (could be a literal)
                     call_args.append(placeholder)
-
             return parent_method(*call_args)
 
         return handler
 
-    def _create_and_add_widget(self, index: int, item: T) -> None:
+    def _create_and_add_widget(self, item: T, position: int | None = None) -> None:
         """Create a widget for an item and add it to the layout."""
         wrapper = self._create_item_wrapper(item)
         widget = self._create_widget_for_item()
-        index_holder = [index]
 
-        self._bind_widget_to_item(widget, wrapper, index_holder)
-        self._connect_child_signals(widget, wrapper, index_holder)
+        self._bind_widget_to_item(widget, item, wrapper)
+        self._connect_child_signals(widget, item, wrapper)
 
-        # Insert at correct position
-        self._items.insert(index, (widget, wrapper, index_holder))
-        self._layout.insertWidget(index, widget)
+        self._entries[item] = (widget, wrapper)
 
-        # Update indices for items after this one
-        for i in range(index + 1, len(self._items)):
-            self._items[i][2][0] = i
+        if position is not None:
+            self._layout.insertWidget(position, widget)
+        else:
+            self._layout.addWidget(widget)
 
-    def _on_insert(self, index: int, item: T) -> None:
-        """Handle item insertion."""
-        self._create_and_add_widget(index, item)
+    def _on_add(self, item: T) -> None:
+        """Handle item addition."""
         if self._sort:
-            self._rebuild_layout_order()
+            # Find correct position based on sort order
+            position = self._find_insert_position(item)
+            self._item_order.insert(position, item)
+            self._create_and_add_widget(item, position)
+        else:
+            # No sorting - append at end
+            self._item_order.append(item)
+            self._create_and_add_widget(item)
 
-    def _on_remove(self, index: int, item: T) -> None:
+    def _on_remove(self, item: T) -> None:
         """Handle item removal."""
-        if index < len(self._items):
-            widget, _, _ = self._items.pop(index)
+        if item in self._entries:
+            widget, _ = self._entries.pop(item)
+            self._item_order.remove(item)
             self._layout.removeWidget(widget)
             widget.deleteLater()
 
-            # Update indices for remaining items
-            for i in range(index, len(self._items)):
-                self._items[i][2][0] = i
-
-            if self._sort:
-                self._rebuild_layout_order()
-
-    def _on_replace(self, index: int, old_item: T, new_item: T) -> None:
-        """Handle item replacement."""
-        if index < len(self._items):
-            widget, wrapper, index_holder = self._items[index]
-
-            if isinstance(wrapper, Observable):
-                # Primitives: just update the Observable
-                wrapper.set(new_item)
-            else:
-                # Complex objects: remove old widget and create new one
-                self._layout.removeWidget(widget)
-                widget.deleteLater()
-
-                new_wrapper = self._create_item_wrapper(new_item)
-                new_widget = self._create_widget_for_item()
-                self._bind_widget_to_item(new_widget, new_wrapper, index_holder)
-                self._connect_child_signals(new_widget, new_wrapper, index_holder)
-
-                self._items[index] = (new_widget, new_wrapper, index_holder)
-                self._layout.insertWidget(index, new_widget)
-
-            # Re-sort if value changed and sorting is enabled
-            if self._sort:
-                self._rebuild_layout_order()
-
-    def _on_clear(self, removed_items: list[T]) -> None:
-        """Handle list clear."""
-        # Remove all widgets
-        for widget, _, _ in self._items:
+    def _on_clear(self, removed_items: set[T]) -> None:
+        """Handle set clear."""
+        for widget, _ in self._entries.values():
             self._layout.removeWidget(widget)
             widget.deleteLater()
-        self._items.clear()
-        self._layout_indices.clear()
+        self._entries.clear()
+        self._item_order.clear()
 
-    def widget_at(self, index: int) -> QWidget | None:
-        """Get the widget at a specific index."""
-        if 0 <= index < len(self._items):
-            return self._items[index][0]
-        return None
+    def widget_for_item(self, item: T) -> QWidget | None:
+        """Get the widget for a specific item."""
+        entry = self._entries.get(item)
+        return entry[0] if entry else None
 
     def widget_count(self) -> int:
         """Get the number of widgets."""
-        return len(self._items)
+        return len(self._entries)
 
-    # List-like interface so list[QLabel] annotation isn't a total lie
-    def __getitem__(self, index: int) -> QWidget:
-        """Get widget at index (list-like access)."""
-        if index < 0:
-            index = len(self._items) + index
-        if 0 <= index < len(self._items):
-            return self._items[index][0]
-        raise IndexError(f"index {index} out of range")
+    # Set-like interface
+    def __contains__(self, item: T) -> bool:
+        """Check if item has a widget."""
+        return item in self._entries
 
     def __len__(self) -> int:
         """Return number of widgets."""
-        return len(self._items)
+        return len(self._entries)
 
     def __iter__(self):
-        """Iterate over widgets."""
-        for widget, _, _ in self._items:
-            yield widget
+        """Iterate over widgets in display order."""
+        for item in self._item_order:
+            if item in self._entries:
+                yield self._entries[item][0]
+
+    def items(self):
+        """Iterate over (item, widget) pairs in display order."""
+        for item in self._item_order:
+            if item in self._entries:
+                yield item, self._entries[item][0]

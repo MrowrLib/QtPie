@@ -496,7 +496,7 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
     If the expression references variables that don't exist yet (required bindings
     on the parent that haven't been populated), this binding is deferred.
     """
-    from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+    from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
     # Extract the expression from {expr}
     expr = expression.strip()
@@ -532,7 +532,7 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
     # Filter to only those that exist on parent
     # Track both Observable (takes value arg) and others (no arg)
     observables: list[Observable[Any]] = []
-    observable_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
+    observable_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]] = []
     for var_name in potential_vars:
         parent_attr = getattr(parent, var_name, None)
         if parent_attr is None:

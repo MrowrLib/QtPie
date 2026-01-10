@@ -57,6 +57,7 @@ class DictWidgetRepeater[K, V](QWidget):
         widget_kwargs: dict[str, Any] | None = None,
         widget_props: dict[str, Any] | None = None,
         bind_expr: str | Callable[[K, V], str] = "{#key} = {#value}",
+        sort: bool | str | Callable[[K], Any] | None = None,
         layout_type: str = "vertical",
         object_name: str | None = None,
         css_classes: list[str] | None = None,
@@ -74,6 +75,8 @@ class DictWidgetRepeater[K, V](QWidget):
             widget_kwargs: Keyword args for widget constructor.
             widget_props: Widget properties to apply via setXxx() after creation.
             bind_expr: Binding expression or callable(key, value) -> str.
+            sort: Sorting option - False/None (insertion order), True (sorted by key),
+                  or callable (key function for sorting keys).
             layout_type: "vertical" or "horizontal".
             object_name: objectName to set on each created widget.
             css_classes: CSS classes to apply to each created widget.
@@ -92,6 +95,8 @@ class DictWidgetRepeater[K, V](QWidget):
         self._widget_kwargs = widget_kwargs or {}
         self._widget_props = widget_props or {}
         self._bind_expr: str | Callable[[K, V], str] = bind_expr
+        # Resolve sort= string method name to callable
+        self._sort: bool | Callable[[K], Any] | None = self._resolve_sort(sort, parent_widget)
         self._is_key_primitive = _is_primitive_type(key_type)
         self._is_value_primitive = _is_primitive_type(value_type)
         self._object_name = object_name
@@ -105,6 +110,8 @@ class DictWidgetRepeater[K, V](QWidget):
         self._entries: dict[K, tuple[QWidget, Observable[Any] | ObservableProxy[Any], Observable[Any] | ObservableProxy[Any]]] = {}
         # Maintain insertion order for layout
         self._key_order: list[K] = []
+        # Track layout ordering for sorted display
+        self._layout_order: list[K] = []  # Keys in display order
 
         # Setup layout
         if layout_type == "horizontal":
@@ -118,11 +125,32 @@ class DictWidgetRepeater[K, V](QWidget):
         for key, value in observable_dict.items():
             self._create_and_add_widget(key, value)
 
+        # Apply sorting if enabled
+        if self._sort:
+            self._rebuild_layout_order()
+
         # Subscribe to granular callbacks
         observable_dict.on_insert(self._on_insert)
         observable_dict.on_remove(self._on_remove)
         observable_dict.on_replace(self._on_replace)
         observable_dict.on_clear(self._on_clear)
+
+    def _resolve_sort(
+        self,
+        sort: bool | str | Callable[[K], Any] | None,
+        parent_widget: Widget[Any] | None,
+    ) -> bool | Callable[[K], Any] | None:
+        """Resolve sort= parameter, converting string method names to callables."""
+        if sort is None or isinstance(sort, bool) or callable(sort):
+            return sort
+        # String method name - resolve from parent widget
+        # At this point, sort must be a string (only remaining type)
+        if parent_widget is not None:
+            method = getattr(parent_widget, sort, None)
+            if method is not None and callable(method):
+                return method
+            raise AttributeError(f"sort='{sort}' - method not found on {type(parent_widget).__name__}")
+        raise AttributeError(f"sort='{sort}' - cannot resolve method name without parent widget")
 
     def _create_key_wrapper(self, key: K) -> Observable[Any] | ObservableProxy[Any]:
         """Create the appropriate wrapper for a key."""
@@ -137,6 +165,45 @@ class DictWidgetRepeater[K, V](QWidget):
             return Observable(value)
         else:
             return ObservableProxy(value)
+
+    def _get_display_order(self) -> list[K]:
+        """Get the display order of keys.
+
+        If sort=False/None, returns insertion order (_key_order).
+        If sort=True, returns sorted keys using default comparison.
+        If sort=callable, uses it as key function for sorting.
+        """
+        if not self._sort:
+            # No sorting - insertion order
+            return list(self._key_order)
+
+        # Sort keys
+        if callable(self._sort):
+            # Use provided key function
+            return sorted(self._key_order, key=self._sort)  # pyright: ignore[reportCallIssue, reportUnknownVariableType]
+        else:
+            # sort=True, use default sorted()
+            return sorted(self._key_order)  # pyright: ignore[reportArgumentType, reportUnknownVariableType]
+
+    def _rebuild_layout_order(self) -> None:
+        """Rebuild the layout widget order based on current sort settings."""
+        new_order = self._get_display_order()
+
+        # Only rebuild if order changed
+        if new_order == self._layout_order:
+            return
+
+        self._layout_order = new_order
+
+        # Remove all widgets from layout (but don't delete them)
+        for key in self._key_order:
+            widget = self._entries[key][0]
+            self._layout.removeWidget(widget)
+
+        # Re-add widgets in sorted order
+        for key in self._layout_order:
+            widget = self._entries[key][0]
+            self._layout.addWidget(widget)
 
     def _create_widget_for_entry(self) -> QWidget:
         """Create a new widget instance."""
@@ -546,12 +613,16 @@ class DictWidgetRepeater[K, V](QWidget):
     def _on_insert(self, key: K, value: V) -> None:
         """Handle new key insertion."""
         self._create_and_add_widget(key, value)
+        if self._sort:
+            self._rebuild_layout_order()
 
     def _on_remove(self, key: K, value: V) -> None:
         """Handle key removal."""
         if key in self._entries:
             widget, _, _ = self._entries.pop(key)
             self._key_order.remove(key)
+            if key in self._layout_order:
+                self._layout_order.remove(key)
             self._layout.removeWidget(widget)
             widget.deleteLater()
 
@@ -585,6 +656,7 @@ class DictWidgetRepeater[K, V](QWidget):
             widget.deleteLater()
         self._entries.clear()
         self._key_order.clear()
+        self._layout_order.clear()
 
     def widget_for_key(self, key: K) -> QWidget | None:
         """Get the widget for a specific key."""

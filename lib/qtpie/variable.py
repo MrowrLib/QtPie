@@ -6,15 +6,21 @@ from collections.abc import Callable, Iterator
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_origin, overload, override
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ValidatorFn
+from observant import (
+    AnyObservable,
+    Observable,
+    ObservableDict,
+    ObservableList,
+    ObservableProxy,
+    ObservableSet,
+    ValidatorFn,
+)
 
-# Union of all observable types
-type AnyObservable[T] = Observable[T] | ObservableList[T] | ObservableDict[Any, T] | ObservableProxy[T]
-
-# TypeVars for list/dict item types (used in overloads)
+# TypeVars for list/dict/set item types (used in overloads)
 _ItemT = TypeVar("_ItemT")
 _KeyT = TypeVar("_KeyT")
 _ValT = TypeVar("_ValT")
+_SetItemT = TypeVar("_SetItemT")
 
 
 def _is_primitive_type(t: type | None) -> bool:
@@ -61,6 +67,14 @@ def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObs
         else:
             default = deepcopy(default)
         return ObservableDict(default)
+
+    # set[T] → ObservableSet
+    if inner_origin is set:
+        if default is None:
+            default = set()  # pyright: ignore[reportUnknownVariableType]
+        else:
+            default = deepcopy(default)
+        return ObservableSet(default)
 
     # Primitives → Observable
     if _is_primitive_type(inner_type):
@@ -185,6 +199,8 @@ class Variable[T, W = None]:
             return cast(T, self._wrapper.to_list())
         if isinstance(self._wrapper, ObservableDict):
             return cast(T, self._wrapper.to_dict())
+        if isinstance(self._wrapper, ObservableSet):
+            return cast(T, self._wrapper.to_set())
         # Must be ObservableProxy (pyright narrows type)
         return self._wrapper.unwrap()
 
@@ -203,6 +219,11 @@ class Variable[T, W = None]:
             self._wrapper.clear()
             if isinstance(val, dict):
                 self._wrapper.update(cast(dict[Any, Any], val))
+        elif isinstance(self._wrapper, ObservableSet):
+            # Replace entire set
+            self._wrapper.clear()
+            if isinstance(val, set):
+                self._wrapper.update(cast(set[Any], val))
         else:
             # Must be ObservableProxy - replace target object
             self._wrapper.replace_target(val)
@@ -304,8 +325,8 @@ class Variable[T, W = None]:
         return self
 
     # -------------------------------------------------------------------------
-    # List/Dict delegation
-    # Typed overloads provide intellisense for list/dict item types
+    # List/Dict/Set delegation
+    # Typed overloads provide intellisense for list/dict/set item types
     # -------------------------------------------------------------------------
 
     if TYPE_CHECKING:
@@ -315,36 +336,50 @@ class Variable[T, W = None]:
         def insert(self: Variable[list[_ItemT], Any], index: int, item: _ItemT) -> None: ...
         def remove(self: Variable[list[_ItemT], Any], item: _ItemT) -> None: ...
 
-        # List pop
+        # Set-specific methods
+        def add(self: Variable[set[_SetItemT], Any], item: _SetItemT) -> None: ...
+        def discard(self: Variable[set[_SetItemT], Any], item: _SetItemT) -> None: ...
+
+        # Pop overloads (list takes index, set takes nothing)
         @overload
         def pop(self: Variable[list[_ItemT], Any], index: int = -1) -> _ItemT: ...
         @overload
         def pop(self: Variable[dict[_KeyT, _ValT], Any], index: _KeyT) -> _ValT: ...  # pyright: ignore[reportInconsistentOverload]
+        @overload
+        def pop(self: Variable[set[_SetItemT], Any]) -> _SetItemT: ...  # pyright: ignore[reportInconsistentOverload]
         def pop(self, index: Any = -1) -> Any: ...
 
-        # Shared list/dict methods with overloads
+        # Shared list/dict/set methods with overloads
         @overload
         def clear(self: Variable[list[_ItemT], Any]) -> None: ...
         @overload
         def clear(self: Variable[dict[_KeyT, _ValT], Any]) -> None: ...
+        @overload
+        def clear(self: Variable[set[_SetItemT], Any]) -> None: ...
         def clear(self) -> None: ...
 
         @overload
         def __len__(self: Variable[list[_ItemT], Any]) -> int: ...
         @overload
         def __len__(self: Variable[dict[_KeyT, _ValT], Any]) -> int: ...
+        @overload
+        def __len__(self: Variable[set[_SetItemT], Any]) -> int: ...
         def __len__(self) -> int: ...
 
         @overload
         def __iter__(self: Variable[list[_ItemT], Any]) -> Iterator[_ItemT]: ...
         @overload
         def __iter__(self: Variable[dict[_KeyT, _ValT], Any]) -> Iterator[_KeyT]: ...
+        @overload
+        def __iter__(self: Variable[set[_SetItemT], Any]) -> Iterator[_SetItemT]: ...
         def __iter__(self) -> Iterator[Any]: ...
 
         @overload
         def __contains__(self: Variable[list[_ItemT], Any], item: _ItemT) -> bool: ...
         @overload
         def __contains__(self: Variable[dict[_KeyT, _ValT], Any], item: _KeyT) -> bool: ...  # pyright: ignore[reportInconsistentOverload]
+        @overload
+        def __contains__(self: Variable[set[_SetItemT], Any], item: _SetItemT) -> bool: ...  # pyright: ignore[reportInconsistentOverload]
         def __contains__(self, item: Any) -> bool: ...
 
         @overload
@@ -397,36 +432,51 @@ class Variable[T, W = None]:
                 raise TypeError(f"remove() requires ObservableList, got {type(self._wrapper).__name__}")
             self._wrapper.remove(item)
 
+        # Set-specific methods
+        def add(self, item: Any) -> None:
+            """Add item to set (delegates to ObservableSet)."""
+            if not isinstance(self._wrapper, ObservableSet):
+                raise TypeError(f"add() requires ObservableSet, got {type(self._wrapper).__name__}")
+            self._wrapper.add(item)
+
+        def discard(self, item: Any) -> None:
+            """Discard item from set (delegates to ObservableSet)."""
+            if not isinstance(self._wrapper, ObservableSet):
+                raise TypeError(f"discard() requires ObservableSet, got {type(self._wrapper).__name__}")
+            self._wrapper.discard(item)
+
         def pop(self, index: int = -1) -> Any:
-            """Remove and return item at index (delegates to ObservableList)."""
-            if not isinstance(self._wrapper, ObservableList):
-                raise TypeError(f"pop() requires ObservableList, got {type(self._wrapper).__name__}")
-            return self._wrapper.pop(index)
+            """Remove and return item (delegates to ObservableList or ObservableSet)."""
+            if isinstance(self._wrapper, ObservableList):
+                return self._wrapper.pop(index)
+            if isinstance(self._wrapper, ObservableSet):
+                return self._wrapper.pop()  # Sets don't take an index
+            raise TypeError(f"pop() requires ObservableList/ObservableSet, got {type(self._wrapper).__name__}")
 
         def clear(self) -> None:
-            """Remove all items (delegates to ObservableList or ObservableDict)."""
-            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+            """Remove all items (delegates to ObservableList, ObservableDict, or ObservableSet)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict, ObservableSet)):
                 self._wrapper.clear()
             else:
-                raise TypeError(f"clear() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+                raise TypeError(f"clear() requires ObservableList/ObservableDict/ObservableSet, got {type(self._wrapper).__name__}")
 
         def __len__(self) -> int:
-            """Return length (delegates to ObservableList or ObservableDict)."""
-            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+            """Return length (delegates to ObservableList, ObservableDict, or ObservableSet)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict, ObservableSet)):
                 return len(self._wrapper)
-            raise TypeError(f"len() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+            raise TypeError(f"len() requires ObservableList/ObservableDict/ObservableSet, got {type(self._wrapper).__name__}")
 
         def __iter__(self) -> Iterator[Any]:
-            """Iterate (delegates to ObservableList or ObservableDict)."""
-            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+            """Iterate (delegates to ObservableList, ObservableDict, or ObservableSet)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict, ObservableSet)):
                 return iter(self._wrapper)
-            raise TypeError(f"iter() requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+            raise TypeError(f"iter() requires ObservableList/ObservableDict/ObservableSet, got {type(self._wrapper).__name__}")
 
         def __contains__(self, item: Any) -> bool:
-            """Check membership (delegates to ObservableList or ObservableDict)."""
-            if isinstance(self._wrapper, (ObservableList, ObservableDict)):
+            """Check membership (delegates to ObservableList, ObservableDict, or ObservableSet)."""
+            if isinstance(self._wrapper, (ObservableList, ObservableDict, ObservableSet)):
                 return item in self._wrapper
-            raise TypeError(f"'in' requires ObservableList/ObservableDict, got {type(self._wrapper).__name__}")
+            raise TypeError(f"'in' requires ObservableList/ObservableDict/ObservableSet, got {type(self._wrapper).__name__}")
 
         def __getitem__(self, key: Any) -> Any:
             """Get item at index/key (delegates to ObservableList or ObservableDict)."""
@@ -720,9 +770,10 @@ class _VariableDescriptor[T]:
                     type_args = typing_get_args(self._inner_type)
                     item_type = type_args[0] if type_args else None
 
-                    # Extract bind= from widget_kwargs for WidgetRepeater
+                    # Extract bind= and sort= from widget_kwargs for WidgetRepeater
                     widget_kwargs_copy = dict(self._widget_kwargs)
                     bind_expr = widget_kwargs_copy.pop("bind", "{#self}")
+                    sort_key = widget_kwargs_copy.pop("sort", None)
 
                     # Create WidgetRepeater instead of single widget
                     widget_instance = WidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
@@ -732,6 +783,7 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
+                        sort=sort_key,
                         object_name=self._object_name or self._name,
                         css_classes=self._css_classes,
                     )
@@ -745,9 +797,10 @@ class _VariableDescriptor[T]:
                     key_type = type_args[0] if len(type_args) > 0 else None
                     value_type = type_args[1] if len(type_args) > 1 else None
 
-                    # Extract bind= from widget_kwargs for DictWidgetRepeater
+                    # Extract bind= and sort= from widget_kwargs for DictWidgetRepeater
                     widget_kwargs_copy = dict(self._widget_kwargs)
                     bind_expr = widget_kwargs_copy.pop("bind", "{#key} = {#value}")
+                    sort_key = widget_kwargs_copy.pop("sort", None)
 
                     # Create DictWidgetRepeater instead of single widget
                     widget_instance = DictWidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
@@ -758,6 +811,33 @@ class _VariableDescriptor[T]:
                         widget_args=self._widget_args,
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
+                        sort=sort_key,
+                        object_name=self._object_name or self._name,
+                        css_classes=self._css_classes,
+                    )
+                elif inner_origin is set:
+                    from typing import get_args as typing_get_args
+
+                    from .set_widget_repeater import SetWidgetRepeater
+
+                    # Extract item type T from set[T]
+                    type_args = typing_get_args(self._inner_type)
+                    item_type = type_args[0] if type_args else None
+
+                    # Extract bind= and sort= from widget_kwargs for SetWidgetRepeater
+                    widget_kwargs_copy = dict(self._widget_kwargs)
+                    bind_expr = widget_kwargs_copy.pop("bind", "{#self}")
+                    sort_key = widget_kwargs_copy.pop("sort", None)
+
+                    # Create SetWidgetRepeater instead of single widget
+                    widget_instance = SetWidgetRepeater(  # pyright: ignore[reportUnknownVariableType]
+                        observable_set=wrapper,  # type: ignore[arg-type]
+                        item_type=item_type,
+                        widget_type=self._widget_type,
+                        widget_args=self._widget_args,
+                        widget_kwargs=widget_kwargs_copy,
+                        bind_expr=bind_expr,
+                        sort=sort_key,
                         object_name=self._object_name or self._name,
                         css_classes=self._css_classes,
                     )

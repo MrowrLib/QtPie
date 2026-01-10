@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import (
     QFormLayout,
     QGridLayout,
@@ -774,20 +774,21 @@ def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # 
 
 
 def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Create WidgetRepeater instances for list[QWidget] fields.
+    """Create WidgetRepeater/SetWidgetRepeater instances for list[QWidget]/set[QWidget] fields.
 
-    For each field with annotation like `list[QLabel]` and `bind="some_path"`,
-    resolves the bind path to get the source list and creates a WidgetRepeater.
+    For each field with annotation like `list[QLabel]` or `set[QLabel]` and `bind="some_path"`,
+    resolves the bind path to get the source collection and creates an appropriate repeater.
 
     The source can be:
-    - Variable[list[T]] → uses its ObservableList (reactive)
-    - ObservableList directly → uses it (reactive)
-    - Observable[list] → wraps value in ObservableList (one-time)
-    - Plain list → wraps in ObservableList (one-time)
+    - Variable[list[T]/set[T]] → uses its ObservableList/ObservableSet (reactive)
+    - ObservableList/ObservableSet directly → uses it (reactive)
+    - Observable[list/set] → wraps value in ObservableList/ObservableSet (one-time)
+    - Plain list/set → wraps in ObservableList/ObservableSet (one-time)
     """
-    from observant import Observable, ObservableDict, ObservableList
+    from observant import Observable, ObservableDict, ObservableList, ObservableSet
 
     from .bindings import resolve_binding_source
+    from .set_widget_repeater import SetWidgetRepeater
     from .variable import Variable
     from .widget_repeater import WidgetRepeater
 
@@ -832,6 +833,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_kwargs=field.kwargs,
                     widget_props=field.widget_props,
                     bind_expr=plain_bind_expr,
+                    sort=field.sort,
                     object_name=field.object_name or name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
@@ -854,6 +856,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_kwargs=field.kwargs,
                     widget_props=field.widget_props,
                     bind_expr=bind_expr_dict,
+                    sort=field.sort,
                     object_name=field.object_name or name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
@@ -887,6 +890,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 widget_kwargs=field.kwargs,
                 widget_props=field.widget_props,
                 bind_expr=bind_expr_dict,
+                sort=field.sort,
                 object_name=field.object_name or name,
                 css_classes=field.css_classes,
                 signal_connections=field.signal_connections,
@@ -932,6 +936,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_kwargs=field.kwargs,
             widget_props=field.widget_props,
             bind_expr=bind_expr,
+            sort=field.sort,
             object_name=field.object_name or name,
             css_classes=field.css_classes,
             signal_connections=field.signal_connections,
@@ -940,6 +945,129 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
 
         # Store the repeater on the widget
         setattr(widget, name, repeater)
+
+    # Handle set[QWidget] fields
+    for name, field in config.fields.items():
+        if not field.is_set_widget:
+            continue
+
+        # set_widget_type is always set when is_set_widget is True
+        assert field.set_widget_type is not None
+
+        if field.bind is None:
+            raise ValueError(f"set[{field.set_widget_type.__name__}] field '{name}' requires bind='...'")
+
+        # Resolve the bind path to get the source
+        source = resolve_binding_source(widget, field.bind)
+
+        # Convert source to ObservableSet
+        obs_set: ObservableSet[Any]
+        item_type: type | None = None
+
+        # If source is None, check if it's a plain set attribute
+        if source is None:
+            # Try to get raw attribute (handles plain set fields)
+            bind_path = field.bind.lstrip("_")
+            raw_attr = None
+            if hasattr(widget, bind_path):
+                raw_attr = getattr(widget, bind_path)
+            elif hasattr(widget, f"_{bind_path}"):
+                raw_attr = getattr(widget, f"_{bind_path}")
+
+            if isinstance(raw_attr, set):
+                # Wrap plain set in ObservableSet
+                obs_set = ObservableSet(cast(set[Any], raw_attr))
+                setattr(widget, field.bind, obs_set)  # Replace with observable version
+                # Skip to repeater creation
+                plain_bind_expr: Any = field.set_format if field.set_format is not None else "{#self}"
+                set_repeater = SetWidgetRepeater(
+                    observable_set=obs_set,
+                    item_type=item_type,
+                    widget_type=field.set_widget_type,
+                    widget_args=field.args,
+                    widget_kwargs=field.kwargs,
+                    widget_props=field.widget_props,
+                    bind_expr=plain_bind_expr,
+                    sort=field.sort,
+                    object_name=field.object_name or name,
+                    css_classes=field.css_classes,
+                    signal_connections=field.signal_connections,
+                    parent_widget=widget,
+                )
+                setattr(widget, name, set_repeater)
+                continue
+            else:
+                raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
+
+        # Get the underlying observable from Variable or use source directly
+        wrapper: Any = None
+        if isinstance(source, Variable):
+            wrapper = source.observable
+        else:
+            wrapper = source
+
+        # Handle ObservableSet -> SetWidgetRepeater
+        if isinstance(wrapper, ObservableSet):
+            # Determine bind expression: use format= if provided, else "{#self}"
+            set_bind_expr: Any = field.set_format if field.set_format is not None else "{#self}"
+
+            set_repeater: SetWidgetRepeater[Any] = SetWidgetRepeater(
+                observable_set=wrapper,  # pyright: ignore[reportUnknownArgumentType]
+                item_type=None,  # Could extract from type hints if needed
+                widget_type=field.set_widget_type,
+                widget_args=field.args,
+                widget_kwargs=field.kwargs,
+                widget_props=field.widget_props,
+                bind_expr=set_bind_expr,
+                sort=field.sort,
+                object_name=field.object_name or name,
+                css_classes=field.css_classes,
+                signal_connections=field.signal_connections,
+                parent_widget=widget,
+            )
+            setattr(widget, name, set_repeater)
+            continue
+
+        # Handle Observable containing a set - create synced ObservableSet
+        if isinstance(wrapper, Observable):
+            val: Any = wrapper.get()  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(val, set):
+                obs_set = ObservableSet(cast(set[Any], val))
+
+                # Sync: when Observable changes, update ObservableSet
+                def make_set_sync(obs: Observable[Any], target: ObservableSet[Any]) -> None:
+                    def on_source_change(new_val: Any) -> None:
+                        if isinstance(new_val, set):
+                            target.clear()
+                            target.update(cast(set[Any], new_val))
+
+                    obs.on_change(on_source_change)
+
+                make_set_sync(wrapper, obs_set)  # pyright: ignore[reportUnknownArgumentType]
+
+                # Determine bind expression
+                set_bind_expr = field.set_format if field.set_format is not None else "{#self}"
+
+                set_repeater = SetWidgetRepeater(
+                    observable_set=obs_set,
+                    item_type=item_type,
+                    widget_type=field.set_widget_type,
+                    widget_args=field.args,
+                    widget_kwargs=field.kwargs,
+                    widget_props=field.widget_props,
+                    bind_expr=set_bind_expr,
+                    sort=field.sort,
+                    object_name=field.object_name or name,
+                    css_classes=field.css_classes,
+                    signal_connections=field.signal_connections,
+                    parent_widget=widget,
+                )
+                setattr(widget, name, set_repeater)
+                continue
+            else:
+                raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected set")  # pyright: ignore[reportUnknownArgumentType]
+        else:
+            raise TypeError(f"bind='{field.bind}' resolved to {type(wrapper).__name__}, expected Variable[set[...]] or ObservableSet")
 
 
 def _make_bound_setter(setter: Callable[[Any, Any], None], widget: QWidget) -> Callable[[Any], None]:
