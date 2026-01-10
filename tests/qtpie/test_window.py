@@ -10,7 +10,7 @@ from assertpy import assert_that
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
-from qtpie import Menu, Variable, Window, menu, new, window
+from qtpie import Menu, Variable, Widget, Window, menu, new, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -2283,3 +2283,31 @@ class TestWindowValidateParameter:
 
         w._name.value = "test"
         assert_that(w._name.is_valid.get()).is_true()
+
+
+class TestWindowRefWithRequiredBinding:
+    """Test ref() with required bindings in nested Window/Widget composition."""
+
+    def test_ref_with_literal_text_and_required_binding(self, qt: QtDriver) -> None:
+        """ref() with literal text + expression works with required bindings."""
+        from dataclasses import dataclass
+
+        from qtpie import ref
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @widget
+        class DogDisplay(Widget):
+            dog: Variable[Dog]
+            name_label: QLabel = new(text=ref("Dog name: {dog.name}"))
+
+        @window(title="Test", record=Dog("Max", 7))
+        class MainWindow(Window[Dog]):
+            dog_display: DogDisplay = new(dog="record")
+
+        w = qt.track(MainWindow())
+        # The ref should resolve with literal text preserved
+        assert_that(w.dog_display.name_label.text()).is_equal_to("Dog name: Max")

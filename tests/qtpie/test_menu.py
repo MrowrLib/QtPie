@@ -1056,3 +1056,31 @@ class TestMenuLifecycleHooks:
         m._name.value = "valid again"  # invalid -> valid
 
         assert_that(valid_states).is_equal_to([False, True])
+
+
+class TestMenuRefWithRequiredBinding:
+    """Test ref() with required bindings in Menu."""
+
+    def test_ref_with_literal_text_and_required_binding(self, qt: QtDriver) -> None:
+        """ref() with literal text + expression works with required bindings."""
+        from dataclasses import dataclass
+
+        from qtpie import ref
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @menu(text="&Dog")
+        class DogMenu(Menu):
+            dog: Variable[Dog]
+            dog_action: QAction = new(text=ref("Dog name: {dog.name}"))
+
+        @window(title="Test", record=Dog("Buddy", 4))
+        class MainWindow(Window[Dog]):
+            dog_menu: DogMenu = new(dog="record")
+
+        w = qt.track(MainWindow())
+        # The ref should resolve with literal text preserved
+        assert_that(w.dog_menu.dog_action.text()).is_equal_to("Dog name: Buddy")

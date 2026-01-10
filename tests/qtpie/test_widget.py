@@ -487,3 +487,31 @@ class TestWidgetDecoratorAliases:
 
         w = qt.track(MyWidget())
         assert_that(w.styleSheet()).is_equal_to("background: yellow;")
+
+
+class TestWidgetRefWithRequiredBinding:
+    """Test ref() with required bindings in nested Widget composition."""
+
+    def test_ref_with_literal_text_and_required_binding(self, qt: QtDriver) -> None:
+        """ref() with literal text + expression works with required bindings."""
+        from dataclasses import dataclass
+
+        from qtpie import ref
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @widget
+        class DogDisplay(Widget):
+            dog: Variable[Dog]
+            name_label: QLabel = new(text=ref("Dog name: {dog.name}"))
+
+        @widget(record=Dog("Rover", 5))
+        class ParentWidget(Widget[Dog]):
+            dog_display: DogDisplay = new(dog="record")
+
+        parent = qt.track(ParentWidget())
+        # The ref should resolve with literal text preserved
+        assert_that(parent.dog_display.name_label.text()).is_equal_to("Dog name: Rover")
