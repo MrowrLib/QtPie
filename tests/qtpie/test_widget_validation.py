@@ -133,7 +133,7 @@ class TestWidgetValidation:
         assert_that(errors["_age"]["positive"]).is_equal_to(["Must be positive"])
 
     def test_widget_validation_error_messages_flat(self, qt: QtDriver) -> None:
-        """Widget.validation_error_messages returns flat list."""
+        """Widget.validation_error_messages returns Observable[list[str]]."""
 
         @widget
         class TestWidget(Widget):
@@ -144,7 +144,7 @@ class TestWidgetValidation:
                 self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Too short")
 
         w = qt.track(TestWidget())
-        msgs = w.validation_error_messages
+        msgs = w.validation_error_messages.get()
 
         assert_that(msgs).contains("Required", "Too short")
 

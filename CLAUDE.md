@@ -581,11 +581,11 @@ class DirtyExample(Widget):
 
     def check_dirty(self):
         # Check if any field changed
-        if self.view_model.is_dirty:
-            print(f"Changed fields: {self.view_model.dirty_fields}")
+        if self.is_dirty.get():
+            print(f"Changed fields: {self.dirty_fields}")
 
         # Reset all to clean
-        self.view_model.reset_dirty()
+        self.reset_dirty()
 
     # Optional lifecycle hook - fires on state transitions only
     def on_dirty_changed(self, is_dirty: bool) -> None:

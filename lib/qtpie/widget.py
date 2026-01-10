@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
-from .state import QtPieState, QtPieViewModel
+from .state import QtPieState
 from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 
 
@@ -172,13 +172,6 @@ class Widget[T = None](QWidget):
             cls.record = _RecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
 
     @property
-    def view_model(self) -> QtPieViewModel:
-        """Access only the Variable fields of this widget."""
-        if not hasattr(self, "_qtpie"):
-            self._qtpie = QtPieState(self)
-        return self._qtpie.view_model
-
-    @property
     def record_state(self: Widget[T]) -> RecordVariable[T] | Variable[T]:
         """Access the RecordVariable/Variable wrapper for .is_dirty, .value, .observable."""
         if not hasattr(self, "_qtpie"):
@@ -246,6 +239,13 @@ class Widget[T = None](QWidget):
             self._qtpie._record.reset_dirty()
 
     @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        if not hasattr(self, "_qtpie"):
+            return set()
+        return self._qtpie.dirty_fields
+
+    @property
     def is_valid(self) -> Observable[bool]:
         """Check if all fields are valid. Returns Observable[bool] for reactive bindings.
 
@@ -263,11 +263,11 @@ class Widget[T = None](QWidget):
         return self._qtpie.validation_errors
 
     @property
-    def validation_error_messages(self) -> list[str]:
-        """Flat list of all error messages."""
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Returns Observable[list[str]] for reactive bindings."""
         if not hasattr(self, "_qtpie"):
-            return []
-        return self._qtpie.validation_error_messages.get()
+            self._qtpie = QtPieState(self)
+        return self._qtpie.validation_error_messages
 
     # -------------------------------------------------------------------------
     # Lifecycle Hooks

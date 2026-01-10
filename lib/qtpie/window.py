@@ -22,7 +22,7 @@ from qtpy.QtWidgets import (
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
-from .state import QtPieState, QtPieViewModel
+from .state import QtPieState
 from .variable import RecordVariable, Variable, _RequiredBindingDescriptor
 
 
@@ -121,13 +121,6 @@ class Window[T = None](QMainWindow):
         if not self._qtpie_config.init_wrapped:
             raise TypeError(f"{type(self).__name__} must be decorated with @window")
         super().__init__(*args, **kwargs)
-
-    @property
-    def view_model(self) -> QtPieViewModel:
-        """Access only the Variable fields of this window."""
-        if not hasattr(self, "_qtpie"):
-            self._qtpie = QtPieState(self)
-        return self._qtpie.view_model
 
     @property
     def record_state(self: Window[T]) -> RecordVariable[T] | Variable[T]:
@@ -230,6 +223,13 @@ class Window[T = None](QMainWindow):
             self._qtpie._record.reset_dirty()
 
     @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        if not hasattr(self, "_qtpie"):
+            return set()
+        return self._qtpie.dirty_fields
+
+    @property
     def is_valid(self) -> Observable[bool]:
         """Check if all fields are valid. Returns Observable[bool] for reactive bindings.
 
@@ -247,11 +247,11 @@ class Window[T = None](QMainWindow):
         return self._qtpie.validation_errors
 
     @property
-    def validation_error_messages(self) -> list[str]:
-        """Flat list of all error messages."""
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Flat list of all error messages. Returns Observable[list[str]] for reactive bindings."""
         if not hasattr(self, "_qtpie"):
-            return []
-        return self._qtpie.validation_error_messages.get()
+            self._qtpie = QtPieState(self)
+        return self._qtpie.validation_error_messages
 
 
 def _collect_fields(cls: type[Window[Any]]) -> None:

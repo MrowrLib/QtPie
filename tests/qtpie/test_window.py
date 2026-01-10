@@ -662,7 +662,7 @@ class TestWindowViewModel:
         w._name = "updated"
 
         # view_model provides access to Variables
-        vm = w.view_model
+        vm = w._qtpie.view_model
         assert_that(vm._count.value).is_equal_to(42)
         assert_that(vm._name.value).is_equal_to("updated")
 
@@ -1469,7 +1469,7 @@ class TestWindowDirtyTracking:
             _name: Variable[str] = new("")
 
         w = qt.track(MainWindow())
-        assert_that(w.view_model.is_dirty).is_false()
+        assert_that(w.is_dirty).is_false()
 
     def test_dirty_after_change(self, qt: QtDriver) -> None:
         """view_model becomes dirty after Variable change."""
@@ -1480,7 +1480,7 @@ class TestWindowDirtyTracking:
 
         w = qt.track(MainWindow())
         w._name.value = "changed"
-        assert_that(w.view_model.is_dirty).is_true()
+        assert_that(w.is_dirty).is_true()
 
     def test_dirty_fields_tracks_which_changed(self, qt: QtDriver) -> None:
         """dirty_fields() returns only the changed fields."""
@@ -1493,7 +1493,7 @@ class TestWindowDirtyTracking:
         w = qt.track(MainWindow())
         w._name.value = "changed"
 
-        assert_that(w.view_model.dirty_fields).is_equal_to({"_name"})
+        assert_that(w.dirty_fields).is_equal_to({"_name"})
 
     def test_dirty_fields_multiple(self, qt: QtDriver) -> None:
         """dirty_fields() returns all changed fields."""
@@ -1507,7 +1507,7 @@ class TestWindowDirtyTracking:
         w._name.value = "changed"
         w._count.value = 42
 
-        assert_that(w.view_model.dirty_fields).is_equal_to({"_name", "_count"})
+        assert_that(w.dirty_fields).is_equal_to({"_name", "_count"})
 
     def test_reset_dirty_clears_all(self, qt: QtDriver) -> None:
         """reset_dirty() marks all Variables as clean."""
@@ -1520,11 +1520,11 @@ class TestWindowDirtyTracking:
         w = qt.track(MainWindow())
         w._name.value = "changed"
         w._count.value = 42
-        assert_that(w.view_model.is_dirty).is_true()
+        assert_that(w.is_dirty).is_true()
 
-        w.view_model.reset_dirty()
-        assert_that(w.view_model.is_dirty).is_false()
-        assert_that(w.view_model.dirty_fields).is_equal_to(set())
+        w.reset_dirty()
+        assert_that(w.is_dirty).is_false()
+        assert_that(w.dirty_fields).is_equal_to(set())
 
     def test_dirty_after_reset_and_change(self, qt: QtDriver) -> None:
         """After reset, changing a value makes it dirty again."""
@@ -1535,10 +1535,10 @@ class TestWindowDirtyTracking:
 
         w = qt.track(MainWindow())
         w._name.value = "first"
-        w.view_model.reset_dirty()
+        w.reset_dirty()
 
         w._name.value = "second"
-        assert_that(w.view_model.is_dirty).is_true()
+        assert_that(w.is_dirty).is_true()
 
 
 class TestWindowOnDirtyChangedHook:
@@ -1575,7 +1575,7 @@ class TestWindowOnDirtyChangedHook:
 
         w = qt.track(MainWindow())
         w._name.value = "changed"
-        w.view_model.reset_dirty()
+        w.reset_dirty()
 
         assert_that(dirty_states).is_equal_to([True, False])
 
@@ -1609,7 +1609,7 @@ class TestWindowOnDirtyChangedHook:
         w = qt.track(MainWindow())
         w._name.value = "changed"
         # Should not raise
-        assert_that(w.view_model.is_dirty).is_true()
+        assert_that(w.is_dirty).is_true()
 
 
 # =============================================================================
@@ -1685,7 +1685,7 @@ class TestWindowValidation:
                 self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Too short")
 
         w = qt.track(MainWindow())
-        msgs = w.validation_error_messages
+        msgs = w.validation_error_messages.get()
 
         assert_that(msgs).contains("Required", "Too short")
 
@@ -1813,7 +1813,7 @@ class TestWindowIsDirty:
         assert_that(w.is_dirty.get()).is_true()
 
         # Reset Variables
-        w.view_model.reset_dirty()
+        w.reset_dirty()
         assert_that(w.is_dirty.get()).is_false()
 
         # Modify record
@@ -1826,7 +1826,7 @@ class TestWindowIsDirty:
         @window(title="Test")
         class MainWindow(Window):
             _name: Variable[str] = new("")
-            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+            _save_btn: QPushButton = new("Save", enabled="is_dirty")
 
         w = qt.track(MainWindow())
 
@@ -1851,7 +1851,7 @@ class TestWindowIsDirty:
         w._name.value = "changed"
         assert_that(dirty_changes).contains(True)
 
-        w.view_model.reset_dirty()
+        w.reset_dirty()
         assert_that(dirty_changes).contains(False)
 
 

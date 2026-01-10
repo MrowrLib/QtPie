@@ -325,13 +325,13 @@ class TestListWidgetAggregatedValidation:
         w.text2.value = "world"
         assert_that(w.errors.layout().count()).is_equal_to(0)
 
-    def test_bind_via_view_model_path(self, qt: QtDriver) -> None:
-        """list[QLabel] can bind via view_model.validation_error_messages path."""
+    def test_bind_via_validation_error_messages(self, qt: QtDriver) -> None:
+        """list[QLabel] can bind via validation_error_messages path."""
 
         @widget
         class MyWidget(Widget):
             text: Variable[str] = new("")
-            errors: list[QLabel] = new(bind="view_model.validation_error_messages")
+            errors: list[QLabel] = new(bind="validation_error_messages")
 
             def __setup__(self) -> None:
                 self.text.add_validator("required", lambda v: "Required" if not v else None)

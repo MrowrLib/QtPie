@@ -23,7 +23,7 @@ class TestViewModelDirtyTracking:
             _name: Variable[str] = new("")
 
         w = qt.track(MyWidget())
-        assert_that(w.view_model.is_dirty.get()).is_false()
+        assert_that(w.is_dirty.get()).is_false()
 
     def test_dirty_after_change(self, qt: QtDriver) -> None:
         """view_model becomes dirty after Variable change."""
@@ -34,7 +34,7 @@ class TestViewModelDirtyTracking:
 
         w = qt.track(MyWidget())
         w._name.value = "changed"
-        assert_that(w.view_model.is_dirty.get()).is_true()
+        assert_that(w.is_dirty.get()).is_true()
 
     def test_dirty_fields_tracks_which_changed(self, qt: QtDriver) -> None:
         """dirty_fields() returns only the changed fields."""
@@ -47,7 +47,7 @@ class TestViewModelDirtyTracking:
         w = qt.track(MyWidget())
         w._name.value = "changed"
 
-        assert_that(w.view_model.dirty_fields).is_equal_to({"_name"})
+        assert_that(w.dirty_fields).is_equal_to({"_name"})
 
     def test_dirty_fields_multiple(self, qt: QtDriver) -> None:
         """dirty_fields() returns all changed fields."""
@@ -61,7 +61,7 @@ class TestViewModelDirtyTracking:
         w._name.value = "changed"
         w._count.value = 42
 
-        assert_that(w.view_model.dirty_fields).is_equal_to({"_name", "_count"})
+        assert_that(w.dirty_fields).is_equal_to({"_name", "_count"})
 
     def test_reset_dirty_clears_all(self, qt: QtDriver) -> None:
         """reset_dirty() marks all Variables as clean."""
@@ -74,11 +74,11 @@ class TestViewModelDirtyTracking:
         w = qt.track(MyWidget())
         w._name.value = "changed"
         w._count.value = 42
-        assert_that(w.view_model.is_dirty.get()).is_true()
+        assert_that(w.is_dirty.get()).is_true()
 
-        w.view_model.reset_dirty()
-        assert_that(w.view_model.is_dirty.get()).is_false()
-        assert_that(w.view_model.dirty_fields).is_equal_to(set())
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
+        assert_that(w.dirty_fields).is_equal_to(set())
 
     def test_dirty_after_reset_and_change(self, qt: QtDriver) -> None:
         """After reset, changing a value makes it dirty again."""
@@ -89,10 +89,10 @@ class TestViewModelDirtyTracking:
 
         w = qt.track(MyWidget())
         w._name.value = "first"
-        w.view_model.reset_dirty()
+        w.reset_dirty()
 
         w._name.value = "second"
-        assert_that(w.view_model.is_dirty.get()).is_true()
+        assert_that(w.is_dirty.get()).is_true()
 
 
 class TestIsDirtyObservable:
@@ -106,8 +106,8 @@ class TestIsDirtyObservable:
             _name: Variable[str] = new("")
 
         w = qt.track(MyWidget())
-        assert_that(w.view_model.is_dirty).is_instance_of(Observable)
-        assert_that(w.view_model.is_dirty.get()).is_false()
+        assert_that(w.is_dirty).is_instance_of(Observable)
+        assert_that(w.is_dirty.get()).is_false()
 
     def test_is_dirty_reactive_updates(self, qt: QtDriver) -> None:
         """view_model.is_dirty Observable should update when dirty state changes."""
@@ -118,28 +118,28 @@ class TestIsDirtyObservable:
 
         w = qt.track(MyWidget())
         dirty_changes: list[bool] = []
-        w.view_model.is_dirty.on_change(lambda v: dirty_changes.append(v))
+        w.is_dirty.on_change(lambda v: dirty_changes.append(v))
 
         # Initially clean
-        assert_that(w.view_model.is_dirty.get()).is_false()
+        assert_that(w.is_dirty.get()).is_false()
 
         # Become dirty
         w._name.value = "changed"
-        assert_that(w.view_model.is_dirty.get()).is_true()
+        assert_that(w.is_dirty.get()).is_true()
         assert_that(dirty_changes).contains(True)
 
         # Become clean again
-        w.view_model.reset_dirty()
-        assert_that(w.view_model.is_dirty.get()).is_false()
+        w.reset_dirty()
+        assert_that(w.is_dirty.get()).is_false()
         assert_that(dirty_changes).contains(False)
 
     def test_is_dirty_in_binding(self, qt: QtDriver) -> None:
-        """view_model.is_dirty can be used in enabled= bindings."""
+        """is_dirty can be used in enabled= bindings."""
 
         @widget
         class MyWidget(Widget):
             _name: Variable[str] = new("")
-            _save_btn: QPushButton = new("Save", enabled="{view_model.is_dirty.get()}")
+            _save_btn: QPushButton = new("Save", enabled="is_dirty")
 
         w = qt.track(MyWidget())
 
@@ -151,7 +151,7 @@ class TestIsDirtyObservable:
         assert_that(w._save_btn.isEnabled()).is_true()
 
         # Become clean - button should disable
-        w.view_model.reset_dirty()
+        w.reset_dirty()
         assert_that(w._save_btn.isEnabled()).is_false()
 
 
@@ -189,7 +189,7 @@ class TestOnDirtyChangedHook:
 
         w = qt.track(MyWidget())
         w._name.value = "changed"
-        w.view_model.reset_dirty()
+        w.reset_dirty()
 
         assert_that(dirty_states).is_equal_to([True, False])
 
@@ -223,7 +223,7 @@ class TestOnDirtyChangedHook:
         w = qt.track(MyWidget())
         w._name.value = "changed"
         # Should not raise
-        assert_that(w.view_model.is_dirty.get()).is_true()
+        assert_that(w.is_dirty.get()).is_true()
 
 
 class TestWidgetIsDirty:
@@ -292,7 +292,7 @@ class TestWidgetIsDirty:
         assert_that(w.is_dirty.get()).is_true()
 
         # Reset Variables, still dirty from record access (triggers lazily)
-        w.view_model.reset_dirty()
+        w.reset_dirty()
         assert_that(w.is_dirty.get()).is_false()
 
         # Modify record
@@ -305,7 +305,7 @@ class TestWidgetIsDirty:
         @widget
         class MyWidget(Widget):
             _name: Variable[str] = new("")
-            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+            _save_btn: QPushButton = new("Save", enabled="is_dirty")
 
         w = qt.track(MyWidget())
 
@@ -326,7 +326,7 @@ class TestWidgetIsDirty:
 
         @widget(record=Person())
         class PersonEditor(Widget[Person]):
-            _save_btn: QPushButton = new("Save", enabled="{is_dirty.get()}")
+            _save_btn: QPushButton = new("Save", enabled="is_dirty")
 
         w = qt.track(PersonEditor())
 
@@ -351,7 +351,7 @@ class TestWidgetIsDirty:
         w._name.value = "changed"
         assert_that(dirty_changes).contains(True)
 
-        w.view_model.reset_dirty()
+        w.reset_dirty()
         assert_that(dirty_changes).contains(False)
 
 
@@ -412,7 +412,7 @@ class TestWidgetResetDirty:
 
         w.reset_dirty()
         assert_that(w.is_dirty.get()).is_false()
-        assert_that(w.view_model.is_dirty.get()).is_false()
+        assert_that(w.is_dirty.get()).is_false()
         assert_that(w.record_state.is_dirty.get()).is_false()
 
     def test_reset_dirty_on_clean_widget(self, qt: QtDriver) -> None:

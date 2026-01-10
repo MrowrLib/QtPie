@@ -63,6 +63,9 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
                     if nested_path and isinstance(observable, ObservableProxy):
                         return observable.observable_for_path(nested_path)
                 return attr
+            # Handle Observable properties directly (e.g., is_dirty, is_valid)
+            if isinstance(raw_attr, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
+                return cast(BindingSource, raw_attr)
         return None
 
     # 1. Try exact match first (e.g., 'name' -> widget.name)
@@ -75,18 +78,6 @@ def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | No
 
     if not hasattr(widget, "_qtpie"):
         widget._qtpie = QtPieState(widget)  # type: ignore[attr-defined]
-
-    # Try view_model properties (e.g., view_model.validation_error_messages)
-    if first == "view_model" and rest:
-        view_model = widget._qtpie.view_model  # type: ignore[attr-defined]
-        if hasattr(view_model, rest):
-            prop_val = getattr(view_model, rest)
-            if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
-                return cast(BindingSource, prop_val)
-
-    # Try widget-level Observable properties (e.g., validation_error_messages)
-    if first == "validation_error_messages" and not rest:
-        return widget._qtpie.validation_error_messages  # type: ignore[attr-defined]
 
     # 2. Try record if Widget[T]
     if hasattr(widget, "_qtpie_config"):
