@@ -2142,3 +2142,144 @@ class TestWindowVariableWidgetSignalConnections:
 
         with pytest.raises(RuntimeError, match="nonexistent"):
             qt.track(App())
+
+
+# =============================================================================
+# Validate= parameter on Variables in Window
+# =============================================================================
+
+
+class TestWindowValidateParameter:
+    """Test validate= parameter on Variable fields in Window (matching Widget behavior)."""
+
+    def test_validate_single_method_name(self, qt: QtDriver) -> None:
+        """validate='method_name' registers a validator."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        w = qt.track(MainWindow())
+        assert_that(w._name.is_valid.get()).is_false()
+
+        w._name.value = "Alice"
+        assert_that(w._name.is_valid.get()).is_true()
+
+    def test_validate_list_of_method_names(self, qt: QtDriver) -> None:
+        """validate=['method1', 'method2'] registers multiple validators."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("", validate=["not_empty", "min_length"])
+
+            def not_empty(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def min_length(self, value: str) -> str | None:
+                return None if len(value) >= 3 else "Min 3 chars"
+
+        w = qt.track(MainWindow())
+        assert_that(w._name.is_valid.get()).is_false()
+
+        w._name.value = "ab"
+        assert_that(w._name.is_valid.get()).is_false()  # Still too short
+
+        w._name.value = "abc"
+        assert_that(w._name.is_valid.get()).is_true()
+
+    def test_validate_with_callable(self, qt: QtDriver) -> None:
+        """validate=callable registers a callable validator."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _age: Variable[int] = new(0, validate=lambda v: None if v >= 0 else "Must be positive")
+
+        w = qt.track(MainWindow())
+        # Initial value 0 is valid (>= 0)
+        assert_that(w._age.is_valid.get()).is_true()
+
+        w._age.value = -1
+        assert_that(w._age.is_valid.get()).is_false()
+
+    def test_validate_with_tuple_explicit_name(self, qt: QtDriver) -> None:
+        """validate=('name', 'method') uses explicit validator name."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("", validate=[("custom_name", "check_name")])
+
+            def check_name(self, value: str) -> str | None:
+                return None if value else "Empty"
+
+        w = qt.track(MainWindow())
+        errors = w._name.validation_errors.get()
+        assert "custom_name" in errors
+
+    def test_validate_with_tuple_callable(self, qt: QtDriver) -> None:
+        """validate=('name', callable) works."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _count: Variable[int] = new(0, validate=[("positive_check", lambda v: None if v >= 0 else "Negative")])
+
+        w = qt.track(MainWindow())
+        w._count.value = -5
+        errors = w._count.validation_errors.get()
+        assert "positive_check" in errors
+
+    def test_validate_mixed_formats(self, qt: QtDriver) -> None:
+        """validate= supports mixed formats in list."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new(
+                "",
+                validate=[
+                    "not_empty",  # Method name
+                    lambda v: None if len(v) <= 50 else "Too long",  # Lambda
+                    ("custom", "custom_check"),  # Tuple with method
+                ],
+            )
+
+            def not_empty(self, v: str) -> str | None:
+                return None if v else "Empty"
+
+            def custom_check(self, v: str) -> str | None:
+                return None if v.isalpha() else "Letters only"
+
+        w = qt.track(MainWindow())
+        w._name.value = "abc123"  # Has non-letters
+        assert_that(w._name.is_valid.get()).is_false()
+
+        w._name.value = "abc"
+        assert_that(w._name.is_valid.get()).is_true()
+
+    def test_validate_runs_before_setup(self, qt: QtDriver) -> None:
+        """validate= validators are registered before __setup__."""
+        setup_valid: list[bool] = []
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str] = new("valid", validate=lambda v: None if v else "Empty")
+
+            def __setup__(self) -> None:
+                setup_valid.append(self._name.is_valid.get())
+
+        qt.track(MainWindow())
+        assert_that(setup_valid[0]).is_true()
+
+    def test_validate_with_widget_type(self, qt: QtDriver) -> None:
+        """validate= works with Variable[T, W] (inline widget)."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _name: Variable[str, QLineEdit] = new("", validate=lambda v: None if v else "Required")
+
+        w = qt.track(MainWindow())
+        assert_that(w._name.is_valid.get()).is_false()
+
+        w._name.value = "test"
+        assert_that(w._name.is_valid.get()).is_true()

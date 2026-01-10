@@ -397,7 +397,18 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         _create_list_widget_fields(self, config)  # type: ignore[arg-type]
 
         # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
+        # Skip reactive props (with {}) and Translatable - they'll be handled by apply_reactive_widget_props
+        from .bindings import is_format_string
+        from .translations.translatable import Translatable
+
         for prop_name, value in config.widget_props.items():
+            # Skip reactive props - they'll be handled by apply_reactive_widget_props
+            if isinstance(value, str) and is_format_string(value):
+                continue
+            # Skip Translatable props - they'll be handled by apply_reactive_widget_props
+            if isinstance(value, Translatable):
+                continue
+
             setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
             setter = getattr(self, setter_name, None)
             if setter is not None and callable(setter):
@@ -474,15 +485,22 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                     fld = config.fields.get(name)
                     if fld is not None and fld.exclude_from_layout:
                         continue
-                    label = fld.label if fld else None
+                    # Resolve Translatable labels (keep original for retranslation)
+                    label_translatable = fld.label if fld and isinstance(fld.label, Translatable) else None
+                    label = fld.label.resolve() if fld and isinstance(fld.label, Translatable) else (fld.label if fld else None)
                     grid = fld.grid if fld else None
-                    _add_to_layout(qt_layout, widget_instance, config.layout, label, grid)
+                    _add_to_layout(qt_layout, widget_instance, config.layout, label, grid, label_translatable)
 
             self.setCentralWidget(central)
 
         # Ensure QtPieState exists BEFORE bindings run (binding code checks hasattr)
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)
+
+        # Register validators from validate= parameter (before __setup__ so they're active)
+        from .widget import _register_validators
+
+        _register_validators(self, config)  # type: ignore[arg-type]
 
         # Set initial record value if provided via @window(record=...)
         if config.record_default is not None and hasattr(self, "record"):
@@ -528,14 +546,38 @@ def _add_to_layout(
     layout_type: LayoutType,
     label: str | None = None,
     grid: GridPosition | None = None,
+    label_translatable: Any | None = None,  # Original Translatable for retranslation
 ) -> None:
-    """Add a widget to the layout."""
+    """Add a widget to the layout.
+
+    Args:
+        layout: The Qt layout to add to.
+        widget_instance: The widget to add.
+        layout_type: The type of layout.
+        label: For form layouts, the label text for this row.
+        grid: For grid layouts, position as (row, col) or (row, col, rowspan, colspan).
+        label_translatable: Original Translatable for registering retranslation binding.
+    """
     if layout_type in ("vertical", "horizontal"):
         layout.addWidget(widget_instance)  # type: ignore[union-attr]
     elif layout_type == "form":
         form_layout = cast(QFormLayout, layout)
         if label is not None:
             form_layout.addRow(label, widget_instance)
+            # Register form label for retranslation if it was a Translatable
+            if label_translatable is not None:
+                from qtpie.translations.store import register_binding
+                from qtpie.translations.translatable import Translatable
+
+                if isinstance(label_translatable, Translatable):
+                    # Get the QLabel that Qt created for this row
+                    label_widget = form_layout.labelForField(widget_instance)
+                    register_binding(
+                        label_widget,
+                        "text",
+                        label_translatable.text,
+                        label_translatable.context,
+                    )
         else:
             form_layout.addRow(widget_instance)
     elif layout_type == "grid":
