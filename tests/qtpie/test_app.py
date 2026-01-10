@@ -684,7 +684,7 @@ class TestAppBaseRecord:
 
     def test_ref_with_required_binding(self, qt: QtDriver) -> None:
         """ref() can reference required binding fields after they're bound."""
-        from PySide6.QtGui import QAction
+        from qtpy.QtGui import QAction
 
         from qtpie import Menu, menu, ref
 
@@ -708,7 +708,7 @@ class TestAppBaseRecord:
 
     def test_ref_with_literal_text_and_required_binding(self, qt: QtDriver) -> None:
         """ref() with literal text + expression works with required bindings."""
-        from PySide6.QtGui import QAction
+        from qtpy.QtGui import QAction
 
         from qtpie import Menu, menu, ref
 

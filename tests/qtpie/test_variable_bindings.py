@@ -2,7 +2,7 @@
 """Tests for Variable bindings - passing state DOWN to child widgets."""
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel
+from qtpy.QtWidgets import QApplication, QLabel
 
 from qtpie import Variable, Widget, new, widget
 

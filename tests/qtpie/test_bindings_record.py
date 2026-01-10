@@ -293,7 +293,7 @@ class TestBindingResolutionOrder:
         w._qtpie.record_state.observable.name.set("Alice")  # type: ignore[union-attr]
 
         # The label should show "Name: Alice" (from record.name)
-        # NOT "Name: <PySide6.QtWidgets.QLineEdit...>" (from _name widget)
+        # NOT "Name: <qtpy.QtWidgets.QLineEdit...>" (from _name widget)
         assert_that(w.display.text()).is_equal_to("Name: Alice")
 
     def test_exact_widget_attr_wins_over_record(self, qt: QtDriver) -> None:

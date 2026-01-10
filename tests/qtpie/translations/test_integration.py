@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QPushButton
+from qtpy.QtWidgets import QLabel, QPushButton
 
 from qtpie import Widget, entrypoint, new, t, widget
 from qtpie.testing import QtDriver
@@ -374,7 +374,7 @@ class TestTranslatableInFormLayout:
         """label=t() works in form layouts."""
         from dataclasses import dataclass
 
-        from PySide6.QtWidgets import QLineEdit
+        from qtpy.QtWidgets import QLineEdit
 
         entries = [
             TranslationEntry(
@@ -402,7 +402,7 @@ class TestTranslatableInFormLayout:
         assert layout is not None
 
         # The label should be translated
-        from PySide6.QtWidgets import QFormLayout
+        from qtpy.QtWidgets import QFormLayout
 
         assert isinstance(layout, QFormLayout)
         # Get the label for the first row
@@ -417,7 +417,7 @@ class TestTranslatableInFormLayout:
         """label=t() retranslates when language changes."""
         from dataclasses import dataclass
 
-        from PySide6.QtWidgets import QFormLayout, QLineEdit
+        from qtpy.QtWidgets import QFormLayout, QLineEdit
 
         entries = [
             TranslationEntry(
@@ -461,7 +461,7 @@ class TestTranslatableInFormLayout:
         """label=t() shows source text when no translation exists."""
         from dataclasses import dataclass
 
-        from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit
+        from qtpy.QtWidgets import QFormLayout, QLabel, QLineEdit
 
         @dataclass
         class Person:
@@ -643,7 +643,7 @@ class TestTranslatableComplex:
         """Widget with t() in positional args, labels, and buttons."""
         from dataclasses import dataclass
 
-        from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit
+        from qtpy.QtWidgets import QFormLayout, QLabel, QLineEdit
 
         entries = [
             TranslationEntry(
