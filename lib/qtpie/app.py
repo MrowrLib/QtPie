@@ -1,16 +1,92 @@
+# pyright: reportPrivateUsage=false
 """App class - a QApplication subclass with lifecycle hooks and qasync support."""
 
 import asyncio
 import signal
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, NoReturn, overload
 
 import qasync  # type: ignore[import-untyped]
+from observant import Observable
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QApplication, QWidget
+from qtpy.QtGui import QIcon, QPixmap
+from qtpy.QtWidgets import (
+    QApplication,
+    QFormLayout,
+    QGridLayout,
+    QHBoxLayout,
+    QLayout,
+    QMainWindow,
+    QMenu,
+    QStyle,
+    QSystemTrayIcon,
+    QVBoxLayout,
+    QWidget,
+)
 
+from qtpie.layout import LayoutType
+from qtpie.new_field import NewField
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
+
+
+@dataclass
+class AppConfig:
+    """Configuration for @app decorator."""
+
+    init_wrapped: bool = False
+    auto_bind: bool = True
+    widget_props: dict[str, Any] = field(default_factory=lambda: {})
+    object_name: str | None = None
+    css_classes: list[str] = field(default_factory=lambda: [])
+    # Track fields for signal connections and handling
+    fields: dict[str, NewField] = field(default_factory=lambda: {})
+    variable_names: list[str] = field(default_factory=lambda: [])
+
+    # Layout configuration for auto-Window's central widget
+    layout: LayoutType = "vertical"
+    margins: int | tuple[int, int, int, int] | None = None
+
+    # Feature toggles
+    window: bool = True  # Auto-create Window for QWidget/QMenu fields
+    system_tray: bool = True  # Auto-create system tray for system_tray:/QAction fields
+    show: bool = True  # Auto-show window in run()
+    minimize_to_tray: bool = True  # If True, closing window hides to tray instead of quitting
+
+    # Icon settings (str path, QIcon, QPixmap, or QStyle.StandardPixmap)
+    icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Sets BOTH window_icon AND tray_icon (fallback)
+    window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Window icon only (overrides icon=)
+    tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Tray icon only (overrides icon=)
+
+    # Record type from App[T]
+    record_type: type[Any] | None = None
+    # Initial record value from @app(record=...)
+    record_default: Any | None = None
+    # Required bindings - bare Variable[T] fields that must be provided
+    required_bindings: set[str] = field(default_factory=lambda: set[str]())
+
+    # For AppBase: track if we're in a real QApplication context
+    is_qapplication: bool = False
+
+
+def _resolve_icon(value: str | QIcon | QPixmap | QStyle.StandardPixmap | None) -> QIcon | None:
+    """Convert str/QIcon/QPixmap/StandardPixmap to QIcon, or return None."""
+    if value is None:
+        return None
+    if isinstance(value, QIcon):
+        return value
+    if isinstance(value, QPixmap):
+        return QIcon(value)
+    if isinstance(value, QStyle.StandardPixmap):
+        # Need QApplication instance to get style
+        qapp = QApplication.instance()
+        if qapp is not None and isinstance(qapp, QApplication):
+            return qapp.style().standardIcon(value)
+        return None
+    # str path
+    return QIcon(value)
 
 
 def run_app(app: QApplication) -> int:
@@ -57,30 +133,301 @@ def run_app(app: QApplication) -> int:
     return 0
 
 
-class App(QApplication):
+# Forward declaration for type hints - actual class defined below
+# This is needed because _collect_fields_for_app is called in AppBase.__init_subclass__
+# before the App class is fully defined
+
+
+def _collect_fields_for_app(cls: type) -> None:
+    """Collect NewField instances from class before they're processed."""
+    config: AppConfig = cls._qtpie_config  # type: ignore[attr-defined]
+    for name in getattr(cls, "__annotations__", {}):
+        value = getattr(cls, name, None)
+        if isinstance(value, NewField):
+            config.fields[name] = value  # pyright: ignore[reportUnknownMemberType]
+
+
+class AppBase[T = None]:
     """
-    A QApplication subclass with lifecycle hooks and qasync integration.
+    Base class with declarative features for App.
+
+    This class contains all the declarative logic (fields, dirty tracking,
+    validation, lifecycle hooks) but does NOT inherit from QApplication.
+    Use this for testing or when you need the declarative features without
+    a QApplication.
+
+    For actual applications, use App which inherits from both AppBase and QApplication.
 
     Features:
-    - Lifecycle hooks: __setup__(), create_window()
+    - Declarative fields: Variables, QWidgets, QMenus, QActions
+    - Auto-created Window for QWidget/QMenu fields
+    - System tray support
+    - Lifecycle hooks: __setup__()
+    - Dirty tracking and validation
+
+    Examples:
+        # For testing (no QApplication needed):
+        @app
+        class MyAppBase(AppBase):
+            _count: Variable[int] = new(0)
+            _label: QLabel = new("Hello")
+
+        app = MyAppBase()  # Works without QApplication!
+        app._count.value = 5
+        assert app.is_dirty.get() == True
+
+        # For real apps, use App instead:
+        @app
+        class MyApp(App):
+            ...
+    """
+
+    _qtpie_config: AppConfig
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Each subclass gets its own config
+        cls._qtpie_config = AppConfig()
+
+        # Check if this is a QApplication subclass
+        cls._qtpie_config.is_qapplication = issubclass(cls, QApplication)
+
+        # Extract T from AppBase[T] or App[T] if present
+        from typing import TypeVar, get_args, get_origin
+
+        for base in getattr(cls, "__orig_bases__", ()):
+            origin = get_origin(base)
+            if origin is AppBase or origin is App:
+                args = get_args(base)
+                # Only set record_type if T is a concrete type, not a TypeVar or None
+                if args and args[0] is not type(None) and not isinstance(args[0], TypeVar):
+                    cls._qtpie_config.record_type = args[0]
+                break
+
+        # Check if user declared 'record' explicitly
+        has_explicit_record = "record" in cls.__dict__
+
+        # Collect NewField instances before they're processed
+        _collect_fields_for_app(cls)
+
+        # Apply new_fields to handle Variable and QWidget instantiation
+        from qtpie.new_fields import new_fields
+
+        new_fields(cls)
+
+        # Collect variable names (after new_fields converts NewField → _VariableDescriptor)
+        from qtpie.variable import _VariableDescriptor
+
+        for name, value in list(cls.__dict__.items()):
+            if isinstance(value, _VariableDescriptor):
+                cls._qtpie_config.variable_names.append(name)
+
+        # Auto-create record descriptor if App[T] but no explicit record
+        if cls._qtpie_config.record_type is not None and not has_explicit_record:
+            from qtpie.widget import _RecordDescriptor
+
+            cls.record = _RecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
+
+    if TYPE_CHECKING:
+        # Lie to pyright: say record returns T for field autocomplete
+        @property
+        def record(self) -> T: ...
+        @record.setter
+        def record(self, value: T) -> None: ...
+
+    if not TYPE_CHECKING:
+        # Runtime-only: provide better error messages for .record access
+        # Hidden from pyright so it doesn't disable attribute checking
+        def __getattr__(self, name: str) -> NoReturn:
+            """Handle attribute access for special cases."""
+            if name == "record":
+                raise TypeError(f"{type(self).__name__} has no record type. Use AppBase[YourModel] or App[YourModel] to enable record access.")
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    # -------------------------------------------------------------------------
+    # Dirty tracking properties
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any Variable has changed from its clean state."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            return state.is_dirty
+        # No state yet - return empty observable
+        return Observable[bool](False, dirty_tracking=False, validation=False)
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            return state.dirty_fields
+        return set()
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            state.reset_dirty()
+
+    # -------------------------------------------------------------------------
+    # Validation properties
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Check if all validators pass."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            return state.is_valid
+        return Observable[bool](True, dirty_tracking=False, validation=False)
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Return structured validation errors: {field: {validator: [errors]}}."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            return state.validation_errors
+        return {}
+
+    @property
+    def validation_error_messages(self) -> list[str]:
+        """Return flat list of all error messages."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            return state.validation_error_messages.get()
+        return []
+
+    def add_validator(
+        self,
+        field_name: str,
+        validator_name: str,
+        validator: Callable[[Any], str | None],
+    ) -> None:
+        """Add a named validator to a field."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            state.add_validator(field_name, validator_name, validator)
+
+    def remove_validator(self, field_name: str, validator_name: str) -> None:
+        """Remove a validator by name."""
+        state = getattr(self, "_qtpie_state", None)
+        if state is not None:
+            state.remove_validator(field_name, validator_name)
+
+    # -------------------------------------------------------------------------
+    # Lifecycle hooks (override in subclass)
+    # -------------------------------------------------------------------------
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """Called when dirty state changes.
+
+        Override this method to react to dirty state transitions.
+        Only fires on actual state changes (True→False or False→True).
+
+        Example::
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                self._save_btn.setEnabled(is_dirty)
+        """
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """Called when validation state changes.
+
+        Override this method to react to validation state transitions.
+        Only fires on actual state changes (True→False or False→True).
+
+        Example::
+
+            def on_valid_changed(self, is_valid: bool) -> None:
+                self._submit_btn.setEnabled(is_valid)
+        """
+
+    def on_system_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """Called when system tray icon is activated.
+
+        Override this method to customize tray activation behavior.
+        Default behavior (double-click shows window) runs after this hook.
+
+        Args:
+            reason: The activation reason (DoubleClick, Trigger, Context, etc.)
+        """
+
+    # -------------------------------------------------------------------------
+    # Window control methods
+    # -------------------------------------------------------------------------
+
+    def show(self) -> None:
+        """Show the auto-created window."""
+        auto_window: QMainWindow | None = getattr(self, "_auto_window", None)
+        if auto_window is not None:
+            auto_window.show()
+
+    def hide(self) -> None:
+        """Hide the auto-created window."""
+        auto_window: QMainWindow | None = getattr(self, "_auto_window", None)
+        if auto_window is not None:
+            auto_window.hide()
+
+    @property
+    def is_visible(self) -> bool:
+        """Check if the auto-created window is visible."""
+        auto_window: QMainWindow | None = getattr(self, "_auto_window", None)
+        if auto_window is not None:
+            return auto_window.isVisible()
+        return False
+
+    @property
+    def window(self) -> QMainWindow | None:
+        """Access the auto-created window, if any."""
+        return getattr(self, "_auto_window", None)
+
+    def __init__(self) -> None:
+        """Initialize AppBase with declarative features.
+
+        This is a simple __init__ for the base class. When used with @app decorator,
+        the wrapped __init__ handles all the declarative setup.
+        """
+        super().__init__()
+
+
+class App[T = None](AppBase[T], QApplication):
+    """
+    A QApplication subclass with declarative features and qasync integration.
+
+    This class combines AppBase (declarative features) with QApplication.
+
+    Features:
+    - Declarative fields: Variables, QWidgets, QMenus, QActions
+    - Auto-created Window for QWidget/QMenu fields
+    - System tray support
+    - Lifecycle hooks: __setup__()
     - Dark/light mode support
     - Stylesheet loading
     - qasync event loop for async/await support
 
     Examples:
-        # Simple usage
+        # Simple usage (legacy - without @app decorator)
         app = App("My App", dark_mode=True)
         window = MyMainWindow()
         window.show()
         app.run()
 
-        # Subclass with hooks
+        # Declarative usage with @app decorator
+        @app
         class MyApp(App):
-            def __setup__(self):
-                self.load_stylesheet("styles.qss")
+            _name: Variable[str] = new("")
+            name_input: QLineEdit = new(bind="_name")
+            save_btn: QPushButton = new("Save", clicked="on_save")
 
-            def create_window(self):
-                return MyMainWindow()
+            def on_save(self) -> None:
+                print(f"Saving: {self._name.value}")
+
+        # With record type
+        @app(title="Settings", record=Settings())
+        class SettingsApp(App[Settings]):
+            name: QLineEdit = new()  # Auto-binds to record.name
     """
 
     def __init__(
@@ -108,10 +455,10 @@ class App(QApplication):
         elif light_mode:
             set_color_scheme(ColorScheme.Light)
 
-        # Initialize QApplication
+        # Initialize QApplication (skip AppBase.__init__ which does nothing useful here)
         if argv is None:
             argv = sys.argv
-        super().__init__(list(argv))
+        QApplication.__init__(self, list(argv))
 
         # Set application metadata
         self.setApplicationName(name)
@@ -126,33 +473,11 @@ class App(QApplication):
             # Apply any pending color scheme set before app creation
             apply_deferred_color_scheme(self)
 
-        # Call lifecycle hooks
-        self._call_lifecycle_hooks()
-
-    def _call_lifecycle_hooks(self) -> None:
-        """Call lifecycle hooks if defined in subclass."""
-        # Check if __setup__ is overridden (not the base class stub)
-        if type(self).__setup__ is not App.__setup__:
-            self.__setup__()
-
-    def __setup__(self) -> None:
-        """
-        Lifecycle hook called after App initialization.
-
-        Override this method in subclasses to perform custom setup.
-        """
-
-    def create_window(self) -> QWidget | None:
-        """
-        Lifecycle hook to create the main window.
-
-        Override this method in subclasses to return a main window widget.
-        The @entrypoint decorator will call this and show the returned widget.
-
-        Returns:
-            A QWidget to show as the main window, or None.
-        """
-        return None
+        # Call __setup__ hook (only if NOT using @app decorator - it handles this)
+        if not self._qtpie_config.init_wrapped:
+            setup_method = getattr(self, "__setup__", None)
+            if setup_method is not None:
+                setup_method()
 
     def load_stylesheet(
         self,
@@ -183,11 +508,17 @@ class App(QApplication):
         """
         Run the application with qasync event loop.
 
+        If the @app decorator was used with show=True (the default),
+        the auto-created window will be shown before starting the event loop.
+
         This method blocks until the application exits.
 
         Returns:
             The application exit code.
         """
+        # Auto-show window if show=True in config
+        if self._qtpie_config.show:
+            self.show()
         return run_app(self)
 
     async def run_async(self) -> int:
@@ -203,3 +534,844 @@ class App(QApplication):
         self.aboutToQuit.connect(quit_event.set)
         await quit_event.wait()
         return 0
+
+
+@overload
+def app[A: AppBase[Any]](cls: type[A]) -> type[A]: ...
+
+
+@overload
+def app[A: AppBase[Any]](
+    cls: None = None,
+    *,
+    # Feature toggles
+    window: bool = True,
+    system_tray: bool = True,
+    show: bool = True,
+    minimize_to_tray: bool = True,
+    # Window settings
+    title: str | None = None,
+    layout: LayoutType = "vertical",
+    margins: int | tuple[int, int, int, int] | None = None,
+    # Icon settings
+    icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    # Standard settings
+    auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
+    record: Any | None = None,
+    **kwargs: Any,
+) -> Callable[[type[A]], type[A]]: ...
+
+
+def app[A: AppBase[Any]](
+    cls: type[A] | None = None,
+    *,
+    # Feature toggles
+    window: bool = True,
+    system_tray: bool = True,
+    show: bool = True,
+    minimize_to_tray: bool = True,
+    # Window settings
+    title: str | None = None,
+    layout: LayoutType = "vertical",
+    margins: int | tuple[int, int, int, int] | None = None,
+    # Icon settings
+    icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    # Standard settings
+    auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
+    record: Any | None = None,
+    stylesheet: str | None = None,
+    **kwargs: Any,
+) -> type[A] | Callable[[type[A]], type[A]]:
+    """Decorator for App/AppBase classes with declarative features.
+
+    Works with both AppBase (for testing) and App (for real applications).
+
+    Usage:
+        # For testing (no QApplication needed):
+        @app
+        class MyAppBase(AppBase):
+            _count: Variable[int] = new(0)
+
+        # For real apps:
+        @app
+        class MyApp(App):
+            ...
+
+        @app(title="My App", icon="app.png")
+        class MyApp(App):
+            _name: Variable[str] = new("")
+            name_input: QLineEdit = new(bind="_name")
+            file_menu: FileMenu = new()  # Auto-added to Window's menu bar
+
+            system_tray: TrayMenu = new()  # Creates system tray with this menu
+
+    Args:
+        window: If True (default), auto-create Window for QWidget/QMenu fields.
+        system_tray: If True (default), auto-create system tray.
+        show: If True (default), auto-show window in run().
+        title: Window title (also sets applicationName).
+        layout: Layout for auto-Window's central widget.
+        margins: Layout margins.
+        icon: Shared icon for both window and tray.
+        window_icon: Window icon (overrides icon=).
+        tray_icon: Tray icon (overrides icon=).
+        auto_bind: If True (default), enable auto-binding for Variables.
+        name: Set the app's objectName.
+        classes: List of CSS classes to apply.
+        record: Initial record value for App[T]/AppBase[T].
+        stylesheet: Shorthand for styleSheet.
+        **kwargs: Extra properties.
+    """
+    if title is not None:
+        kwargs["windowTitle"] = title
+    if stylesheet is not None:
+        kwargs["styleSheet"] = stylesheet
+
+    def decorator(target: type[A]) -> type[A]:
+        config = target._qtpie_config
+        config.layout = layout
+        config.margins = margins
+        config.auto_bind = auto_bind
+        config.record_default = record
+        config.widget_props = kwargs
+        config.object_name = name
+        config.css_classes = classes or []
+        config.window = window
+        config.system_tray = system_tray
+        config.show = show
+        config.minimize_to_tray = minimize_to_tray
+        config.icon = icon
+        config.window_icon = window_icon
+        config.tray_icon = tray_icon
+
+        # Wrap __init__
+        _wrap_init_for_app(target)
+
+        return target
+
+    if cls is not None:
+        return decorator(cls)
+
+    return decorator  # type: ignore[return-value]
+
+
+def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
+    """Wrap __init__ to set up declarative features."""
+    if cls._qtpie_config.init_wrapped:
+        return
+
+    original_init = cls.__init__
+    config = cls._qtpie_config
+
+    def wrapped_init(self: AppBase[Any], *args: Any, **kwargs: Any) -> None:
+        # Call original __init__
+        original_init(self, *args, **kwargs)
+
+        # Initialize state for dirty tracking and validation
+        from qtpie.state import QtPieStateBase
+
+        state = QtPieStateBase(self)
+        self._qtpie_state = state  # type: ignore[attr-defined]
+
+        # Register Variables in state
+        for var_name in config.variable_names:
+            var = getattr(self, var_name, None)
+            if var is not None:
+                state.variables[var_name] = var
+
+        # Set objectName (only for QApplication subclasses)
+        if config.is_qapplication:
+            if config.object_name is not None:
+                self.setObjectName(config.object_name)  # type: ignore[attr-defined]
+            else:
+                self.setObjectName(type(self).__name__)  # type: ignore[attr-defined]
+
+        # Apply widget_props (style="Fusion" -> setStyle("Fusion"), etc.)
+        _apply_app_widget_props(self, config)
+
+        # Connect signals for fields
+        for fname, fld in config.fields.items():
+            instance = getattr(self, fname, None)
+            if instance is not None:
+                for signal_name, handler in fld.signal_connections.items():
+                    signal = getattr(instance, signal_name, None)
+                    if signal is not None:
+                        if isinstance(handler, str):
+                            method = getattr(self, handler, None)
+                            if method is not None:
+                                signal.connect(method)
+                        elif callable(handler):
+                            signal.connect(handler)
+
+        # Set initial record value if provided via @app(record=...)
+        if config.record_default is not None and hasattr(self, "record"):
+            self.record = config.record_default
+
+        # Call __setup__ hook (before bindings, so record can be initialized)
+        setup_method = getattr(self, "__setup__", None)
+        if setup_method is not None:
+            setup_method()
+
+        # Apply format bindings for widget fields (bind="{_name}", etc.)
+        _apply_app_bindings(self, config)
+
+        # Create auto-Window if we have widget/menu fields and window=True
+        if config.window:
+            _create_auto_window(self, config, cls)
+
+        # Set up system tray if enabled
+        if config.system_tray:
+            _setup_system_tray(self, config)
+
+        # Set up dirty/valid change hooks
+        _setup_state_hooks(self, state)
+
+    cls.__init__ = wrapped_init  # type: ignore[method-assign]
+    cls._qtpie_config.init_wrapped = True
+
+
+def _apply_app_widget_props(app: AppBase[Any], config: AppConfig) -> None:
+    """Apply widget properties from @app decorator kwargs.
+
+    For each prop like style="Fusion", calls app.setStyle("Fusion").
+    """
+    for prop_name, value in config.widget_props.items():
+        # Build setter name: style -> setStyle
+        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+        setter = getattr(app, setter_name, None)
+        if setter is not None and callable(setter):
+            setter(value)
+
+
+def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[Any]]) -> None:
+    """Create an auto-Window for QWidget/QMenu fields.
+
+    Categorizes fields and creates a QMainWindow with:
+    - QMenu fields added to menuBar
+    - QWidget/Variable[T,W] fields added to central widget layout
+
+    Works with both AppBase (for testing) and App (real applications).
+    """
+    from qtpie.variable import Variable
+
+    # Check if this is a real QApplication for applicationName() access
+    qapp = app if isinstance(app, QApplication) else None
+
+    # Categorize fields
+    menu_fields: list[tuple[str, QMenu]] = []
+    widget_fields: list[tuple[str, QWidget]] = []
+    system_tray_menu: QMenu | None = None
+
+    for name in getattr(cls, "__annotations__", {}):
+        instance = getattr(app, name, None)
+
+        # Check for system_tray field
+        if name == "system_tray" and isinstance(instance, QMenu):
+            system_tray_menu = instance
+            continue
+
+        # QMenu -> menu bar (not system_tray)
+        if isinstance(instance, QMenu):
+            menu_fields.append((name, instance))
+            continue
+
+        # QWidget -> central widget
+        if isinstance(instance, QWidget):
+            widget_fields.append((name, instance))
+            continue
+
+        # Variable[T, W] -> central widget (its .widget)
+        if isinstance(instance, Variable) and instance.widget is not None:
+            widget_fields.append((name, instance.widget))
+            continue
+
+    # Store system_tray_menu for later use in system tray setup
+    if system_tray_menu is not None:
+        app._system_tray_menu = system_tray_menu  # type: ignore[attr-defined]
+
+    # Only create window if there are fields to display
+    if not menu_fields and not widget_fields:
+        return
+
+    # Create the auto-Window
+    window = QMainWindow()
+
+    # Set window title from config
+    window_title = config.widget_props.get("windowTitle")
+    if window_title:
+        window.setWindowTitle(window_title)
+    elif qapp is not None:
+        window.setWindowTitle(qapp.applicationName())
+    else:
+        # For AppBase testing, use class name as title
+        window.setWindowTitle(type(app).__name__)
+
+    # Set window icon
+    resolved_icon = _resolve_icon(config.window_icon) or _resolve_icon(config.icon)
+    if resolved_icon:
+        window.setWindowIcon(resolved_icon)
+
+    # Add menus to menu bar
+    for _name, menu in menu_fields:
+        window.menuBar().addMenu(menu)
+        # Store reference to parent window for #parent bindings
+        menu._parent_window = window  # type: ignore[attr-defined]
+
+    # Create central widget with layout if we have widget fields
+    if widget_fields and config.layout is not None:
+        central = QWidget()
+        qt_layout = _create_layout_for_app(config.layout)
+
+        if qt_layout is not None:
+            central.setLayout(qt_layout)
+
+            # Apply margins
+            if config.margins is not None:
+                if isinstance(config.margins, int):
+                    qt_layout.setContentsMargins(config.margins, config.margins, config.margins, config.margins)
+                else:
+                    qt_layout.setContentsMargins(*config.margins)
+
+            # Add widgets to layout
+            for name, widget_instance in widget_fields:
+                fld = config.fields.get(name)
+                if fld is not None and fld.exclude_from_layout:
+                    continue
+                label = fld.label if fld else None
+                grid = fld.grid if fld else None
+                _add_to_layout_for_app(qt_layout, widget_instance, config.layout, label, grid)
+
+        window.setCentralWidget(central)
+
+    # Store the auto-Window on the app
+    app._auto_window = window  # type: ignore[attr-defined]
+
+    # Set up minimize-to-tray behavior if enabled
+    # This will be finalized after system tray is set up
+    app._qtpie_minimize_to_tray = config.minimize_to_tray  # type: ignore[attr-defined]
+
+
+def _create_layout_for_app(layout_type: LayoutType) -> QLayout | None:
+    """Create a Qt layout based on type."""
+    if layout_type == "vertical":
+        return QVBoxLayout()
+    elif layout_type == "horizontal":
+        return QHBoxLayout()
+    elif layout_type == "form":
+        return QFormLayout()
+    elif layout_type == "grid":
+        return QGridLayout()
+    return None
+
+
+def _add_to_layout_for_app(
+    layout: QLayout,
+    widget_instance: QWidget,
+    layout_type: LayoutType,
+    label: str | None = None,
+    grid: tuple[int, ...] | None = None,
+) -> None:
+    """Add a widget to the layout."""
+    from typing import cast
+
+    if layout_type in ("vertical", "horizontal"):
+        layout.addWidget(widget_instance)  # type: ignore[union-attr]
+    elif layout_type == "form":
+        from qtpy.QtWidgets import QFormLayout
+
+        form_layout = cast(QFormLayout, layout)
+        if label is not None:
+            form_layout.addRow(label, widget_instance)
+        else:
+            form_layout.addRow(widget_instance)
+    elif layout_type == "grid":
+        from qtpy.QtWidgets import QGridLayout
+
+        grid_layout = cast(QGridLayout, layout)
+        if grid is not None:
+            row, col = grid[0], grid[1]
+            rowspan = grid[2] if len(grid) > 2 else 1
+            colspan = grid[3] if len(grid) > 3 else 1
+            grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
+        else:
+            grid_layout.addWidget(widget_instance)
+
+
+def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
+    """Set up system tray icon with menu.
+
+    The system tray uses:
+    - system_tray field (QMenu) if defined
+    - QAction, Separator, Section fields are added to a lazily-created tray menu
+    - Or creates a tray with auto-Window show/hide and quit actions
+
+    Works with both AppBase (for testing) and App (real applications).
+    When used with AppBase, tray is created without a parent.
+    """
+    from qtpy.QtGui import QAction
+
+    from qtpie.menu import Section, Separator
+
+    # Check if this is a real QApplication for parent assignment and quit action
+    qapp = app if isinstance(app, QApplication) else None
+
+    # Check if there's a system_tray menu stored from _create_auto_window
+    tray_menu: QMenu | None = getattr(app, "_system_tray_menu", None)
+
+    # Check if we have any tray-related fields (QAction, Separator, Section)
+    annotations = getattr(type(app), "__annotations__", {})
+    has_tray_items = False
+    for name in annotations:
+        annotation = annotations.get(name)
+        if annotation is QAction or annotation is Separator or annotation is Section:
+            has_tray_items = True
+            break
+        # Also check if field instance is QAction
+        instance = getattr(app, name, None)
+        if isinstance(instance, QAction):
+            has_tray_items = True
+            break
+
+    # If no system_tray field but we have an auto-window, create a default menu
+    auto_window: QMainWindow | None = getattr(app, "_auto_window", None)
+
+    # Create tray if we have: a tray menu, an auto-window, OR tray items
+    if tray_menu is None and auto_window is None and not has_tray_items:
+        # Nothing to show in tray - skip tray creation
+        return
+
+    # Resolve tray icon
+    icon = _resolve_icon(config.tray_icon) or _resolve_icon(config.icon)
+    if icon is None:
+        # Use application icon as fallback (only available for QApplication)
+        if qapp is not None:
+            icon = qapp.windowIcon()
+            if icon.isNull():
+                # No explicit icon - use empty icon (system will show default)
+                icon = QIcon()
+        else:
+            # For AppBase testing, create empty icon
+            icon = QIcon()
+
+    # Create system tray icon (parent to QApplication if available, None otherwise)
+    tray = QSystemTrayIcon(icon, qapp)
+
+    # Create or use the tray menu
+    if tray_menu is None:
+        tray_menu = QMenu()
+
+        # Add items in declaration order (like Menu does)
+        for name in annotations:
+            annotation = annotations.get(name)
+
+            # Check for Separator
+            if annotation is Separator:
+                tray_menu.addSeparator()
+                continue
+
+            # Check for Section
+            if annotation is Section:
+                section_text = _get_section_text_for_tray(name, config.fields.get(name))
+                tray_menu.addSection(section_text)
+                continue
+
+            # Check for QAction
+            instance = getattr(app, name, None)
+            if isinstance(instance, QAction):
+                tray_menu.addAction(instance)
+                continue
+
+    tray.setContextMenu(tray_menu)
+
+    # Connect activation signals
+    def on_tray_activated(reason: QSystemTrayIcon.ActivationReason) -> None:
+        # Call hook if defined
+        hook = getattr(app, "on_system_tray_activated", None)
+        if hook is not None:
+            hook(reason)
+        # Default: double-click shows window
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick and auto_window is not None:
+            auto_window.show()
+            auto_window.raise_()
+            auto_window.activateWindow()
+
+    tray.activated.connect(on_tray_activated)
+
+    # Store tray reference
+    app._system_tray = tray  # type: ignore[attr-defined]
+
+    # Set up minimize-to-tray on window close if enabled
+    minimize_to_tray = getattr(app, "_qtpie_minimize_to_tray", True)
+    if minimize_to_tray and auto_window is not None:
+        _install_minimize_to_tray(auto_window)
+
+    # Show tray
+    tray.show()
+
+
+def _install_minimize_to_tray(window: QMainWindow) -> None:
+    """Install close event handler to hide window instead of closing.
+
+    This makes closing the window hide it to the system tray instead of
+    quitting the application.
+    """
+    from qtpy.QtCore import QEvent
+
+    def close_event_handler(event: QEvent) -> None:
+        # Hide window instead of closing
+        window.hide()
+        event.ignore()
+
+    window.closeEvent = close_event_handler  # type: ignore[method-assign]
+
+
+def _get_section_text_for_tray(name: str, field: NewField | None) -> str:
+    """Get section text from field name or explicit new() value.
+
+    Name format: ___text___ -> "Text"
+    """
+    # Check for explicit text in new()
+    if field is not None:
+        if field.args:
+            return str(field.args[0])
+        if "text" in field.kwargs:
+            return str(field.kwargs["text"])
+
+    # Extract from name: ___recent___ -> "Recent"
+    stripped = name.strip("_")
+    if stripped:
+        # Convert snake_case to Title Case
+        return stripped.replace("_", " ").title()
+
+    return ""
+
+
+def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
+    """Apply bindings for QWidget fields in AppBase.
+
+    For each QWidget field:
+    - If field.bind is set and is a format string, create format binding
+    - If field.bind is set and is a simple path, create Variable binding
+    - Handle property bindings (visible=, enabled=)
+    - Handle list widget bindings (list[QLabel] bound to Variable[list[...]])
+    """
+    from observant import Observable
+
+    from qtpie.bindings import bind, create_format_binding, is_format_string, resolve_binding_source
+    from qtpie.bindings.registry import get_binding_registry
+    from qtpie.variable import Variable
+
+    registry = get_binding_registry()
+
+    for name, field_info in config.fields.items():
+        # Handle list widget fields separately
+        if field_info.is_list_widget:
+            _apply_list_binding_for_app(app, name, field_info)
+            continue
+
+        # Get the widget instance
+        widget_instance = getattr(app, name, None)
+        if widget_instance is None:
+            continue
+
+        # Skip non-QWidget fields (Variables, etc.)
+        if not isinstance(widget_instance, QWidget):
+            continue
+
+        # Apply property bindings (visible=, enabled=)
+        if field_info.property_bindings:
+            for prop_name, bind_expr in field_info.property_bindings.items():
+                adapter = registry.get(widget_instance, prop_name)
+                if adapter is None or adapter.setter is None:
+                    continue
+
+                setter = adapter.setter
+
+                def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                    def bound_setter(val: Any) -> None:
+                        s(w, val)
+
+                    return bound_setter  # noqa: B023
+
+                bound_setter = make_setter(setter, widget_instance)
+
+                if is_format_string(bind_expr):
+                    # Expression like "{_count > 0}"
+                    _create_expression_binding_for_app(app, bind_expr, bound_setter)
+                else:
+                    # Simple variable reference like "_is_visible"
+                    source = resolve_binding_source(app, bind_expr)  # type: ignore[arg-type]
+                    if source is None:
+                        continue
+                    if isinstance(source, Variable):
+                        bound_setter(source.value)  # pyright: ignore[reportUnknownMemberType]
+                        source.on_change(bound_setter)
+                    elif isinstance(source, Observable):
+                        bound_setter(source.get())
+                        source.on_change(bound_setter)
+
+        # Determine bind path
+        bind_path: str
+        if field_info.bind is not None:
+            # Explicit bind - always apply
+            if isinstance(field_info.bind, str):
+                bind_path = field_info.bind
+            else:
+                # Translatable - resolve to string
+                bind_path = field_info.bind.resolve()  # type: ignore[union-attr]
+        elif config.auto_bind:
+            # Auto-bind: strip underscore prefix and use field name
+            # This binds 'username' field to record.username or _username Variable
+            bind_path = name.lstrip("_")
+        else:
+            # No explicit bind and auto_bind is disabled
+            continue
+
+        # Handle format strings
+        if is_format_string(bind_path):
+            default_prop = registry.get_default_prop(widget_instance)
+            adapter = registry.get(widget_instance, default_prop)
+            if adapter is not None and adapter.setter is not None:
+                bound_setter = _make_bound_setter_for_app(adapter.setter, widget_instance)
+                create_format_binding(app, bind_path, bound_setter)  # type: ignore[arg-type]
+            continue
+
+        # Simple variable reference - create binding
+        source = resolve_binding_source(app, bind_path)  # type: ignore[arg-type]
+        if source is None:
+            continue
+
+        if isinstance(source, Variable):
+            bind(source).to(widget_instance)
+        elif isinstance(source, Observable):
+            default_prop = registry.get_default_prop(widget_instance)
+            adapter = registry.get(widget_instance, default_prop)
+            if adapter is not None and adapter.setter is not None:
+                adapter.setter(widget_instance, source.get())
+                setter = adapter.setter
+
+                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                    def on_observable_change(v: Any) -> None:
+                        s(w, v)
+
+                    return on_observable_change
+
+                source.on_change(make_obs_to_widget(setter, widget_instance))
+
+
+def _make_bound_setter_for_app(setter: Callable[[Any, Any], None], widget: QWidget) -> Callable[[Any], None]:
+    """Create a bound setter function that captures the widget reference."""
+
+    def bound_setter(val: Any) -> None:
+        setter(widget, val)
+
+    return bound_setter
+
+
+def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -> None:
+    """Apply list binding for list[QWidget] fields."""
+    from observant import ObservableDict, ObservableList
+
+    from qtpie.bindings import resolve_binding_source
+    from qtpie.dict_widget_repeater import DictWidgetRepeater
+    from qtpie.variable import Variable
+    from qtpie.widget_repeater import WidgetRepeater
+
+    if field.bind is None:
+        return
+
+    bind_path = field.bind if isinstance(field.bind, str) else field.bind.resolve()  # type: ignore[union-attr]
+
+    # Resolve the source variable
+    source = resolve_binding_source(app, bind_path)  # type: ignore[arg-type]
+    if source is None or not isinstance(source, Variable):
+        return
+
+    # Get the widget type from field
+    widget_type = field.list_widget_type
+    if widget_type is None:
+        return
+
+    # Get the underlying observable from Variable
+    wrapper = source._wrapper  # pyright: ignore[reportPrivateUsage]
+
+    # Handle dict bindings
+    if isinstance(wrapper, ObservableDict):
+        # Dict binding with #key and #value
+        bind_expr: str | Callable[[Any], str] = field.list_format if field.list_format is not None else "{#key} = {#value}"
+
+        dict_repeater: DictWidgetRepeater[Any, Any] = DictWidgetRepeater(
+            observable_dict=wrapper,
+            key_type=None,
+            value_type=None,
+            widget_type=widget_type,
+            widget_args=field.args,
+            widget_kwargs=field.kwargs,
+            widget_props=field.widget_props,
+            bind_expr=bind_expr,  # type: ignore[arg-type]
+            sort=field.sort,
+            object_name=field.object_name or name,
+            css_classes=field.css_classes,
+            signal_connections=field.signal_connections,
+            parent_widget=app,  # type: ignore[arg-type]
+        )
+        setattr(app, name, dict_repeater)
+        return
+
+    # Handle list bindings
+    if not isinstance(wrapper, ObservableList):
+        return
+
+    # Get format string if provided (stored as list_format in NewField)
+    list_bind_expr: str | Callable[[Any], str] = field.list_format if field.list_format is not None else "{#self}"
+
+    # Create and store the repeater
+    repeater: WidgetRepeater[Any] = WidgetRepeater(
+        observable_list=wrapper,
+        item_type=None,  # Could extract from type hints if needed
+        widget_type=widget_type,
+        widget_args=field.args,
+        widget_kwargs=field.kwargs,
+        widget_props=field.widget_props,
+        bind_expr=list_bind_expr,
+        sort=field.sort,
+        object_name=field.object_name or name,
+        css_classes=field.css_classes,
+        signal_connections=field.signal_connections,
+        parent_widget=app,  # type: ignore[arg-type]
+    )
+    setattr(app, name, repeater)
+
+
+def _create_expression_binding_for_app(
+    app: AppBase[Any],
+    expression: str,
+    setter: Callable[[Any], None],
+) -> None:
+    """Create a binding for an expression like "{_count > 0}".
+
+    Unlike format bindings which return strings, this returns the raw evaluated value.
+    This is used for property bindings like visible= and enabled= that need boolean results.
+
+    This mirrors the logic in widget.py's _create_expression_binding.
+    """
+    from typing import cast
+
+    from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+
+    from qtpie.bindings import resolve_binding_source
+    from qtpie.bindings.format_binding import _BUILTINS, _extract_ast_names
+    from qtpie.variable import Variable
+
+    # Extract the expression from {expr}
+    expr = expression.strip()
+    if expr.startswith("{") and expr.endswith("}"):
+        expr = expr[1:-1].strip()
+
+    # Extract variable names from the expression
+    ast_names = _extract_ast_names(expr)
+    var_names = ast_names - _BUILTINS
+
+    # Collect all reactive objects to subscribe to
+    observables: list[Observable[Any]] = []
+    reactive_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
+
+    for var_name in var_names:
+        source = resolve_binding_source(app, var_name)  # type: ignore[arg-type]
+        if source is not None:
+            if isinstance(source, Variable):
+                obs: Any = source.observable
+                if isinstance(obs, Observable):
+                    observables.append(cast(Observable[Any], obs))
+                elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
+            elif isinstance(source, Observable):
+                observables.append(source)
+            elif isinstance(source, (ObservableList, ObservableDict, ObservableProxy)):  # pyright: ignore[reportUnnecessaryIsInstance]
+                reactive_collections.append(source)
+        else:
+            # Also check for reactive attributes directly on the app
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(app, attr_name):
+                    raw_attr: Any = getattr(app, attr_name)
+                    if isinstance(raw_attr, Observable):
+                        observables.append(cast(Observable[Any], raw_attr))
+                        break
+                    elif isinstance(raw_attr, (ObservableList, ObservableDict, ObservableProxy)):
+                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
+                        break
+
+    def compute() -> Any:
+        # Build context with current values
+        context: dict[str, Any] = {}
+
+        for var_name in var_names:
+            # Try with underscore prefix first, then without
+            for attr_name in [f"_{var_name}", var_name]:
+                if hasattr(app, attr_name):
+                    raw_attr: Any = getattr(app, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        context[var_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                    else:
+                        context[var_name] = raw_attr
+                    break
+
+        # Evaluate the expression
+        try:
+            value = eval(expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+            return value
+        except Exception:
+            return None
+
+    # Set initial value
+    setter(compute())
+
+    # Subscribe to ALL reactive objects - when any changes, recompute
+    def on_observable_change(_: Any) -> None:
+        setter(compute())
+
+    for obs in observables:
+        obs.on_change(on_observable_change)
+
+    # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
+    def on_collection_change() -> None:
+        setter(compute())
+
+    for coll in reactive_collections:
+        coll.on_change(on_collection_change)
+
+
+def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:
+    """Set up dirty and valid change hooks."""
+    # Track previous values for edge detection
+    was_dirty = False
+    was_valid = True
+
+    def on_dirty_update(is_dirty: bool) -> None:
+        nonlocal was_dirty
+        if is_dirty != was_dirty:
+            was_dirty = is_dirty
+            # Check if hook is overridden
+            if type(app).on_dirty_changed is not AppBase.on_dirty_changed:
+                app.on_dirty_changed(is_dirty)
+
+    def on_valid_update(is_valid: bool) -> None:
+        nonlocal was_valid
+        if is_valid != was_valid:
+            was_valid = is_valid
+            # Check if hook is overridden
+            if type(app).on_valid_changed is not AppBase.on_valid_changed:
+                app.on_valid_changed(is_valid)
+
+    # Subscribe to state changes (if there are Variables)
+    if state.variables:
+        state.is_dirty.on_change(on_dirty_update)
+        state.is_valid.on_change(on_valid_update)

@@ -303,6 +303,36 @@ class QtPieStateBase:
 
         raise KeyError(f"No field named '{field}' found")
 
+    def remove_validator(self, field: str, name: str) -> None:
+        """Remove a named validator from a specific field."""
+        # Check if field is in variables
+        if field in self.variables:
+            self.variables[field].remove_validator(name)
+            return
+
+        # Try to trigger variable creation by accessing it on the host
+        if hasattr(self._host, field):
+            attr = getattr(self._host, field)
+            # After access, check if it's now registered
+            if field in self.variables:
+                self.variables[field].remove_validator(name)
+                return
+            # If it's a Variable directly
+            if hasattr(attr, "remove_validator"):
+                attr.remove_validator(name)
+                return
+
+        # Check if it's a record field
+        if self._record is not None:
+            try:
+                field_obs = getattr(self._record.observable, field)
+                field_obs.remove_validator(name)
+                return
+            except AttributeError:
+                pass
+
+        raise KeyError(f"No field named '{field}' found")
+
 
 class QtPieViewModelBase:
     """Base view model with dirty tracking and validation."""

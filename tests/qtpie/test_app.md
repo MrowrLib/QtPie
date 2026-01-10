@@ -58,7 +58,7 @@ def test_app_has_dark_light_mode_methods(self, qapp: App) -> None:
 
 ## Lifecycle Hooks
 
-The `App` class supports `__setup__()` and `create_window()` hooks for customization.
+The `App` class supports the `__setup__()` lifecycle hook for customization.
 
 ```python
 def test_setup_hook_called_on_subclass(self) -> None:

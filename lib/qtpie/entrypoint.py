@@ -207,13 +207,6 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
 
         # Apply stylesheet to the app
         _watcher = _apply_stylesheet(app, config)
-
-        # Call create_window if it exists and is overridden
-        create_window_method: Callable[[], QWidget | None] | None = getattr(app, "create_window", None)
-        if create_window_method is not None and callable(create_window_method):
-            result = create_window_method()
-            if isinstance(result, QWidget):
-                window = result
     else:
         # Create a default App with dark/light mode support
         app_kwargs: dict[str, Any] = {}
@@ -280,8 +273,13 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
         _apply_window_config(window, config)
         window.show()
 
-    # Run the app using the standalone helper
-    run_app_fn(app)
+    # Run the app - use app.run() if it exists (for App subclasses with auto-show)
+    # otherwise use the standalone helper
+    run_method = getattr(app, "run", None)
+    if run_method is not None and callable(run_method):
+        run_method()
+    else:
+        run_app_fn(app)
 
 
 def _apply_window_config(window: QWidget, config: EntryConfig) -> None:
@@ -426,11 +424,8 @@ def entrypoint(
         # App subclass with lifecycle hooks
         @entrypoint
         class MyApp(App):
-            def setup(self):
+            def __setup__(self):
                 print("Setting up!")
-
-            def create_window(self):
-                return MyMainWindow()
     """
     config = EntryConfig(
         dark_mode=dark_mode,

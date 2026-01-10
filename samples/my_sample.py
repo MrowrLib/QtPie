@@ -3,33 +3,16 @@ from dataclasses import dataclass
 from typing import override
 
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QTabWidget
+from qtpy.QtGui import QAction
+from qtpy.QtWidgets import QApplication, QCheckBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
 
-from qtpie import Variable, Widget, entrypoint, new, set_language, slot, t, widget
+from qtpie import App, Menu, Section, Separator, Variable, Widget, app, entrypoint, menu, new, set_language, slot, t, widget
 
 
 @dataclass
 class Animal:
     name: str
     species: str
-
-
-@widget
-class RecordValidationWidget(Widget[Animal]):
-    _name: QLineEdit = new()
-
-    def __setup__(self) -> None:
-        self.record = Animal(name="Fido", species="Dog")
-        self.record_state.add_validator("name-length", self.validate_length)
-        self.record_state.is_valid.on_change(self.on_validity_change)
-
-    def validate_length(self, value: Animal) -> str | None:
-        if len(value.name) < 3:
-            return "Name must be at least 3 characters long."
-        return None
-
-    def on_validity_change(self, is_valid: bool) -> None:
-        print(f"Record validity changed: {is_valid}")
 
 
 @widget
@@ -649,7 +632,6 @@ class TodoRow(Widget[TodoItem]):
     delete_btn: QPushButton = new("X", clicked="on_delete")
 
 
-@entrypoint(title="Todo List", size=(400, 500))
 @widget
 class TodoApp(Widget):
     _items: Variable[list[TodoItem]] = new([])
@@ -669,3 +651,37 @@ class TodoApp(Widget):
 
     def on_toggle(self, index: int, done: bool) -> None:
         print(f"Item at index {index} marked as {'done' if done else 'not done'}")
+
+
+@menu(text="&File")
+class FileMenu(Menu):
+    exit_action: QAction = new("E&xit", triggered="on_exit")
+    ___: Separator
+    ___hello_section_name___: Section
+    another_action: QAction = new("Say Hello", triggered="say_hello")
+
+    def on_exit(self) -> None:
+        print("Exit action triggered.")
+        app = QApplication.instance()
+        if app:
+            app.quit()
+
+    def say_hello(self) -> None:
+        print("Hello from the menu action!")
+
+
+@entrypoint
+@app(title="My QtPie App with Menu Action", icon=QStyle.StandardPixmap.SP_BrowserReload, minimize_to_tray=False)
+class MyApp(App):
+    _say_hello: QAction = new("Say Hello", triggered="say_hello")
+    ___: Separator
+    ___hello_section_name___: Section = new("Hello Section")
+    _quit: QAction = new("Quit", triggered="quit")
+
+    file_menu: FileMenu = new()
+
+    def __setup__(self) -> None:
+        print("App setup complete.")
+
+    def say_hello(self) -> None:
+        print("Hello from the menu action!")

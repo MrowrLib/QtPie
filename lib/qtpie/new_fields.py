@@ -39,8 +39,10 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
     This decorator handles non-Variable types by instantiating them in __init__.
     """
-    # Check if already processed
-    if getattr(cls, "__new_fields_processed__", False):
+    # Check if already processed - use __dict__ to check THIS class only, not inherited
+    # This is important because subclasses need their own NewField processing even if
+    # parent class was already processed
+    if cls.__dict__.get("__new_fields_processed__", False):
         return cls
 
     # Find all remaining NewField instances (non-Variable types)
@@ -57,8 +59,18 @@ def new_fields[T](cls: type[T]) -> type[T]:
     # Wrap __init__ to instantiate non-Variable fields
     original_init = cls.__init__ if hasattr(cls, "__init__") else None
 
+    # Check if this class is a QApplication subclass - needs to init QApp BEFORE widgets
+    from qtpy.QtWidgets import QApplication
+
+    is_qapp_subclass = issubclass(cls, QApplication)
+
     def new_init(self: Any, *args: Any, **kwargs: Any) -> None:
         from qtpie.translations.translatable import Translatable
+
+        # For QApplication subclasses, MUST initialize QApplication BEFORE creating widgets
+        # because Qt requires QApplication to exist before any QWidget can be created
+        if is_qapp_subclass and original_init is not None:
+            original_init(self, *args, **kwargs)
 
         # Track refs to resolve after all fields are created
         # Format: (field_name, instance, ref_kwarg_name, Ref)
@@ -176,8 +188,8 @@ def new_fields[T](cls: type[T]) -> type[T]:
         # Resolve refs now that all fields exist
         _resolve_refs(self, pending_refs)
 
-        # Call original __init__
-        if original_init is not None:
+        # Call original __init__ (skip for QApplication subclasses - already called above)
+        if not is_qapp_subclass and original_init is not None:
             original_init(self, *args, **kwargs)
 
     cls.__init__ = new_init  # type: ignore[method-assign]

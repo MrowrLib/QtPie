@@ -608,6 +608,10 @@ class RecordVariable[T]:
         """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
         self._wrapper.add_validator(name, validator)
 
+    def remove_validator(self, name: str) -> None:
+        """Remove a named validator."""
+        self._wrapper.remove_validator(name)
+
     @property
     def is_valid(self) -> Observable[bool]:
         """Validity state. Bindable."""

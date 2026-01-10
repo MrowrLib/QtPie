@@ -1,6 +1,6 @@
 """QtPie - Declarative UI framework for Qt."""
 
-from .app import App, run_app
+from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
 from .dict_widget_repeater import DictWidgetRepeater
 from .entrypoint import entrypoint
@@ -20,7 +20,10 @@ from .window import Window, window
 
 __all__ = [
     "App",
+    "AppBase",
+    "AppConfig",
     "ColorScheme",
+    "app",
     "DictWidgetRepeater",
     "Menu",
     "MenuConfig",

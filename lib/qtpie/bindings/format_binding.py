@@ -452,6 +452,7 @@ def create_format_binding(
       - {#var} - alias for variable's value (only when variable provided)
       - {#widget} - always the widget/window instance
       - {#window} - alias for #widget (more semantic for Window classes)
+      - {#app} - the QApplication instance (for accessing App class properties)
 
     Args:
         widget: The Widget instance to resolve paths from.
@@ -472,6 +473,7 @@ def create_format_binding(
     uses_self = any("#self" in f.expression for f in fields)
     uses_var = any("#var" in f.expression for f in fields)
     uses_widget = any("#widget" in f.expression or "#window" in f.expression for f in fields)
+    uses_app = any("#app" in f.expression for f in fields)
 
     # Get ROOT names for building eval context
     root_names = _get_root_names(var_names)
@@ -513,6 +515,12 @@ def create_format_binding(
         # Add #widget as 'widget_ref' in context if used
         if uses_widget:
             context["widget_ref"] = widget
+
+        # Add #app - find the QApplication instance
+        if uses_app:
+            from qtpy.QtWidgets import QApplication
+
+            context["app_ref"] = QApplication.instance()
 
         # Add #self - if variable provided, it's the variable's value; otherwise widget
         if uses_self:
@@ -573,6 +581,7 @@ def create_format_binding(
                 eval_expr = eval_expr.replace("#var", "var")
                 eval_expr = eval_expr.replace("#widget", "widget_ref")
                 eval_expr = eval_expr.replace("#window", "widget_ref")
+                eval_expr = eval_expr.replace("#app", "app_ref")
 
                 # Evaluate the expression
                 try:
