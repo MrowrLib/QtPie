@@ -655,14 +655,18 @@ class TodoApp(Widget):
 
 @menu(text="&File")
 class FileMenu(Menu):
+    custom_signal: Signal = Signal(int, int)
+
     dog: Variable[Dog]
 
-    print_dog_action: QAction = new(text=ref("Dog name: {dog.name}"), triggered="print_dog")
+    some_number: Variable[int] = new(123)
+    simple_number: int = 42
 
-    def print_dog(self) -> None:
-        print(f"DOG: {self.dog}")
-        print(f"DOG Value: {self.dog.value}")
-        print(f"Dog Name: {self.dog.name}, Age: {self.dog.age}")
+    print_dog_action: QAction = new(text=ref("Dog name: {dog.name}"), triggered="{just_a_function(some_number, simple_number)}")
+    # print_dog_action: QAction = new(text=ref("Dog name: {dog.name}"), triggered="{custom_signal(some_number, simple_number)}")
+
+    def just_a_function(self, *args: object, **kwargs: object) -> None:
+        print(f"Just a regular function in the menu called with args: {args}, kwargs: {kwargs}")
 
 
 @entrypoint
@@ -672,10 +676,7 @@ class MyApp(App[Dog]):
     _name: QLineEdit = new()
     _age: QLineEdit = new()
 
-    file_menu: FileMenu = new(dog="record")
+    file_menu: FileMenu = new(dog="record", custom_signal="on_custom_signal")
 
-    def say_hello(self) -> None:
-        print("Hello from the menu action!")
-
-    # _say_hello: QAction = new("Say Hello", triggered="say_hello")
-    # _quit: QAction = new("Quit", triggered="quit")
+    def on_custom_signal(self, *args: object, **kwargs: object) -> None:
+        print(f"Custom signal receive with args: {args}, kwargs: {kwargs}")

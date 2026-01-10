@@ -1229,11 +1229,15 @@ def _is_signal(obj: object) -> bool:
 def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Connect signals declared in new() to handlers.
 
-    Supports callables, string method names, and string signal names:
+    Supports callables, string method names, string signal names, and expressions:
         clicked=lambda: print("clicked")
         clicked="on_clicked"
         clicked="my_custom_signal"  # If my_custom_signal is a Signal, emits it
+        clicked="{my_custom_signal(123)}"  # Expression - emit signal with args
+        clicked="{on_clicked()}"  # Expression - call method with no args
     """
+    from .bindings import is_format_string
+
     for name, field in config.fields.items():
         if not field.signal_connections:
             continue
@@ -1248,22 +1252,119 @@ def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
                 continue
 
             if isinstance(handler, str):
-                # String handler - could be method name or signal name
-                target = getattr(widget, handler, None)
-                if target is None:
-                    raise AttributeError(f"{type(widget).__name__} has no method or signal '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
-
-                if _is_signal(target):
-                    # Target is a Signal - connect signal-to-signal
-                    signal.connect(target)
-                elif callable(target):
-                    # Target is a method
-                    signal.connect(target)
+                # Check if it's an expression (format string with {})
+                if is_format_string(handler):
+                    # Expression handler - create a wrapper that evaluates the expression
+                    expr_handler = _create_signal_expression_handler(widget, handler)
+                    signal.connect(expr_handler)
                 else:
-                    raise AttributeError(f'{type(widget).__name__}.{handler} is not callable or a Signal for signal connection {name}.{signal_name}="{handler}"')
+                    # Simple string handler - could be method name or signal name
+                    target = getattr(widget, handler, None)
+                    if target is None:
+                        raise AttributeError(f"{type(widget).__name__} has no method or signal '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
+
+                    if _is_signal(target):
+                        # Target is a Signal - connect signal-to-signal
+                        signal.connect(target)
+                    elif callable(target):
+                        # Target is a method
+                        signal.connect(target)
+                    else:
+                        raise AttributeError(f'{type(widget).__name__}.{handler} is not callable or a Signal for signal connection {name}.{signal_name}="{handler}"')
             else:
                 # Direct callable (lambda, function, etc.)
                 signal.connect(handler)
+
+
+def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> Callable[..., Any]:
+    """Create a signal handler from an expression string like "{my_signal(123)}".
+
+    The expression is evaluated in the widget's context when the signal fires.
+    Supports:
+        - Method calls: {on_clicked()}, {handle_value(123)}
+        - Signal emissions: {my_signal()}, {value_changed(42)}
+        - Full Python expressions with widget variables
+        - #args placeholder to pass signal arguments: {handle_click(#args)}
+    """
+    from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields
+    from .variable import Variable
+
+    # Parse the expression to get the inner content
+    fields = _parse_format_fields(expression)
+    if not fields:
+        raise ValueError(f"Invalid signal expression: {expression}")
+
+    # We expect a single expression field
+    expr = fields[0].expression
+
+    # Check if expression uses special placeholders
+    uses_args = "#args" in expr
+    uses_widget = "#widget" in expr or "#self" in expr
+
+    # Replace special placeholders before AST extraction (they're not valid Python)
+    expr_for_ast = expr
+    if uses_args:
+        expr_for_ast = expr_for_ast.replace("#args", "_signal_args_placeholder_")
+    if uses_widget:
+        expr_for_ast = expr_for_ast.replace("#widget", "_widget_ref_")
+        expr_for_ast = expr_for_ast.replace("#self", "_widget_ref_")
+
+    # Extract variable names from the expression for context building
+    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
+    # Remove placeholder names we added
+    var_names.discard("_signal_args_placeholder_")
+    var_names.discard("_widget_ref_")
+
+    def handler(*signal_args: Any) -> Any:
+        # Build context with widget's variables
+        context: dict[str, Any] = {}
+
+        # Add widget reference
+        context["widget_ref"] = widget
+
+        # Add #args support - replaced in expression
+        # We'll handle this by making 'args' available in context
+        if uses_args:
+            context["signal_args"] = signal_args
+
+        # Add all variable values to context
+        for var_name in var_names:
+            # Try exact match first
+            if hasattr(widget, var_name):
+                raw_attr: Any = getattr(widget, var_name)
+                if isinstance(raw_attr, Variable):
+                    context[var_name] = raw_attr.value
+                elif _is_signal(raw_attr):
+                    # Wrap signal so it can be called directly (calls .emit())
+                    context[var_name] = raw_attr.emit
+                else:
+                    context[var_name] = raw_attr
+            # Try underscore fallback
+            elif hasattr(widget, f"_{var_name}"):
+                raw_attr = getattr(widget, f"_{var_name}")
+                if isinstance(raw_attr, Variable):
+                    context[var_name] = raw_attr.value
+                elif _is_signal(raw_attr):
+                    context[var_name] = raw_attr.emit
+                else:
+                    context[var_name] = raw_attr
+
+        # Replace special placeholders
+        eval_expr = expr
+        if uses_args:
+            eval_expr = eval_expr.replace("#args", "*signal_args")
+        if uses_widget:
+            eval_expr = eval_expr.replace("#widget", "widget_ref")
+            eval_expr = eval_expr.replace("#self", "widget_ref")
+
+        # Evaluate the expression
+        try:
+            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Error evaluating signal expression '{expression}': {e}") from e
+
+    return handler
 
 
 def _apply_property_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:

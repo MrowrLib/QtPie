@@ -25,6 +25,13 @@ from .variable import (
     _RequiredBindingDescriptor,  # pyright: ignore[reportPrivateUsage]
 )
 
+
+def _is_signal(obj: object) -> bool:
+    """Check if obj is a Qt Signal (bound signal instance)."""
+    type_name = type(obj).__name__
+    return type_name in ("SignalInstance", "pyqtBoundSignal")
+
+
 # =============================================================================
 # Marker Classes
 # =============================================================================
@@ -485,9 +492,25 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
                         signal = getattr(item, signal_name, None)
                         if signal is not None:
                             if isinstance(handler, str):
-                                method = getattr(self, handler, None)
-                                if method is not None:
-                                    signal.connect(method)
+                                # Check if it's an expression (format string with {})
+                                if "{" in handler and "}" in handler:
+                                    # Expression handler - create a wrapper that evaluates the expression
+                                    expr_handler = _create_menu_signal_expression_handler(self, handler)
+                                    signal.connect(expr_handler)
+                                else:
+                                    # Simple string handler - could be method name or signal name
+                                    target = getattr(self, handler, None)
+                                    if target is None:
+                                        raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {item_name}.{signal_name}=\"{handler}\"")
+
+                                    if _is_signal(target):
+                                        # Target is a Signal - connect signal-to-signal
+                                        signal.connect(target)
+                                    elif callable(target):
+                                        # Target is a method
+                                        signal.connect(target)
+                                    else:
+                                        raise AttributeError(f'{type(self).__name__}.{handler} is not callable or a Signal for signal connection {item_name}.{signal_name}="{handler}"')
                             elif callable(handler):
                                 signal.connect(handler)
 
@@ -577,6 +600,97 @@ def _bind_action_checked(menu: Menu[Any], action: Any, var_name: str) -> None:
             var.value = checked
 
     action.toggled.connect(on_action_toggled)
+
+
+def _create_menu_signal_expression_handler(menu: Menu[Any], expression: str) -> Callable[[Any], Any]:
+    """Create a signal handler from an expression string like "{my_signal(123)}".
+
+    The expression is evaluated in the menu's context when the signal fires.
+    Supports:
+        - Method calls: {on_clicked()}, {handle_value(123)}
+        - Signal emissions: {my_signal()}, {value_changed(42)}
+        - Full Python expressions with menu variables
+        - #args placeholder to pass signal arguments: {handle_click(#args)}
+        - #menu / #self placeholder for the menu instance
+    """
+    from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields
+
+    # Parse the expression to get the inner content
+    fields = _parse_format_fields(expression)
+    if not fields:
+        raise ValueError(f"Invalid signal expression: {expression}")
+
+    # We expect a single expression field
+    expr = fields[0].expression
+
+    # Check if expression uses special placeholders
+    uses_args = "#args" in expr
+    uses_menu = "#menu" in expr or "#self" in expr
+
+    # Replace special placeholders before AST extraction (they're not valid Python)
+    expr_for_ast = expr
+    if uses_args:
+        expr_for_ast = expr_for_ast.replace("#args", "_signal_args_placeholder_")
+    if uses_menu:
+        expr_for_ast = expr_for_ast.replace("#menu", "_menu_ref_")
+        expr_for_ast = expr_for_ast.replace("#self", "_menu_ref_")
+
+    # Extract variable names from the expression for context building
+    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
+    # Remove placeholder names we added
+    var_names.discard("_signal_args_placeholder_")
+    var_names.discard("_menu_ref_")
+
+    def handler(*signal_args: Any) -> Any:
+        # Build context with menu's variables
+        context: dict[str, Any] = {}
+
+        # Add menu reference for #menu / #self
+        if uses_menu:
+            context["menu_ref"] = menu
+
+        # Add #args support
+        if uses_args:
+            context["signal_args"] = signal_args
+
+        # Add all variable values to context
+        for var_name in var_names:
+            # Try exact match first
+            if hasattr(menu, var_name):
+                raw_attr: Any = getattr(menu, var_name)
+                if isinstance(raw_attr, Variable):
+                    context[var_name] = raw_attr.value
+                elif _is_signal(raw_attr):
+                    # Wrap signal so it can be called directly (calls .emit())
+                    context[var_name] = raw_attr.emit
+                else:
+                    context[var_name] = raw_attr
+            # Try underscore fallback
+            elif hasattr(menu, f"_{var_name}"):
+                raw_attr = getattr(menu, f"_{var_name}")
+                if isinstance(raw_attr, Variable):
+                    context[var_name] = raw_attr.value
+                elif _is_signal(raw_attr):
+                    context[var_name] = raw_attr.emit
+                else:
+                    context[var_name] = raw_attr
+
+        # Replace special placeholders
+        eval_expr = expr
+        if uses_args:
+            eval_expr = eval_expr.replace("#args", "*signal_args")
+        if uses_menu:
+            eval_expr = eval_expr.replace("#menu", "menu_ref")
+            eval_expr = eval_expr.replace("#self", "menu_ref")
+
+        # Evaluate the expression
+        try:
+            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Error evaluating signal expression '{expression}': {e}") from e
+
+    return handler
 
 
 def _is_action_list_type(annotation: Any) -> bool:

@@ -1,6 +1,8 @@
 # pyright: reportPrivateUsage=false
 # pyright: reportMissingTypeArgument=false
 # pyright: reportUnknownMemberType=false
+# pyright: reportUnknownArgumentType=false
+# pyright: reportUnknownLambdaType=false
 """Tests for the Menu system (@menu decorator)."""
 
 from typing import override
@@ -1084,3 +1086,271 @@ class TestMenuRefWithRequiredBinding:
         w = qt.track(MainWindow())
         # The ref should resolve with literal text preserved
         assert_that(w.dog_menu.dog_action.text()).is_equal_to("Dog name: Buddy")
+
+
+# =============================================================================
+# Menu Signal-to-Signal Connections
+# =============================================================================
+
+
+class TestMenuSignalToSignal:
+    """Test signal-to-signal connections in Menu (like Widget has)."""
+
+    def test_triggered_emits_signal(self, qt: QtDriver) -> None:
+        """Action triggered emits a custom signal when handler is signal name."""
+        from qtpy.QtCore import Signal
+
+        signal_emitted = False
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            file_requested = Signal()
+            new_action: QAction = new("&New", triggered="file_requested")
+
+        m = qt.track(FileMenu())
+
+        def on_signal() -> None:
+            nonlocal signal_emitted
+            signal_emitted = True
+
+        m.file_requested.connect(on_signal)
+        m.new_action.trigger()
+
+        assert_that(signal_emitted).is_true()
+
+    def test_method_handler_still_works_in_menu(self, qt: QtDriver) -> None:
+        """Existing method handler behavior is unchanged in Menu."""
+        method_called = False
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            new_action: QAction = new("&New", triggered="on_new")
+
+            def on_new(self) -> None:
+                nonlocal method_called
+                method_called = True
+
+        m = qt.track(FileMenu())
+        m.new_action.trigger()
+
+        assert_that(method_called).is_true()
+
+    def test_lambda_handler_still_works_in_menu(self, qt: QtDriver) -> None:
+        """Existing lambda handler behavior is unchanged in Menu."""
+        lambda_called = False
+
+        def set_called() -> None:
+            nonlocal lambda_called
+            lambda_called = True
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            new_action: QAction = new("&New", triggered=set_called)
+
+        m = qt.track(FileMenu())
+        m.new_action.trigger()
+
+        assert_that(lambda_called).is_true()
+
+    def test_invalid_handler_raises_in_menu(self, qt: QtDriver) -> None:
+        """Nonexistent handler name raises AttributeError in Menu."""
+        import pytest
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            new_action: QAction = new("&New", triggered="nonexistent")
+
+        with pytest.raises(AttributeError, match="nonexistent"):
+            qt.track(FileMenu())
+
+    def test_non_callable_non_signal_raises_in_menu(self, qt: QtDriver) -> None:
+        """Handler pointing to non-callable, non-signal attribute raises in Menu."""
+        import pytest
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            some_value: int = 42
+            new_action: QAction = new("&New", triggered="some_value")
+
+        with pytest.raises(AttributeError, match="not callable or a Signal"):
+            qt.track(FileMenu())
+
+    def test_toggled_emits_signal(self, qt: QtDriver) -> None:
+        """Checkable action toggled emits custom signal when handler is signal name."""
+        from qtpy.QtCore import Signal
+
+        received_value: bool | None = None
+
+        @menu(text="&View")
+        class ViewMenu(Menu):
+            toggle_changed = Signal(bool)
+            word_wrap: QAction = new("Word Wrap", checkable=True, toggled="toggle_changed")
+
+        m = qt.track(ViewMenu())
+
+        def on_toggle(val: bool) -> None:
+            nonlocal received_value
+            received_value = val
+
+        m.toggle_changed.connect(on_toggle)
+        m.word_wrap.setChecked(True)
+
+        assert_that(received_value).is_true()
+
+    def test_menu_in_window_signal_to_parent(self, qt: QtDriver) -> None:
+        """Menu action can emit signal that parent window handles."""
+        from qtpy.QtCore import Signal
+
+        parent_received = False
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            file_requested = Signal()
+            new_action: QAction = new("&New", triggered="file_requested")
+
+        @window(title="App")
+        class App(Window):
+            file_menu: FileMenu = new(file_requested="_on_file")
+
+            def _on_file(self) -> None:
+                nonlocal parent_received
+                parent_received = True
+
+        app = qt.track(App())
+        app.file_menu.new_action.trigger()
+
+        assert_that(parent_received).is_true()
+
+
+class TestMenuSignalExpressions:
+    """Test expression-based signal handlers in Menu (e.g., triggered="{custom_signal(123)}")."""
+
+    def test_triggered_expression_calls_method(self, qt: QtDriver) -> None:
+        """Expression like {on_action()} calls the method."""
+        method_called = False
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            action: QAction = new("Action", triggered="{on_action()}")
+
+            def on_action(self) -> None:
+                nonlocal method_called
+                method_called = True
+
+        m = qt.track(FileMenu())
+        m.action.trigger()
+
+        assert_that(method_called).is_true()
+
+    def test_triggered_expression_emits_signal_with_literal(self, qt: QtDriver) -> None:
+        """Expression like {custom_signal(123)} emits signal with literal value."""
+        from qtpy.QtCore import Signal
+
+        received_value: int | None = None
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            custom_signal = Signal(int)
+            # Signals can be called directly (auto-emits)
+            action: QAction = new("Action", triggered="{custom_signal(123)}")
+
+        m = qt.track(FileMenu())
+
+        def on_signal(val: int) -> None:
+            nonlocal received_value
+            received_value = val
+
+        m.custom_signal.connect(on_signal)
+        m.action.trigger()
+
+        assert_that(received_value).is_equal_to(123)
+
+    def test_triggered_expression_uses_variable_value(self, qt: QtDriver) -> None:
+        """Expression can reference Variable values."""
+        from qtpy.QtCore import Signal
+
+        received_values: list[int] = []
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            custom_signal = Signal(int, int)
+            _some_number: Variable[int] = new(42)
+            simple_number: int = 99
+            # Signals can be called directly with Variable values
+            action: QAction = new("Action", triggered="{custom_signal(some_number, simple_number)}")
+
+        m = qt.track(FileMenu())
+
+        def on_signal(a: int, b: int) -> None:
+            received_values.extend([a, b])
+
+        m.custom_signal.connect(on_signal)
+        m.action.trigger()
+
+        assert_that(received_values).is_equal_to([42, 99])
+
+    def test_triggered_expression_with_args_placeholder(self, qt: QtDriver) -> None:
+        """Expression with #args passes signal arguments."""
+        received_checked: bool | None = None
+
+        @menu(text="&View")
+        class ViewMenu(Menu):
+            action: QAction = new("Toggle", checkable=True, toggled="{on_toggled(#args)}")
+
+            def on_toggled(self, checked: bool) -> None:
+                nonlocal received_checked
+                received_checked = checked
+
+        m = qt.track(ViewMenu())
+        m.action.setChecked(True)
+
+        assert_that(received_checked).is_true()
+
+    def test_triggered_expression_full_example(self, qt: QtDriver) -> None:
+        """Full example from user: triggered with Variable and literal values."""
+        from dataclasses import dataclass
+
+        from qtpy.QtCore import Signal
+
+        from qtpie import ref
+
+        received_values: list[int] = []
+
+        @dataclass
+        class Dog:
+            name: str = ""
+            age: int = 0
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            custom_signal = Signal(int, int)
+
+            dog: Variable[Dog]
+
+            _some_number: Variable[int] = new(123)
+            simple_number: int = 42
+
+            # Signals can be called directly (auto-emits)
+            print_dog_action: QAction = new(
+                text=ref("Dog name: {dog.name}"),
+                triggered="{custom_signal(some_number, simple_number)}",
+            )
+
+            def on_custom(self, a: int, b: int) -> None:
+                received_values.extend([a, b])
+
+        # Create a window that provides the dog binding
+        @window(title="Test", record=Dog("Buddy", 4))
+        class MainWindow(Window[Dog]):
+            file_menu: FileMenu = new(dog="record")
+
+        w = qt.track(MainWindow())
+
+        # Connect to the signal
+        w.file_menu.custom_signal.connect(lambda a, b: received_values.extend([a, b]))
+
+        # Trigger the action
+        w.file_menu.print_dog_action.trigger()
+
+        assert_that(received_values).is_equal_to([123, 42])
+        assert_that(w.file_menu.print_dog_action.text()).is_equal_to("Dog name: Buddy")

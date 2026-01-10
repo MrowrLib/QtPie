@@ -1,5 +1,7 @@
 # pyright: reportMissingTypeArgument=false
 # pyright: reportPrivateUsage=false
+# pyright: reportUnknownLambdaType=false
+# pyright: reportUnknownArgumentType=false
 """Tests for signal-to-signal connections via string handler."""
 
 import pytest
@@ -7,7 +9,7 @@ from assertpy import assert_that
 from qtpy.QtCore import Signal
 from qtpy.QtWidgets import QPushButton, QSlider
 
-from qtpie import Widget, new, widget
+from qtpie import Variable, Widget, Window, new, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -230,3 +232,261 @@ class TestParentChildSignalFlow:
         app.counter._button.click()
 
         assert_that(final_handler_called).is_true()
+
+
+# =============================================================================
+# Expression-based Signal Handlers (e.g., clicked="{custom_signal(123)}")
+# =============================================================================
+
+
+class TestWidgetSignalExpressions:
+    """Test expression-based signal handlers in Widget."""
+
+    def test_expression_calls_method(self, qt: QtDriver) -> None:
+        """Expression like {on_click()} calls the method."""
+        method_called = False
+
+        @widget
+        class MyWidget(Widget):
+            _button: QPushButton = new("Click", clicked="{on_click()}")
+
+            def on_click(self) -> None:
+                nonlocal method_called
+                method_called = True
+
+        w = qt.track(MyWidget())
+        w._button.click()
+
+        assert_that(method_called).is_true()
+
+    def test_expression_emits_signal_with_literal(self, qt: QtDriver) -> None:
+        """Expression like {custom_signal(123)} emits signal with literal value."""
+        received_value: int | None = None
+
+        @widget
+        class MyWidget(Widget):
+            custom_signal = Signal(int)
+            _button: QPushButton = new("Click", clicked="{custom_signal(123)}")
+
+        w = qt.track(MyWidget())
+
+        def on_signal(val: int) -> None:
+            nonlocal received_value
+            received_value = val
+
+        w.custom_signal.connect(on_signal)
+        w._button.click()
+
+        assert_that(received_value).is_equal_to(123)
+
+    def test_expression_uses_variable_value(self, qt: QtDriver) -> None:
+        """Expression can reference Variable values."""
+        received_values: list[int] = []
+
+        @widget
+        class MyWidget(Widget):
+            custom_signal = Signal(int, int)
+            _some_number: Variable[int] = new(42)
+            simple_number: int = 99
+            _button: QPushButton = new("Click", clicked="{custom_signal(some_number, simple_number)}")
+
+        w = qt.track(MyWidget())
+
+        def on_signal(a: int, b: int) -> None:
+            received_values.extend([a, b])
+
+        w.custom_signal.connect(on_signal)
+        w._button.click()
+
+        assert_that(received_values).is_equal_to([42, 99])
+
+    def test_expression_with_args_placeholder(self, qt: QtDriver) -> None:
+        """Expression with #args passes signal arguments."""
+        received_value: int | None = None
+
+        @widget
+        class MyWidget(Widget):
+            _slider: QSlider = new(valueChanged="{on_value(#args)}")
+
+            def on_value(self, val: int) -> None:
+                nonlocal received_value
+                received_value = val
+
+        w = qt.track(MyWidget())
+        w._slider.setValue(77)
+
+        assert_that(received_value).is_equal_to(77)
+
+
+class TestWindowSignalExpressions:
+    """Test expression-based signal handlers in Window."""
+
+    def test_expression_calls_method(self, qt: QtDriver) -> None:
+        """Expression like {on_click()} calls the method."""
+        method_called = False
+
+        @window(title="Test")
+        class MyWindow(Window):
+            _button: QPushButton = new("Click", clicked="{on_click()}")
+
+            def on_click(self) -> None:
+                nonlocal method_called
+                method_called = True
+
+        w = qt.track(MyWindow())
+        w._button.click()
+
+        assert_that(method_called).is_true()
+
+    def test_expression_emits_signal_with_literal(self, qt: QtDriver) -> None:
+        """Expression like {custom_signal(123)} emits signal with literal value."""
+        received_value: int | None = None
+
+        @window(title="Test")
+        class MyWindow(Window):
+            custom_signal = Signal(int)
+            _button: QPushButton = new("Click", clicked="{custom_signal(123)}")
+
+        w = qt.track(MyWindow())
+
+        def on_signal(val: int) -> None:
+            nonlocal received_value
+            received_value = val
+
+        w.custom_signal.connect(on_signal)
+        w._button.click()
+
+        assert_that(received_value).is_equal_to(123)
+
+    def test_expression_uses_variable_value(self, qt: QtDriver) -> None:
+        """Expression can reference Variable values."""
+        received_values: list[int] = []
+
+        @window(title="Test")
+        class MyWindow(Window):
+            custom_signal = Signal(int, int)
+            _some_number: Variable[int] = new(42)
+            simple_number: int = 99
+            _button: QPushButton = new("Click", clicked="{custom_signal(some_number, simple_number)}")
+
+        w = qt.track(MyWindow())
+
+        def on_signal(a: int, b: int) -> None:
+            received_values.extend([a, b])
+
+        w.custom_signal.connect(on_signal)
+        w._button.click()
+
+        assert_that(received_values).is_equal_to([42, 99])
+
+    def test_expression_with_args_placeholder(self, qt: QtDriver) -> None:
+        """Expression with #args passes signal arguments."""
+        received_value: int | None = None
+
+        @window(title="Test")
+        class MyWindow(Window):
+            _slider: QSlider = new(valueChanged="{on_value(#args)}")
+
+            def on_value(self, val: int) -> None:
+                nonlocal received_value
+                received_value = val
+
+        w = qt.track(MyWindow())
+        w._slider.setValue(77)
+
+        assert_that(received_value).is_equal_to(77)
+
+
+class TestAppSignalExpressions:
+    """Test expression-based signal handlers in App (using QObject + AppBase for signal support)."""
+
+    def test_expression_calls_method(self, qt: QtDriver) -> None:
+        """Expression like {on_click()} calls the method."""
+        from qtpy.QtCore import QObject
+
+        from qtpie import AppBase, app
+
+        method_called = False
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(QObject, AppBase):
+            _button: QPushButton = new("Click", clicked="{on_click()}")
+
+            def on_click(self) -> None:
+                nonlocal method_called
+                method_called = True
+
+        a = MyApp()
+        a._button.click()
+
+        assert_that(method_called).is_true()
+
+    def test_expression_emits_signal_with_literal(self, qt: QtDriver) -> None:
+        """Expression like {custom_signal(123)} emits signal with literal value."""
+        from qtpy.QtCore import QObject
+
+        from qtpie import AppBase, app
+
+        received_value: int | None = None
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(QObject, AppBase):
+            custom_signal = Signal(int)
+            _button: QPushButton = new("Click", clicked="{custom_signal(123)}")
+
+        a = MyApp()
+
+        def on_signal(val: int) -> None:
+            nonlocal received_value
+            received_value = val
+
+        a.custom_signal.connect(on_signal)
+        a._button.click()
+
+        assert_that(received_value).is_equal_to(123)
+
+    def test_expression_uses_variable_value(self, qt: QtDriver) -> None:
+        """Expression can reference Variable values."""
+        from qtpy.QtCore import QObject
+
+        from qtpie import AppBase, app
+
+        received_values: list[int] = []
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(QObject, AppBase):
+            custom_signal = Signal(int, int)
+            _some_number: Variable[int] = new(42)
+            simple_number: int = 99
+            _button: QPushButton = new("Click", clicked="{custom_signal(some_number, simple_number)}")
+
+        a = MyApp()
+
+        def on_signal(a_val: int, b_val: int) -> None:
+            received_values.extend([a_val, b_val])
+
+        a.custom_signal.connect(on_signal)
+        a._button.click()
+
+        assert_that(received_values).is_equal_to([42, 99])
+
+    def test_expression_with_args_placeholder(self, qt: QtDriver) -> None:
+        """Expression with #args passes signal arguments."""
+        from qtpy.QtCore import QObject
+
+        from qtpie import AppBase, app
+
+        received_value: int | None = None
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(QObject, AppBase):
+            _slider: QSlider = new(valueChanged="{on_value(#args)}")
+
+            def on_value(self, val: int) -> None:
+                nonlocal received_value
+                received_value = val
+
+        a = MyApp()
+        a._slider.setValue(77)
+
+        assert_that(received_value).is_equal_to(77)

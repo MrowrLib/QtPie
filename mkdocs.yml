@@ -52,8 +52,11 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Why QtPie?: why-qtpie.md
+  - Install: install.md
   - Basics:
       - Widgets: basics/widgets.md
+      - Layouts: basics/layouts.md
+      - Signals: basics/signals.md
   - Reactive State:
       - Variables: state/variables.md
       - Bindings: state/bindings.md
