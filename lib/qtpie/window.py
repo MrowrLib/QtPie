@@ -5,24 +5,23 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, NoReturn, get_args, get_origin, overload
 
 from observant import Observable
 from qtpy.QtWidgets import (
-    QFormLayout,
-    QGridLayout,
-    QHBoxLayout,
     QLayout,
     QMainWindow,
     QMenu,
-    QVBoxLayout,
     QWidget,
 )
 
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
+from .signals import create_signal_expression_handler
 from .state import QtPieState
+from .utils.common import detect_required_bindings, is_signal
+from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor
 from .widget import IconType, _resolve_icon
 
@@ -241,40 +240,8 @@ def _collect_fields(cls: type[Window[Any]]) -> None:
 
 
 def _detect_required_bindings_for_window(cls: type[Window[Any]]) -> None:
-    """Detect bare Variable[T] annotations as required bindings.
-
-    A bare annotation like `count: Variable[int]` (no `= new()`) indicates
-    the Variable must be provided by the parent widget/window via binding.
-
-    Creates a _RequiredBindingDescriptor for each bare Variable annotation.
-    """
-    # Get annotations from this class only (not inherited)
-    annotations = getattr(cls, "__annotations__", {})
-
-    for name, annotation in annotations.items():
-        # Check if annotation is Variable[T] or Variable
-        origin = get_origin(annotation)
-        if origin is not Variable and annotation is not Variable:
-            continue
-
-        # Check if there's a value in __dict__ for this name
-        # If there is, it's either a NewField (= new(...)) or a descriptor (already processed)
-        if name in cls.__dict__:
-            # Has a value - not a bare annotation
-            continue
-
-        # This is a bare Variable[T] annotation - mark as required binding
-        cls._qtpie_config.required_bindings.add(name)
-
-        # Extract inner type from Variable[T]
-        inner_type: type | None = None
-        if origin is Variable:
-            args = get_args(annotation)
-            inner_type = args[0] if args else None
-
-        # Create a _RequiredBindingDescriptor for this annotation
-        descriptor: _RequiredBindingDescriptor[Any] = _RequiredBindingDescriptor(name, inner_type)
-        setattr(cls, name, descriptor)
+    """Detect bare Variable[T] annotations as required bindings."""
+    detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
 
 
 @overload
@@ -454,7 +421,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                 if target is None:
                                     raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {fname}.{signal_name}=\"{handler}\"")
 
-                                if _is_signal(target):
+                                if is_signal(target):
                                     # Target is a Signal - connect signal-to-signal
                                     signal.connect(target)
                                 elif callable(target):
@@ -497,7 +464,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Option 2: Create a container with layout for non-menu widgets
         elif non_menu_widgets and config.layout is not None:
             central = QWidget()
-            qt_layout = _create_layout(config.layout)
+            qt_layout = create_layout(config.layout)
             if qt_layout is not None:
                 central.setLayout(qt_layout)
 
@@ -555,116 +522,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
     cls._qtpie_config.init_wrapped = True
 
 
-def _is_signal(obj: object) -> bool:
-    """Check if obj is a Qt Signal (bound signal instance)."""
-    type_name = type(obj).__name__
-    return type_name in ("SignalInstance", "pyqtBoundSignal")
-
-
 def _create_window_signal_expression_handler(window: Window[Any], expression: str) -> Callable[..., Any]:
-    """Create a signal handler from an expression string like "{my_signal(123)}".
-
-    The expression is evaluated in the window's context when the signal fires.
-    Supports:
-        - Method calls: {on_clicked()}, {handle_value(123)}
-        - Signal emissions: {my_signal()}, {value_changed(42)}
-        - Full Python expressions with window variables
-        - #args placeholder to pass signal arguments: {handle_click(#args)}
-    """
-    from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields
-    from .variable import Variable
-
-    # Parse the expression to get the inner content
-    fields = _parse_format_fields(expression)
-    if not fields:
-        raise ValueError(f"Invalid signal expression: {expression}")
-
-    # We expect a single expression field
-    expr = fields[0].expression
-
-    # Check if expression uses special placeholders
-    uses_args = "#args" in expr
-    uses_window = "#window" in expr or "#widget" in expr or "#self" in expr
-
-    # Replace special placeholders before AST extraction (they're not valid Python)
-    expr_for_ast = expr
-    if uses_args:
-        expr_for_ast = expr_for_ast.replace("#args", "_signal_args_placeholder_")
-    if uses_window:
-        expr_for_ast = expr_for_ast.replace("#window", "_window_ref_")
-        expr_for_ast = expr_for_ast.replace("#widget", "_window_ref_")
-        expr_for_ast = expr_for_ast.replace("#self", "_window_ref_")
-
-    # Extract variable names from the expression for context building
-    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
-    # Remove placeholder names we added
-    var_names.discard("_signal_args_placeholder_")
-    var_names.discard("_window_ref_")
-
-    def handler(*signal_args: Any) -> Any:
-        # Build context with window's variables
-        context: dict[str, Any] = {}
-
-        # Add window reference for #window / #widget / #self
-        if uses_window:
-            context["window_ref"] = window
-
-        # Add #args support
-        if uses_args:
-            context["signal_args"] = signal_args
-
-        # Add all variable values to context
-        for var_name in var_names:
-            # Try exact match first
-            if hasattr(window, var_name):
-                raw_attr: Any = getattr(window, var_name)
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif _is_signal(raw_attr):
-                    # Wrap signal so it can be called directly (calls .emit())
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
-            # Try underscore fallback
-            elif hasattr(window, f"_{var_name}"):
-                raw_attr = getattr(window, f"_{var_name}")
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif _is_signal(raw_attr):
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
-
-        # Replace special placeholders
-        eval_expr = expr
-        if uses_args:
-            eval_expr = eval_expr.replace("#args", "*signal_args")
-        if uses_window:
-            eval_expr = eval_expr.replace("#window", "window_ref")
-            eval_expr = eval_expr.replace("#widget", "window_ref")
-            eval_expr = eval_expr.replace("#self", "window_ref")
-
-        # Evaluate the expression
-        try:
-            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-            return result
-        except Exception as e:
-            raise RuntimeError(f"Error evaluating signal expression '{expression}': {e}") from e
-
-    return handler
-
-
-def _create_layout(layout_type: LayoutType) -> QLayout | None:
-    """Create a Qt layout based on type."""
-    if layout_type == "vertical":
-        return QVBoxLayout()
-    elif layout_type == "horizontal":
-        return QHBoxLayout()
-    elif layout_type == "form":
-        return QFormLayout()
-    elif layout_type == "grid":
-        return QGridLayout()
-    return None
+    """Create a signal handler from an expression string like "{my_signal(123)}"."""
+    return create_signal_expression_handler(window, expression, ["#window", "#widget", "#self"])
 
 
 def _add_to_layout(
@@ -673,46 +533,7 @@ def _add_to_layout(
     layout_type: LayoutType,
     label: str | None = None,
     grid: GridPosition | None = None,
-    label_translatable: Any | None = None,  # Original Translatable for retranslation
+    label_translatable: Any | None = None,
 ) -> None:
-    """Add a widget to the layout.
-
-    Args:
-        layout: The Qt layout to add to.
-        widget_instance: The widget to add.
-        layout_type: The type of layout.
-        label: For form layouts, the label text for this row.
-        grid: For grid layouts, position as (row, col) or (row, col, rowspan, colspan).
-        label_translatable: Original Translatable for registering retranslation binding.
-    """
-    if layout_type in ("vertical", "horizontal"):
-        layout.addWidget(widget_instance)  # type: ignore[union-attr]
-    elif layout_type == "form":
-        form_layout = cast(QFormLayout, layout)
-        if label is not None:
-            form_layout.addRow(label, widget_instance)
-            # Register form label for retranslation if it was a Translatable
-            if label_translatable is not None:
-                from qtpie.translations.store import register_binding
-                from qtpie.translations.translatable import Translatable
-
-                if isinstance(label_translatable, Translatable):
-                    # Get the QLabel that Qt created for this row
-                    label_widget = form_layout.labelForField(widget_instance)
-                    register_binding(
-                        label_widget,
-                        "text",
-                        label_translatable.text,
-                        label_translatable.context,
-                    )
-        else:
-            form_layout.addRow(widget_instance)
-    elif layout_type == "grid":
-        grid_layout = cast(QGridLayout, layout)
-        if grid is not None:
-            row, col = grid[0], grid[1]
-            rowspan = grid[2] if len(grid) > 2 else 1
-            colspan = grid[3] if len(grid) > 3 else 1
-            grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
-        else:
-            grid_layout.addWidget(widget_instance)
+    """Add a widget to the layout."""
+    add_to_layout(layout, widget_instance, layout_type, label, grid, label_translatable)

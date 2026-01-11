@@ -16,28 +16,13 @@ from observant import (
     ValidatorFn,
 )
 
+from .utils.common import is_primitive_type, is_signal_on_type
+
 # TypeVars for list/dict/set item types (used in overloads)
 _ItemT = TypeVar("_ItemT")
 _KeyT = TypeVar("_KeyT")
 _ValT = TypeVar("_ValT")
 _SetItemT = TypeVar("_SetItemT")
-
-
-def _is_primitive_type(t: type | None) -> bool:
-    """Check if type is a primitive."""
-    return t in (str, int, float, bool, type(None))
-
-
-def _is_signal_on_type(name: str, target_type: type) -> bool:
-    """Check if name is a signal on the given type."""
-    try:
-        attr = getattr(target_type, name, None)
-        if attr is None:
-            return False
-        # qtpy signals at class level have type name 'Signal'
-        return type(attr).__name__ == "Signal"
-    except Exception:
-        return False
 
 
 def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObservable[Any]:
@@ -77,7 +62,7 @@ def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObs
         return ObservableSet(default)
 
     # Primitives → Observable
-    if _is_primitive_type(inner_type):
+    if is_primitive_type(inner_type):
         return Observable(default)
 
     # Complex types → ObservableProxy
@@ -860,7 +845,7 @@ class _VariableDescriptor[T]:
                     signal_connections: dict[str, str | Callable[..., Any]] = {}
                     signal_keys_to_remove: list[str] = []
                     for key, value in widget_kwargs_copy.items():
-                        if _is_signal_on_type(key, self._widget_type):
+                        if is_signal_on_type(key, self._widget_type):
                             if isinstance(value, str) or callable(value):
                                 signal_connections[key] = value
                                 signal_keys_to_remove.append(key)

@@ -15,22 +15,21 @@ from qtpy.QtCore import QTimer
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
     QApplication,
-    QFormLayout,
-    QGridLayout,
-    QHBoxLayout,
     QLayout,
     QMainWindow,
     QMenu,
     QStyle,
     QSystemTrayIcon,
-    QVBoxLayout,
     QWidget,
 )
 
 from qtpie.layout import LayoutType
 from qtpie.new_field import NewField
+from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
+from qtpie.utils.common import is_signal
+from qtpie.utils.layouts import add_to_layout, create_layout, resolve_icon
 
 
 @dataclass
@@ -70,24 +69,6 @@ class AppConfig:
 
     # For AppBase: track if we're in a real QApplication context
     is_qapplication: bool = False
-
-
-def _resolve_icon(value: str | QIcon | QPixmap | QStyle.StandardPixmap | None) -> QIcon | None:
-    """Convert str/QIcon/QPixmap/StandardPixmap to QIcon, or return None."""
-    if value is None:
-        return None
-    if isinstance(value, QIcon):
-        return value
-    if isinstance(value, QPixmap):
-        return QIcon(value)
-    if isinstance(value, QStyle.StandardPixmap):
-        # Need QApplication instance to get style
-        qapp = QApplication.instance()
-        if qapp is not None and isinstance(qapp, QApplication):
-            return qapp.style().standardIcon(value)
-        return None
-    # str path
-    return QIcon(value)
 
 
 def run_app(app: QApplication) -> int:
@@ -717,7 +698,7 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
                                 if target is None:
                                     raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {fname}.{signal_name}=\"{handler}\"")
 
-                                if _is_signal(target):
+                                if is_signal(target):
                                     # Target is a Signal - connect signal-to-signal
                                     signal.connect(target)
                                 elif callable(target):
@@ -761,102 +742,9 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
     cls._qtpie_config.init_wrapped = True
 
 
-def _is_signal(obj: object) -> bool:
-    """Check if obj is a Qt Signal (bound signal instance)."""
-    type_name = type(obj).__name__
-    return type_name in ("SignalInstance", "pyqtBoundSignal")
-
-
 def _create_app_signal_expression_handler(app: AppBase[Any], expression: str) -> Callable[..., Any]:
-    """Create a signal handler from an expression string like "{my_signal(123)}".
-
-    The expression is evaluated in the app's context when the signal fires.
-    Supports:
-        - Method calls: {on_clicked()}, {handle_value(123)}
-        - Signal emissions: {my_signal()}, {value_changed(42)}
-        - Full Python expressions with app variables
-        - #args placeholder to pass signal arguments: {handle_click(#args)}
-        - #app placeholder for the app instance
-    """
-    from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields
-    from .variable import Variable
-
-    # Parse the expression to get the inner content
-    fields = _parse_format_fields(expression)
-    if not fields:
-        raise ValueError(f"Invalid signal expression: {expression}")
-
-    # We expect a single expression field
-    expr = fields[0].expression
-
-    # Check if expression uses special placeholders
-    uses_args = "#args" in expr
-    uses_app = "#app" in expr or "#self" in expr
-
-    # Replace special placeholders before AST extraction (they're not valid Python)
-    expr_for_ast = expr
-    if uses_args:
-        expr_for_ast = expr_for_ast.replace("#args", "_signal_args_placeholder_")
-    if uses_app:
-        expr_for_ast = expr_for_ast.replace("#app", "_app_ref_")
-        expr_for_ast = expr_for_ast.replace("#self", "_app_ref_")
-
-    # Extract variable names from the expression for context building
-    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
-    # Remove placeholder names we added
-    var_names.discard("_signal_args_placeholder_")
-    var_names.discard("_app_ref_")
-
-    def handler(*signal_args: Any) -> Any:
-        # Build context with app's variables
-        context: dict[str, Any] = {}
-
-        # Add app reference for #app / #self placeholder
-        if uses_app:
-            context["app_ref"] = app
-
-        # Add #args support
-        if uses_args:
-            context["signal_args"] = signal_args
-
-        # Add all variable values to context
-        for var_name in var_names:
-            # Try exact match first
-            if hasattr(app, var_name):
-                raw_attr: Any = getattr(app, var_name)
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif _is_signal(raw_attr):
-                    # Wrap signal so it can be called directly (calls .emit())
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
-            # Try underscore fallback
-            elif hasattr(app, f"_{var_name}"):
-                raw_attr = getattr(app, f"_{var_name}")
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif _is_signal(raw_attr):
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
-
-        # Replace special placeholders
-        eval_expr = expr
-        if uses_args:
-            eval_expr = eval_expr.replace("#args", "*signal_args")
-        if uses_app:
-            eval_expr = eval_expr.replace("#app", "app_ref")
-            eval_expr = eval_expr.replace("#self", "app_ref")
-
-        # Evaluate the expression
-        try:
-            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-            return result
-        except Exception as e:
-            raise RuntimeError(f"Error evaluating signal expression '{expression}': {e}") from e
-
-    return handler
+    """Create a signal handler from an expression string like "{my_signal(123)}"."""
+    return create_signal_expression_handler(app, expression, ["#app", "#self"])
 
 
 def _apply_app_widget_props(app: AppBase[Any], config: AppConfig) -> None:
@@ -936,7 +824,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
         window.setWindowTitle(type(app).__name__)
 
     # Set window icon
-    resolved_icon = _resolve_icon(config.window_icon) or _resolve_icon(config.icon)
+    resolved_icon = resolve_icon(config.window_icon) or resolve_icon(config.icon)
     if resolved_icon:
         window.setWindowIcon(resolved_icon)
 
@@ -949,7 +837,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     # Create central widget with layout if we have widget fields
     if widget_fields and config.layout is not None:
         central = QWidget()
-        qt_layout = _create_layout_for_app(config.layout)
+        qt_layout = create_layout(config.layout)
 
         if qt_layout is not None:
             central.setLayout(qt_layout)
@@ -980,19 +868,6 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     app._qtpie_minimize_to_tray = config.minimize_to_tray  # type: ignore[attr-defined]
 
 
-def _create_layout_for_app(layout_type: LayoutType) -> QLayout | None:
-    """Create a Qt layout based on type."""
-    if layout_type == "vertical":
-        return QVBoxLayout()
-    elif layout_type == "horizontal":
-        return QHBoxLayout()
-    elif layout_type == "form":
-        return QFormLayout()
-    elif layout_type == "grid":
-        return QGridLayout()
-    return None
-
-
 def _add_to_layout_for_app(
     layout: QLayout,
     widget_instance: QWidget,
@@ -1001,29 +876,7 @@ def _add_to_layout_for_app(
     grid: tuple[int, ...] | None = None,
 ) -> None:
     """Add a widget to the layout."""
-    from typing import cast
-
-    if layout_type in ("vertical", "horizontal"):
-        layout.addWidget(widget_instance)  # type: ignore[union-attr]
-    elif layout_type == "form":
-        from qtpy.QtWidgets import QFormLayout
-
-        form_layout = cast(QFormLayout, layout)
-        if label is not None:
-            form_layout.addRow(label, widget_instance)
-        else:
-            form_layout.addRow(widget_instance)
-    elif layout_type == "grid":
-        from qtpy.QtWidgets import QGridLayout
-
-        grid_layout = cast(QGridLayout, layout)
-        if grid is not None:
-            row, col = grid[0], grid[1]
-            rowspan = grid[2] if len(grid) > 2 else 1
-            colspan = grid[3] if len(grid) > 3 else 1
-            grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
-        else:
-            grid_layout.addWidget(widget_instance)
+    add_to_layout(layout, widget_instance, layout_type, label, grid)
 
 
 def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
@@ -1070,7 +923,7 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
         return
 
     # Resolve tray icon
-    icon = _resolve_icon(config.tray_icon) or _resolve_icon(config.icon)
+    icon = resolve_icon(config.tray_icon) or resolve_icon(config.icon)
     if icon is None:
         # Use application icon as fallback (only available for QApplication)
         if qapp is not None:

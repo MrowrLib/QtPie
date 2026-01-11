@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -10,22 +9,12 @@ from observant import Observable, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from .bindings import bind
+from .utils.common import HANDLER_SPEC_RE, PLACEHOLDER_RE, is_primitive_type
+from .utils.properties import resolve_nested_property
 from .variable import Variable
 
 if TYPE_CHECKING:
     from .widget import Widget
-
-# Regex to find placeholders like {#self}, {name}, {age}, {#self.age}
-# Note: No {#index} for sets - sets are unordered
-_PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
-
-# Regex to parse handler spec like "method_name(#value, #args)"
-_HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
-
-
-def _is_primitive_type(t: type | None) -> bool:
-    """Check if type is a primitive."""
-    return t in (str, int, float, bool, type(None))
 
 
 class SetWidgetRepeater[T](QWidget):
@@ -90,7 +79,7 @@ class SetWidgetRepeater[T](QWidget):
         self._bind_expr: str | Callable[[T], str] = bind_expr
         # Resolve sort= string method name to callable
         self._sort: bool | Callable[[T], Any] | None = self._resolve_sort(sort, parent_widget)
-        self._is_primitive = _is_primitive_type(item_type)
+        self._is_primitive = is_primitive_type(item_type)
         self._object_name = object_name
         self._css_classes = css_classes or []
         self._signal_connections = signal_connections or {}
@@ -224,7 +213,7 @@ class SetWidgetRepeater[T](QWidget):
             return
 
         # Find all placeholders in the bind expression
-        placeholders = _PLACEHOLDER_RE.findall(bind_expr)
+        placeholders = PLACEHOLDER_RE.findall(bind_expr)
 
         # Case 1: Simple {#self} - bind directly to item value (two-way)
         if bind_expr == "{#self}":
@@ -321,27 +310,6 @@ class SetWidgetRepeater[T](QWidget):
 
             wrapper.on_change(sync_to_set)
 
-    def _resolve_nested_property(self, obj: Any, path: str) -> Any:
-        """Resolve a dotted property path like 'breed.name' on an object."""
-        parts = path.split(".")
-        current: Any = obj
-        for part in parts:
-            if isinstance(current, Observable):
-                current = current.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-            if isinstance(current, ObservableProxy):
-                prop_obs = getattr(current, part, None)  # pyright: ignore[reportUnknownArgumentType]
-                if isinstance(prop_obs, Observable):
-                    current = prop_obs.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-                else:
-                    current = prop_obs  # pyright: ignore[reportUnknownVariableType]
-            elif hasattr(current, part):  # pyright: ignore[reportUnknownArgumentType]
-                current = getattr(current, part)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-            else:
-                return f"<unknown:{path}>"
-        if isinstance(current, Observable):
-            current = current.get()  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-        return current  # pyright: ignore[reportUnknownVariableType]
-
     def _bind_computed_format(
         self,
         widget: QWidget,
@@ -371,7 +339,7 @@ class SetWidgetRepeater[T](QWidget):
         def compute_value() -> str:
             result = format_str
 
-            for match in _PLACEHOLDER_RE.finditer(format_str):
+            for match in PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 full_match = match.group(0)
 
@@ -384,11 +352,11 @@ class SetWidgetRepeater[T](QWidget):
                 elif placeholder.startswith("#self."):
                     prop_path = placeholder[6:]  # Remove "#self."
                     if isinstance(wrapper, Observable):
-                        value = self._resolve_nested_property(wrapper.get(), prop_path)
+                        value = resolve_nested_property(wrapper.get(), prop_path)
                     else:
-                        value = self._resolve_nested_property(wrapper, prop_path)
+                        value = resolve_nested_property(wrapper, prop_path)
                 elif isinstance(wrapper, ObservableProxy):
-                    value = self._resolve_nested_property(wrapper, placeholder)
+                    value = resolve_nested_property(wrapper, placeholder)
                 else:
                     value = f"<unknown:{placeholder}>"
 
@@ -407,7 +375,7 @@ class SetWidgetRepeater[T](QWidget):
             wrapper.on_change(on_change)
         else:
             # Subscribe to property observables mentioned in format
-            for match in _PLACEHOLDER_RE.finditer(format_str):
+            for match in PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 if placeholder in ("#self",):
                     continue
@@ -459,7 +427,7 @@ class SetWidgetRepeater[T](QWidget):
         if callable(spec):
             return spec
 
-        match = _HANDLER_SPEC_RE.match(spec)
+        match = HANDLER_SPEC_RE.match(spec)
         if not match:
             raise ValueError(f"Invalid handler spec: {spec}")
 

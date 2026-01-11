@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -10,21 +9,12 @@ from observant import Observable, ObservableDict, ObservableProxy
 from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
 from .bindings import bind
+from .utils.common import HANDLER_SPEC_RE, PLACEHOLDER_RE, is_primitive_type
+from .utils.properties import resolve_nested_property
 from .variable import Variable
 
 if TYPE_CHECKING:
     from .widget import Widget
-
-# Regex to find placeholders like {#key}, {#value}, {#self}, {name}, {#key.name}
-_PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
-
-# Regex to parse handler spec like "method_name(#value, #key, #args)"
-_HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
-
-
-def _is_primitive_type(t: type | None) -> bool:
-    """Check if type is a primitive."""
-    return t in (str, int, float, bool, type(None))
 
 
 class DictWidgetRepeater[K, V](QWidget):
@@ -97,8 +87,8 @@ class DictWidgetRepeater[K, V](QWidget):
         self._bind_expr: str | Callable[[K, V], str] = bind_expr
         # Resolve sort= string method name to callable
         self._sort: bool | Callable[[K], Any] | None = self._resolve_sort(sort, parent_widget)
-        self._is_key_primitive = _is_primitive_type(key_type)
-        self._is_value_primitive = _is_primitive_type(value_type)
+        self._is_key_primitive = is_primitive_type(key_type)
+        self._is_value_primitive = is_primitive_type(value_type)
         self._object_name = object_name
         self._css_classes = css_classes or []
         self._signal_connections = signal_connections or {}
@@ -227,27 +217,6 @@ class DictWidgetRepeater[K, V](QWidget):
                 setter(value)
         return widget
 
-    def _resolve_nested_property(self, obj: Any, path: str) -> Any:
-        """Resolve a dotted property path like 'breed.name' on an object."""
-        parts = path.split(".")
-        current: Any = obj
-        for part in parts:
-            if isinstance(current, Observable):
-                current = current.get()  # pyright: ignore[reportUnknownVariableType]
-            if isinstance(current, ObservableProxy):
-                prop_obs = getattr(current, part, None)  # pyright: ignore[reportUnknownArgumentType]
-                if isinstance(prop_obs, Observable):
-                    current = prop_obs.get()  # pyright: ignore[reportUnknownVariableType]
-                else:
-                    current = prop_obs  # pyright: ignore[reportUnknownVariableType]
-            elif hasattr(current, part):  # pyright: ignore[reportUnknownArgumentType]
-                current = getattr(current, part)  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-            else:
-                return f"<unknown:{path}>"
-        if isinstance(current, Observable):
-            current = current.get()  # pyright: ignore[reportUnknownVariableType]
-        return current  # pyright: ignore[reportUnknownVariableType]
-
     def _bind_widget_to_entry(
         self,
         widget: QWidget,
@@ -271,7 +240,7 @@ class DictWidgetRepeater[K, V](QWidget):
             return
 
         # Find all placeholders in the bind expression
-        placeholders = _PLACEHOLDER_RE.findall(bind_expr)
+        placeholders = PLACEHOLDER_RE.findall(bind_expr)
 
         # Case 1: Simple {#value} or {#self} - bind directly to value (two-way)
         if bind_expr in ("{#value}", "{#self}"):
@@ -406,7 +375,7 @@ class DictWidgetRepeater[K, V](QWidget):
             result = format_str
 
             # Find and replace all placeholders
-            for match in _PLACEHOLDER_RE.finditer(format_str):
+            for match in PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 full_match = match.group(0)
 
@@ -425,19 +394,19 @@ class DictWidgetRepeater[K, V](QWidget):
                     # Nested property on key: #key.name -> key.name
                     prop_path = placeholder[5:]  # Remove "#key."
                     if isinstance(key_wrapper, Observable):
-                        resolved = self._resolve_nested_property(key_wrapper.get(), prop_path)
+                        resolved = resolve_nested_property(key_wrapper.get(), prop_path)
                     else:
-                        resolved = self._resolve_nested_property(key_wrapper, prop_path)
+                        resolved = resolve_nested_property(key_wrapper, prop_path)
                 elif placeholder.startswith("#value.") or placeholder.startswith("#self."):
                     # Nested property on value: #value.age or #self.age -> value.age
                     prop_path = placeholder.split(".", 1)[1]
                     if isinstance(value_wrapper, Observable):
-                        resolved = self._resolve_nested_property(value_wrapper.get(), prop_path)
+                        resolved = resolve_nested_property(value_wrapper.get(), prop_path)
                     else:
-                        resolved = self._resolve_nested_property(value_wrapper, prop_path)
+                        resolved = resolve_nested_property(value_wrapper, prop_path)
                 elif isinstance(value_wrapper, ObservableProxy):
                     # Property access on value object (shorthand)
-                    resolved = self._resolve_nested_property(value_wrapper, placeholder)
+                    resolved = resolve_nested_property(value_wrapper, placeholder)
                 else:
                     resolved = f"<unknown:{placeholder}>"
 
@@ -457,7 +426,7 @@ class DictWidgetRepeater[K, V](QWidget):
             key_wrapper.on_change(on_change)
         else:
             # For ObservableProxy keys, subscribe to all property observables mentioned
-            for match in _PLACEHOLDER_RE.finditer(format_str):
+            for match in PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 if placeholder.startswith("#key."):
                     prop_name = placeholder[5:].split(".")[0]
@@ -470,7 +439,7 @@ class DictWidgetRepeater[K, V](QWidget):
             value_wrapper.on_change(on_change)
         else:
             # For ObservableProxy values, subscribe to all property observables mentioned
-            for match in _PLACEHOLDER_RE.finditer(format_str):
+            for match in PLACEHOLDER_RE.finditer(format_str):
                 placeholder = match.group(1)
                 # Direct property on value
                 if not placeholder.startswith("#"):
@@ -539,7 +508,7 @@ class DictWidgetRepeater[K, V](QWidget):
             return spec
 
         # Parse handler spec
-        match = _HANDLER_SPEC_RE.match(spec)
+        match = HANDLER_SPEC_RE.match(spec)
         if not match:
             raise ValueError(f"Invalid handler spec: {spec}")
 

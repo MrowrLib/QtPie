@@ -1,6 +1,5 @@
 """ActionRepeater - Manages repeated QActions bound to list items in menus."""
 
-import re
 from collections.abc import Callable
 from typing import Any
 
@@ -8,13 +7,7 @@ from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtGui import QAction
 from qtpy.QtWidgets import QMenu
 
-# Regex to find placeholders like {#self}, {#index}, {name}, {age}
-_PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
-
-
-def _is_primitive_type(t: type | None) -> bool:
-    """Check if type is a primitive."""
-    return t in (str, int, float, bool, type(None))
+from .utils.common import PLACEHOLDER_RE, is_primitive_type
 
 
 class ActionRepeater[T]:
@@ -54,7 +47,7 @@ class ActionRepeater[T]:
         self._format_expr: str | Callable[[T], str] = format_expr
         self._triggered_handler = triggered_handler
         self._anchor_action = anchor_action
-        self._is_primitive = _is_primitive_type(item_type)
+        self._is_primitive = is_primitive_type(item_type)
 
         # Track: (action, item_wrapper, index_holder)
         # item_wrapper is Observable[T] for primitives, ObservableProxy[T] for objects
@@ -97,7 +90,7 @@ class ActionRepeater[T]:
         # Case: Format string
         result = format_expr
 
-        for match in _PLACEHOLDER_RE.finditer(format_expr):
+        for match in PLACEHOLDER_RE.finditer(format_expr):
             placeholder = match.group(1)
             full_match = match.group(0)
 

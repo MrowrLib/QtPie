@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any, get_args, get_origin, get_type_hints
 
 from .layout import GridPosition
+from .utils.common import is_signal_on_type
 from .variable import Variable, create_variable_descriptor
 
 
@@ -357,14 +358,7 @@ class NewField:
         """Check if name is a signal on the field type."""
         if self.field_type is None:
             return False
-        try:
-            attr = getattr(self.field_type, name, None)
-            if attr is None:
-                return False
-            # qtpy signals at class level have type name 'Signal'
-            return type(attr).__name__ == "Signal"
-        except Exception:
-            return False
+        return is_signal_on_type(name, self.field_type)
 
     def _extract_signal_connections(self) -> None:
         """Extract signal=handler kwargs for QWidgets.
@@ -405,14 +399,7 @@ class NewField:
 
     def _is_signal_on_type(self, name: str, target_type: type) -> bool:
         """Check if name is a signal on the given type."""
-        try:
-            attr = getattr(target_type, name, None)
-            if attr is None:
-                return False
-            # qtpy signals at class level have type name 'Signal'
-            return type(attr).__name__ == "Signal"
-        except Exception:
-            return False
+        return is_signal_on_type(name, target_type)
 
     def _has_setter(self, prop_name: str, widget_type: type | None = None) -> bool:
         """Check if the widget type has a setXxx method for the given property name."""
