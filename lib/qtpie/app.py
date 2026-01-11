@@ -23,6 +23,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from qtpie.bindings.setters import make_bound_setter as _make_bound_setter
 from qtpie.layout import LayoutType
 from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
@@ -997,13 +998,28 @@ def _get_section_text_for_tray(name: str, field: NewField | None) -> str:
     return ""
 
 
+def _apply_app_property_bindings(app: AppBase[Any], config: AppConfig) -> None:
+    """Apply property bindings (visible=, enabled=) for App fields."""
+    from qtpie.bindings.property_bindings import apply_property_bindings_for_fields, get_widget_property_setter
+
+    def get_target(field_name: str) -> QWidget | None:
+        instance = getattr(app, field_name, None)
+        return instance if isinstance(instance, QWidget) else None
+
+    apply_property_bindings_for_fields(
+        context=app,
+        fields=config.fields,
+        get_target=get_target,
+        get_setter=get_widget_property_setter,
+    )
+
+
 def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
     """Apply bindings for QWidget fields in AppBase.
 
     For each QWidget field:
     - If field.bind is set and is a format string, create format binding
     - If field.bind is set and is a simple path, create Variable binding
-    - Handle property bindings (visible=, enabled=)
     - Handle list widget bindings (list[QLabel] bound to Variable[list[...]])
     """
     from observant import Observable
@@ -1011,6 +1027,9 @@ def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
     from qtpie.bindings import bind, create_format_binding, is_format_string, resolve_binding_source
     from qtpie.bindings.registry import get_binding_registry
     from qtpie.variable import Variable
+
+    # Apply property bindings first (visible=, enabled=)
+    _apply_app_property_bindings(app, config)
 
     registry = get_binding_registry()
 
@@ -1028,38 +1047,6 @@ def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
         # Skip non-QWidget fields (Variables, etc.)
         if not isinstance(widget_instance, QWidget):
             continue
-
-        # Apply property bindings (visible=, enabled=)
-        if field_info.property_bindings:
-            for prop_name, bind_expr in field_info.property_bindings.items():
-                adapter = registry.get(widget_instance, prop_name)
-                if adapter is None or adapter.setter is None:
-                    continue
-
-                setter = adapter.setter
-
-                def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
-                    def bound_setter(val: Any) -> None:
-                        s(w, val)
-
-                    return bound_setter  # noqa: B023
-
-                bound_setter = make_setter(setter, widget_instance)
-
-                if is_format_string(bind_expr):
-                    # Expression like "{_count > 0}"
-                    _create_expression_binding_for_app(app, bind_expr, bound_setter)
-                else:
-                    # Simple variable reference like "_is_visible"
-                    source = resolve_binding_source(app, bind_expr)  # type: ignore[arg-type]
-                    if source is None:
-                        continue
-                    if isinstance(source, Variable):
-                        bound_setter(source.value)  # pyright: ignore[reportUnknownMemberType]
-                        source.on_change(bound_setter)
-                    elif isinstance(source, Observable):
-                        bound_setter(source.get())
-                        source.on_change(bound_setter)
 
         # Determine bind path
         bind_path: str
@@ -1083,7 +1070,7 @@ def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
             default_prop = registry.get_default_prop(widget_instance)
             adapter = registry.get(widget_instance, default_prop)
             if adapter is not None and adapter.setter is not None:
-                bound_setter = _make_bound_setter_for_app(adapter.setter, widget_instance)
+                bound_setter = _make_bound_setter(adapter.setter, widget_instance)
                 create_format_binding(app, bind_path, bound_setter)  # type: ignore[arg-type]
             continue
 
@@ -1108,15 +1095,6 @@ def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
                     return on_observable_change
 
                 source.on_change(make_obs_to_widget(setter, widget_instance))
-
-
-def _make_bound_setter_for_app(setter: Callable[[Any, Any], None], widget: QWidget) -> Callable[[Any], None]:
-    """Create a bound setter function that captures the widget reference."""
-
-    def bound_setter(val: Any) -> None:
-        setter(widget, val)
-
-    return bound_setter
 
 
 def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -> None:
@@ -1192,104 +1170,6 @@ def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -
         parent_widget=app,  # type: ignore[arg-type]
     )
     setattr(app, name, repeater)
-
-
-def _create_expression_binding_for_app(
-    app: AppBase[Any],
-    expression: str,
-    setter: Callable[[Any], None],
-) -> None:
-    """Create a binding for an expression like "{_count > 0}".
-
-    Unlike format bindings which return strings, this returns the raw evaluated value.
-    This is used for property bindings like visible= and enabled= that need boolean results.
-
-    This mirrors the logic in widget.py's _create_expression_binding.
-    """
-    from typing import cast
-
-    from observant import Observable, ObservableDict, ObservableList, ObservableProxy
-
-    from qtpie.bindings import resolve_binding_source
-    from qtpie.bindings.format_binding import _BUILTINS, _extract_ast_names
-    from qtpie.variable import Variable
-
-    # Extract the expression from {expr}
-    expr = expression.strip()
-    if expr.startswith("{") and expr.endswith("}"):
-        expr = expr[1:-1].strip()
-
-    # Extract variable names from the expression
-    ast_names = _extract_ast_names(expr)
-    var_names = ast_names - _BUILTINS
-
-    # Collect all reactive objects to subscribe to
-    observables: list[Observable[Any]] = []
-    reactive_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
-
-    for var_name in var_names:
-        source = resolve_binding_source(app, var_name)  # type: ignore[arg-type]
-        if source is not None:
-            if isinstance(source, Variable):
-                obs: Any = source.observable
-                if isinstance(obs, Observable):
-                    observables.append(cast(Observable[Any], obs))
-                elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
-                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
-            elif isinstance(source, Observable):
-                observables.append(source)
-            elif isinstance(source, (ObservableList, ObservableDict, ObservableProxy)):  # pyright: ignore[reportUnnecessaryIsInstance]
-                reactive_collections.append(source)
-        else:
-            # Also check for reactive attributes directly on the app
-            for attr_name in [var_name, f"_{var_name}"]:
-                if hasattr(app, attr_name):
-                    raw_attr: Any = getattr(app, attr_name)
-                    if isinstance(raw_attr, Observable):
-                        observables.append(cast(Observable[Any], raw_attr))
-                        break
-                    elif isinstance(raw_attr, (ObservableList, ObservableDict, ObservableProxy)):
-                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
-                        break
-
-    def compute() -> Any:
-        # Build context with current values
-        context: dict[str, Any] = {}
-
-        for var_name in var_names:
-            # Try with underscore prefix first, then without
-            for attr_name in [f"_{var_name}", var_name]:
-                if hasattr(app, attr_name):
-                    raw_attr: Any = getattr(app, attr_name)
-                    if isinstance(raw_attr, Variable):
-                        context[var_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
-                    else:
-                        context[var_name] = raw_attr
-                    break
-
-        # Evaluate the expression
-        try:
-            value = eval(expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-            return value
-        except Exception:
-            return None
-
-    # Set initial value
-    setter(compute())
-
-    # Subscribe to ALL reactive objects - when any changes, recompute
-    def on_observable_change(_: Any) -> None:
-        setter(compute())
-
-    for obs in observables:
-        obs.on_change(on_observable_change)
-
-    # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
-    def on_collection_change() -> None:
-        setter(compute())
-
-    for coll in reactive_collections:
-        coll.on_change(on_collection_change)
 
 
 def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:

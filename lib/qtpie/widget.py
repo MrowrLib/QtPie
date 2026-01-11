@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from .bindings.setters import make_bound_setter as _make_bound_setter
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
@@ -987,15 +988,6 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             raise TypeError(f"bind='{field.bind}' resolved to {type(wrapper).__name__}, expected Variable[set[...]] or ObservableSet")
 
 
-def _make_bound_setter(setter: Callable[[Any, Any], None], widget: QWidget) -> Callable[[Any], None]:
-    """Create a bound setter function that captures the widget reference."""
-
-    def bound_setter(val: Any) -> None:
-        setter(widget, val)
-
-    return bound_setter
-
-
 def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Apply auto-bindings for QWidget fields.
 
@@ -1005,7 +997,7 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
 
     Then resolve the path and create the binding.
     """
-    from observant import Observable, ObservableProxy
+    from observant import Observable
 
     from .bindings import bind, create_format_binding, is_format_string, resolve_binding_source
     from .translations.translatable import Translatable
@@ -1131,186 +1123,19 @@ def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> C
 
 
 def _apply_property_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Apply property bindings like visible="_is_visible" or enabled="{_count > 0}".
+    """Apply property bindings like visible="_is_visible" or enabled="{_count > 0}"."""
+    from .bindings.property_bindings import apply_property_bindings_for_fields, get_widget_property_setter
 
-    For each QWidget field with property_bindings, resolves the binding expression
-    and creates a one-way binding to the property setter (e.g., setVisible, setEnabled).
-    """
-    from .bindings import is_format_string, resolve_binding_source
-    from .bindings.registry import get_binding_registry
-    from .variable import Variable
+    def get_target(field_name: str) -> QWidget | None:
+        instance = getattr(widget, field_name, None)
+        return instance if isinstance(instance, QWidget) else None
 
-    registry = get_binding_registry()
-
-    for name, field in config.fields.items():
-        if not field.property_bindings:
-            continue
-
-        # Get the widget instance
-        widget_instance = getattr(widget, name, None)
-        if widget_instance is None or not isinstance(widget_instance, QWidget):
-            continue
-
-        # Apply each property binding
-        for prop_name, bind_expr in field.property_bindings.items():
-            # Get the binding adapter for this property
-            adapter = registry.get(widget_instance, prop_name)
-            if adapter is None or adapter.setter is None:
-                continue
-
-            # Create a bound setter
-            setter = adapter.setter
-
-            def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
-                def bound_setter(val: Any) -> None:
-                    s(w, val)
-
-                return bound_setter  # noqa: B023
-
-            bound_setter = make_setter(setter, widget_instance)
-
-            # Check if it's a format/expression binding or simple variable reference
-            if is_format_string(bind_expr):
-                # Expression like "{_count > 0}" - use expression binding (returns raw value, not string)
-                _create_expression_binding(widget, bind_expr, bound_setter)
-            else:
-                # Simple variable reference like "_is_visible"
-                source = resolve_binding_source(widget, bind_expr)
-                if source is None:
-                    continue
-
-                # Get initial value and set up binding
-                if isinstance(source, Variable):
-                    # Set initial value
-                    bound_setter(source.value)  # pyright: ignore[reportUnknownMemberType]
-                    # Subscribe to changes - use Variable's on_change which accepts Any callback
-                    source.on_change(bound_setter)
-                elif isinstance(source, Observable):
-                    # Set initial value
-                    bound_setter(source.get())
-                    # Subscribe to changes
-                    source.on_change(bound_setter)
-
-
-def _create_expression_binding(
-    widget: Widget[Any],
-    expression: str,
-    setter: Callable[[Any], None],
-) -> None:
-    """Create a binding for an expression like "{_count > 0}".
-
-    Unlike format bindings which return strings, this returns the raw evaluated value.
-    This is used for property bindings like visible= and enabled= that need boolean results.
-    """
-    from .bindings import resolve_binding_source
-    from .bindings.format_binding import _BUILTINS, _extract_ast_names
-    from .variable import Variable
-
-    # Extract the expression from {expr}
-    # Handle both "{expr}" and "expr" formats
-    expr = expression.strip()
-    if expr.startswith("{") and expr.endswith("}"):
-        expr = expr[1:-1].strip()
-
-    # Extract variable names from the expression
-    ast_names = _extract_ast_names(expr)
-    var_names = ast_names - _BUILTINS
-
-    # Collect all reactive objects to subscribe to
-    # Observable has on_change(callback: Callable[[T], None])
-    # ObservableList/Dict/Proxy have on_change(callback: Callable[[], None])
-    observables: list[Observable[Any]] = []
-    reactive_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
-
-    for var_name in var_names:
-        source = resolve_binding_source(widget, var_name)
-        if source is not None:
-            if isinstance(source, Variable):
-                obs: Any = source.observable
-                if isinstance(obs, Observable):
-                    observables.append(cast(Observable[Any], obs))
-                elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
-                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
-            elif isinstance(source, Observable):
-                observables.append(source)
-            elif isinstance(source, (ObservableList, ObservableDict, ObservableProxy)):  # pyright: ignore[reportUnnecessaryIsInstance] - runtime check for BindingSource union
-                reactive_collections.append(source)
-        else:
-            # Also check for reactive attributes directly on the widget
-            # (e.g., is_valid returns Observable[bool])
-            for attr_name in [var_name, f"_{var_name}"]:
-                if hasattr(widget, attr_name):
-                    raw_attr: Any = getattr(widget, attr_name)
-                    if isinstance(raw_attr, Observable):
-                        observables.append(cast(Observable[Any], raw_attr))
-                        break
-                    elif isinstance(raw_attr, (ObservableList, ObservableDict, ObservableProxy)):
-                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
-                        break
-
-    # Also check for nested Observable paths like "view_model.is_dirty" or "record.is_valid"
-    # Find patterns like "name.attr" or "name.attr.method()" in the expression
-    import re
-
-    nested_patterns = re.findall(r"\b(\w+(?:\.\w+)+)(?:\s*\()?", expr)
-    for path in nested_patterns:
-        # Try to evaluate the path to find Observables
-        # Stop at paths that end with method calls like ".get()"
-        parts = path.split(".")
-        # Try progressively longer paths to find Observable
-        obj: Any = widget
-        for part in parts:
-            if not hasattr(obj, part):
-                break
-            obj = getattr(obj, part)
-            if isinstance(obj, Observable):
-                if obj not in observables:
-                    observables.append(cast(Observable[Any], obj))
-                break
-            elif isinstance(obj, (ObservableList, ObservableDict, ObservableProxy)):
-                if obj not in reactive_collections:
-                    reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obj))
-                break
-
-    def compute() -> Any:
-        # Build context with current values
-        context: dict[str, Any] = {}
-
-        for var_name in var_names:
-            # Try with underscore prefix first, then without
-            for attr_name in [f"_{var_name}", var_name]:
-                if hasattr(widget, attr_name):
-                    raw_attr: Any = getattr(widget, attr_name)
-                    if isinstance(raw_attr, Variable):
-                        context[var_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
-                    else:
-                        context[var_name] = raw_attr
-                    break
-
-        # Evaluate the expression
-        try:
-            value = eval(expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-            return value
-        except Exception:
-            return None
-
-    # Set initial value
-    setter(compute())
-
-    # Subscribe to ALL reactive objects - when any changes, recompute
-    # Observable.on_change takes Callable[[T], None]
-    def on_observable_change(_: Any) -> None:
-        setter(compute())
-
-    for obs in observables:
-        obs.on_change(on_observable_change)
-
-    # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
-    def on_collection_change() -> None:
-        setter(compute())
-
-    for coll in reactive_collections:
-        coll.on_change(on_collection_change)
+    apply_property_bindings_for_fields(
+        context=widget,
+        fields=config.fields,
+        get_target=get_target,
+        get_setter=get_widget_property_setter,
+    )
 
 
 def _apply_reactive_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:

@@ -474,10 +474,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
         # Apply bindings using shared logic (after __setup__ so record is available)
         from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
-        from .widget import _create_expression_binding
+        from .bindings.expression import create_expression_binding
 
         apply_auto_bindings(self, config)
-        apply_property_bindings(self, config, create_expression_binding_fn=_create_expression_binding)
+        apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)
         apply_reactive_widget_props(self, config)
 
         # Enable on_dirty_changed and on_valid_changed hooks

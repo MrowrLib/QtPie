@@ -818,6 +818,9 @@ def _apply_action_property_bindings(menu: Menu[Any], config: MenuConfig) -> None
 
     This handles QAction property bindings which aren't handled by the regular
     apply_property_bindings (which only handles QWidgets).
+
+    Note: Uses _create_menu_expression_binding instead of the shared version
+    because menus need special #parent placeholder support.
     """
     from qtpy.QtGui import QAction
 
@@ -851,7 +854,7 @@ def _apply_action_property_bindings(menu: Menu[Any], config: MenuConfig) -> None
             prop_setter = make_setter(setter, action)
 
             if is_format_string(bind_expr):
-                # Expression binding like {record.can_undo}
+                # Expression binding like {record.can_undo} - uses menu-specific version for #parent support
                 _create_menu_expression_binding(menu, bind_expr, prop_setter)
             else:
                 # Simple variable reference
