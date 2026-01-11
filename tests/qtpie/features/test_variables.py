@@ -320,6 +320,132 @@ class TestVariableDict:
 
 
 @pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestVariableSet:
+    """Variable[set[T]] with set operations."""
+
+    def test_set_empty_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[set[str]] defaults to empty set."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new()
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tags.value).is_equal_to(set())
+
+    def test_set_with_initial_items(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[set[str]] can have initial items."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b", "c"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tags.value).is_equal_to({"a", "b", "c"})
+
+    def test_set_add(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can add to set via .observable."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new()
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.add("hello")  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to({"hello"})
+
+    def test_set_add_multiple(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can add multiple items to set."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new()
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.add("a")  # type: ignore[union-attr]
+        instance._tags.observable.add("b")  # type: ignore[union-attr]
+        instance._tags.observable.add("c")  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to({"a", "b", "c"})
+
+    def test_set_add_duplicate(self, base_class, decorator, qt: QtDriver) -> None:
+        """Adding duplicate to set has no effect."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.add("a")  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to({"a"})
+        assert_that(len(instance._tags.value)).is_equal_to(1)
+
+    def test_set_discard(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can discard from set via .observable."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b", "c"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.discard("b")  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to({"a", "c"})
+
+    def test_set_discard_missing(self, base_class, decorator, qt: QtDriver) -> None:
+        """Discarding missing item from set does not raise."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.discard("missing")  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to({"a"})
+
+    def test_set_clear(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can clear set via .observable."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b", "c"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._tags.observable.clear()  # type: ignore[union-attr]
+        assert_that(instance._tags.value).is_equal_to(set())
+
+    def test_set_contains(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can check item in set."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that("a" in instance._tags.value).is_true()
+        assert_that("c" in instance._tags.value).is_false()
+
+    def test_set_len(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can get set length."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b", "c"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(len(instance._tags.value)).is_equal_to(3)
+
+    def test_set_iteration(self, base_class, decorator, qt: QtDriver) -> None:
+        """Can iterate over set."""
+
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str]] = new(default={"a", "b", "c"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        items = list(instance._tags.value)
+        assert_that(set(items)).is_equal_to({"a", "b", "c"})
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
 class TestVariablePerInstance:
     """Each instance has its own Variable values."""
 

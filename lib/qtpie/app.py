@@ -251,6 +251,10 @@ class AppBase[T = None]:
         state = getattr(self, "_qtpie_state", None)
         if state is not None:
             state.reset_dirty()
+        # Also reset record dirty state (record is in _qtpie, not _qtpie_state)
+        qtpie = getattr(self, "_qtpie", None)
+        if qtpie is not None and qtpie._record is not None:
+            qtpie._record.reset_dirty()
 
     # -------------------------------------------------------------------------
     # Validation properties
@@ -1105,8 +1109,9 @@ def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -
 def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:
     """Set up dirty and valid change hooks."""
     # Track previous values for edge detection
-    was_dirty = False
-    was_valid = True
+    # Sync with current state (after __setup__ ran and added validators)
+    was_dirty = state.is_dirty.get()
+    was_valid = state.is_valid.get()
 
     def on_dirty_update(is_dirty: bool) -> None:
         nonlocal was_dirty
@@ -1124,7 +1129,25 @@ def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:
             if type(app).on_valid_changed is not AppBase.on_valid_changed:
                 app.on_valid_changed(is_valid)
 
-    # Subscribe to state changes (if there are Variables)
-    if state.variables:
+    # Subscribe to state changes (if there are Variables or record)
+    # For App, record is in _qtpie (via _RecordDescriptor) not _qtpie_state
+    qtpie = getattr(app, "_qtpie", None)
+    record = qtpie._record if qtpie is not None else None
+
+    if state.variables or record is not None:
         state.is_dirty.on_change(on_dirty_update)
         state.is_valid.on_change(on_valid_update)
+
+    # Subscribe record's is_dirty to state's aggregated is_dirty (for App)
+    if record is not None:
+
+        def update_dirty_from_record(_: Any = None) -> None:
+            # Recompute: any Variable dirty OR record dirty
+            current = state._compute_is_dirty()
+            if record is not None:
+                current = current or record.is_dirty.get()
+            state._aggregated_is_dirty.set(current)
+
+        record.is_dirty.on_change(update_dirty_from_record)
+        # Initial sync
+        update_dirty_from_record()
