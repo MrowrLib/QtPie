@@ -4,7 +4,7 @@ from typing import override
 
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
+from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
 
 from qtpie import App, Menu, Variable, Widget, app, entrypoint, menu, new, ref, set_language, slot, t, widget
 
@@ -669,7 +669,8 @@ class FileMenu(Menu):
         print(f"Just a regular function in the menu called with args: {args}, kwargs: {kwargs}")
 
 
-@entrypoint
+#
+# @entrypoint
 @app(title="My QtPie App with Menu Action", icon=QStyle.StandardPixmap.SP_BrowserReload, minimize_to_tray=False, record=Dog("Rover", 5))
 class MyApp(App[Dog]):
     _header: QLabel = new("Welcome to My QtPie App!", stylesheet="font-size: 18px; font-weight: bold;")
@@ -680,3 +681,10 @@ class MyApp(App[Dog]):
 
     def on_custom_signal(self, *args: object, **kwargs: object) -> None:
         print(f"Custom signal receive with args: {args}, kwargs: {kwargs}")
+
+
+@entrypoint
+@widget
+class MyComboBox(Widget):
+    _items: Variable[list[str]] = new(["A", "B", "C"])
+    _combo: QComboBox = new(bind="_items")

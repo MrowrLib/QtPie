@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from observant import Observable
+from observant import Observable, ObservableList
 from qtpy.QtWidgets import QWidget
 
 if TYPE_CHECKING:
@@ -19,6 +19,12 @@ class BindingConfig(Protocol):
     fields: dict[str, NewField]
     auto_bind: bool
     widget_props: dict[str, Any]
+
+
+def _is_model_widget(widget: QWidget) -> bool:
+    """Check if widget supports setModel() - e.g., QComboBox, QListView, QTableView."""
+    set_model = getattr(widget, "setModel", None)
+    return set_model is not None and callable(set_model)
 
 
 def apply_auto_bindings(
@@ -102,6 +108,26 @@ def apply_auto_bindings(
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
         if source is None:
             continue
+
+        # Check if this is a model widget (QComboBox, QListView, etc.) with a list source
+        if _is_model_widget(widget_instance):
+            obs_list: ObservableList[Any] | None = None
+
+            # Extract ObservableList from Variable or use directly
+            if isinstance(source, VarType):
+                wrapper = source.observable
+                if isinstance(wrapper, ObservableList):
+                    obs_list = wrapper
+            elif isinstance(source, ObservableList):
+                obs_list = source
+
+            if obs_list is not None:
+                # Create ReactiveListModel and set it on the widget
+                from qtpie.models import ReactiveListModel
+
+                model = ReactiveListModel(obs_list, parent=widget_instance)
+                widget_instance.setModel(model)  # type: ignore[attr-defined]
+                continue
 
         # Create the binding
         if isinstance(source, VarType):
