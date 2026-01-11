@@ -600,12 +600,44 @@ Different implementations could have different behaviors.
 
 ## Refactoring Recommendations
 
-### Phase 1: Extract Pure Utilities
+### Phase 1: Extract Pure Utilities (Zero Risk)
 1. `_is_signal()` → `lib/qtpie/utils/signals.py`
 2. `_create_layout()` → `lib/qtpie/utils/layouts.py`
 3. `_resolve_icon()` → `lib/qtpie/utils/icons.py`
+4. `_is_primitive_type()` → `lib/qtpie/utils/types.py`
+5. `_PLACEHOLDER_RE`, `_HANDLER_SPEC_RE` → `lib/qtpie/utils/patterns.py`
 
-### Phase 2: Unify Config Classes
+### Phase 2: Extract Repeater Utilities
+Create `lib/qtpie/repeaters/base.py`:
+```python
+# Shared across all repeaters
+def is_primitive_type(t: type | None) -> bool: ...
+def resolve_nested_property(obj: Any, path: str) -> Any: ...
+def create_item_wrapper(item: T, is_primitive: bool) -> Observable | ObservableProxy: ...
+def apply_widget_styling(widget, object_name, css_classes, widget_props): ...
+```
+
+### Phase 3: Create Repeater Base Class
+```python
+class BaseRepeater[T](QWidget):
+    """Abstract base for all widget repeaters."""
+    _is_primitive: bool
+    _widget_type: type
+    _widget_args: tuple
+    _widget_kwargs: dict
+    _widget_props: dict
+    _bind_expr: str | Callable
+    _object_name: str | None
+    _css_classes: list[str]
+    _signal_connections: dict
+    _parent_widget: Widget | None
+
+    def _create_widget(self) -> QWidget: ...
+    def _apply_styling(self, widget: QWidget) -> None: ...
+    def _resolve_property(self, obj: Any, path: str) -> Any: ...
+```
+
+### Phase 4: Unify Config Classes
 Create a base config class:
 ```python
 @dataclass
@@ -635,14 +667,14 @@ class MenuConfig(QtPieBaseConfig):
     item_order: list[str]
 ```
 
-### Phase 3: Unify Record Descriptors
+### Phase 5: Unify Record Descriptors
 Extract to `lib/qtpie/descriptors/record.py`:
 ```python
 class RecordDescriptor[T]:
     def __init__(self, record_type: type[T], state_class: type = QtPieState): ...
 ```
 
-### Phase 4: Create Shared `__init_subclass__` Helper
+### Phase 6: Create Shared `__init_subclass__` Helper
 ```python
 def setup_qtpie_subclass(
     cls: type,
@@ -653,7 +685,7 @@ def setup_qtpie_subclass(
     # Common subclass setup logic
 ```
 
-### Phase 5: Unify Signal Expression Handlers
+### Phase 7: Unify Signal Expression Handlers
 ```python
 def create_signal_expression_handler(
     context_obj: Any,
@@ -662,7 +694,7 @@ def create_signal_expression_handler(
 ) -> Callable[..., Any]:
 ```
 
-### Phase 6: Unify Binding Application
+### Phase 8: Unify Binding Application
 Move everything to `bindings/apply.py`:
 - `apply_auto_bindings`
 - `apply_property_bindings`
@@ -671,7 +703,7 @@ Move everything to `bindings/apply.py`:
 
 All modules should use these shared functions.
 
-### Phase 7: Fix WidgetBase or Remove
+### Phase 9: Fix WidgetBase or Remove
 Either:
 - Update to use shared infrastructure
 - Remove and document that Widget/Window/Menu should be used
@@ -691,9 +723,138 @@ uv run ruff check lib/qtpie/ tests/
 
 ## Priority Order
 
-1. **HIGH**: Fix Menu record dirty subscription bug
-2. **HIGH**: Unify `_is_signal`, `_create_layout` (pure functions, zero risk)
-3. **MEDIUM**: Unify signal expression handlers (one parameterized function)
-4. **MEDIUM**: Unify config classes (base class + extensions)
-5. **LOW**: Unify `__init_subclass__` logic (more complex, higher risk)
-6. **LOW**: Unify `_wrap_init_*` functions (very complex, highest risk)
+### Bugs to Fix First
+1. **CRITICAL**: Fix `SetWidgetRepeater` missing two-way sync for primitives
+2. **HIGH**: Fix Menu record dirty subscription bug
+
+### Low-Risk Extractions (Start Here)
+3. **HIGH**: Extract `_is_signal`, `_create_layout`, `_is_primitive_type` (pure functions, zero risk)
+4. **HIGH**: Extract `_PLACEHOLDER_RE`, `_HANDLER_SPEC_RE` to shared patterns module
+5. **HIGH**: Extract `_resolve_nested_property` (identical in 4 files)
+
+### Medium-Risk Unifications
+6. **MEDIUM**: Create repeater base class with shared styling/widget creation
+7. **MEDIUM**: Unify signal expression handlers (one parameterized function)
+8. **MEDIUM**: Unify config classes (base class + extensions)
+9. **MEDIUM**: Unify `_create_signal_handler` across repeaters
+
+### Higher-Risk Unifications
+10. **LOW**: Unify `__init_subclass__` logic (more complex, higher risk)
+11. **LOW**: Unify `_wrap_init_*` functions (very complex, highest risk)
+12. **LOW**: Unify binding application logic across Widget/Window/Menu/App
+
+---
+
+## Lines of Code That Could Be Eliminated
+
+| Duplication | Approx Lines | Files Affected |
+|-------------|--------------|----------------|
+| `_is_primitive_type` | 4 × 3 = 12 | 4 repeaters |
+| `_PLACEHOLDER_RE` | 4 × 1 = 4 | 4 repeaters |
+| `_HANDLER_SPEC_RE` | 3 × 1 = 3 | 3 repeaters |
+| `_resolve_nested_property` | 4 × 20 = 80 | 4 repeaters |
+| `_create_widget_for_item` | 3 × 20 = 60 | 3 widget repeaters |
+| `_create_signal_handler` | 3 × 50 = 150 | 3 repeaters |
+| `_is_signal` | 4 × 4 = 16 | widget/window/menu/app |
+| `_create_layout` | 3 × 10 = 30 | widget/window/app |
+| Signal expression handlers | 4 × 87 = 348 | widget/window/menu/app |
+| `_detect_required_bindings` | 3 × 35 = 105 | widget/window/menu |
+| **Total Potential Savings** | **~808 lines** | |
+
+This doesn't include the larger `_wrap_init_*` functions which have more complex differences.
+
+---
+
+## Test Strategy
+
+### Phase 1: Use Existing Tests for Regression (During Refactor)
+
+The current test suite (1288 tests) should serve as a regression suite during refactoring:
+
+```bash
+uv run pytest tests/ -v
+uv run pyright lib/qtpie/ tests/qtpie/
+uv run ruff check lib/qtpie/ tests/
+```
+
+**Goal**: Keep all tests passing after each refactoring step. Don't add new tests during the refactor - just ensure nothing breaks.
+
+### Phase 2: Organized Feature Test Suite (After Refactor)
+
+After refactoring is complete, create a new organized test suite structure that tests features across all base classes systematically.
+
+**Proposed Structure:**
+```
+tests/features/
+    dirty_tracking/
+        test_widget_dirty_tracking.py
+        test_window_dirty_tracking.py
+        test_menu_dirty_tracking.py
+        test_app_dirty_tracking.py
+    validation/
+        test_widget_validation.py
+        test_window_validation.py
+        test_menu_validation.py
+        test_app_validation.py
+    record_types/
+        test_widget_record.py
+        test_window_record.py
+        test_menu_record.py
+        test_app_record.py
+    bindings/
+        test_widget_bindings.py
+        test_window_bindings.py
+        test_menu_bindings.py
+        test_app_bindings.py
+    repeaters/
+        test_widget_repeater_list.py
+        test_widget_repeater_dict.py
+        test_widget_repeater_set.py
+        test_action_repeater.py
+        test_repeater_sorting.py
+        test_repeater_signals.py
+    signals/
+        test_signal_connections.py
+        test_signal_expressions.py
+    lifecycle/
+        test_setup_hooks.py
+        test_dirty_changed_hooks.py
+        test_valid_changed_hooks.py
+    layouts/
+        test_vertical_layout.py
+        test_horizontal_layout.py
+        test_form_layout.py
+        test_grid_layout.py
+```
+
+**Goals:**
+- Each feature directory tests that feature across Widget/Window/Menu/App consistently
+- Exposes inconsistencies between implementations (likely already fixed by refactor)
+- Serves as living documentation of how features work
+- Quadruple+ the test count for comprehensive coverage
+
+**Why After Refactor:**
+1. New tests during refactor would likely find bugs that the refactor itself fixes
+2. Creates churn - tests that fail initially, then pass after refactor
+3. Better to have a clean baseline, then add comprehensive tests
+
+---
+
+## Bugs Fixed
+
+### SetWidgetRepeater Two-Way Sync (FIXED)
+
+**Bug**: `SetWidgetRepeater` was missing `_setup_primitive_sync`, so editing a widget for `set[int]` or `set[str]` didn't update the underlying set.
+
+**Fix**: Added `_setup_primitive_sync` method to `set_widget_repeater.py` that:
+1. Tracks the original item value
+2. On widget change: removes old value from set, adds new value
+3. Updates the tracked current value
+
+**Tests**: `tests/qtpie/test_bug_reproductions.py::TestSetWidgetRepeaterTwoWaySyncBug`
+
+### Menu Record Dirty Tracking (NOT A BUG)
+
+**Investigation**: Initially suspected Menu's `_MenuRecordDescriptor` was missing dirty subscription calls. However, testing showed that Menu's record dirty tracking works correctly. The subscription appears to happen through a different path (possibly `register_variable` which calls `_subscribe_variable_to_aggregation`).
+
+**Tests**: `tests/qtpie/test_bug_reproductions.py::TestMenuRecordDirtyTrackingBug` - all pass

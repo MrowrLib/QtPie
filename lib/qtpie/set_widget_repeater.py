@@ -230,6 +230,7 @@ class SetWidgetRepeater[T](QWidget):
         if bind_expr == "{#self}":
             var: Variable[Any] = Variable(wrapper)
             bind(var).to(widget)
+            self._setup_primitive_sync(wrapper, item)
             return
 
         # Case 2: Single property {name} - bind to that property (two-way for objects)
@@ -286,6 +287,39 @@ class SetWidgetRepeater[T](QWidget):
             wrapper.on_change(on_change)
         else:
             wrapper.on_change(lambda: on_change(None))
+
+    def _setup_primitive_sync(
+        self,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        original_item: T,
+    ) -> None:
+        """Set up sync from primitive Observable back to set.
+
+        For sets, when a primitive value changes, we need to:
+        1. Remove the original item from the set
+        2. Add the new value to the set
+        """
+        if isinstance(wrapper, Observable):
+            # Prevent infinite loop: track if we're updating
+            updating = {"active": False}
+            # Track the current item value (may change from original)
+            current_item = [original_item]
+
+            def sync_to_set(new_val: Any, upd: dict[str, bool] = updating, cur: list[T] = current_item) -> None:
+                if upd["active"]:
+                    return
+                upd["active"] = True
+                try:
+                    old_val = cur[0]
+                    if old_val != new_val:
+                        # Remove old value and add new value
+                        self._obs_set.discard(old_val)
+                        self._obs_set.add(new_val)
+                        cur[0] = new_val
+                finally:
+                    upd["active"] = False
+
+            wrapper.on_change(sync_to_set)
 
     def _resolve_nested_property(self, obj: Any, path: str) -> Any:
         """Resolve a dotted property path like 'breed.name' on an object."""
