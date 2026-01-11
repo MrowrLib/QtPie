@@ -1,0 +1,11 @@
+[project]
+dependencies = [
+  "qtpie",
+]
+description = "Free Open-source Rest Client"
+name = "forc"
+requires-python = ">=3.13"
+version = "0.1.0"
+
+[tool.uv.sources]
+qtpie = {workspace = true}

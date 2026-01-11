@@ -222,6 +222,12 @@ class Menu[T = None](QMenu):
             self._qtpie = QtPieState(self)
         self._qtpie.add_validator(field, name, validator)
 
+    def remove_validator(self, field: str, name: str) -> None:
+        """Remove a named validator from a field."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        self._qtpie.remove_validator(field, name)
+
     @property
     def is_valid(self) -> Observable[bool]:
         """Check if all fields are valid. Returns Observable[bool] for reactive bindings."""

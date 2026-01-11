@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import types
 from collections.abc import Callable, Iterator
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_origin, overload, override
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_args, get_origin, overload, override
 
 from observant import (
     AnyObservable,
@@ -25,7 +26,7 @@ _ValT = TypeVar("_ValT")
 _SetItemT = TypeVar("_SetItemT")
 
 
-def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObservable[Any]:
+def _create_observable_for_type(inner_type: type | types.UnionType | None, default: Any) -> AnyObservable[Any]:
     """Create the appropriate observable wrapper based on type.
 
     Note: Mutable defaults (list, dict, complex objects) are deep-copied
@@ -65,9 +66,19 @@ def _create_observable_for_type(inner_type: type | None, default: Any) -> AnyObs
     if is_primitive_type(inner_type):
         return Observable(default)
 
+    # Union types (e.g., str | None, int | None) → Observable if all members are primitives
+    if isinstance(inner_type, types.UnionType):
+        type_args = get_args(inner_type)
+        # Check if all args are primitive types (including None)
+        if all(is_primitive_type(t) for t in type_args):
+            return Observable(default)
+
     # Complex types → ObservableProxy
     # Need to create an instance if default is None
     if default is None:
+        # UnionType can't be instantiated
+        if isinstance(inner_type, types.UnionType):
+            raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default=...) or provide constructor args.")
         # Try to instantiate with no args
         try:
             default = inner_type()
@@ -239,6 +250,10 @@ class Variable[T, W = None]:
         """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
         # type: ignore needed because AnyObservable union has different validator signatures
         self._wrapper.add_validator(name, validator)  # type: ignore[arg-type]
+
+    def remove_validator(self, name: str) -> None:
+        """Remove a named validator."""
+        self._wrapper.remove_validator(name)
 
     @property
     def is_valid(self) -> Observable[bool]:

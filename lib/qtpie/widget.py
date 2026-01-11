@@ -196,6 +196,12 @@ class Widget[T = None](QWidget):
             self._qtpie = QtPieState(self)
         self._qtpie.add_validator(field, name, validator)
 
+    def remove_validator(self, field: str, name: str) -> None:
+        """Remove a named validator from a field."""
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+        self._qtpie.remove_validator(field, name)
+
     @property
     def is_dirty(self) -> Observable[bool]:
         """Check if any field has changed. Returns Observable[bool] for reactive bindings.

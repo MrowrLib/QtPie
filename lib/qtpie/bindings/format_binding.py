@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING, Any
 
-from observant import Observable, ObservableDict, ObservableList, ObservableSet
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
 from .path import BindingSource, resolve_binding_source
 
@@ -585,9 +585,14 @@ def create_format_binding(
 
                 # Evaluate the expression
                 try:
-                    value = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    value: Any = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    # Unwrap Observable/ObservableProxy results (from nested property access)
+                    if isinstance(value, Observable):
+                        value = value.get()  # pyright: ignore[reportUnknownVariableType]
+                    elif isinstance(value, ObservableProxy):
+                        value = value.unwrap()  # pyright: ignore[reportUnknownVariableType]
                     # If value is callable (method without parens), call it
-                    if callable(value) and not isinstance(value, type):
+                    if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()
                 except Exception:
                     value = f"<error: {field.expression}>"
@@ -595,11 +600,11 @@ def create_format_binding(
                 # Apply format spec if present
                 if field.format_spec:
                     try:
-                        value = format(value, field.format_spec)
+                        value = format(value, field.format_spec)  # pyright: ignore[reportUnknownArgumentType]
                     except Exception:
-                        value = str(value)
+                        value = str(value)  # pyright: ignore[reportUnknownArgumentType]
                 else:
-                    value = str(value)
+                    value = str(value)  # pyright: ignore[reportUnknownArgumentType]
 
                 result_parts.append(value)
 

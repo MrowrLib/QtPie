@@ -229,10 +229,26 @@ class ObservableDict[K, V]:
         self._validators[name] = validator
         self._validate()
 
+    def remove_validator(self, name: str) -> None:
+        """Remove a named validator."""
+        if name in self._validators:
+            del self._validators[name]
+            self._validate()
+
     def _validate(self) -> None:
         """Run all validators and update state."""
-        if self._is_valid is None or not self._validators:
-            return  # Validation disabled or no validators
+        if self._is_valid is None:
+            return  # Validation disabled
+
+        if not self._validators:
+            # No validators = always valid
+            assert self._validation_errors is not None
+            assert self._validation_error_messages is not None
+            self._validation_errors.set({})
+            self._validation_error_messages.set([])
+            if not self._is_valid.get():
+                self._is_valid.set(True)
+            return
 
         errors_dict: dict[str, list[str]] = {}
         all_messages: list[str] = []

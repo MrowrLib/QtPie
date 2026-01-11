@@ -1,0 +1,9 @@
+from qtpy.QtWidgets import QLabel
+
+from qtpie import App, app, entrypoint, new
+
+
+@entrypoint
+@app(title="Free Open-source Rest Client")
+class ForcApp(App):
+    header: QLabel = new("Free Open-source RTOS Configuration Tool")

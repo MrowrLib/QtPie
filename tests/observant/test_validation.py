@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 
 from assertpy import assert_that
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
 
 class TestObservableValidation:
@@ -94,6 +94,39 @@ class TestObservableValidation:
         obs.set("hello")  # now valid
         assert_that(transitions).contains(True)
 
+    def test_remove_validator(self) -> None:
+        """Can remove a validator by name."""
+        obs = Observable("")
+        obs.add_validator("required", lambda v: None if v else "Required")
+
+        assert_that(obs.is_valid.get()).is_false()
+
+        obs.remove_validator("required")
+        assert_that(obs.is_valid.get()).is_true()
+        assert_that(obs.validation_errors.get()).is_empty()
+
+    def test_remove_validator_nonexistent(self) -> None:
+        """Removing nonexistent validator is a no-op."""
+        obs = Observable("hello")
+        obs.add_validator("required", lambda v: None if v else "Required")
+
+        # Should not raise
+        obs.remove_validator("nonexistent")
+        assert_that(obs.is_valid.get()).is_true()
+
+    def test_remove_one_of_multiple_validators(self) -> None:
+        """Can remove one validator while keeping others."""
+        obs = Observable("")
+        obs.add_validator("required", lambda v: None if v else "Required")
+        obs.add_validator("min_len", lambda v: None if len(v) >= 3 else "Too short")
+
+        assert_that(obs.validation_errors.get()).contains_key("required", "min_len")
+
+        obs.remove_validator("required")
+        assert_that(obs.validation_errors.get()).does_not_contain_key("required")
+        assert_that(obs.validation_errors.get()).contains_key("min_len")
+        assert_that(obs.is_valid.get()).is_false()  # Still invalid due to min_len
+
 
 class TestObservableListValidation:
     """Test ObservableList[T] validation."""
@@ -122,6 +155,17 @@ class TestObservableListValidation:
         lst.pop()
         assert_that(lst.is_valid.get()).is_true()
 
+    def test_list_remove_validator(self) -> None:
+        """Can remove a validator from ObservableList."""
+        lst = ObservableList[str]([])
+        lst.add_validator("not_empty", lambda items: None if items else "List cannot be empty")
+
+        assert_that(lst.is_valid.get()).is_false()
+
+        lst.remove_validator("not_empty")
+        assert_that(lst.is_valid.get()).is_true()
+        assert_that(lst.validation_errors.get()).is_empty()
+
 
 class TestObservableDictValidation:
     """Test ObservableDict[K, V] validation."""
@@ -139,6 +183,46 @@ class TestObservableDictValidation:
 
         dct["required"] = 42
         assert_that(dct.is_valid.get()).is_true()
+
+    def test_dict_remove_validator(self) -> None:
+        """Can remove a validator from ObservableDict."""
+        dct = ObservableDict[str, int]({"a": 1})
+        dct.add_validator(
+            "has_required",
+            lambda d: None if "required" in d else "Missing 'required' key",
+        )
+
+        assert_that(dct.is_valid.get()).is_false()
+
+        dct.remove_validator("has_required")
+        assert_that(dct.is_valid.get()).is_true()
+        assert_that(dct.validation_errors.get()).is_empty()
+
+
+class TestObservableSetValidation:
+    """Test ObservableSet[T] validation."""
+
+    def test_set_validation(self) -> None:
+        """ObservableSet can have validators."""
+        s = ObservableSet[str](set())
+        s.add_validator("not_empty", lambda items: None if items else "Set cannot be empty")
+
+        assert_that(s.is_valid.get()).is_false()
+        assert_that(s.validation_error_messages.get()).is_equal_to(["Set cannot be empty"])
+
+        s.add("item")
+        assert_that(s.is_valid.get()).is_true()
+
+    def test_set_remove_validator(self) -> None:
+        """Can remove a validator from ObservableSet."""
+        s = ObservableSet[str](set())
+        s.add_validator("not_empty", lambda items: None if items else "Set cannot be empty")
+
+        assert_that(s.is_valid.get()).is_false()
+
+        s.remove_validator("not_empty")
+        assert_that(s.is_valid.get()).is_true()
+        assert_that(s.validation_errors.get()).is_empty()
 
 
 class TestObservableProxyValidation:
@@ -202,3 +286,39 @@ class TestObservableProxyValidation:
         invalid = proxy.invalid_fields
         assert_that(invalid).contains("age")
         assert_that(invalid).does_not_contain("name")
+
+    def test_proxy_remove_own_validator(self) -> None:
+        """Can remove proxy's own validator."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        proxy: ObservableProxy[Person] = ObservableProxy(Person())
+        proxy.add_validator(
+            "adult_named",
+            lambda p: None if p.name and p.age >= 18 else "Must be named adult",
+        )
+
+        assert_that(proxy.is_valid.get()).is_false()
+
+        proxy.remove_validator("adult_named")
+        assert_that(proxy.is_valid.get()).is_true()
+        assert_that(proxy.validation_errors.get()).is_empty()
+
+    def test_proxy_remove_field_validator(self) -> None:
+        """Can remove validator from proxy field."""
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        proxy: ObservableProxy[Person] = ObservableProxy(Person())
+        proxy.name.add_validator("required", lambda v: None if v else "Required")
+
+        assert_that(proxy.is_valid.get()).is_false()
+
+        proxy.name.remove_validator("required")
+        assert_that(proxy.name.is_valid.get()).is_true()
+        assert_that(proxy.is_valid.get()).is_true()

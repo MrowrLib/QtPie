@@ -290,6 +290,11 @@ class SetWidgetRepeater[T](QWidget):
         """Get the number of widgets."""
         return len(self._entries)
 
+    @property
+    def widgets(self) -> list[QWidget]:
+        """Get all widgets as a list (in display order)."""
+        return [self._entries[item][0] for item in self._item_order if item in self._entries]
+
     # Set-like interface
     def __contains__(self, item: T) -> bool:
         """Check if item has a widget."""

@@ -339,6 +339,11 @@ class DictWidgetRepeater[K, V](QWidget):
         """Get the number of widgets."""
         return len(self._entries)
 
+    @property
+    def widgets(self) -> list[QWidget]:
+        """Get all widgets as a list (in insertion order)."""
+        return [self._entries[key][0] for key in self._key_order]
+
     # List-like interface for iteration
     def __getitem__(self, key: K) -> QWidget:
         """Get widget for key (dict-like access)."""

@@ -1,0 +1,12 @@
+[project]
+dependencies = [
+  "forc",
+  "qtpie[test]",
+]
+description = "Tests for Forc"
+name = "forc-tests"
+requires-python = ">=3.13"
+version = "0.1.0"
+
+[tool.uv.sources]
+forc = {workspace = true}

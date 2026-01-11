@@ -1,6 +1,7 @@
 """Common utility functions shared across QtPie modules."""
 
 import re
+import types
 
 # Regex to find placeholders like {#self}, {#index}, {name}, {age}, {#self.age}
 PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
@@ -9,7 +10,7 @@ PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
 HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
 
 
-def is_primitive_type(t: type | None) -> bool:
+def is_primitive_type(t: type | types.UnionType | None) -> bool:
     """Check if type is a primitive."""
     return t in (str, int, float, bool, type(None))
 

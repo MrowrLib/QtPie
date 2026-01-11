@@ -330,6 +330,11 @@ class WidgetRepeater[T](QWidget):
         """Get the number of widgets."""
         return len(self._items)
 
+    @property
+    def widgets(self) -> list[QWidget]:
+        """Get all widgets as a list."""
+        return [w for w, _, _ in self._items]
+
     # List-like interface so list[QLabel] annotation isn't a total lie
     def __getitem__(self, index: int) -> QWidget:
         """Get widget at index (list-like access)."""

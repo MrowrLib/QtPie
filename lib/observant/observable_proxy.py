@@ -350,6 +350,13 @@ class ObservableProxy[T]:
         validators[name] = validator
         self._validate()
 
+    def remove_validator(self, name: str) -> None:
+        """Remove a named validator."""
+        validators: dict[str, ValidatorFn[T]] = object.__getattribute__(self, "_validators")
+        if name in validators:
+            del validators[name]
+            self._validate()
+
     def _validate(self) -> None:
         """Run own validators and update state."""
         is_valid_obs: Observable[bool] | None = object.__getattribute__(self, "_is_valid")
@@ -358,6 +365,15 @@ class ObservableProxy[T]:
 
         validators: dict[str, ValidatorFn[T]] = object.__getattribute__(self, "_validators")
         if not validators:
+            # No validators = always valid
+            validation_errors: Observable[dict[str, list[str]]] | None = object.__getattribute__(self, "_validation_errors")
+            validation_error_messages: Observable[list[str]] | None = object.__getattribute__(self, "_validation_error_messages")
+            if validation_errors is not None:
+                validation_errors.set({})
+            if validation_error_messages is not None:
+                validation_error_messages.set([])
+            if not is_valid_obs.get():
+                is_valid_obs.set(True)
             return
 
         target: T = object.__getattribute__(self, "_target")

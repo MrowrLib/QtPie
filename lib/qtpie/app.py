@@ -51,7 +51,7 @@ class AppConfig:
 
     # Feature toggles
     window: bool = True  # Auto-create Window for QWidget/QMenu fields
-    system_tray: bool = True  # Auto-create system tray for system_tray:/QAction fields
+    system_tray: bool | None = None  # None=auto (only if QActions/system_tray field), True=force, False=never
     show: bool = True  # Auto-show window in run()
     minimize_to_tray: bool = True  # If True, closing window hides to tray instead of quitting
 
@@ -537,7 +537,7 @@ def app[A: AppBase[Any]](
     *,
     # Feature toggles
     window: bool = True,
-    system_tray: bool = True,
+    system_tray: bool | None = None,
     show: bool = True,
     minimize_to_tray: bool = True,
     # Window settings
@@ -562,7 +562,7 @@ def app[A: AppBase[Any]](
     *,
     # Feature toggles
     window: bool = True,
-    system_tray: bool = True,
+    system_tray: bool | None = None,
     show: bool = True,
     minimize_to_tray: bool = True,
     # Window settings
@@ -730,8 +730,8 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         if config.window:
             _create_auto_window(self, config, cls)
 
-        # Set up system tray if enabled
-        if config.system_tray:
+        # Set up system tray (None=auto-detect, True=force, False=never)
+        if config.system_tray is not False:
             _setup_system_tray(self, config)
 
         # Set up dirty/valid change hooks
@@ -912,7 +912,11 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
     The system tray uses:
     - system_tray field (QMenu) if defined
     - QAction, Separator, Section fields are added to a lazily-created tray menu
-    - Or creates a tray with auto-Window show/hide and quit actions
+
+    Behavior depends on config.system_tray:
+    - None (default): auto-detect, only create if there are QActions or system_tray field
+    - True: force create (with default menu for auto-window if no items)
+    - False: never create (handled by caller, won't reach this function)
 
     Works with both AppBase (for testing) and App (real applications).
     When used with AppBase, tray is created without a parent.
@@ -944,10 +948,21 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
     # If no system_tray field but we have an auto-window, create a default menu
     auto_window: QMainWindow | None = getattr(app, "_auto_window", None)
 
-    # Create tray if we have: a tray menu, an auto-window, OR tray items
-    if tray_menu is None and auto_window is None and not has_tray_items:
-        # Nothing to show in tray - skip tray creation
-        return
+    # Decide whether to create the tray based on what content is available
+    # tray_menu: explicit system_tray Menu field
+    # has_tray_items: QAction/Separator/Section fields
+    # auto_window: default show/hide/quit menu for window
+    has_content = tray_menu is not None or has_tray_items or auto_window is not None
+
+    if config.system_tray is True:
+        # Force create - but still need something to show
+        if not has_content:
+            return
+    else:
+        # Auto-detect (system_tray=None): only create if there are tray items or menu
+        # (not just because there's an auto_window - that's too implicit)
+        if tray_menu is None and not has_tray_items:
+            return
 
     # Resolve tray icon
     icon = resolve_icon(config.tray_icon) or resolve_icon(config.icon)
