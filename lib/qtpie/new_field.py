@@ -57,6 +57,18 @@ class NewField:
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
+        # QListView-specific selection bindings (multi)
+        self.selected_indexes: str | None = None  # Variable name for selectedIndexes binding (list[int])
+        self.selected_items_list: str | None = None  # Variable name for selectedItems binding (list[T]) for QListView
+        # QTableView-specific selection bindings (single)
+        self.selected_row: str | None = None  # Variable name for selectedRow binding
+        self.selected_column: str | None = None  # Variable name for selectedColumn binding
+        self.selected_cell: str | None = None  # Variable name for selectedCell binding (tuple[int, int])
+        # QTableView-specific selection bindings (multi)
+        self.selected_rows: str | None = None  # Variable name for selectedRows binding (list[int])
+        self.selected_columns: str | None = None  # Variable name for selectedColumns binding (list[int])
+        self.selected_cells: str | None = None  # Variable name for selectedCells binding (list[tuple])
+        self.selected_items: str | None = None  # Variable name for selectedItems binding (list[T])
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
@@ -254,22 +266,39 @@ class NewField:
             # Extract bind= for QtPie binding system
             self.bind = self.kwargs.pop("bind", None)
 
-            # Extract format= for model widgets (QComboBox, QListView, etc.) with bind=
-            # format= specifies how list items should be displayed: "{name} ({age}}"
-            if self.bind is not None:
+            # Extract format=/selection bindings for model widgets ONLY (QComboBox, QListView, QTableView)
+            # These kwargs should NOT be popped for non-model widgets as they might be constructor params
+            if self.bind is not None and self._is_model_widget_type():
+                # format= specifies how list items should be displayed: "{name} ({age}}"
                 self.model_format = self.kwargs.pop("format", None)
-                # Extract selection bindings for model widgets
+                # Extract selection bindings for model widgets (QComboBox, QListView, QTableView)
                 self.selected_index = self.kwargs.pop("selectedIndex", None)
                 self.selected_item = self.kwargs.pop("selectedItem", None)
-                # Extract columns/headers for QTableView with bind=
-                # columns= specifies which fields to show: ["name", "age"]
-                # headers= provides custom headers: {"name": "Dog Name"}
-                columns = self.kwargs.pop("columns", None)
-                if columns is not None:
-                    self.table_columns = list(columns)
-                headers = self.kwargs.pop("headers", None)
-                if headers is not None:
-                    self.table_headers = dict(headers)
+                # Extract QTableView-specific kwargs only if this is a QTableView
+                if self._is_qtableview_type():
+                    # QTableView-specific selection bindings (single)
+                    self.selected_row = self.kwargs.pop("selectedRow", None)
+                    self.selected_column = self.kwargs.pop("selectedColumn", None)
+                    self.selected_cell = self.kwargs.pop("selectedCell", None)
+                    # QTableView-specific selection bindings (multi)
+                    self.selected_rows = self.kwargs.pop("selectedRows", None)
+                    self.selected_columns = self.kwargs.pop("selectedColumns", None)
+                    self.selected_cells = self.kwargs.pop("selectedCells", None)
+                    self.selected_items = self.kwargs.pop("selectedItems", None)
+                    # Extract columns/headers for QTableView with bind=
+                    # columns= specifies which fields to show: ["name", "age"]
+                    # headers= provides custom headers: {"name": "Dog Name"}
+                    columns = self.kwargs.pop("columns", None)
+                    if columns is not None:
+                        self.table_columns = list(columns)
+                    headers = self.kwargs.pop("headers", None)
+                    if headers is not None:
+                        self.table_headers = dict(headers)
+                # Extract QListView-specific kwargs only if this is a QListView
+                elif self._is_qlistview_type():
+                    # QListView-specific selection bindings (multi)
+                    self.selected_indexes = self.kwargs.pop("selectedIndexes", None)
+                    self.selected_items_list = self.kwargs.pop("selectedItems", None)
 
             # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)
@@ -378,6 +407,53 @@ class NewField:
             return cls is QAction or (isinstance(cls, type) and issubclass(cls, QAction))  # pyright: ignore[reportUnnecessaryIsInstance]
         except (ImportError, TypeError):
             return False
+
+    def _is_qtableview_type(self) -> bool:
+        """Check if the field type is a QTableView subclass."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QTableView
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QTableView)
+        except (ImportError, TypeError):
+            return False
+
+    def _is_qlistview_type(self) -> bool:
+        """Check if the field type is a QListView subclass (but not QTableView)."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QListView, QTableView
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            # QListView but not QTableView (QTableView inherits from QAbstractItemView, not QListView)
+            return issubclass(self.field_type, QListView) and not issubclass(self.field_type, QTableView)
+        except (ImportError, TypeError):
+            return False
+
+    def _is_qcombobox_type(self) -> bool:
+        """Check if the field type is a QComboBox subclass."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QComboBox
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QComboBox)
+        except (ImportError, TypeError):
+            return False
+
+    def _is_model_widget_type(self) -> bool:
+        """Check if the field type is a model widget (QComboBox, QListView, QTableView)."""
+        return self._is_qcombobox_type() or self._is_qlistview_type() or self._is_qtableview_type()
 
     def _is_signal(self, name: str) -> bool:
         """Check if name is a signal on the field type."""

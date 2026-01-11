@@ -323,3 +323,35 @@ class TestBindingResolutionOrder:
 
         # {count} should resolve to _count via underscore fallback
         assert_that(w.display.text()).is_equal_to("Count: 42")
+
+    def test_local_variable_wins_over_record_field_with_same_name(self, qt: QtDriver) -> None:
+        """Local _dogs Variable takes priority over record.dogs field.
+
+        Bug reproduction: When a Widget[T] has both:
+        - record.dogs (from T)
+        - _dogs (local Variable)
+
+        A binding like {len(_dogs)} should resolve to the local _dogs Variable,
+        not strip the underscore and find record.dogs.
+        """
+
+        @dataclass
+        class Pet:
+            name: str
+
+        @dataclass
+        class Owner:
+            dogs: list[Pet]  # record has 'dogs' field
+
+        @widget(record=Owner(dogs=[Pet("RecordDog")]))
+        class DogOwner(Widget[Owner]):
+            # Local Variable with different items than record.dogs
+            _dogs: Variable[list[Pet]] = new([Pet("Local1"), Pet("Local2"), Pet("Local3")])
+            # This binding should use _dogs (local Variable), not record.dogs
+            count_label: QLabel = new(bind="Count: {len(_dogs)}")
+
+        w = qt.track(DogOwner())
+
+        # record.dogs has 1 item, _dogs Variable has 3 items
+        # The label should show count of LOCAL _dogs (3), not record.dogs (1)
+        assert_that(w.count_label.text()).is_equal_to("Count: 3")

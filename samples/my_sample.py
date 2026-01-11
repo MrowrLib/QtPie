@@ -4,7 +4,7 @@ from typing import override
 
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QListView, QPushButton, QStyle, QTableView, QTabWidget
+from qtpy.QtWidgets import QAbstractItemView, QCheckBox, QLabel, QLineEdit, QListView, QPushButton, QStyle, QTableView, QTabWidget
 
 from qtpie import App, Menu, Variable, Widget, app, entrypoint, menu, new, ref, set_language, slot, t, widget
 
@@ -683,25 +683,44 @@ class MyApp(App[Dog]):
         print(f"Custom signal receive with args: {args}, kwargs: {kwargs}")
 
 
+# <--- todo: maybe support for set[Dog] ? not a big deal though. and dict.
+
+
 @dataclass
 class DogsCollection:
-    dogs: list[Dog]  # <--- todo: maybe support for set[Dog] ? not a big deal though. and dict.
+    dogs: list[Dog]
 
 
 @entrypoint
-@widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5)]))
+@widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)]))
 class MyComboBox(Widget[DogsCollection]):
     # The currently seletected index and dog
     _index: Variable[int]
-    _dog: Variable[Dog]
+    # _dog: Variable[Dog]
+    _dogs: Variable[list[Dog]]  # = new([Dog("FAKE", 0)])
 
     # Holy crap, these both react together!
-    _list: QListView = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
-    _combo: QComboBox = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
+    # _list: QListView = new(bind="dogs", format="{name} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
+    # _combo: QComboBox = new(bind="dogs", format="{name} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
 
     # Yay, these are reactive!
     _dog_name_label: QLabel = new(bind="{_dog.name}")
     _dog_age_label: QLabel = new(bind="{_dog.age}")
 
-    # Table:
-    _table: QTableView = new(bind="dogs")  # , columns=["age"])
+    # Table and multi-select list!
+    _table: QTableView = new(bind="dogs", selectedItems="_dogs")
+    _list: QListView = new(bind="dogs", format="{name} ({age} yrs)", selectedItems="_dogs", selectionMode=QAbstractItemView.SelectionMode.MultiSelection)
+
+    _dogs_count: QLabel = new(bind="Selected dogs count: {len(_dogs)}")
+
+    # _btn_print_selected_dogs: QPushButton = new("Print Selected Dogs", clicked="print_selected_dogs")
+
+    # def print_selected_dogs(self) -> None:
+    #     print(f"There are {len(self._dogz.value)} selected dogs:")
+    #     for dog in self._dogz.value:
+    #         print(f"Selected Dog: {dog.name}, Age: {dog.age}")
+
+    btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
+
+    def add_dog(self) -> None:
+        self._dogs.append(Dog(name="New Dog", age=1))

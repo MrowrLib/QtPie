@@ -459,32 +459,33 @@ class TestComboBoxSelectionBindingBoth:
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestSelectionParamsNotStolen:
-    """Ensure selectedIndex/selectedItem pass to constructor when no bind=."""
+    """Ensure selection kwargs pass to constructor when widget is not a model widget."""
 
-    def test_selected_params_pass_to_constructor(self, base_class, decorator, qt: QtDriver) -> None:
-        """selectedIndex/selectedItem go to constructor when no bind= present."""
+    def test_combobox_kwargs_pass_to_non_model_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox-related kwargs pass to constructor for non-model widgets."""
         from PySide6.QtWidgets import QWidget
 
-        # Custom widget that accepts these params in constructor
         class CustomWidget(QWidget):
             def __init__(
                 self,
                 parent: QWidget | None = None,
                 selectedIndex: int = -1,
                 selectedItem: str | None = None,
+                format: str | None = None,  # noqa: A002
             ) -> None:
                 super().__init__(parent)
                 self.my_index = selectedIndex
                 self.my_item = selectedItem
+                self.my_format = format
 
         @decorator
         class TestClass(base_class):
-            # No bind= means selectedIndex/selectedItem should pass to constructor
-            _custom: CustomWidget = new(selectedIndex=42, selectedItem="test")
+            _custom: CustomWidget = new(bind="x", selectedIndex=42, selectedItem="test", format="{name}")
 
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(instance._custom.my_index).is_equal_to(42)
         assert_that(instance._custom.my_item).is_equal_to("test")
+        assert_that(instance._custom.my_format).is_equal_to("{name}")
 
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)

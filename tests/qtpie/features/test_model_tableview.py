@@ -208,24 +208,28 @@ class TestTableViewModelBinding:
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestTableViewSelectionBinding:
-    """QTableView selection bindings with selectedIndex= and selectedItem=."""
+    """QTableView selection bindings.
 
-    def test_table_selected_index_binding(self, base_class, decorator, qt: QtDriver) -> None:
-        """QTableView with selectedIndex= binds to row index Variable."""
+    Single: selectedRow, selectedColumn, selectedCell, selectedItem
+    Multi: selectedRows, selectedColumns, selectedCells, selectedItems
+    """
+
+    def test_table_selected_row_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with selectedRow= binds to row index Variable."""
 
         @decorator
         class TestClass(base_class):
             _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
-            _idx: Variable[int] = new(0)
-            _table: QTableView = new(bind="_dogs", selectedIndex="_idx")
+            _row: Variable[int]  # Bare annotation
+            _table: QTableView = new(bind="_dogs", selectedRow="_row")
 
         instance = create_and_track(qt, TestClass, base_class)
 
-        # Initial state - index 0 selected
-        assert_that(instance._idx.value).is_equal_to(0)
+        # Initial state - row 0 selected
+        assert_that(instance._row.value).is_equal_to(0)
 
         # Change selection via Variable
-        instance._idx.value = 1
+        instance._row.value = 1
         current_idx = instance._table.selectionModel().currentIndex()
         assert_that(current_idx.row()).is_equal_to(1)
 
@@ -245,23 +249,23 @@ class TestTableViewSelectionBinding:
         assert_that(instance._dog.value.name).is_equal_to("Fido")
 
     def test_table_both_bindings(self, base_class, decorator, qt: QtDriver) -> None:
-        """QTableView with both selectedIndex= and selectedItem= keeps them in sync."""
+        """QTableView with both selectedRow= and selectedItem= keeps them in sync."""
 
         @decorator
         class TestClass(base_class):
             _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
-            _idx: Variable[int]  # Bare annotation
+            _row: Variable[int]  # Bare annotation
             _dog: Variable[Dog]  # Bare annotation
-            _table: QTableView = new(bind="_dogs", selectedIndex="_idx", selectedItem="_dog")
+            _table: QTableView = new(bind="_dogs", selectedRow="_row", selectedItem="_dog")
 
         instance = create_and_track(qt, TestClass, base_class)
 
         # Both should sync on init
-        assert_that(instance._idx.value).is_equal_to(0)
+        assert_that(instance._row.value).is_equal_to(0)
         assert_that(instance._dog.value.name).is_equal_to("Fido")
 
-        # Change index - item should update
-        instance._idx.value = 1
+        # Change row - item should update
+        instance._row.value = 1
         assert_that(instance._dog.value.name).is_equal_to("Rex")
 
     def test_table_bare_variable_selection(self, base_class, decorator, qt: QtDriver) -> None:
@@ -270,16 +274,156 @@ class TestTableViewSelectionBinding:
         @decorator
         class TestClass(base_class):
             _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
-            _idx: Variable[int]  # Bare annotation - no new()
+            _row: Variable[int]  # Bare annotation - no new()
             _dog: Variable[Dog]  # Bare annotation - no new()
-            _table: QTableView = new(bind="_dogs", selectedIndex="_idx", selectedItem="_dog")
+            _table: QTableView = new(bind="_dogs", selectedRow="_row", selectedItem="_dog")
 
         instance = create_and_track(qt, TestClass, base_class)
 
         # Both should sync from widget
-        assert_that(instance._idx.value).is_equal_to(0)
+        assert_that(instance._row.value).is_equal_to(0)
         assert_that(instance._dog.value.name).is_equal_to("Fido")
 
-        # Change index - item should update
-        instance._idx.value = 1
+        # Change row - item should update
+        instance._row.value = 1
         assert_that(instance._dog.value.name).is_equal_to("Rex")
+
+    def test_table_selected_column_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with selectedColumn= binds to column index Variable."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _col: Variable[int]  # Bare annotation
+            _table: QTableView = new(bind="_dogs", selectedColumn="_col")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial state - column 0 selected
+        assert_that(instance._col.value).is_equal_to(0)
+
+        # Change column via Variable
+        instance._col.value = 1
+        current_idx = instance._table.selectionModel().currentIndex()
+        assert_that(current_idx.column()).is_equal_to(1)
+
+    def test_table_selected_cell_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with selectedCell= binds to (row, col) tuple Variable."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _cell: Variable[tuple[int, int]]  # Bare annotation
+            _table: QTableView = new(bind="_dogs", selectedCell="_cell")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial state - cell (0, 0) selected
+        assert_that(instance._cell.value).is_equal_to((0, 0))
+
+        # Change cell via Variable
+        instance._cell.value = (1, 1)
+        current_idx = instance._table.selectionModel().currentIndex()
+        assert_that(current_idx.row()).is_equal_to(1)
+        assert_that(current_idx.column()).is_equal_to(1)
+
+    def test_table_all_single_selection_bindings(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with all single selection bindings keeps them in sync."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _row: Variable[int]
+            _col: Variable[int]
+            _cell: Variable[tuple[int, int]]
+            _dog: Variable[Dog]
+            _table: QTableView = new(
+                bind="_dogs",
+                selectedRow="_row",
+                selectedColumn="_col",
+                selectedCell="_cell",
+                selectedItem="_dog",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # All should sync on init
+        assert_that(instance._row.value).is_equal_to(0)
+        assert_that(instance._col.value).is_equal_to(0)
+        assert_that(instance._cell.value).is_equal_to((0, 0))
+        assert_that(instance._dog.value.name).is_equal_to("Fido")
+
+        # Change row - all should update
+        instance._row.value = 1
+        assert_that(instance._cell.value).is_equal_to((1, 0))
+        assert_that(instance._dog.value.name).is_equal_to("Rex")
+
+        # Change column - cell should update
+        instance._col.value = 1
+        assert_that(instance._cell.value).is_equal_to((1, 1))
+
+        # Change cell - row, col, item should update
+        instance._cell.value = (0, 0)
+        assert_that(instance._row.value).is_equal_to(0)
+        assert_that(instance._col.value).is_equal_to(0)
+        assert_that(instance._dog.value.name).is_equal_to("Fido")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewSelectionParamsNotStolen:
+    """Ensure selection kwargs pass to constructor when widget is not a model widget."""
+
+    def test_tableview_kwargs_pass_to_non_model_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView-related kwargs pass to constructor for non-model widgets."""
+        from PySide6.QtWidgets import QWidget
+
+        class CustomWidget(QWidget):
+            def __init__(
+                self,
+                parent: QWidget | None = None,
+                selectedRow: int = -1,
+                selectedColumn: int = -1,
+                selectedCell: tuple[int, int] | None = None,
+                selectedItem: str | None = None,
+                selectedRows: list[int] | None = None,
+                selectedColumns: list[int] | None = None,
+                selectedCells: list[tuple[int, int]] | None = None,
+                selectedItems: list[str] | None = None,
+                format: str | None = None,  # noqa: A002
+            ) -> None:
+                super().__init__(parent)
+                self.my_row = selectedRow
+                self.my_column = selectedColumn
+                self.my_cell = selectedCell
+                self.my_item = selectedItem
+                self.my_rows = selectedRows
+                self.my_columns = selectedColumns
+                self.my_cells = selectedCells
+                self.my_items = selectedItems
+                self.my_format = format
+
+        @decorator
+        class TestClass(base_class):
+            _custom: CustomWidget = new(
+                bind="x",
+                selectedRow=2,
+                selectedColumn=3,
+                selectedCell=(1, 1),
+                selectedItem="test_item",
+                selectedRows=[0, 2],
+                selectedColumns=[1, 3],
+                selectedCells=[(0, 0), (1, 1)],
+                selectedItems=["a", "b"],
+                format="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._custom.my_row).is_equal_to(2)
+        assert_that(instance._custom.my_column).is_equal_to(3)
+        assert_that(instance._custom.my_cell).is_equal_to((1, 1))
+        assert_that(instance._custom.my_item).is_equal_to("test_item")
+        assert_that(instance._custom.my_rows).is_equal_to([0, 2])
+        assert_that(instance._custom.my_columns).is_equal_to([1, 3])
+        assert_that(instance._custom.my_cells).is_equal_to([(0, 0), (1, 1)])
+        assert_that(instance._custom.my_items).is_equal_to(["a", "b"])
+        assert_that(instance._custom.my_format).is_equal_to("{name}")

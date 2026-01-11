@@ -295,7 +295,8 @@ class Widget[T = None](QWidget):
         def __getattr__(self, name: str) -> NoReturn:
             """Handle attribute access for special cases."""
             if name == "record":
-                raise TypeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
+                # Use AttributeError so hasattr() works correctly
+                raise AttributeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 

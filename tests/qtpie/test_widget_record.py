@@ -151,7 +151,8 @@ class TestWidgetRecord:
 
         w = qt.track(PlainWidget())
 
-        with pytest.raises(TypeError, match="no record type"):
+        # Uses AttributeError so hasattr() works correctly
+        with pytest.raises(AttributeError, match="no record type"):
             _ = w.record
 
     def test_record_state_without_record_type_raises(self, qt: QtDriver) -> None:
@@ -163,7 +164,8 @@ class TestWidgetRecord:
 
         w = qt.track(PlainWidget())
 
-        with pytest.raises(TypeError, match="has no record"):
+        # Uses AttributeError so hasattr() works correctly
+        with pytest.raises(AttributeError, match="has no record"):
             _ = w._qtpie.record_state
 
     def test_record_setter_with_value(self, qt: QtDriver) -> None:
