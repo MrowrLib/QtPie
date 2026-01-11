@@ -27,6 +27,13 @@ def _is_model_widget(widget: QWidget) -> bool:
     return set_model is not None and callable(set_model)
 
 
+def _is_table_view(widget: QWidget) -> bool:
+    """Check if widget is a QTableView (needs ReactiveTableModel)."""
+    from qtpy.QtWidgets import QTableView
+
+    return isinstance(widget, QTableView)
+
+
 def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None:
     """Pre-create Variables for selection bindings that reference bare Variable[T] annotations.
 
@@ -159,7 +166,8 @@ def _setup_selection_bindings(
     if selected_index_path is None and selected_item_path is None:
         return
 
-    from qtpy.QtCore import Qt
+    from qtpy.QtCore import QModelIndex, Qt
+    from qtpy.QtWidgets import QComboBox
 
     from qtpie.variable import Variable as VarType
 
@@ -180,10 +188,6 @@ def _setup_selection_bindings(
     # Flag to prevent circular updates
     updating = {"flag": False}
 
-    # Get widget methods for index-based selection (works for QComboBox)
-    set_current_index_fn = getattr(widget, "setCurrentIndex", None)
-    current_index_changed = getattr(widget, "currentIndexChanged", None)
-
     # Helper to get item at index via model's UserRole
     def get_item_at_index(idx: int) -> Any:
         if idx < 0 or idx >= model.rowCount():
@@ -198,87 +202,199 @@ def _setup_selection_bindings(
                 return i
         return -1
 
-    # Sync initial values between Variables and widget
-    current_widget_index_fn = getattr(widget, "currentIndex", None)
+    # Detect widget type and set up appropriate bindings
+    # QComboBox: currentIndex() returns int, setCurrentIndex(int), currentIndexChanged signal
+    # QListView/QTableView: use selectionModel, currentIndex() returns QModelIndex
+    is_combobox = isinstance(widget, QComboBox)
 
-    # Get the current widget index (will sync Variables from this if they're None)
-    current_widget_idx = current_widget_index_fn() if current_widget_index_fn else 0
+    if is_combobox:
+        # QComboBox-specific setup
+        set_current_index_fn = getattr(widget, "setCurrentIndex", None)
+        current_index_changed = getattr(widget, "currentIndexChanged", None)
+        current_widget_index_fn = getattr(widget, "currentIndex", None)
 
-    if index_var is not None and set_current_index_fn is not None:
-        initial_idx = index_var.value
-        # Variable[int] can have None value if no default provided
-        if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
-            set_current_index_fn(initial_idx)
-            current_widget_idx = initial_idx  # Update for item_var sync below
-        else:
-            # Sync Variable to widget's current state
-            index_var.value = current_widget_idx
+        # Get the current widget index (will sync Variables from this if they're None)
+        current_widget_idx: int = current_widget_index_fn() if current_widget_index_fn else 0
 
-    if item_var is not None:
-        initial_item = item_var.value
-        if initial_item is not None:
-            # Set widget to match item if index didn't already set it
-            if index_var is None and set_current_index_fn is not None:
-                idx = find_index_of_item(initial_item)
-                if idx >= 0:
-                    set_current_index_fn(idx)
-        else:
-            # Sync item Variable to widget's current selection
-            item_var.value = get_item_at_index(current_widget_idx)
+        if index_var is not None and set_current_index_fn is not None:
+            initial_idx = index_var.value
+            # Variable[int] can have None value if no default provided
+            if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                set_current_index_fn(initial_idx)
+                current_widget_idx = initial_idx  # Update for item_var sync below
+            else:
+                # Sync Variable to widget's current state
+                index_var.value = current_widget_idx
 
-    # Variable → Widget binding (and cross-update between index/item vars)
-    if index_var is not None and set_current_index_fn is not None:
+        if item_var is not None:
+            initial_item = item_var.value
+            if initial_item is not None:
+                # Set widget to match item if index didn't already set it
+                if index_var is None and set_current_index_fn is not None:
+                    idx = find_index_of_item(initial_item)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+            else:
+                # Sync item Variable to widget's current selection
+                item_var.value = get_item_at_index(current_widget_idx)
 
-        def on_index_var_change(new_idx: int) -> None:
-            if updating["flag"]:
-                return
-            updating["flag"] = True
-            try:
-                set_current_index_fn(new_idx)
-                # Also update item_var if both bindings are present
-                if item_var is not None:
-                    item_var.value = get_item_at_index(new_idx)
-            finally:
-                updating["flag"] = False
+        # Variable → Widget binding (and cross-update between index/item vars)
+        if index_var is not None and set_current_index_fn is not None:
 
-        index_var.on_change(on_index_var_change)
+            def on_index_var_change_combo(new_idx: int) -> None:
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    set_current_index_fn(new_idx)
+                    # Also update item_var if both bindings are present
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(new_idx)
+                finally:
+                    updating["flag"] = False
 
-    if item_var is not None and set_current_index_fn is not None:
+            index_var.on_change(on_index_var_change_combo)
 
-        def on_item_var_change(*_args: Any) -> None:
-            # Note: Observable passes value, ObservableProxy passes nothing
-            if updating["flag"]:
-                return
-            updating["flag"] = True
-            try:
-                new_item = item_var.value  # type: ignore[union-attr]
-                idx = find_index_of_item(new_item)
-                if idx >= 0:
-                    set_current_index_fn(idx)
-                    # Also update index_var if both bindings are present
+        if item_var is not None and set_current_index_fn is not None:
+
+            def on_item_var_change_combo(*_args: Any) -> None:
+                # Note: Observable passes value, ObservableProxy passes nothing
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    new_item = item_var.value  # type: ignore[union-attr]
+                    idx = find_index_of_item(new_item)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+                        # Also update index_var if both bindings are present
+                        if index_var is not None:
+                            index_var.value = idx
+                finally:
+                    updating["flag"] = False
+
+            item_var.on_change(on_item_var_change_combo)
+
+        # Widget → Variable binding
+        if current_index_changed is not None and (index_var is not None or item_var is not None):
+
+            def on_widget_selection_changed_combo(new_idx: int) -> None:
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
                     if index_var is not None:
-                        index_var.value = idx
-            finally:
-                updating["flag"] = False
+                        index_var.value = new_idx
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(new_idx)
+                finally:
+                    updating["flag"] = False
 
-        item_var.on_change(on_item_var_change)
+            current_index_changed.connect(on_widget_selection_changed_combo)
 
-    # Widget → Variable binding
-    if current_index_changed is not None and (index_var is not None or item_var is not None):
+    else:
+        # QListView/QTableView - use selectionModel
+        from qtpy.QtCore import QItemSelectionModel
 
-        def on_widget_selection_changed(new_idx: int) -> None:
-            if updating["flag"]:
+        selection_model = widget.selectionModel()  # type: ignore[attr-defined]
+        if selection_model is None:
+            return
+
+        # Helper to set index via selection model
+        def set_row_index(row: int) -> None:
+            if row < 0 or row >= model.rowCount():
                 return
-            updating["flag"] = True
-            try:
-                if index_var is not None:
-                    index_var.value = new_idx
-                if item_var is not None:
-                    item_var.value = get_item_at_index(new_idx)
-            finally:
-                updating["flag"] = False
+            model_idx = model.index(row, 0)
+            selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+                model_idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
+            )
 
-        current_index_changed.connect(on_widget_selection_changed)
+        # Get current row from selection model
+        def get_current_row() -> int:
+            current_idx = selection_model.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            if current_idx.isValid():  # pyright: ignore[reportUnknownMemberType]
+                return int(current_idx.row())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+            return -1
+
+        # Initialize from current state
+        current_row = get_current_row()
+
+        if index_var is not None:
+            initial_idx = index_var.value
+            # Variable[int] can have None value if no default provided
+            if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                set_row_index(initial_idx)
+                current_row = initial_idx
+            else:
+                # Sync Variable to widget's current state
+                index_var.value = current_row if current_row >= 0 else 0
+
+        if item_var is not None:
+            initial_item = item_var.value
+            if initial_item is not None:
+                # Set widget to match item if index didn't already set it
+                if index_var is None:
+                    idx = find_index_of_item(initial_item)
+                    if idx >= 0:
+                        set_row_index(idx)
+                        current_row = idx
+            else:
+                # Sync item Variable to widget's current selection
+                effective_row = current_row if current_row >= 0 else 0
+                item_var.value = get_item_at_index(effective_row)
+
+        # Variable → Widget binding
+        if index_var is not None:
+
+            def on_index_var_change_view(new_idx: int) -> None:
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    set_row_index(new_idx)
+                    # Also update item_var if both bindings are present
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(new_idx)
+                finally:
+                    updating["flag"] = False
+
+            index_var.on_change(on_index_var_change_view)
+
+        if item_var is not None:
+
+            def on_item_var_change_view(*_args: Any) -> None:
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    new_item = item_var.value  # type: ignore[union-attr]
+                    idx = find_index_of_item(new_item)
+                    if idx >= 0:
+                        set_row_index(idx)
+                        if index_var is not None:
+                            index_var.value = idx
+                finally:
+                    updating["flag"] = False
+
+            item_var.on_change(on_item_var_change_view)
+
+        # Widget → Variable binding via selection model's currentChanged signal
+        if index_var is not None or item_var is not None:
+
+            def on_view_selection_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    row = current.row() if current.isValid() else -1
+                    if index_var is not None:
+                        index_var.value = row
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(row) if row >= 0 else None
+                finally:
+                    updating["flag"] = False
+
+            selection_model.currentChanged.connect(on_view_selection_changed)  # pyright: ignore[reportUnknownMemberType]
 
 
 def apply_auto_bindings(
@@ -376,16 +492,33 @@ def apply_auto_bindings(
                 obs_list = source
 
             if obs_list is not None:
-                # Create ReactiveListModel and set it on the widget
-                from qtpie.bindings.format_binding import create_item_formatter
-                from qtpie.models import ReactiveListModel
+                # Decide which model type to use
+                # QTableView (or explicit columns=) uses ReactiveTableModel
+                # Others (QComboBox, QListView) use ReactiveListModel
+                use_table_model = _is_table_view(widget_instance) or field_info.table_columns is not None
 
-                # Check for format= to customize item display
-                format_fn = None
-                if field_info.model_format is not None:
-                    format_fn = create_item_formatter(field_info.model_format)
+                if use_table_model:
+                    # Create ReactiveTableModel for QTableView
+                    from qtpie.models import ReactiveTableModel
 
-                model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
+                    model = ReactiveTableModel(
+                        obs_list,
+                        parent=widget_instance,
+                        columns=field_info.table_columns,
+                        headers=field_info.table_headers,
+                    )
+                else:
+                    # Create ReactiveListModel for QComboBox, QListView, etc.
+                    from qtpie.bindings.format_binding import create_item_formatter
+                    from qtpie.models import ReactiveListModel
+
+                    # Check for format= to customize item display
+                    format_fn = None
+                    if field_info.model_format is not None:
+                        format_fn = create_item_formatter(field_info.model_format)
+
+                    model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
+
                 widget_instance.setModel(model)  # type: ignore[attr-defined]
 
                 # Set up selection bindings if specified

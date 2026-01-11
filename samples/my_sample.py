@@ -4,7 +4,7 @@ from typing import override
 
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QStyle, QTabWidget
+from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QListView, QPushButton, QStyle, QTableView, QTabWidget
 
 from qtpie import App, Menu, Variable, Widget, app, entrypoint, menu, new, ref, set_language, slot, t, widget
 
@@ -685,16 +685,23 @@ class MyApp(App[Dog]):
 
 @dataclass
 class DogsCollection:
-    dogs: list[Dog]
+    dogs: list[Dog]  # <--- todo: maybe support for set[Dog] ? not a big deal though. and dict.
 
 
 @entrypoint
 @widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5)]))
 class MyComboBox(Widget[DogsCollection]):
+    # The currently seletected index and dog
     _index: Variable[int]
     _dog: Variable[Dog]
+
+    # Holy crap, these both react together!
+    _list: QListView = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
     _combo: QComboBox = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
 
     # Yay, these are reactive!
     _dog_name_label: QLabel = new(bind="{_dog.name}")
     _dog_age_label: QLabel = new(bind="{_dog.age}")
+
+    # Table:
+    _table: QTableView = new(bind="dogs")  # , columns=["age"])

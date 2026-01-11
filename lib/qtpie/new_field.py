@@ -51,6 +51,9 @@ class NewField:
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
         # Model format for QComboBox/QListView/etc. with bind= to list
         self.model_format: str | None = None  # Format for model items: "{name} ({age})"
+        # Table columns for QTableView with bind= to list
+        self.table_columns: list[str] | None = None  # Column names: ["name", "age"]
+        self.table_headers: dict[str, str] | None = None  # Custom headers: {"name": "Dog Name"}
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
@@ -252,12 +255,21 @@ class NewField:
             self.bind = self.kwargs.pop("bind", None)
 
             # Extract format= for model widgets (QComboBox, QListView, etc.) with bind=
-            # format= specifies how list items should be displayed: "{name} ({age})"
+            # format= specifies how list items should be displayed: "{name} ({age}}"
             if self.bind is not None:
                 self.model_format = self.kwargs.pop("format", None)
                 # Extract selection bindings for model widgets
                 self.selected_index = self.kwargs.pop("selectedIndex", None)
                 self.selected_item = self.kwargs.pop("selectedItem", None)
+                # Extract columns/headers for QTableView with bind=
+                # columns= specifies which fields to show: ["name", "age"]
+                # headers= provides custom headers: {"name": "Dog Name"}
+                columns = self.kwargs.pop("columns", None)
+                if columns is not None:
+                    self.table_columns = list(columns)
+                headers = self.kwargs.pop("headers", None)
+                if headers is not None:
+                    self.table_headers = dict(headers)
 
             # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)
