@@ -1072,7 +1072,20 @@ def apply_auto_bindings(
 
                     model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
 
-                widget_instance.setModel(model)  # type: ignore[attr-defined]
+                # Wrap in filter/sort proxy if filter= or sort= is specified
+                if field_info.model_filter is not None or field_info.model_sort is not None:
+                    from qtpie.models import ReactiveFilterProxyModel
+
+                    proxy = ReactiveFilterProxyModel(
+                        parent=widget_instance,
+                        filter_expr=field_info.model_filter,
+                        sort_key=field_info.model_sort,
+                        widget=host,  # type: ignore[arg-type]
+                    )
+                    proxy.setSourceModel(model)
+                    widget_instance.setModel(proxy)  # type: ignore[attr-defined]
+                else:
+                    widget_instance.setModel(model)  # type: ignore[attr-defined]
 
                 # Set up selection bindings based on widget type
                 if use_tree_model:

@@ -71,6 +71,10 @@ class NewField:
         self.selected_items: str | None = None  # Variable name for selectedItems binding (list[T])
         # QTreeView-specific: children attribute name
         self.tree_children: str | None = None  # Attribute name for child items: "children"
+        # Filter expression for model widgets: "{_search} in {name}"
+        self.model_filter: str | None = None  # Filter expression evaluated per item
+        # Sort key for model widgets: "{age}", "method_name", or callable
+        self.model_sort: str | Callable[[Any], Any] | None = None
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
@@ -268,11 +272,15 @@ class NewField:
             # Extract bind= for QtPie binding system
             self.bind = self.kwargs.pop("bind", None)
 
-            # Extract format=/selection bindings for model widgets ONLY (QComboBox, QListView, QTableView)
+            # Extract format=/filter=/selection bindings for model widgets ONLY (QComboBox, QListView, QTableView)
             # These kwargs should NOT be popped for non-model widgets as they might be constructor params
             if self.bind is not None and self._is_model_widget_type():
                 # format= specifies how list items should be displayed: "{name} ({age}}"
                 self.model_format = self.kwargs.pop("format", None)
+                # filter= specifies expression to filter items: "{_search} in {name}"
+                self.model_filter = self.kwargs.pop("filter", None)
+                # sort= specifies how to sort items: "{age}", "method_name", or callable
+                self.model_sort = self.kwargs.pop("sort", None)
                 # Extract selection bindings for model widgets (QComboBox, QListView, QTableView)
                 self.selected_index = self.kwargs.pop("selectedIndex", None)
                 self.selected_item = self.kwargs.pop("selectedItem", None)

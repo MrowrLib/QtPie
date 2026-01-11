@@ -693,10 +693,13 @@ class DogsCollection:
     dogs: list[Dog]
 
 
+@entrypoint
 @widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)]))
 class MyComboBox(Widget[DogsCollection]):
-    _dogs: Variable[list[Dog]]
+    # Let's have a search box which when typed in filters down the list of dogs shown
+    _search_text: Variable[str, QLineEdit] = new("")(placeholderText="Search dogs...")
 
+    _dogs: Variable[list[Dog]]
     _table: QTableView = new(bind="dogs", selectedItems="_dogs")
     _list: QListView = new(bind="dogs", format="{name} ({age} yrs)", selectedItems="_dogs", selectionMode=QAbstractItemView.SelectionMode.MultiSelection)
 
@@ -726,7 +729,7 @@ class Cat:
 cat = Cat(name="Mittens", age=4, kittens=[Cat(name="Fluffy", age=1, kittens=[]), Cat(name="Snowball", age=2, kittens=[Cat(name="Tiny", age=0, kittens=[Cat(name="Micro", age=0, kittens=[])])])])
 
 
-@entrypoint
+# @entrypoint
 @widget(record=cat)
 class HierarchicalCatsWidget(Widget[Cat]):
     _selected_kitten: Variable[Cat]
