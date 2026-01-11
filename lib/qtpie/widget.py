@@ -15,34 +15,16 @@ from qtpy.QtWidgets import (
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
+from .qtpie_config import _QtPieConfig
 from .signals import create_signal_expression_handler
 from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
 from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
+from .widget_base import WidgetBase
 
 # Re-export for backwards compatibility (window.py imports from here)
 _resolve_icon = resolve_icon
-
-
-class _QtPieConfig:
-    """Class-level QtPie configuration."""
-
-    __slots__ = ("layout", "margins", "fields", "variable_names", "init_wrapped", "record_type", "record_default", "auto_bind", "widget_props", "object_name", "css_classes", "required_bindings")
-
-    def __init__(self) -> None:
-        self.layout: LayoutType = "vertical"
-        self.margins: int | tuple[int, int, int, int] | None = None
-        self.fields: dict[str, NewField] = {}
-        self.variable_names: list[str] = []
-        self.init_wrapped: bool = False
-        self.record_type: type[Any] | None = None  # T from Widget[T]
-        self.record_default: Any | None = None  # Initial record value from @widget(record=...)
-        self.auto_bind: bool = True  # Auto-bind QWidget fields to matching Variables/record fields
-        self.widget_props: dict[str, Any] = {}  # Extra props like windowTitle -> setWindowTitle()
-        self.object_name: str | None = None  # objectName for the widget
-        self.css_classes: list[str] = []  # CSS classes for the widget
-        self.required_bindings: set[str] = set()  # Bare Variable[T] fields that must be provided
 
 
 class _RecordDescriptor[T]:
@@ -318,11 +300,11 @@ class Widget[T = None](QWidget):
 
 
 @overload
-def widget[W: Widget[Any]](cls: type[W]) -> type[W]: ...
+def widget[W: (Widget[Any] | WidgetBase[Any])](cls: type[W]) -> type[W]: ...
 
 
 @overload
-def widget[W: Widget[Any]](
+def widget[W: (Widget[Any] | WidgetBase[Any])](
     cls: None = None,
     *,
     layout: LayoutType = "vertical",
@@ -337,7 +319,7 @@ def widget[W: Widget[Any]](
 ) -> Callable[[type[W]], type[W]]: ...
 
 
-def widget[W: Widget[Any]](
+def widget[W: (Widget[Any] | WidgetBase[Any])](
     cls: type[W] | None = None,
     *,
     layout: LayoutType = "vertical",
@@ -430,7 +412,7 @@ def widget[W: Widget[Any]](
     return decorator  # type: ignore[return-value]
 
 
-def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
+def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> None:
     """Wrap __init__ to create layout, add child widgets, and call __setup__."""
     if cls._qtpie_config.init_wrapped:
         return
@@ -440,7 +422,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
     # Capture config at decoration time
     config = cls._qtpie_config
 
-    def wrapped_init(self: Widget[Any], *args: Any, **kwargs: Any) -> None:
+    def wrapped_init(self: Any, *args: Any, **kwargs: Any) -> None:
         # Set translation context to class name (used by t() markers)
         from qtpie.translations import set_translation_context
 

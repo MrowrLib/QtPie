@@ -7,51 +7,44 @@ from assertpy import assert_that
 from observant import Observable
 from qtpy.QtWidgets import QLabel, QListView, QPushButton, QWidget
 
-from qtpie import Variable, WidgetBase, new
+from qtpie import Variable, WidgetBase, new, widget
 from qtpie.testing import QtDriver
 
 
-class TestWidgetBaseWithMockWidget:
-    """Test WidgetBase with plain Python classes (no Qt)."""
+class TestWidgetBaseWithQWidget:
+    """Test WidgetBase with QWidget classes (requires @widget decorator)."""
 
-    def test_setup_called_after_init(self) -> None:
+    def test_setup_called_after_init(self, qt: QtDriver) -> None:
         """__setup__ is called after __init__ completes."""
         call_order: list[str] = []
 
-        class MockWidget:
-            def __init__(self) -> None:
-                call_order.append("init")
-
-        class MyWidget(MockWidget, WidgetBase):
+        @widget
+        class MyWidget(QWidget, WidgetBase):
             def __setup__(self) -> None:
                 call_order.append("setup")
 
-        MyWidget()
-        assert_that(call_order).is_equal_to(["init", "setup"])
+        qt.track(MyWidget())
+        assert_that(call_order).is_equal_to(["setup"])
 
-    def test_variable_works_without_decorator(self) -> None:
-        """Variable fields work without explicit @new_fields decorator."""
+    def test_variable_works(self, qt: QtDriver) -> None:
+        """Variable fields work with @widget decorator."""
 
-        class MockWidget:
-            pass
-
-        class MyWidget(MockWidget, WidgetBase):
+        @widget
+        class MyWidget(QWidget, WidgetBase):
             _name: Variable[str] = new("")
 
-        obj = MyWidget()
+        obj = qt.track(MyWidget())
         obj._name.value = "hello"
         assert_that(obj._name.value).is_equal_to("hello")
 
-    def test_variable_reactive_without_decorator(self) -> None:
-        """Variable fields are reactive without explicit @new_fields."""
+    def test_variable_reactive(self, qt: QtDriver) -> None:
+        """Variable fields are reactive."""
 
-        class MockWidget:
-            pass
-
-        class MyWidget(MockWidget, WidgetBase):
+        @widget
+        class MyWidget(QWidget, WidgetBase):
             _count: Variable[int] = new(0)
 
-        obj = MyWidget()
+        obj = qt.track(MyWidget())
         received: list[int] = []
         observable = cast(Observable[int], obj._count.observable)
         observable.on_change(lambda v: received.append(v))
@@ -61,35 +54,31 @@ class TestWidgetBaseWithMockWidget:
 
         assert_that(received).is_equal_to([1, 2])
 
-    def test_setup_can_access_variables(self) -> None:
+    def test_setup_can_access_variables(self, qt: QtDriver) -> None:
         """__setup__ can read and write Variable fields."""
 
-        class MockWidget:
-            pass
-
-        class MyWidget(MockWidget, WidgetBase):
+        @widget
+        class MyWidget(QWidget, WidgetBase):
             _value: Variable[int] = new(0)
 
             def __setup__(self) -> None:
                 self._value.value = 42
 
-        obj = MyWidget()
+        obj = qt.track(MyWidget())
         assert_that(obj._value.value).is_equal_to(42)
 
-    def test_non_variable_fields_instantiated(self) -> None:
+    def test_non_variable_fields_instantiated(self, qt: QtDriver) -> None:
         """Non-Variable new() fields are instantiated."""
 
         class Counter:
             def __init__(self, start: int = 0) -> None:
                 self.value = start
 
-        class MockWidget:
-            pass
-
-        class MyWidget(MockWidget, WidgetBase):
+        @widget
+        class MyWidget(QWidget, WidgetBase):
             _counter: Counter = new(start=10)
 
-        obj = MyWidget()
+        obj = qt.track(MyWidget())
         assert_that(obj._counter.value).is_equal_to(10)
 
 
@@ -99,16 +88,18 @@ class TestWidgetBaseWithRealQt:
     def test_qwidget_subclass(self, qt: QtDriver) -> None:
         """WidgetBase works with QWidget subclass."""
 
+        @widget
         class MyWidget(QWidget, WidgetBase):
             _title: Variable[str] = new("default")
 
-        widget = qt.track(MyWidget())
-        widget._title.value = "Hello Qt!"
-        assert_that(widget._title.value).is_equal_to("Hello Qt!")
+        w = qt.track(MyWidget())
+        w._title.value = "Hello Qt!"
+        assert_that(w._title.value).is_equal_to("Hello Qt!")
 
     def test_qlistview_subclass(self, qt: QtDriver) -> None:
         """WidgetBase works with QListView (the intended use case)."""
 
+        @widget
         class MyListView(QListView, WidgetBase):
             _items: Variable[list[str]] = new([])
 
@@ -122,6 +113,7 @@ class TestWidgetBaseWithRealQt:
         """__setup__ runs after Qt widget is fully initialized."""
         was_initialized = False
 
+        @widget
         class MyWidget(QWidget, WidgetBase):
             def __setup__(self) -> None:
                 nonlocal was_initialized
@@ -135,6 +127,7 @@ class TestWidgetBaseWithRealQt:
     def test_mixed_qt_and_variable_fields(self, qt: QtDriver) -> None:
         """Can mix Variable fields with instantiated Qt widgets."""
 
+        @widget
         class MyWidget(QWidget, WidgetBase):
             _label: QLabel = new("Hello")
             _button: QPushButton = new("Click me")
