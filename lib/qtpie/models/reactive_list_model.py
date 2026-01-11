@@ -1,5 +1,6 @@
 """ReactiveListModel - QAbstractListModel backed by ObservableList."""
 
+from collections.abc import Callable
 from typing import Any, override
 
 from observant import ObservableList
@@ -23,15 +24,22 @@ class ReactiveListModel[T](QAbstractListModel):
         # Changes to obs_list automatically update the view
         obs_list.append("D")  # Emits rowsInserted
         obs_list.remove("A")  # Emits rowsRemoved
+
+        # With custom formatting for complex objects:
+        dogs = ObservableList([Dog("Fido", 3), Dog("Rex", 5)])
+        model = ReactiveListModel(dogs, format_fn=lambda d: f"{d.name} ({d.age})")
     """
 
     def __init__(
         self,
         observable_list: ObservableList[T],
         parent: QObject | None = None,
+        *,
+        format_fn: Callable[[T], str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
+        self._format_fn = format_fn
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -59,6 +67,8 @@ class ReactiveListModel[T](QAbstractListModel):
         item = self._obs_list[row]
 
         if role == Qt.ItemDataRole.DisplayRole:
+            if self._format_fn is not None:
+                return self._format_fn(item)
             return str(item)
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access

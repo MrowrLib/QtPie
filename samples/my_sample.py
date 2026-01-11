@@ -683,8 +683,13 @@ class MyApp(App[Dog]):
         print(f"Custom signal receive with args: {args}, kwargs: {kwargs}")
 
 
+@dataclass
+class DogsColletion:
+    dogs: list[Dog]
+
+
 @entrypoint
-@widget
-class MyComboBox(Widget):
-    _items: Variable[list[str]] = new(["A", "B", "C"])
-    _combo: QComboBox = new(bind="_items")
+@widget(record=DogsColletion(dogs=[Dog("Fido", 3), Dog("Rex", 5)]))
+class MyComboBox(Widget[DogsColletion]):
+    # _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+    _combo: QComboBox = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)")

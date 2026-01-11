@@ -123,9 +123,15 @@ def apply_auto_bindings(
 
             if obs_list is not None:
                 # Create ReactiveListModel and set it on the widget
+                from qtpie.bindings.format_binding import create_item_formatter
                 from qtpie.models import ReactiveListModel
 
-                model = ReactiveListModel(obs_list, parent=widget_instance)
+                # Check for format= to customize item display
+                format_fn = None
+                if field_info.model_format is not None:
+                    format_fn = create_item_formatter(field_info.model_format)
+
+                model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
                 widget_instance.setModel(model)  # type: ignore[attr-defined]
                 continue
 

@@ -691,3 +691,92 @@ def get_static_value(widget: Widget[Any], path: str) -> Any:
         else:
             return None
     return current
+
+
+def create_item_formatter(template: str) -> Callable[[Any], str]:
+    """Create a function that formats an item using a template string.
+
+    Supports the full QtPie expression language:
+    - Simple fields: {name}, {age}
+    - Method calls: {name.upper()}, {name.strip()}
+    - Function calls: {len(name)}, {str(age)}
+    - Math: {age * 2}, {price + tax}
+    - Format specs: {price:.2f}
+
+    The item is available as both direct attribute access and via #self:
+        "{name}" - access item.name
+        "{#self.name}" - same thing
+        "{#self}" - the item itself (useful for primitives)
+
+    Args:
+        template: Format string like "{name} ({age})" or "{name.upper()}"
+
+    Returns:
+        A callable that takes an item and returns the formatted string.
+
+    Example:
+        formatter = create_item_formatter("{name} - {age} years")
+        result = formatter(Dog("Fido", 3))  # "Fido - 3 years"
+    """
+    # Parse the template once
+    parsed = _parse_format_template(template)
+    fields = _parse_format_fields(template)
+
+    # Get all variable names used in the template (excluding #self)
+    var_names = _get_variable_names(fields)
+
+    # Check for #self usage
+    uses_self = any("#self" in f.expression for f in fields)
+
+    def format_item(item: Any) -> str:
+        """Format a single item using the template."""
+        # Build context with item attributes
+        context: dict[str, Any] = {}
+
+        # Add #self reference
+        if uses_self:
+            context["self"] = item
+
+        # Add item attributes to context
+        for name in var_names:
+            root = name.split(".")[0]
+            if hasattr(item, root):
+                context[root] = getattr(item, root)
+
+        # Process each field and build the result
+        result_parts: list[str] = []
+
+        for literal_text, field in parsed:
+            result_parts.append(literal_text)
+
+            if field is not None:
+                # Handle #self placeholder
+                eval_expr = field.expression
+                eval_expr = eval_expr.replace("#self", "self")
+
+                # Evaluate the expression
+                try:
+                    value: Any = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    # Unwrap Observable results if any
+                    if isinstance(value, Observable):
+                        value = value.get()  # pyright: ignore[reportUnknownVariableType]
+                    # If value is callable (method without parens), call it
+                    if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
+                        value = value()
+                except Exception:
+                    value = f"<error: {field.expression}>"
+
+                # Apply format spec if present
+                if field.format_spec:
+                    try:
+                        value = format(value, field.format_spec)  # pyright: ignore[reportUnknownArgumentType]
+                    except Exception:
+                        value = str(value)  # pyright: ignore[reportUnknownArgumentType]
+                else:
+                    value = str(value)  # pyright: ignore[reportUnknownArgumentType]
+
+                result_parts.append(value)
+
+        return "".join(result_parts)
+
+    return format_item
