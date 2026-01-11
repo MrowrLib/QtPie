@@ -369,6 +369,11 @@ class AppBase[T = None]:
         """Access the auto-created window, if any."""
         return getattr(self, "_auto_window", None)
 
+    @property
+    def tray_icon(self) -> QSystemTrayIcon | None:
+        """Access the system tray icon, if any."""
+        return getattr(self, "_tray_icon", None)
+
     def __init__(self) -> None:
         """Initialize AppBase with declarative features.
 
@@ -710,6 +715,9 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         # Property bindings (visible=, enabled=)
         apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)  # type: ignore[arg-type]
 
+        # Apply property bindings for QActions (not handled by apply_property_bindings which only does QWidgets)
+        _apply_action_property_bindings_for_app(self, config)
+
         # Auto bindings (bind="{_name}", etc.)
         apply_auto_bindings(self, config)  # type: ignore[arg-type]
 
@@ -808,16 +816,15 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     # Create the auto-Window
     window = QMainWindow()
 
-    # Apply CSS classes to window
-    if config.css_classes:
-        from qtpie.utils.layouts import apply_object_name_and_classes
+    # Apply object name and CSS classes to window
+    from qtpie.utils.layouts import apply_object_name_and_classes
 
-        apply_object_name_and_classes(
-            window,
-            object_name=None,  # Will default to class name
-            css_classes=config.css_classes,
-            default_name=type(app).__name__,
-        )
+    apply_object_name_and_classes(
+        window,
+        object_name=config.object_name,  # From name= parameter
+        css_classes=config.css_classes,
+        default_name=type(app).__name__,
+    )
 
     # Set window title from config
     window_title = config.widget_props.get("windowTitle")
@@ -999,8 +1006,8 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
 
     tray.activated.connect(on_tray_activated)
 
-    # Store tray reference
-    app._system_tray = tray  # type: ignore[attr-defined]
+    # Store tray reference (accessible via .tray_icon property)
+    app._tray_icon = tray  # type: ignore[attr-defined]
 
     # Set up minimize-to-tray on window close if enabled
     minimize_to_tray = getattr(app, "_qtpie_minimize_to_tray", True)
@@ -1046,6 +1053,57 @@ def _get_section_text_for_tray(name: str, field: NewField | None) -> str:
         return stripped.replace("_", " ").title()
 
     return ""
+
+
+def _apply_action_property_bindings_for_app(app: AppBase[Any], config: AppConfig) -> None:
+    """Apply property bindings like enabled="_can_quit" to QAction fields.
+
+    This handles QAction property bindings which aren't handled by the regular
+    apply_property_bindings (which only handles QWidgets).
+    """
+    from qtpy.QtGui import QAction
+
+    from qtpie.bindings import is_format_string, resolve_binding_source
+    from qtpie.bindings.expression import create_expression_binding
+    from qtpie.variable import Variable
+
+    for field_name, field_info in config.fields.items():
+        if not field_info.property_bindings:
+            continue
+
+        action = getattr(app, field_name, None)
+        if action is None or not isinstance(action, QAction):
+            continue
+
+        for prop_name, bind_expr in field_info.property_bindings.items():
+            # Get the setter for this property
+            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+            setter = getattr(action, setter_name, None)
+            if setter is None or not callable(setter):
+                continue
+
+            # Wrap setter for type compatibility
+            def make_setter(s: Callable[..., Any]) -> Callable[[Any], None]:
+                def setter_fn(val: Any) -> None:
+                    s(val)
+
+                return setter_fn
+
+            typed_setter = make_setter(setter)
+
+            if is_format_string(bind_expr):
+                # Expression binding like "{_count > 0}"
+                create_expression_binding(app, bind_expr, typed_setter)
+            else:
+                # Simple variable reference like "_can_quit"
+                source = resolve_binding_source(app, bind_expr)  # type: ignore[arg-type]
+                if source is None:
+                    continue
+
+                if isinstance(source, Variable):
+                    # Set initial value and subscribe
+                    typed_setter(source.value)  # pyright: ignore[reportUnknownMemberType]
+                    source.on_change(typed_setter)
 
 
 def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -> None:

@@ -10,6 +10,7 @@ version = "0.1.0"
 members = [
   "lib",
   "tests",
+  "examples/forc",
 ]
 
 [tool.uv.sources]

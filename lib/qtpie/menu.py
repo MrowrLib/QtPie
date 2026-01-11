@@ -115,6 +115,7 @@ class MenuConfig:
     """Configuration for @menu decorator."""
 
     init_wrapped: bool = False
+    auto_bind: bool = True  # Enable auto-binding for Variables
     text: str | None = None  # Menu title (e.g., "&File")
     object_name: str | None = None
     css_classes: list[str] = field(default_factory=lambda: list[str]())

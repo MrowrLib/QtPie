@@ -931,9 +931,9 @@ class TestAppBaseSystemTrayMenu:
             _label: QLabel = new("Content")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
-        assert_that(instance._system_tray).is_instance_of(QSystemTrayIcon)
-        tray_menu = instance._system_tray.contextMenu()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
+        assert_that(instance._tray_icon).is_instance_of(QSystemTrayIcon)
+        tray_menu = instance._tray_icon.contextMenu()
         assert_that(tray_menu).is_same_as(instance.system_tray)
 
     def test_system_tray_qmenu_actions_preserved(self, qt: QtDriver) -> None:
@@ -954,7 +954,7 @@ class TestAppBaseSystemTrayMenu:
             _label: QLabel = new("Content")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         action_texts = [a.text() for a in tray_menu.actions()]
         assert_that(action_texts).contains("Action One")
         assert_that(action_texts).contains("Action Two")
@@ -1030,19 +1030,16 @@ class TestAppBaseSystemTrayMenu:
             _label: QLabel = new("Content")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
-        # The internal tray icon is stored as _system_tray attribute by the system
-        # but since our field is also named _system_tray, we check the contextMenu
-        tray = instance._system_tray
-        # If it's our Menu, check via the stored _system_tray_menu
-        if isinstance(tray, QSystemTrayIcon):
-            tray_menu = tray.contextMenu()
-            action_texts = [a.text() for a in tray_menu.actions()]
-            assert_that(action_texts).contains("First Action")
-            assert_that(action_texts).contains("Second Action")
-        else:
-            # Our TrayMenu is the field, check system got it
-            assert_that(hasattr(instance, "_system_tray_menu")).is_true()
+        # User's field is accessible as _system_tray (the TrayMenu)
+        assert_that(instance._system_tray).is_instance_of(TrayMenu)
+        # Internal tray icon is stored with different name to avoid collision
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
+        assert_that(instance._tray_icon).is_instance_of(QSystemTrayIcon)
+        # Tray context menu is the user's TrayMenu
+        tray_menu = instance._tray_icon.contextMenu()
+        action_texts = [a.text() for a in tray_menu.actions()]
+        assert_that(action_texts).contains("First Action")
+        assert_that(action_texts).contains("Second Action")
 
     def test_underscore_system_tray_not_in_menubar(self, qt: QtDriver) -> None:
         """_system_tray: QMenu (with underscore) is not added to window menu bar."""
@@ -1086,8 +1083,8 @@ class TestAppBaseSystemTray:
             action: QAction = new("Say Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
-        assert_that(instance._system_tray).is_instance_of(QSystemTrayIcon)
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
+        assert_that(instance._tray_icon).is_instance_of(QSystemTrayIcon)
 
     def test_qaction_added_to_tray_menu(self, qt: QtDriver) -> None:
         """QAction field is added to system tray context menu."""
@@ -1098,7 +1095,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Say Hello")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         assert_that(tray_menu).is_not_none()
         actions = tray_menu.actions()
         action_texts = [a.text() for a in actions]
@@ -1115,7 +1112,7 @@ class TestAppBaseSystemTray:
             action3: QAction = new("Third")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         action_texts = [a.text() for a in tray_menu.actions()]
         assert_that(action_texts).contains("First")
         assert_that(action_texts).contains("Second")
@@ -1147,7 +1144,7 @@ class TestAppBaseSystemTray:
             _count: Variable[int] = new(0)
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_false()
+        assert_that(hasattr(instance, "_tray_icon")).is_false()
 
     def test_system_tray_disabled(self, qt: QtDriver) -> None:
         """system_tray=False prevents tray creation even with QActions."""
@@ -1158,7 +1155,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_false()
+        assert_that(hasattr(instance, "_tray_icon")).is_false()
 
     def test_icon_accepts_qicon(self, qt: QtDriver) -> None:
         """icon= accepts QIcon."""
@@ -1171,7 +1168,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
 
     def test_icon_accepts_qpixmap(self, qt: QtDriver) -> None:
         """icon= accepts QPixmap."""
@@ -1184,7 +1181,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
 
     def test_tray_icon_accepts_qicon(self, qt: QtDriver) -> None:
         """tray_icon= accepts QIcon."""
@@ -1197,7 +1194,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
 
     def test_icon_accepts_standard_pixmap(self, qt: QtDriver) -> None:
         """icon= accepts QStyle.StandardPixmap."""
@@ -1209,7 +1206,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
 
     def test_separator_in_tray_menu(self, qt: QtDriver) -> None:
         """Separator fields add separators to tray menu."""
@@ -1224,7 +1221,7 @@ class TestAppBaseSystemTray:
             action2: QAction = new("Second")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         actions = tray_menu.actions()
         # Should have: First, Separator, Second
         assert_that(len(actions)).is_greater_than_or_equal_to(3)
@@ -1244,7 +1241,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         actions = tray_menu.actions()
         # First action should be a section with text "My Section"
         assert_that(actions[0].text()).is_equal_to("My Section")
@@ -1261,7 +1258,7 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        tray_menu = instance._system_tray.contextMenu()
+        tray_menu = instance._tray_icon.contextMenu()
         actions = tray_menu.actions()
         assert_that(actions[0].text()).is_equal_to("Custom Section Name")
 
@@ -1280,9 +1277,9 @@ class TestAppBaseSystemTray:
             action: QAction = new("Hello")
 
         instance = MyApp()
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
         # The tray icon should be set (not null)
-        tray_icon = instance._system_tray.icon()
+        tray_icon = instance._tray_icon.icon()
         assert_that(tray_icon.isNull()).is_false()
 
     def test_tray_icon_overrides_icon(self, qt: QtDriver) -> None:
@@ -1305,7 +1302,7 @@ class TestAppBaseSystemTray:
         instance = MyApp()
         # Tray should use tray_icon, not shared icon
         # We can't easily compare QIcon objects, but we can verify tray was created
-        assert_that(hasattr(instance, "_system_tray")).is_true()
+        assert_that(hasattr(instance, "_tray_icon")).is_true()
 
 
 class TestAppBaseWindowIcon:
@@ -1364,7 +1361,7 @@ class TestAppBaseWindowIcon:
         instance = MyApp()
         # Both should have icons
         assert_that(instance._auto_window.windowIcon().isNull()).is_false()
-        assert_that(instance._system_tray.icon().isNull()).is_false()
+        assert_that(instance._tray_icon.icon().isNull()).is_false()
 
     def test_window_icon_accepts_string_path(self, qt: QtDriver, tmp_path: Path) -> None:
         """window_icon= accepts string file path."""
@@ -1416,7 +1413,7 @@ class TestAppBaseSystemTrayActivation:
 
         instance = MyApp()
         # Simulate activation by emitting the signal
-        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+        instance._tray_icon.activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
         assert_that(activations).contains(QSystemTrayIcon.ActivationReason.Trigger)
 
     def test_on_system_tray_activated_receives_reason(self, qt: QtDriver) -> None:
@@ -1438,8 +1435,8 @@ class TestAppBaseSystemTrayActivation:
 
         instance = MyApp()
         # Test different activation reasons
-        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.Context)
-        instance._system_tray.activated.emit(QSystemTrayIcon.ActivationReason.MiddleClick)
+        instance._tray_icon.activated.emit(QSystemTrayIcon.ActivationReason.Context)
+        instance._tray_icon.activated.emit(QSystemTrayIcon.ActivationReason.MiddleClick)
         assert_that(activations).is_equal_to(
             [
                 QSystemTrayIcon.ActivationReason.Context,
