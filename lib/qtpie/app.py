@@ -28,7 +28,6 @@ from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
-from qtpie.utils.common import is_signal
 from qtpie.utils.layouts import add_to_layout, create_layout, resolve_icon
 
 
@@ -680,34 +679,9 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         _apply_app_widget_props(self, config)
 
         # Connect signals for fields
-        for fname, fld in config.fields.items():
-            instance = getattr(self, fname, None)
-            if instance is not None:
-                for signal_name, handler in fld.signal_connections.items():
-                    signal = getattr(instance, signal_name, None)
-                    if signal is not None:
-                        if isinstance(handler, str):
-                            # Check if it's an expression (format string with {})
-                            if "{" in handler and "}" in handler:
-                                # Expression handler - create a wrapper that evaluates the expression
-                                expr_handler = _create_app_signal_expression_handler(self, handler)
-                                signal.connect(expr_handler)
-                            else:
-                                # Simple string handler - could be method name or signal name
-                                target = getattr(self, handler, None)
-                                if target is None:
-                                    raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {fname}.{signal_name}=\"{handler}\"")
+        from qtpie.signals import connect_field_signals
 
-                                if is_signal(target):
-                                    # Target is a Signal - connect signal-to-signal
-                                    signal.connect(target)
-                                elif callable(target):
-                                    # Target is a method
-                                    signal.connect(target)
-                                else:
-                                    raise AttributeError(f'{type(self).__name__}.{handler} is not callable or a Signal for signal connection {fname}.{signal_name}="{handler}"')
-                        elif callable(handler):
-                            signal.connect(handler)
+        connect_field_signals(self, config.fields, _create_app_signal_expression_handler)
 
         # Set initial record value if provided via @app(record=...)
         # new_fields may have already set this (so child widgets can bind to parent.record)
@@ -752,12 +726,9 @@ def _apply_app_widget_props(app: AppBase[Any], config: AppConfig) -> None:
 
     For each prop like style="Fusion", calls app.setStyle("Fusion").
     """
-    for prop_name, value in config.widget_props.items():
-        # Build setter name: style -> setStyle
-        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-        setter = getattr(app, setter_name, None)
-        if setter is not None and callable(setter):
-            setter(value)
+    from qtpie.utils.layouts import apply_widget_props
+
+    apply_widget_props(app, config.widget_props)
 
 
 def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[Any]]) -> None:
@@ -843,11 +814,9 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             central.setLayout(qt_layout)
 
             # Apply margins
-            if config.margins is not None:
-                if isinstance(config.margins, int):
-                    qt_layout.setContentsMargins(config.margins, config.margins, config.margins, config.margins)
-                else:
-                    qt_layout.setContentsMargins(*config.margins)
+            from qtpie.utils.layouts import apply_layout_margins
+
+            apply_layout_margins(qt_layout, config.margins)
 
             # Add widgets to layout
             for name, widget_instance in widget_fields:

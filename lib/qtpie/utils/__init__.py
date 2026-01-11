@@ -8,7 +8,15 @@ from qtpie.utils.common import (
     is_signal,
     is_signal_on_type,
 )
-from qtpie.utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
+from qtpie.utils.layouts import (
+    IconType,
+    add_to_layout,
+    apply_layout_margins,
+    apply_object_name_and_classes,
+    apply_widget_props,
+    create_layout,
+    resolve_icon,
+)
 from qtpie.utils.properties import resolve_nested_property
 
 __all__ = [
@@ -16,6 +24,9 @@ __all__ = [
     "PLACEHOLDER_RE",
     "IconType",
     "add_to_layout",
+    "apply_layout_margins",
+    "apply_object_name_and_classes",
+    "apply_widget_props",
     "create_layout",
     "detect_required_bindings",
     "is_primitive_type",

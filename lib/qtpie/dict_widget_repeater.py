@@ -6,9 +6,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from observant import Observable, ObservableDict, ObservableProxy
-from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
+from .repeaters.utils import create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
 from .utils.common import HANDLER_SPEC_RE, PLACEHOLDER_RE, is_primitive_type
 from .utils.properties import resolve_nested_property
 from .variable import Variable
@@ -86,7 +87,7 @@ class DictWidgetRepeater[K, V](QWidget):
         self._widget_props = widget_props or {}
         self._bind_expr: str | Callable[[K, V], str] = bind_expr
         # Resolve sort= string method name to callable
-        self._sort: bool | Callable[[K], Any] | None = self._resolve_sort(sort, parent_widget)
+        self._sort: bool | Callable[[K], Any] | None = resolve_sort(sort, parent_widget)
         self._is_key_primitive = is_primitive_type(key_type)
         self._is_value_primitive = is_primitive_type(value_type)
         self._object_name = object_name
@@ -104,12 +105,7 @@ class DictWidgetRepeater[K, V](QWidget):
         self._layout_order: list[K] = []  # Keys in display order
 
         # Setup layout
-        if layout_type == "horizontal":
-            self._layout = QHBoxLayout(self)
-        else:
-            self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(0)
+        self._layout = setup_repeater_layout(self, layout_type)
 
         # Create initial widgets for existing items
         for key, value in observable_dict.items():
@@ -125,36 +121,13 @@ class DictWidgetRepeater[K, V](QWidget):
         observable_dict.on_replace(self._on_replace)
         observable_dict.on_clear(self._on_clear)
 
-    def _resolve_sort(
-        self,
-        sort: bool | str | Callable[[K], Any] | None,
-        parent_widget: Widget[Any] | None,
-    ) -> bool | Callable[[K], Any] | None:
-        """Resolve sort= parameter, converting string method names to callables."""
-        if sort is None or isinstance(sort, bool) or callable(sort):
-            return sort
-        # String method name - resolve from parent widget
-        # At this point, sort must be a string (only remaining type)
-        if parent_widget is not None:
-            method = getattr(parent_widget, sort, None)
-            if method is not None and callable(method):
-                return method
-            raise AttributeError(f"sort='{sort}' - method not found on {type(parent_widget).__name__}")
-        raise AttributeError(f"sort='{sort}' - cannot resolve method name without parent widget")
-
     def _create_key_wrapper(self, key: K) -> Observable[Any] | ObservableProxy[Any]:
         """Create the appropriate wrapper for a key."""
-        if self._is_key_primitive:
-            return Observable(key)
-        else:
-            return ObservableProxy(key)
+        return create_item_wrapper(key, self._key_type)
 
     def _create_value_wrapper(self, value: V) -> Observable[Any] | ObservableProxy[Any]:
         """Create the appropriate wrapper for a value."""
-        if self._is_value_primitive:
-            return Observable(value)
-        else:
-            return ObservableProxy(value)
+        return create_item_wrapper(value, self._value_type)
 
     def _get_display_order(self) -> list[K]:
         """Get the display order of keys.
@@ -197,25 +170,14 @@ class DictWidgetRepeater[K, V](QWidget):
 
     def _create_widget_for_entry(self) -> QWidget:
         """Create a new widget instance."""
-        widget = self._widget_type(*self._widget_args, **self._widget_kwargs)
-
-        # Apply objectName if specified
-        if self._object_name is not None:
-            widget.setObjectName(self._object_name)
-
-        # Apply CSS classes if specified
-        if self._css_classes:
-            from .styles import set_classes
-
-            set_classes(widget, list(self._css_classes))
-
-        # Apply widget props (styleSheet="X" → setStyleSheet("X"))
-        for prop_name, value in self._widget_props.items():
-            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-            setter = getattr(widget, setter_name, None)
-            if setter is not None and callable(setter):
-                setter(value)
-        return widget
+        return create_styled_widget(
+            self._widget_type,
+            self._widget_args,
+            self._widget_kwargs,
+            self._object_name,
+            self._css_classes,
+            self._widget_props,
+        )
 
     def _bind_widget_to_entry(
         self,

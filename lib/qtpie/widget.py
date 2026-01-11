@@ -17,7 +17,7 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .signals import create_signal_expression_handler
 from .state import QtPieState
-from .utils.common import detect_required_bindings, is_signal
+from .utils.common import detect_required_bindings
 from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
 from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 
@@ -457,11 +457,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
                 self.setLayout(qt_layout)
 
                 # Apply margins
-                if config.margins is not None:
-                    if isinstance(config.margins, int):
-                        qt_layout.setContentsMargins(config.margins, config.margins, config.margins, config.margins)
-                    else:
-                        qt_layout.setContentsMargins(*config.margins)
+                from .utils.layouts import apply_layout_margins
+
+                apply_layout_margins(qt_layout, config.margins)
 
                 # Add child widgets to layout (in field definition order)
                 # Use __annotations__ to preserve order across QWidget and Variable[T, W] fields
@@ -606,35 +604,21 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     Reactive props (with {}) are skipped here and applied later by _apply_reactive_widget_props.
     """
     from .bindings import is_format_string
+    from .utils.layouts import apply_object_name_and_classes, apply_widget_props
 
-    # Apply objectName: use explicit name if set, otherwise default to class name
-    if config.object_name is not None:
-        widget.setObjectName(config.object_name)
-    else:
-        widget.setObjectName(type(widget).__name__)
+    # Apply objectName and CSS classes
+    apply_object_name_and_classes(
+        widget,
+        config.object_name,
+        config.css_classes,
+        default_name=type(widget).__name__,
+    )
 
-    # Apply CSS classes if specified
-    if config.css_classes:
-        from .styles import set_classes
+    # Apply widget properties, skipping reactive ones
+    def skip_reactive(prop_name: str, value: Any) -> bool:
+        return isinstance(value, str) and is_format_string(value)
 
-        set_classes(widget, config.css_classes)
-
-    # Apply other widget properties (skip reactive ones with {})
-    for prop_name, value in config.widget_props.items():
-        # Skip reactive props - they'll be handled by _apply_reactive_widget_props
-        if isinstance(value, str) and is_format_string(value):
-            continue
-
-        # Convert propName to setPropName (capitalize first letter)
-        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-        setter = getattr(widget, setter_name, None)
-        if setter is not None and callable(setter):
-            try:
-                setter(value)
-            except TypeError as e:
-                raise TypeError(f"Failed to call {setter_name}({value!r}) on {type(widget).__name__}: {e}") from e
-        else:
-            raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
+    apply_widget_props(widget, config.widget_props, skip_filter=skip_reactive, strict=True)
 
 
 def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # pyright: ignore[reportUnknownArgumentType]
@@ -1135,53 +1119,10 @@ def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
 
 
 def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Connect signals declared in new() to handlers.
+    """Connect signals declared in new() to handlers."""
+    from qtpie.signals import connect_field_signals
 
-    Supports callables, string method names, string signal names, and expressions:
-        clicked=lambda: print("clicked")
-        clicked="on_clicked"
-        clicked="my_custom_signal"  # If my_custom_signal is a Signal, emits it
-        clicked="{my_custom_signal(123)}"  # Expression - emit signal with args
-        clicked="{on_clicked()}"  # Expression - call method with no args
-    """
-    from .bindings import is_format_string
-
-    for name, field in config.fields.items():
-        if not field.signal_connections:
-            continue
-
-        widget_instance = getattr(widget, name, None)
-        if widget_instance is None:
-            continue
-
-        for signal_name, handler in field.signal_connections.items():
-            signal = getattr(widget_instance, signal_name, None)
-            if signal is None:
-                continue
-
-            if isinstance(handler, str):
-                # Check if it's an expression (format string with {})
-                if is_format_string(handler):
-                    # Expression handler - create a wrapper that evaluates the expression
-                    expr_handler = _create_signal_expression_handler(widget, handler)
-                    signal.connect(expr_handler)
-                else:
-                    # Simple string handler - could be method name or signal name
-                    target = getattr(widget, handler, None)
-                    if target is None:
-                        raise AttributeError(f"{type(widget).__name__} has no method or signal '{handler}' for signal connection {name}.{signal_name}=\"{handler}\"")
-
-                    if is_signal(target):
-                        # Target is a Signal - connect signal-to-signal
-                        signal.connect(target)
-                    elif callable(target):
-                        # Target is a method
-                        signal.connect(target)
-                    else:
-                        raise AttributeError(f'{type(widget).__name__}.{handler} is not callable or a Signal for signal connection {name}.{signal_name}="{handler}"')
-            else:
-                # Direct callable (lambda, function, etc.)
-                signal.connect(handler)
+    connect_field_signals(widget, config.fields, _create_signal_expression_handler)
 
 
 def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> Callable[..., Any]:

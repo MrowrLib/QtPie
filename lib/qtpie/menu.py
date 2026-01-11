@@ -20,7 +20,7 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .signals import create_signal_expression_handler
 from .state import QtPieState
-from .utils.common import detect_required_bindings, is_signal
+from .utils.common import detect_required_bindings
 from .variable import (
     RecordVariable,
     Variable,
@@ -402,24 +402,18 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
                 menu_text = class_name
         self.setTitle(menu_text)
 
-        # Set objectName
-        if config.object_name:
-            self.setObjectName(config.object_name)
-        else:
-            self.setObjectName(cls.__name__)
+        # Apply objectName and CSS classes
+        from .utils.layouts import apply_object_name_and_classes, apply_widget_props
 
-        # Apply CSS classes
-        if config.css_classes:
-            from .styles import set_classes
-
-            set_classes(self, config.css_classes)
+        apply_object_name_and_classes(
+            self,
+            config.object_name,
+            config.css_classes,
+            default_name=cls.__name__,
+        )
 
         # Apply widget props from decorator
-        for prop_name, value in props.items():
-            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-            setter = getattr(self, setter_name, None)
-            if setter is not None and callable(setter):
-                setter(value)
+        apply_widget_props(self, props)
 
         # Add items (actions, separators, sections) in order
         for item_name in config.item_order:
@@ -460,31 +454,9 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
 
                 # Connect signals for this action
                 if field and field.signal_connections:
-                    for signal_name, handler in field.signal_connections.items():
-                        signal = getattr(item, signal_name, None)
-                        if signal is not None:
-                            if isinstance(handler, str):
-                                # Check if it's an expression (format string with {})
-                                if "{" in handler and "}" in handler:
-                                    # Expression handler - create a wrapper that evaluates the expression
-                                    expr_handler = _create_menu_signal_expression_handler(self, handler)
-                                    signal.connect(expr_handler)
-                                else:
-                                    # Simple string handler - could be method name or signal name
-                                    target = getattr(self, handler, None)
-                                    if target is None:
-                                        raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {item_name}.{signal_name}=\"{handler}\"")
+                    from qtpie.signals import connect_item_signals
 
-                                    if is_signal(target):
-                                        # Target is a Signal - connect signal-to-signal
-                                        signal.connect(target)
-                                    elif callable(target):
-                                        # Target is a method
-                                        signal.connect(target)
-                                    else:
-                                        raise AttributeError(f'{type(self).__name__}.{handler} is not callable or a Signal for signal connection {item_name}.{signal_name}="{handler}"')
-                            elif callable(handler):
-                                signal.connect(handler)
+                    connect_item_signals(self, item, item_name, field.signal_connections, _create_menu_signal_expression_handler)
 
         # Set initial record if provided (record support will be added in C.8)
         if config.record_default is not None:

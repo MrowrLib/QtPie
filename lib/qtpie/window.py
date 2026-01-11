@@ -20,7 +20,7 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .signals import create_signal_expression_handler
 from .state import QtPieState
-from .utils.common import detect_required_bindings, is_signal
+from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor
 from .widget import IconType, _resolve_icon
@@ -376,61 +376,29 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Skip reactive props (with {}) and Translatable - they'll be handled by apply_reactive_widget_props
         from .bindings import is_format_string
         from .translations.translatable import Translatable
+        from .utils.layouts import apply_object_name_and_classes, apply_widget_props
 
-        for prop_name, value in config.widget_props.items():
-            # Skip reactive props - they'll be handled by apply_reactive_widget_props
+        def skip_reactive_or_translatable(prop_name: str, value: Any) -> bool:
             if isinstance(value, str) and is_format_string(value):
-                continue
-            # Skip Translatable props - they'll be handled by apply_reactive_widget_props
+                return True
             if isinstance(value, Translatable):
-                continue
+                return True
+            return False
 
-            setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-            setter = getattr(self, setter_name, None)
-            if setter is not None and callable(setter):
-                setter(value)
+        apply_widget_props(self, config.widget_props, skip_filter=skip_reactive_or_translatable)
 
-        # Set objectName
-        if config.object_name is not None:
-            self.setObjectName(config.object_name)
-        else:
-            self.setObjectName(type(self).__name__)
-
-        # Apply CSS classes
-        if config.css_classes:
-            from .styles import set_classes
-
-            set_classes(self, config.css_classes)
+        # Apply objectName and CSS classes
+        apply_object_name_and_classes(
+            self,
+            config.object_name,
+            config.css_classes,
+            default_name=type(self).__name__,
+        )
 
         # Connect signals for fields
-        for fname, fld in config.fields.items():
-            instance = getattr(self, fname, None)
-            if instance is not None:
-                for signal_name, handler in fld.signal_connections.items():
-                    signal = getattr(instance, signal_name, None)
-                    if signal is not None:
-                        if isinstance(handler, str):
-                            # Check if it's an expression (format string with {})
-                            if "{" in handler and "}" in handler:
-                                # Expression handler - create a wrapper that evaluates the expression
-                                expr_handler = _create_window_signal_expression_handler(self, handler)
-                                signal.connect(expr_handler)
-                            else:
-                                # Simple string handler - could be method name or signal name
-                                target = getattr(self, handler, None)
-                                if target is None:
-                                    raise AttributeError(f"{type(self).__name__} has no method or signal '{handler}' for signal connection {fname}.{signal_name}=\"{handler}\"")
+        from qtpie.signals import connect_field_signals
 
-                                if is_signal(target):
-                                    # Target is a Signal - connect signal-to-signal
-                                    signal.connect(target)
-                                elif callable(target):
-                                    # Target is a method
-                                    signal.connect(target)
-                                else:
-                                    raise AttributeError(f'{type(self).__name__}.{handler} is not callable or a Signal for signal connection {fname}.{signal_name}="{handler}"')
-                        elif callable(handler):
-                            signal.connect(handler)
+        connect_field_signals(self, config.fields, _create_window_signal_expression_handler)
 
         # Auto-add QMenu fields to menu bar (in declaration order)
         # And collect non-menu QWidget fields for central widget
@@ -469,11 +437,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 central.setLayout(qt_layout)
 
                 # Apply margins
-                if config.margins is not None:
-                    if isinstance(config.margins, int):
-                        qt_layout.setContentsMargins(config.margins, config.margins, config.margins, config.margins)
-                    else:
-                        qt_layout.setContentsMargins(*config.margins)
+                from .utils.layouts import apply_layout_margins
+
+                apply_layout_margins(qt_layout, config.margins)
 
                 # Add non-menu widgets to layout (in field definition order)
                 for name, widget_instance in non_menu_widgets:

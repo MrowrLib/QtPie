@@ -1,5 +1,6 @@
 """Layout utility functions shared across QtPie modules."""
 
+from collections.abc import Callable
 from typing import Any
 
 from qtpy.QtGui import QIcon, QPixmap
@@ -110,3 +111,78 @@ def add_to_layout(
             grid_layout.addWidget(widget_instance, row, col, rowspan, colspan)
         else:
             grid_layout.addWidget(widget_instance)
+
+
+def apply_widget_props(
+    target: Any,
+    widget_props: dict[str, Any],
+    skip_filter: Callable[[str, Any], bool] | None = None,
+    strict: bool = False,
+) -> None:
+    """Apply widget properties via setter methods.
+
+    For each prop like windowTitle="X", calls target.setWindowTitle("X").
+
+    Args:
+        target: The widget/object to apply properties to.
+        widget_props: Dictionary of property names and values.
+        skip_filter: Optional callable(prop_name, value) -> bool to skip certain props.
+        strict: If True, raise AttributeError for missing setters.
+    """
+    for prop_name, value in widget_props.items():
+        # Skip if filter says to
+        if skip_filter is not None and skip_filter(prop_name, value):
+            continue
+
+        # Convert propName to setPropName (capitalize first letter)
+        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+        setter = getattr(target, setter_name, None)
+        if setter is not None and callable(setter):
+            setter(value)
+        elif strict:
+            raise AttributeError(f"{type(target).__name__} has no setter '{setter_name}' for property '{prop_name}'")
+
+
+def apply_layout_margins(
+    layout: QLayout,
+    margins: int | tuple[int, int, int, int] | None,
+) -> None:
+    """Apply margins to a layout.
+
+    Args:
+        layout: The layout to configure.
+        margins: Either a single int (applied to all sides) or a tuple of (left, top, right, bottom).
+    """
+    if margins is None:
+        return
+    if isinstance(margins, int):
+        layout.setContentsMargins(margins, margins, margins, margins)
+    else:
+        layout.setContentsMargins(*margins)
+
+
+def apply_object_name_and_classes(
+    target: QWidget,
+    object_name: str | None,
+    css_classes: list[str],
+    default_name: str | None = None,
+) -> None:
+    """Apply objectName and CSS classes to a widget.
+
+    Args:
+        target: The widget to configure.
+        object_name: Explicit objectName (if set).
+        css_classes: List of CSS classes to apply.
+        default_name: Default objectName if not explicitly set.
+    """
+    # Apply objectName: use explicit name if set, otherwise use default
+    if object_name is not None:
+        target.setObjectName(object_name)
+    elif default_name is not None:
+        target.setObjectName(default_name)
+
+    # Apply CSS classes if specified
+    if css_classes:
+        from qtpie.styles import set_classes
+
+        set_classes(target, css_classes)
