@@ -9,7 +9,7 @@ from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, create_item_wrapper, create_signal_handler, create_styled_widget, resolve_sort, setup_repeater_layout
+from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -249,48 +249,6 @@ class WidgetRepeater[T](QWidget):
 
             wrapper.on_change(sync_to_list)
 
-    def _connect_child_signals(
-        self,
-        widget: QWidget,
-        wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
-    ) -> None:
-        """Connect child widget signals to parent handlers.
-
-        Args:
-            widget: The child widget instance.
-            wrapper: Observable or ObservableProxy wrapping the item.
-            index_holder: Mutable [int] for tracking index changes.
-        """
-        if not self._signal_connections or self._parent_widget is None:
-            return
-
-        for signal_name, handler_spec in self._signal_connections.items():
-            # Get the signal from child widget
-            signal = getattr(widget, signal_name, None)
-            if signal is None:
-                continue
-
-            # Create handler that resolves placeholders at call time
-            handler = self._make_signal_handler(handler_spec, wrapper, index_holder, widget)
-            signal.connect(handler)
-
-    def _make_signal_handler(
-        self,
-        spec: str | Callable[..., Any],
-        wrapper: Observable[Any] | ObservableProxy[Any],
-        index_holder: list[int],
-        widget: QWidget,
-    ) -> Callable[..., Any]:
-        """Create a handler that resolves placeholders at call time."""
-        return create_signal_handler(
-            spec,
-            wrapper,
-            widget,
-            self._parent_widget,
-            index_holder=index_holder,
-        )
-
     def _create_and_add_widget(self, index: int, item: T) -> None:
         """Create a widget for an item and add it to the layout."""
         wrapper = self._create_item_wrapper(item)
@@ -298,7 +256,7 @@ class WidgetRepeater[T](QWidget):
         index_holder = [index]
 
         self._bind_widget_to_item(widget, wrapper, index_holder)
-        self._connect_child_signals(widget, wrapper, index_holder)
+        connect_child_signals(widget, wrapper, self._signal_connections, self._parent_widget, index_holder=index_holder)
 
         # Insert at correct position
         self._items.insert(index, (widget, wrapper, index_holder))
@@ -344,7 +302,7 @@ class WidgetRepeater[T](QWidget):
                 new_wrapper = self._create_item_wrapper(new_item)
                 new_widget = self._create_widget_for_item()
                 self._bind_widget_to_item(new_widget, new_wrapper, index_holder)
-                self._connect_child_signals(new_widget, new_wrapper, index_holder)
+                connect_child_signals(new_widget, new_wrapper, self._signal_connections, self._parent_widget, index_holder=index_holder)
 
                 self._items[index] = (new_widget, new_wrapper, index_holder)
                 self._layout.insertWidget(index, new_widget)

@@ -9,7 +9,7 @@ from observant import Observable, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, create_item_wrapper, create_signal_handler, create_styled_widget, resolve_sort, setup_repeater_layout
+from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -238,45 +238,13 @@ class SetWidgetRepeater[T](QWidget):
 
             wrapper.on_change(sync_to_set)
 
-    def _connect_child_signals(
-        self,
-        widget: QWidget,
-        item: T,
-        wrapper: Observable[Any] | ObservableProxy[Any],
-    ) -> None:
-        """Connect child widget signals to parent handlers."""
-        if not self._signal_connections or self._parent_widget is None:
-            return
-
-        for signal_name, handler_spec in self._signal_connections.items():
-            signal = getattr(widget, signal_name, None)
-            if signal is None:
-                continue
-
-            handler = self._make_signal_handler(handler_spec, wrapper, widget)
-            signal.connect(handler)
-
-    def _make_signal_handler(
-        self,
-        spec: str | Callable[..., Any],
-        wrapper: Observable[Any] | ObservableProxy[Any],
-        widget: QWidget,
-    ) -> Callable[..., Any]:
-        """Create a handler that resolves placeholders at call time."""
-        return create_signal_handler(
-            spec,
-            wrapper,
-            widget,
-            self._parent_widget,
-        )
-
     def _create_and_add_widget(self, item: T, position: int | None = None) -> None:
         """Create a widget for an item and add it to the layout."""
         wrapper = self._create_item_wrapper(item)
         widget = self._create_widget_for_item()
 
         self._bind_widget_to_item(widget, item, wrapper)
-        self._connect_child_signals(widget, item, wrapper)
+        connect_child_signals(widget, wrapper, self._signal_connections, self._parent_widget)
 
         self._entries[item] = (widget, wrapper)
 

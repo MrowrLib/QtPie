@@ -390,3 +390,43 @@ def bind_computed_format(
             key_wrapper.on_change(on_change)
         else:
             key_wrapper.on_change(lambda: on_change(None))
+
+
+def connect_child_signals(
+    widget: QWidget,
+    wrapper: Observable[Any] | ObservableProxy[Any],
+    signal_connections: dict[str, str | Callable[..., Any]],
+    parent_widget: Any | None,
+    *,
+    index_holder: list[int] | None = None,
+    key_wrapper: Observable[Any] | ObservableProxy[Any] | None = None,
+) -> None:
+    """Connect child widget signals to parent handlers.
+
+    Shared logic for all repeater classes.
+
+    Args:
+        widget: The child widget instance.
+        wrapper: Observable or ObservableProxy wrapping the item/value.
+        signal_connections: Dict of signal_name -> handler_spec.
+        parent_widget: The parent Widget instance for resolving handlers.
+        index_holder: Optional mutable [int] for list index (WidgetRepeater).
+        key_wrapper: Optional key wrapper (DictWidgetRepeater).
+    """
+    if not signal_connections or parent_widget is None:
+        return
+
+    for signal_name, handler_spec in signal_connections.items():
+        signal = getattr(widget, signal_name, None)
+        if signal is None:
+            continue
+
+        handler = create_signal_handler(
+            handler_spec,
+            wrapper,
+            widget,
+            parent_widget,
+            index_holder=index_holder,
+            key_wrapper=key_wrapper,
+        )
+        signal.connect(handler)

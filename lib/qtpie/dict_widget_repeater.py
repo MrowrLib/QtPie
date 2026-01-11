@@ -9,7 +9,7 @@ from observant import Observable, ObservableDict, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, create_item_wrapper, create_signal_handler, create_styled_widget, resolve_sort, setup_repeater_layout
+from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -268,50 +268,6 @@ class DictWidgetRepeater[K, V](QWidget):
 
             value_wrapper.on_change(sync_to_dict)
 
-    def _connect_child_signals(
-        self,
-        widget: QWidget,
-        key: K,
-        key_wrapper: Observable[Any] | ObservableProxy[Any],
-        value_wrapper: Observable[Any] | ObservableProxy[Any],
-    ) -> None:
-        """Connect child widget signals to parent handlers.
-
-        Args:
-            widget: The child widget instance.
-            key: The dict key.
-            key_wrapper: Observable or ObservableProxy wrapping the key.
-            value_wrapper: Observable or ObservableProxy wrapping the value.
-        """
-        if not self._signal_connections or self._parent_widget is None:
-            return
-
-        for signal_name, handler_spec in self._signal_connections.items():
-            # Get the signal from child widget
-            signal = getattr(widget, signal_name, None)
-            if signal is None:
-                continue
-
-            # Create handler that resolves placeholders at call time
-            handler = self._make_signal_handler(handler_spec, key_wrapper, value_wrapper, widget)
-            signal.connect(handler)
-
-    def _make_signal_handler(
-        self,
-        spec: str | Callable[..., Any],
-        key_wrapper: Observable[Any] | ObservableProxy[Any],
-        value_wrapper: Observable[Any] | ObservableProxy[Any],
-        widget: QWidget,
-    ) -> Callable[..., Any]:
-        """Create a handler that resolves placeholders at call time."""
-        return create_signal_handler(
-            spec,
-            value_wrapper,
-            widget,
-            self._parent_widget,
-            key_wrapper=key_wrapper,
-        )
-
     def _create_and_add_widget(self, key: K, value: V) -> None:
         """Create a widget for a key-value pair and add it to the layout."""
         key_wrapper = self._create_key_wrapper(key)
@@ -319,7 +275,7 @@ class DictWidgetRepeater[K, V](QWidget):
         widget = self._create_widget_for_entry()
 
         self._bind_widget_to_entry(widget, key, key_wrapper, value_wrapper)
-        self._connect_child_signals(widget, key, key_wrapper, value_wrapper)
+        connect_child_signals(widget, value_wrapper, self._signal_connections, self._parent_widget, key_wrapper=key_wrapper)
 
         # Store and add to layout
         self._entries[key] = (widget, key_wrapper, value_wrapper)
@@ -359,7 +315,7 @@ class DictWidgetRepeater[K, V](QWidget):
                 new_value_wrapper = self._create_value_wrapper(new_value)
                 new_widget = self._create_widget_for_entry()
                 self._bind_widget_to_entry(new_widget, key, key_wrapper, new_value_wrapper)
-                self._connect_child_signals(new_widget, key, key_wrapper, new_value_wrapper)
+                connect_child_signals(new_widget, new_value_wrapper, self._signal_connections, self._parent_widget, key_wrapper=key_wrapper)
 
                 self._entries[key] = (new_widget, key_wrapper, new_value_wrapper)
                 self._layout.insertWidget(index, new_widget)
