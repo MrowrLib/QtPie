@@ -51,6 +51,9 @@ class NewField:
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
         # Model format for QComboBox/QListView/etc. with bind= to list
         self.model_format: str | None = None  # Format for model items: "{name} ({age})"
+        # Selection bindings for model widgets (QComboBox, QListView, etc.)
+        self.selected_index: str | None = None  # Variable name for selectedIndex binding
+        self.selected_item: str | None = None  # Variable name for selectedItem binding
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
@@ -252,6 +255,9 @@ class NewField:
             # format= specifies how list items should be displayed: "{name} ({age})"
             if self.bind is not None:
                 self.model_format = self.kwargs.pop("format", None)
+                # Extract selection bindings for model widgets
+                self.selected_index = self.kwargs.pop("selectedIndex", None)
+                self.selected_item = self.kwargs.pop("selectedItem", None)
 
             # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)

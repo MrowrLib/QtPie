@@ -509,8 +509,11 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
         # Apply bindings (after __setup__ so record is available)
         # BUT: if we have required bindings that haven't been set up yet (provided by parent),
         # defer binding application until after the parent applies Variable bindings
-        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
+        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props, pre_create_selection_variables
         from .bindings.expression import create_expression_binding
+
+        # Pre-create Variables for selection bindings (bare Variable[T] without new())
+        pre_create_selection_variables(self, config)
 
         if _has_unset_required_bindings(self, config):
             self._qtpie_pending_auto_bindings = True  # type: ignore[attr-defined]

@@ -684,12 +684,17 @@ class MyApp(App[Dog]):
 
 
 @dataclass
-class DogsColletion:
+class DogsCollection:
     dogs: list[Dog]
 
 
 @entrypoint
-@widget(record=DogsColletion(dogs=[Dog("Fido", 3), Dog("Rex", 5)]))
-class MyComboBox(Widget[DogsColletion]):
-    # _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
-    _combo: QComboBox = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)")
+@widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5)]))
+class MyComboBox(Widget[DogsCollection]):
+    _index: Variable[int]
+    _dog: Variable[Dog]
+    _combo: QComboBox = new(bind="dogs", format="cool! {name.upper()} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
+
+    # Yay, these are reactive!
+    _dog_name_label: QLabel = new(bind="{_dog.name}")
+    _dog_age_label: QLabel = new(bind="{_dog.age}")

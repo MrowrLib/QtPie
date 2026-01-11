@@ -129,6 +129,14 @@ def _collect_fields_for_app(cls: type) -> None:
             config.fields[name] = value  # pyright: ignore[reportUnknownMemberType]
 
 
+def _detect_required_bindings_for_app(cls: type) -> None:
+    """Detect bare Variable[T] annotations as required bindings for App."""
+    from qtpie.utils.common import detect_required_bindings
+    from qtpie.variable import Variable, _RequiredBindingDescriptor
+
+    detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
+
+
 class AppBase[T = None]:
     """
     Base class with declarative features for App.
@@ -196,6 +204,10 @@ class AppBase[T = None]:
         from qtpie.new_fields import new_fields
 
         new_fields(cls)
+
+        # Detect bare Variable[T] annotations (no = new())
+        # These are required bindings - must be provided by parent or created for selection bindings
+        _detect_required_bindings_for_app(cls)
 
         # Collect variable names (after new_fields converts NewField → _VariableDescriptor)
         from qtpie.variable import _VariableDescriptor
@@ -709,8 +721,11 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
             setup_method()
 
         # Apply bindings for widget fields
-        from qtpie.bindings.apply import apply_auto_bindings, apply_property_bindings
+        from qtpie.bindings.apply import apply_auto_bindings, apply_property_bindings, pre_create_selection_variables
         from qtpie.bindings.expression import create_expression_binding
+
+        # Pre-create Variables for selection bindings (bare Variable[T] without new())
+        pre_create_selection_variables(self, config)  # type: ignore[arg-type]
 
         # Property bindings (visible=, enabled=)
         apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)  # type: ignore[arg-type]
