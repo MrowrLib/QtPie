@@ -116,7 +116,7 @@ class Binding[T]:
             # Import here to avoid circular imports
             from ..state import QtPieState
             from ..variable import RecordVariable
-            from ..widget import _apply_auto_bindings  # pyright: ignore[reportPrivateUsage]
+            from .apply import apply_auto_bindings
 
             # Get or create the widget's QtPieState
             if not hasattr(widget, "_qtpie"):
@@ -134,7 +134,7 @@ class Binding[T]:
             # Re-apply auto-bindings now that record is populated
             # This is needed because the widget's __init__ ran before we set up the record
             config = type(widget)._qtpie_config  # type: ignore[attr-defined]
-            _apply_auto_bindings(widget, config)  # type: ignore[arg-type]
+            apply_auto_bindings(widget, config)  # type: ignore[arg-type]
         else:
             # For primitives or other types, just set the value directly
             # The widget will create its own proxy when accessed

@@ -23,7 +23,6 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from qtpie.bindings.setters import make_bound_setter as _make_bound_setter
 from qtpie.layout import LayoutType
 from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
@@ -699,8 +698,20 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         if setup_method is not None:
             setup_method()
 
-        # Apply format bindings for widget fields (bind="{_name}", etc.)
-        _apply_app_bindings(self, config)
+        # Apply bindings for widget fields
+        from qtpie.bindings.apply import apply_auto_bindings, apply_property_bindings
+        from qtpie.bindings.expression import create_expression_binding
+
+        # Property bindings (visible=, enabled=)
+        apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)  # type: ignore[arg-type]
+
+        # Auto bindings (bind="{_name}", etc.)
+        apply_auto_bindings(self, config)  # type: ignore[arg-type]
+
+        # Handle list widget fields (list[QLabel] bound to Variable[list[...]])
+        for name, field_info in config.fields.items():
+            if field_info.is_list_widget:
+                _apply_list_binding_for_app(self, name, field_info)
 
         # Create auto-Window if we have widget/menu fields and window=True
         if config.window:
@@ -726,10 +737,17 @@ def _apply_app_widget_props(app: AppBase[Any], config: AppConfig) -> None:
     """Apply widget properties from @app decorator kwargs.
 
     For each prop like style="Fusion", calls app.setStyle("Fusion").
+    Reactive props (with {}) are skipped here.
+    CSS classes are applied to the auto-created window, not the app itself.
     """
+    from qtpie.bindings import is_format_string
     from qtpie.utils.layouts import apply_widget_props
 
-    apply_widget_props(app, config.widget_props)
+    # Apply widget properties, skipping reactive ones
+    def skip_reactive(prop_name: str, value: Any) -> bool:
+        return isinstance(value, str) and is_format_string(value)
+
+    apply_widget_props(app, config.widget_props, skip_filter=skip_reactive)
 
 
 def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[Any]]) -> None:
@@ -784,6 +802,17 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
 
     # Create the auto-Window
     window = QMainWindow()
+
+    # Apply CSS classes to window
+    if config.css_classes:
+        from qtpie.utils.layouts import apply_object_name_and_classes
+
+        apply_object_name_and_classes(
+            window,
+            object_name=None,  # Will default to class name
+            css_classes=config.css_classes,
+            default_name=type(app).__name__,
+        )
 
     # Set window title from config
     window_title = config.widget_props.get("windowTitle")
@@ -996,105 +1025,6 @@ def _get_section_text_for_tray(name: str, field: NewField | None) -> str:
         return stripped.replace("_", " ").title()
 
     return ""
-
-
-def _apply_app_property_bindings(app: AppBase[Any], config: AppConfig) -> None:
-    """Apply property bindings (visible=, enabled=) for App fields."""
-    from qtpie.bindings.property_bindings import apply_property_bindings_for_fields, get_widget_property_setter
-
-    def get_target(field_name: str) -> QWidget | None:
-        instance = getattr(app, field_name, None)
-        return instance if isinstance(instance, QWidget) else None
-
-    apply_property_bindings_for_fields(
-        context=app,
-        fields=config.fields,
-        get_target=get_target,
-        get_setter=get_widget_property_setter,
-    )
-
-
-def _apply_app_bindings(app: AppBase[Any], config: AppConfig) -> None:
-    """Apply bindings for QWidget fields in AppBase.
-
-    For each QWidget field:
-    - If field.bind is set and is a format string, create format binding
-    - If field.bind is set and is a simple path, create Variable binding
-    - Handle list widget bindings (list[QLabel] bound to Variable[list[...]])
-    """
-    from observant import Observable
-
-    from qtpie.bindings import bind, create_format_binding, is_format_string, resolve_binding_source
-    from qtpie.bindings.registry import get_binding_registry
-    from qtpie.variable import Variable
-
-    # Apply property bindings first (visible=, enabled=)
-    _apply_app_property_bindings(app, config)
-
-    registry = get_binding_registry()
-
-    for name, field_info in config.fields.items():
-        # Handle list widget fields separately
-        if field_info.is_list_widget:
-            _apply_list_binding_for_app(app, name, field_info)
-            continue
-
-        # Get the widget instance
-        widget_instance = getattr(app, name, None)
-        if widget_instance is None:
-            continue
-
-        # Skip non-QWidget fields (Variables, etc.)
-        if not isinstance(widget_instance, QWidget):
-            continue
-
-        # Determine bind path
-        bind_path: str
-        if field_info.bind is not None:
-            # Explicit bind - always apply
-            if isinstance(field_info.bind, str):
-                bind_path = field_info.bind
-            else:
-                # Translatable - resolve to string
-                bind_path = field_info.bind.resolve()  # type: ignore[union-attr]
-        elif config.auto_bind:
-            # Auto-bind: strip underscore prefix and use field name
-            # This binds 'username' field to record.username or _username Variable
-            bind_path = name.lstrip("_")
-        else:
-            # No explicit bind and auto_bind is disabled
-            continue
-
-        # Handle format strings
-        if is_format_string(bind_path):
-            default_prop = registry.get_default_prop(widget_instance)
-            adapter = registry.get(widget_instance, default_prop)
-            if adapter is not None and adapter.setter is not None:
-                bound_setter = _make_bound_setter(adapter.setter, widget_instance)
-                create_format_binding(app, bind_path, bound_setter)  # type: ignore[arg-type]
-            continue
-
-        # Simple variable reference - create binding
-        source = resolve_binding_source(app, bind_path)  # type: ignore[arg-type]
-        if source is None:
-            continue
-
-        if isinstance(source, Variable):
-            bind(source).to(widget_instance)
-        elif isinstance(source, Observable):
-            default_prop = registry.get_default_prop(widget_instance)
-            adapter = registry.get(widget_instance, default_prop)
-            if adapter is not None and adapter.setter is not None:
-                adapter.setter(widget_instance, source.get())
-                setter = adapter.setter
-
-                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
-                    def on_observable_change(v: Any) -> None:
-                        s(w, v)
-
-                    return on_observable_change
-
-                source.on_change(make_obs_to_widget(setter, widget_instance))
 
 
 def _apply_list_binding_for_app(app: AppBase[Any], name: str, field: NewField) -> None:

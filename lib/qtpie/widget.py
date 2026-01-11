@@ -6,13 +6,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
+from observant import Observable, ObservableDict, ObservableList, ObservableSet
 from qtpy.QtWidgets import (
     QLayout,
     QWidget,
 )
 
-from .bindings.setters import make_bound_setter as _make_bound_setter
 from .layout import GridPosition, LayoutType
 from .new_field import NewField
 from .new_fields import new_fields
@@ -522,16 +521,19 @@ def _wrap_init_for_layout(cls: type[Widget[Any]]) -> None:
         # Apply bindings (after __setup__ so record is available)
         # BUT: if we have required bindings that haven't been set up yet (provided by parent),
         # defer binding application until after the parent applies Variable bindings
+        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
+        from .bindings.expression import create_expression_binding
+
         if _has_unset_required_bindings(self, config):
             self._qtpie_pending_auto_bindings = True  # type: ignore[attr-defined]
         else:
-            _apply_auto_bindings(self, config)
+            apply_auto_bindings(self, config)
 
             # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
-            _apply_property_bindings(self, config)
+            apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)
 
             # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
-            _apply_reactive_widget_props(self, config)
+            apply_reactive_widget_props(self, config)
 
         # Enable on_dirty_changed and on_valid_changed hooks (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
@@ -988,128 +990,6 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             raise TypeError(f"bind='{field.bind}' resolved to {type(wrapper).__name__}, expected Variable[set[...]] or ObservableSet")
 
 
-def _apply_auto_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Apply auto-bindings for QWidget fields.
-
-    For each QWidget field:
-    - If field.bind is set, use that path (always applies)
-    - If auto_bind is True, strip leading underscore and use as bind path
-
-    Then resolve the path and create the binding.
-    """
-    from observant import Observable
-
-    from .bindings import bind, create_format_binding, is_format_string, resolve_binding_source
-    from .translations.translatable import Translatable
-    from .variable import Variable
-
-    for name, field in config.fields.items():
-        # Skip list widget fields - they're already bound via WidgetRepeater
-        if field.is_list_widget:
-            continue
-
-        # Get the widget instance
-        widget_instance = getattr(widget, name, None)
-        if widget_instance is None:
-            continue
-
-        # Skip non-QWidget fields (Variables, etc.)
-        if not isinstance(widget_instance, QWidget):
-            continue
-
-        # Determine bind path (keep original Translatable for retranslation)
-        bind_path: str
-        bind_translatable: Translatable | None = None
-        if field.bind is not None:
-            # Explicit bind - always apply
-            # Resolve Translatable if needed
-            if isinstance(field.bind, Translatable):
-                bind_translatable = field.bind
-                bind_path = field.bind.resolve()
-            else:
-                bind_path = field.bind
-        elif config.auto_bind:
-            # Auto-bind: strip underscore prefix
-            bind_path = name.lstrip("_")
-        else:
-            # No explicit bind and auto_bind is disabled
-            continue
-
-        # Handle format strings
-        if is_format_string(bind_path):
-            from .bindings.registry import get_binding_registry
-
-            registry = get_binding_registry()
-            default_prop = registry.get_default_prop(widget_instance)
-            adapter = registry.get(widget_instance, default_prop)
-            if adapter is not None and adapter.setter is not None:
-                # Create a bound setter function
-                bound_setter = _make_bound_setter(adapter.setter, widget_instance)
-                create_format_binding(widget, bind_path, bound_setter)
-
-                # Register for retranslation if bind was a Translatable
-                if bind_translatable is not None:
-                    from .translations.store import register_format_binding
-
-                    register_format_binding(
-                        widget_instance,
-                        default_prop or "text",
-                        bind_translatable.text,
-                        bind_translatable.context,
-                        widget,
-                        bound_setter,
-                    )
-            continue
-
-        # Resolve the binding source
-        source = resolve_binding_source(widget, bind_path)
-        if source is None:
-            continue
-
-        # Create the binding
-        if isinstance(source, Variable):
-            bind(source).to(widget_instance)
-        elif isinstance(source, Observable):
-            # Set up binding for Observable (e.g., from record field)
-            from .bindings.registry import get_binding_registry
-
-            registry = get_binding_registry()
-            default_prop = registry.get_default_prop(widget_instance)
-            adapter = registry.get(widget_instance, default_prop)
-            if adapter is not None and adapter.setter is not None:
-                # Set initial value (Observable → Widget)
-                adapter.setter(widget_instance, source.get())
-
-                # Subscribe to Observable changes (Observable → Widget)
-                setter = adapter.setter
-
-                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
-                    def on_observable_change(v: Any) -> None:
-                        s(w, v)
-
-                    return on_observable_change
-
-                source.on_change(make_obs_to_widget(setter, widget_instance))
-
-                # Two-way binding: Widget → Observable
-                if adapter.signal_name is not None and adapter.getter is not None:
-                    signal = getattr(widget_instance, adapter.signal_name, None)
-                    getter = adapter.getter
-
-                    def make_widget_to_obs(obs: Observable[Any], g: Callable[[Any], Any], w: QWidget) -> Callable[[], None]:
-                        def on_widget_change() -> None:
-                            obs.set(g(w))
-
-                        return on_widget_change
-
-                    if signal is not None:
-                        signal.connect(make_widget_to_obs(source, getter, widget_instance))
-        elif isinstance(source, ObservableProxy):
-            # ObservableProxy - not directly bindable to a widget property
-            # This shouldn't normally happen since paths resolve to leaf observables
-            pass
-
-
 def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Connect signals declared in new() to handlers."""
     from qtpie.signals import connect_field_signals
@@ -1120,52 +1000,6 @@ def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
 def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> Callable[..., Any]:
     """Create a signal handler from an expression string like "{my_signal(123)}"."""
     return create_signal_expression_handler(widget, expression, ["#widget", "#self"])
-
-
-def _apply_property_bindings(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Apply property bindings like visible="_is_visible" or enabled="{_count > 0}"."""
-    from .bindings.property_bindings import apply_property_bindings_for_fields, get_widget_property_setter
-
-    def get_target(field_name: str) -> QWidget | None:
-        instance = getattr(widget, field_name, None)
-        return instance if isinstance(instance, QWidget) else None
-
-    apply_property_bindings_for_fields(
-        context=widget,
-        fields=config.fields,
-        get_target=get_target,
-        get_setter=get_widget_property_setter,
-    )
-
-
-def _apply_reactive_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Apply reactive widget properties from @widget decorator.
-
-    For props like windowTitle="{title}", creates a format binding that updates
-    the property when the referenced variables change.
-    """
-    from .bindings import create_format_binding, is_format_string
-
-    for prop_name, value in config.widget_props.items():
-        # Only handle reactive props with {}
-        if not isinstance(value, str) or not is_format_string(value):
-            continue
-
-        # Get the setter for this property
-        setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
-        setter_method = getattr(widget, setter_name, None)
-        if setter_method is None or not callable(setter_method):
-            raise AttributeError(f"{type(widget).__name__} has no setter '{setter_name}' for property '{prop_name}'")
-
-        # Create a format binding - this returns a string which is what we want for windowTitle etc.
-        # Wrap the setter to match expected signature
-        def make_setter(s: Callable[..., Any]) -> Callable[[Any], None]:
-            def wrapped(val: Any) -> None:
-                s(val)
-
-            return wrapped
-
-        create_format_binding(widget, value, make_setter(setter_method))
 
 
 def _detect_required_bindings(cls: type[Widget[Any]]) -> None:

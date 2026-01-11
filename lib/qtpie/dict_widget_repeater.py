@@ -9,9 +9,8 @@ from observant import Observable, ObservableDict, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
-from .utils.common import HANDLER_SPEC_RE, PLACEHOLDER_RE, is_primitive_type
-from .utils.properties import resolve_nested_property
+from .repeaters.utils import bind_callable_format, bind_computed_format, create_item_wrapper, create_signal_handler, create_styled_widget, resolve_sort, setup_repeater_layout
+from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
 if TYPE_CHECKING:
@@ -198,7 +197,29 @@ class DictWidgetRepeater[K, V](QWidget):
 
         # Case 0: Callable formatter - one-way computed binding
         if callable(bind_expr):
-            self._bind_callable_format(widget, key, key_wrapper, value_wrapper, bind_expr)
+            # DictWidgetRepeater callable takes (key, value), wrap to single-arg
+            def make_dict_formatter(
+                kw: Observable[Any] | ObservableProxy[Any],
+                vw: Observable[Any] | ObservableProxy[Any],
+                f: Callable[[Any, Any], str],
+            ) -> Callable[[Any], str]:
+                def formatter(_: Any) -> str:
+                    k = kw.get() if isinstance(kw, Observable) else kw.unwrap()
+                    v = vw.get() if isinstance(vw, Observable) else vw.unwrap()
+                    return f(k, v)
+
+                return formatter
+
+            bind_callable_format(widget, value_wrapper, make_dict_formatter(key_wrapper, value_wrapper, bind_expr))
+            # Also subscribe to key changes
+            if isinstance(key_wrapper, Observable):
+                from .bindings.registry import get_binding_registry
+
+                registry = get_binding_registry()
+                adapter = registry.get(widget, registry.get_default_prop(widget))
+                if adapter and adapter.setter:
+                    setter = adapter.setter
+                    key_wrapper.on_change(lambda _: setter(widget, make_dict_formatter(key_wrapper, value_wrapper, bind_expr)(None)))
             return
 
         # Find all placeholders in the bind expression
@@ -224,7 +245,7 @@ class DictWidgetRepeater[K, V](QWidget):
             # Fall through to computed format for nested or special placeholders
 
         # Case 3: Format string with placeholders - one-way computed binding
-        self._bind_computed_format(widget, key, key_wrapper, value_wrapper, bind_expr)
+        bind_computed_format(widget, value_wrapper, bind_expr, key_wrapper=key_wrapper)
 
     def _setup_value_sync(
         self,
@@ -246,175 +267,6 @@ class DictWidgetRepeater[K, V](QWidget):
                     upd["active"] = False
 
             value_wrapper.on_change(sync_to_dict)
-
-    def _bind_callable_format(
-        self,
-        widget: QWidget,
-        key: K,
-        key_wrapper: Observable[Any] | ObservableProxy[Any],
-        value_wrapper: Observable[Any] | ObservableProxy[Any],
-        formatter: Callable[[Any, Any], str],
-    ) -> None:
-        """Bind using a callable formatter (one-way only).
-
-        Args:
-            widget: The widget to bind.
-            key: The original key.
-            key_wrapper: Observable or ObservableProxy wrapping the key.
-            value_wrapper: Observable or ObservableProxy wrapping the value.
-            formatter: Callable(key, value) -> str.
-        """
-        from .bindings.registry import get_binding_registry
-
-        # Get the setter for the widget's default property
-        registry = get_binding_registry()
-        default_prop = registry.get_default_prop(widget)
-        adapter = registry.get(widget, default_prop)
-        if adapter is None or adapter.setter is None:
-            return
-
-        setter = adapter.setter
-
-        def compute_value() -> str:
-            """Compute the formatted string using the callable."""
-            if isinstance(key_wrapper, Observable):
-                k = key_wrapper.get()
-            else:
-                k = key_wrapper.unwrap()
-            if isinstance(value_wrapper, Observable):
-                v = value_wrapper.get()
-            else:
-                v = value_wrapper.unwrap()
-            return formatter(k, v)
-
-        # Set initial value
-        setter(widget, compute_value())
-
-        # Subscribe to changes and update widget
-        def on_change(_: Any) -> None:
-            setter(widget, compute_value())
-
-        if isinstance(key_wrapper, Observable):
-            key_wrapper.on_change(on_change)
-        else:
-            key_wrapper.on_change(lambda: on_change(None))
-
-        if isinstance(value_wrapper, Observable):
-            value_wrapper.on_change(on_change)
-        else:
-            value_wrapper.on_change(lambda: on_change(None))
-
-    def _bind_computed_format(
-        self,
-        widget: QWidget,
-        key: K,
-        key_wrapper: Observable[Any] | ObservableProxy[Any],
-        value_wrapper: Observable[Any] | ObservableProxy[Any],
-        format_str: str,
-    ) -> None:
-        """Bind a computed format string to widget (one-way only).
-
-        Supports placeholders:
-        - {#key} - the key
-        - {#value} or {#self} - the value
-        - {#key.property} - nested property on key
-        - {#value.property} or {#self.property} - nested property on value
-        - {property} - property on value (shorthand)
-        """
-        from .bindings.registry import get_binding_registry
-
-        # Get the setter for the widget's default property
-        registry = get_binding_registry()
-        default_prop = registry.get_default_prop(widget)
-        adapter = registry.get(widget, default_prop)
-        if adapter is None or adapter.setter is None:
-            return
-
-        setter = adapter.setter
-
-        def compute_value() -> str:
-            """Compute the formatted string from current values."""
-            result = format_str
-
-            # Find and replace all placeholders
-            for match in PLACEHOLDER_RE.finditer(format_str):
-                placeholder = match.group(1)
-                full_match = match.group(0)
-
-                resolved: Any
-                if placeholder == "#key":
-                    if isinstance(key_wrapper, Observable):
-                        resolved = key_wrapper.get()
-                    else:
-                        resolved = key_wrapper.unwrap()
-                elif placeholder == "#value" or placeholder == "#self":
-                    if isinstance(value_wrapper, Observable):
-                        resolved = value_wrapper.get()
-                    else:
-                        resolved = value_wrapper.unwrap()
-                elif placeholder.startswith("#key."):
-                    # Nested property on key: #key.name -> key.name
-                    prop_path = placeholder[5:]  # Remove "#key."
-                    if isinstance(key_wrapper, Observable):
-                        resolved = resolve_nested_property(key_wrapper.get(), prop_path)
-                    else:
-                        resolved = resolve_nested_property(key_wrapper, prop_path)
-                elif placeholder.startswith("#value.") or placeholder.startswith("#self."):
-                    # Nested property on value: #value.age or #self.age -> value.age
-                    prop_path = placeholder.split(".", 1)[1]
-                    if isinstance(value_wrapper, Observable):
-                        resolved = resolve_nested_property(value_wrapper.get(), prop_path)
-                    else:
-                        resolved = resolve_nested_property(value_wrapper, prop_path)
-                elif isinstance(value_wrapper, ObservableProxy):
-                    # Property access on value object (shorthand)
-                    resolved = resolve_nested_property(value_wrapper, placeholder)
-                else:
-                    resolved = f"<unknown:{placeholder}>"
-
-                result = result.replace(full_match, str(resolved), 1)
-
-            return result
-
-        # Set initial value
-        setter(widget, compute_value())
-
-        # Subscribe to changes and update widget
-        def on_change(_: Any) -> None:
-            setter(widget, compute_value())
-
-        # Subscribe to key changes (for complex keys)
-        if isinstance(key_wrapper, Observable):
-            key_wrapper.on_change(on_change)
-        else:
-            # For ObservableProxy keys, subscribe to all property observables mentioned
-            for match in PLACEHOLDER_RE.finditer(format_str):
-                placeholder = match.group(1)
-                if placeholder.startswith("#key."):
-                    prop_name = placeholder[5:].split(".")[0]
-                    prop_obs: Any = getattr(key_wrapper, prop_name, None)
-                    if isinstance(prop_obs, Observable):
-                        prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
-
-        # Subscribe to value changes
-        if isinstance(value_wrapper, Observable):
-            value_wrapper.on_change(on_change)
-        else:
-            # For ObservableProxy values, subscribe to all property observables mentioned
-            for match in PLACEHOLDER_RE.finditer(format_str):
-                placeholder = match.group(1)
-                # Direct property on value
-                if not placeholder.startswith("#"):
-                    prop_name = placeholder.split(".")[0]
-                    prop_obs = getattr(value_wrapper, prop_name, None)
-                    if isinstance(prop_obs, Observable):
-                        prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
-                # Explicit #value.prop or #self.prop
-                elif placeholder.startswith("#value.") or placeholder.startswith("#self."):
-                    prop_name = placeholder.split(".", 1)[1].split(".")[0]
-                    prop_obs = getattr(value_wrapper, prop_name, None)
-                    if isinstance(prop_obs, Observable):
-                        prop_obs.on_change(on_change)  # pyright: ignore[reportUnknownMemberType]
 
     def _connect_child_signals(
         self,
@@ -441,91 +293,24 @@ class DictWidgetRepeater[K, V](QWidget):
                 continue
 
             # Create handler that resolves placeholders at call time
-            handler = self._create_signal_handler(handler_spec, key, key_wrapper, value_wrapper, widget)
+            handler = self._make_signal_handler(handler_spec, key_wrapper, value_wrapper, widget)
             signal.connect(handler)
 
-    def _create_signal_handler(
+    def _make_signal_handler(
         self,
         spec: str | Callable[..., Any],
-        key: K,
         key_wrapper: Observable[Any] | ObservableProxy[Any],
         value_wrapper: Observable[Any] | ObservableProxy[Any],
         widget: QWidget,
     ) -> Callable[..., Any]:
-        """Create a handler that resolves placeholders at call time.
-
-        Supports:
-        - "method_name" → passes signal's args only (shorthand for method_name(#args))
-        - "method_name()" → passes nothing
-        - "method_name(#args)" → passes signal's args
-        - "method_name(#value, #key, #args)" → passes value, key, then signal args
-
-        Placeholders:
-        - #value: The dict value
-        - #key: The dict key
-        - #widget: The child widget instance
-        - #args: Spread of signal's own arguments
-        """
-        if callable(spec):
-            return spec
-
-        # Parse handler spec
-        match = HANDLER_SPEC_RE.match(spec)
-        if not match:
-            raise ValueError(f"Invalid handler spec: {spec}")
-
-        method_name = match.group(1)
-        args_spec = match.group(2)  # May be None (no parens) or "" (empty parens)
-
-        # Get the method from parent widget
-        if self._parent_widget is None:
-            raise ValueError(f"Cannot connect signal: no parent widget for handler '{method_name}'")
-
-        parent_method = getattr(self._parent_widget, method_name, None)
-        if parent_method is None:
-            raise AttributeError(f"{type(self._parent_widget).__name__} has no method '{method_name}' for signal connection")
-        if not callable(parent_method):
-            raise AttributeError(f"{type(self._parent_widget).__name__}.{method_name} is not callable")
-
-        # Determine what args to pass
-        if args_spec is None:
-            # No parens: "method_name" → pass signal args only (like #args)
-            placeholders = ["#args"]
-        elif args_spec.strip() == "":
-            # Empty parens: "method_name()" → pass nothing
-            placeholders = []
-        else:
-            # Parse placeholders: "method_name(#value, #key, #args)"
-            placeholders = [p.strip() for p in args_spec.split(",") if p.strip()]
-
-        # Create the handler closure
-        def handler(*signal_args: Any) -> Any:
-            call_args: list[Any] = []
-            for placeholder in placeholders:
-                if placeholder == "#value":
-                    # Get the value
-                    if isinstance(value_wrapper, Observable):
-                        call_args.append(value_wrapper.get())
-                    else:
-                        call_args.append(value_wrapper.unwrap())
-                elif placeholder == "#key":
-                    # Get the key
-                    if isinstance(key_wrapper, Observable):
-                        call_args.append(key_wrapper.get())
-                    else:
-                        call_args.append(key_wrapper.unwrap())
-                elif placeholder == "#widget":
-                    call_args.append(widget)
-                elif placeholder == "#args":
-                    # Spread signal args
-                    call_args.extend(signal_args)
-                else:
-                    # Unknown placeholder - pass as-is (could be a literal)
-                    call_args.append(placeholder)
-
-            return parent_method(*call_args)
-
-        return handler
+        """Create a handler that resolves placeholders at call time."""
+        return create_signal_handler(
+            spec,
+            value_wrapper,
+            widget,
+            self._parent_widget,
+            key_wrapper=key_wrapper,
+        )
 
     def _create_and_add_widget(self, key: K, value: V) -> None:
         """Create a widget for a key-value pair and add it to the layout."""

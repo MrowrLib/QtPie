@@ -376,9 +376,8 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
     def wrapped_init(self: Menu[Any], *args: Any, **kwargs: Any) -> None:
         from qtpy.QtGui import QAction
 
-        from .bindings.apply import apply_auto_bindings, apply_property_bindings
+        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
         from .widget import (
-            _apply_reactive_widget_props,  # pyright: ignore[reportPrivateUsage]
             _has_unset_required_bindings,  # pyright: ignore[reportPrivateUsage]
         )
 
@@ -475,7 +474,7 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
         else:
             apply_auto_bindings(self, config)  # type: ignore[arg-type]
             apply_property_bindings(self, config)  # type: ignore[arg-type]
-            _apply_reactive_widget_props(self, config)  # type: ignore[arg-type]
+            apply_reactive_widget_props(self, config)  # type: ignore[arg-type]
 
             # Apply property bindings for QActions (not handled by apply_property_bindings)
             _apply_action_property_bindings(self, config)

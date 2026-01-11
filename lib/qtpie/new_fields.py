@@ -382,17 +382,14 @@ def _apply_pending_bindings(instance: Any) -> None:
             # Still missing required bindings - keep the flag and return
             return
 
-    # Import the binding functions from widget (internal cross-module usage)
-    from .widget import (
-        _apply_auto_bindings,  # pyright: ignore[reportPrivateUsage]
-        _apply_property_bindings,  # pyright: ignore[reportPrivateUsage]
-        _apply_reactive_widget_props,  # pyright: ignore[reportPrivateUsage]
-    )
+    # Import the binding functions from shared module
+    from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
+    from .bindings.expression import create_expression_binding
 
     # Apply the deferred bindings
-    _apply_auto_bindings(instance, child_config)
-    _apply_property_bindings(instance, child_config)
-    _apply_reactive_widget_props(instance, child_config)
+    apply_auto_bindings(instance, child_config)
+    apply_property_bindings(instance, child_config, create_expression_binding_fn=create_expression_binding)
+    apply_reactive_widget_props(instance, child_config)
 
     # Resolve deferred refs now that required bindings are set
     _resolve_deferred_refs(instance)
