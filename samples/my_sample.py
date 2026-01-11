@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 from dataclasses import dataclass
 from typing import override
 
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
-from qtpy.QtWidgets import QAbstractItemView, QCheckBox, QLabel, QLineEdit, QListView, QPushButton, QStyle, QTableView, QTabWidget
+from qtpy.QtWidgets import QAbstractItemView, QCheckBox, QLabel, QLineEdit, QListView, QPushButton, QStyle, QTableView, QTabWidget, QTreeView
 
 from qtpie import App, Menu, Variable, Widget, app, entrypoint, menu, new, ref, set_language, slot, t, widget
 
@@ -691,36 +693,57 @@ class DogsCollection:
     dogs: list[Dog]
 
 
-@entrypoint
 @widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)]))
 class MyComboBox(Widget[DogsCollection]):
-    # The currently seletected index and dog
-    _index: Variable[int]
-    # _dog: Variable[Dog]
-    _dogs: Variable[list[Dog]]  # = new([Dog("FAKE", 0)])
+    _dogs: Variable[list[Dog]]
 
-    # Holy crap, these both react together!
-    # _list: QListView = new(bind="dogs", format="{name} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
-    # _combo: QComboBox = new(bind="dogs", format="{name} ({age} yrs)", selectedIndex="_index", selectedItem="_dog")
-
-    # Yay, these are reactive!
-    _dog_name_label: QLabel = new(bind="{_dog.name}")
-    _dog_age_label: QLabel = new(bind="{_dog.age}")
-
-    # Table and multi-select list!
     _table: QTableView = new(bind="dogs", selectedItems="_dogs")
     _list: QListView = new(bind="dogs", format="{name} ({age} yrs)", selectedItems="_dogs", selectionMode=QAbstractItemView.SelectionMode.MultiSelection)
 
     _dogs_count: QLabel = new(bind="Selected dogs count: {len(_dogs)}")
 
-    # _btn_print_selected_dogs: QPushButton = new("Print Selected Dogs", clicked="print_selected_dogs")
+    _btn_print_selected_dogs: QPushButton = new("Print Selected Dogs", clicked="print_selected_dogs")
 
-    # def print_selected_dogs(self) -> None:
-    #     print(f"There are {len(self._dogz.value)} selected dogs:")
-    #     for dog in self._dogz.value:
-    #         print(f"Selected Dog: {dog.name}, Age: {dog.age}")
+    def print_selected_dogs(self) -> None:
+        print(f"There are {len(self._dogs.value)} selected dogs:")
+        for dog in self._dogs.value:
+            print(f"Selected Dog: {dog.name}, Age: {dog.age}")
 
     btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
 
     def add_dog(self) -> None:
-        self._dogs.append(Dog(name="New Dog", age=1))
+        self.record.dogs.append(Dog(name="New Dog", age=1))
+
+
+# Hierarchical Example
+@dataclass
+class Cat:
+    name: str
+    age: int
+    kittens: list[Cat]
+
+
+cat = Cat(name="Mittens", age=4, kittens=[Cat(name="Fluffy", age=1, kittens=[]), Cat(name="Snowball", age=2, kittens=[Cat(name="Tiny", age=0, kittens=[Cat(name="Micro", age=0, kittens=[])])])])
+
+
+@entrypoint
+@widget(record=cat)
+class HierarchicalCatsWidget(Widget[Cat]):
+    _selected_kitten: Variable[Cat]
+    _selected_kittens: Variable[list[Cat]]
+    _tree: QTreeView = new(
+        bind="kittens",
+        format="{name} ({age} yrs)",
+        children="kittens",
+        selectedItem="_selected_kitten",
+        selectedItems="_selected_kittens",
+        selectionMode=QAbstractItemView.SelectionMode.MultiSelection,
+    )
+
+    _selected_kittens_info: QLabel = new(bind="Selected Kitten Count: {len(_selected_kittens)}")
+    _selected_kitten_info: QLabel = new(bind="Last Selected Kitten: {_selected_kitten.name}, Age: {_selected_kitten.age} yrs")
+
+    btn_add_kitten: QPushButton = new("Add Kitten", clicked="add_kitten")
+
+    def add_kitten(self) -> None:
+        self.record.kittens.append(Cat(name="Mittens", age=3, kittens=[]))

@@ -53,21 +53,45 @@ def detect_required_bindings(
 
     Creates a descriptor for each bare Variable annotation.
 
+    Handles both regular annotations and string annotations (from
+    `from __future__ import annotations`).
+
     Args:
         cls: The class to process.
         config_attr: Name of the config attribute on the class (e.g., "_qtpie_config").
         variable_type: The Variable type to check for.
         descriptor_factory: Factory to create descriptors (e.g., _RequiredBindingDescriptor).
     """
-    from typing import Any, get_args, get_origin
+    from typing import Any, get_args, get_origin, get_type_hints
 
-    annotations = getattr(cls, "__annotations__", {})
+    raw_annotations = getattr(cls, "__annotations__", {})
     config = getattr(cls, config_attr)
 
-    for name, annotation in annotations.items():
-        origin = get_origin(annotation)
-        if origin is not variable_type and annotation is not variable_type:
-            continue
+    # Try to get resolved type hints (handles string annotations from __future__)
+    # Fall back to raw annotations if get_type_hints fails
+    try:
+        # Include Variable type in namespace for resolution
+        namespace = {"Variable": variable_type}
+        # Also include the class itself for self-references
+        namespace[cls.__name__] = cls
+        resolved_annotations = get_type_hints(cls, localns=namespace, include_extras=True)
+    except Exception:
+        # If get_type_hints fails (e.g., unresolvable forward refs), use raw
+        resolved_annotations = raw_annotations
+
+    for name in raw_annotations:
+        # Get resolved annotation if available, otherwise use raw
+        annotation = resolved_annotations.get(name, raw_annotations[name])
+
+        # Handle string annotations that weren't resolved
+        if isinstance(annotation, str):
+            # Check if the string looks like a Variable annotation
+            if not (annotation.startswith("Variable[") or annotation == "Variable"):
+                continue
+        else:
+            origin = get_origin(annotation)
+            if origin is not variable_type and annotation is not variable_type:
+                continue
 
         # Check if there's a value in __dict__
         if name in cls.__dict__:
@@ -78,9 +102,11 @@ def detect_required_bindings(
 
         # Extract inner type
         inner_type: type[Any] | None = None
-        if origin is variable_type:
-            args = get_args(annotation)
-            inner_type = args[0] if args else None
+        if not isinstance(annotation, str):
+            origin = get_origin(annotation)
+            if origin is variable_type:
+                args = get_args(annotation)
+                inner_type = args[0] if args else None
 
         # Create descriptor
         descriptor = descriptor_factory(name, inner_type)

@@ -69,6 +69,8 @@ class NewField:
         self.selected_columns: str | None = None  # Variable name for selectedColumns binding (list[int])
         self.selected_cells: str | None = None  # Variable name for selectedCells binding (list[tuple])
         self.selected_items: str | None = None  # Variable name for selectedItems binding (list[T])
+        # QTreeView-specific: children attribute name
+        self.tree_children: str | None = None  # Attribute name for child items: "children"
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
@@ -299,6 +301,13 @@ class NewField:
                     # QListView-specific selection bindings (multi)
                     self.selected_indexes = self.kwargs.pop("selectedIndexes", None)
                     self.selected_items_list = self.kwargs.pop("selectedItems", None)
+                # Extract QTreeView-specific kwargs only if this is a QTreeView
+                elif self._is_qtreeview_type():
+                    # children= specifies attribute for child items
+                    self.tree_children = self.kwargs.pop("children", None)
+                    # QTreeView selection bindings (multi)
+                    # Note: selected_item is already extracted above for all model widgets
+                    self.selected_items = self.kwargs.pop("selectedItems", None)
 
             # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)
@@ -423,17 +432,31 @@ class NewField:
             return False
 
     def _is_qlistview_type(self) -> bool:
-        """Check if the field type is a QListView subclass (but not QTableView)."""
+        """Check if the field type is a QListView subclass (but not QTableView or QTreeView)."""
         if self.field_type is None:
             return False
         try:
-            from qtpy.QtWidgets import QListView, QTableView
+            from qtpy.QtWidgets import QListView, QTableView, QTreeView
 
             # field_type could be a generic alias, so check it's a proper type
             if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
                 return False
-            # QListView but not QTableView (QTableView inherits from QAbstractItemView, not QListView)
-            return issubclass(self.field_type, QListView) and not issubclass(self.field_type, QTableView)
+            # QListView but not QTableView or QTreeView
+            return issubclass(self.field_type, QListView) and not issubclass(self.field_type, QTableView) and not issubclass(self.field_type, QTreeView)
+        except (ImportError, TypeError):
+            return False
+
+    def _is_qtreeview_type(self) -> bool:
+        """Check if the field type is a QTreeView subclass."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QTreeView
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QTreeView)
         except (ImportError, TypeError):
             return False
 
@@ -452,8 +475,8 @@ class NewField:
             return False
 
     def _is_model_widget_type(self) -> bool:
-        """Check if the field type is a model widget (QComboBox, QListView, QTableView)."""
-        return self._is_qcombobox_type() or self._is_qlistview_type() or self._is_qtableview_type()
+        """Check if the field type is a model widget (QComboBox, QListView, QTableView, QTreeView)."""
+        return self._is_qcombobox_type() or self._is_qlistview_type() or self._is_qtableview_type() or self._is_qtreeview_type()
 
     def _is_signal(self, name: str) -> bool:
         """Check if name is a signal on the field type."""

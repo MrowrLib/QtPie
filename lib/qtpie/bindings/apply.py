@@ -34,6 +34,13 @@ def _is_table_view(widget: QWidget) -> bool:
     return isinstance(widget, QTableView)
 
 
+def _is_tree_view(widget: QWidget) -> bool:
+    """Check if widget is a QTreeView (needs ReactiveTreeModel)."""
+    from qtpy.QtWidgets import QTreeView
+
+    return isinstance(widget, QTreeView)
+
+
 def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None:
     """Pre-create Variables for selection bindings that reference bare Variable[T] annotations.
 
@@ -82,6 +89,8 @@ def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None
             all_selection_paths.add(field_info.selected_cells.lstrip("_"))
         if field_info.selected_items is not None:
             all_selection_paths.add(field_info.selected_items.lstrip("_"))
+        # Note: QTreeView uses selected_item and selected_items which are already
+        # handled above (shared with QComboBox/QListView/QTableView)
 
     if not all_selection_paths:
         return
@@ -774,6 +783,152 @@ def _setup_table_selection_bindings(
         selection_model.selectionChanged.connect(on_selection_changed)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _setup_tree_selection_bindings(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveTreeModel
+    selected_item_path: str | None,
+    selected_items_path: str | None,
+) -> None:
+    """Set up selection bindings for QTreeView.
+
+    Args:
+        host: The Widget/Window instance containing the Variables
+        widget: The QTreeView widget
+        model: The ReactiveTreeModel backing the widget
+        selected_item_path: Variable path for single item binding (e.g., "_selected_node")
+        selected_items_path: Variable path for multi-item binding (e.g., "_selected_nodes")
+    """
+    if selected_item_path is None and selected_items_path is None:
+        return
+
+    from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
+
+    from qtpie.variable import Variable as VarType
+
+    # Resolve Variables
+    item_var: VarType[Any] | None = None
+    items_var: VarType[list[Any]] | None = None
+
+    if selected_item_path is not None:
+        source = _resolve_or_create_variable(host, selected_item_path, None)
+        if isinstance(source, VarType):
+            item_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    if selected_items_path is not None:
+        source = _resolve_or_create_variable(host, selected_items_path, None)
+        if isinstance(source, VarType):
+            items_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    # Flag to prevent circular updates
+    updating = {"flag": False}
+
+    # Get selection model
+    selection_model = widget.selectionModel()  # type: ignore[attr-defined]
+    if selection_model is None:
+        return
+
+    # Helper to get item at model index
+    def get_item_at_index(index: QModelIndex) -> Any:
+        if not index.isValid():
+            return None
+        return model.data(index, Qt.ItemDataRole.UserRole)
+
+    # Helper to get current item
+    def get_current_item() -> Any:
+        current = selection_model.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        return get_item_at_index(current)  # pyright: ignore[reportUnknownArgumentType]
+
+    # Helper to get all selected items
+    def get_selected_items() -> list[Any]:
+        indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        items: list[Any] = []
+        for idx in indexes:  # pyright: ignore[reportUnknownVariableType]
+            item = get_item_at_index(idx)  # pyright: ignore[reportUnknownArgumentType]
+            if item is not None and item not in items:
+                items.append(item)
+        return items
+
+    # Helper to find model index for an item (searches entire tree)
+    def find_index_for_item(item: Any, parent: QModelIndex | None = None) -> QModelIndex:
+        if parent is None:
+            parent = QModelIndex()
+        for row in range(model.rowCount(parent)):
+            idx = model.index(row, 0, parent)
+            if get_item_at_index(idx) == item:
+                return idx
+            # Search children recursively
+            child_result = find_index_for_item(item, idx)
+            if child_result.isValid():
+                return child_result
+        return QModelIndex()
+
+    # Initialize from current state or Variable defaults
+    if item_var is not None:
+        initial_item = item_var.value
+        if initial_item is not None:
+            # Try to select the item in the tree
+            idx = find_index_for_item(initial_item)
+            if idx.isValid():
+                selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+                    idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
+                )
+        else:
+            # Sync Variable to current selection
+            item_var.value = get_current_item()
+
+    if items_var is not None:
+        initial_items = items_var.value
+        if initial_items is None or not initial_items:  # pyright: ignore[reportUnnecessaryComparison]
+            items_var.value = get_selected_items()
+
+    # Variable → Widget binding (single item)
+    if item_var is not None:
+
+        def on_item_var_change(*_args: Any) -> None:
+            if updating["flag"]:
+                return
+            updating["flag"] = True
+            try:
+                new_item = item_var.value  # type: ignore[union-attr]
+                if new_item is not None:
+                    idx = find_index_for_item(new_item)
+                    if idx.isValid():
+                        selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+                            idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
+                        )
+            finally:
+                updating["flag"] = False
+
+        item_var.on_change(on_item_var_change)
+
+    # Widget → Variable binding
+    if item_var is not None or items_var is not None:
+
+        def on_current_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+            if updating["flag"]:
+                return
+            updating["flag"] = True
+            try:
+                if item_var is not None:
+                    item_var.value = get_item_at_index(current)
+            finally:
+                updating["flag"] = False
+
+        def on_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
+            if updating["flag"]:
+                return
+            updating["flag"] = True
+            try:
+                if items_var is not None:
+                    items_var.value = get_selected_items()
+            finally:
+                updating["flag"] = False
+
+        selection_model.currentChanged.connect(on_current_changed)  # pyright: ignore[reportUnknownMemberType]
+        selection_model.selectionChanged.connect(on_selection_changed)  # pyright: ignore[reportUnknownMemberType]
+
+
 def apply_auto_bindings(
     host: QWidget,
     config: BindingConfig,
@@ -871,10 +1026,31 @@ def apply_auto_bindings(
             if obs_list is not None:
                 # Decide which model type to use
                 # QTableView (or explicit columns=) uses ReactiveTableModel
+                # QTreeView (or explicit children=) uses ReactiveTreeModel
                 # Others (QComboBox, QListView) use ReactiveListModel
                 use_table_model = _is_table_view(widget_instance) or field_info.table_columns is not None
+                use_tree_model = _is_tree_view(widget_instance) or field_info.tree_children is not None
 
-                if use_table_model:
+                if use_tree_model:
+                    # Create ReactiveTreeModel for QTreeView
+                    from qtpie.bindings.format_binding import create_item_formatter
+                    from qtpie.models import ReactiveTreeModel
+
+                    # Check for format= to customize item display
+                    format_fn = None
+                    if field_info.model_format is not None:
+                        format_fn = create_item_formatter(field_info.model_format)
+
+                    # Default children attribute to "children" if not specified
+                    children_attr = field_info.tree_children or "children"
+
+                    model = ReactiveTreeModel(
+                        obs_list,
+                        parent=widget_instance,
+                        children_attr=children_attr,
+                        format_fn=format_fn,
+                    )
+                elif use_table_model:
                     # Create ReactiveTableModel for QTableView
                     from qtpie.models import ReactiveTableModel
 
@@ -899,7 +1075,16 @@ def apply_auto_bindings(
                 widget_instance.setModel(model)  # type: ignore[attr-defined]
 
                 # Set up selection bindings based on widget type
-                if use_table_model:
+                if use_tree_model:
+                    # QTreeView selection bindings
+                    _setup_tree_selection_bindings(
+                        host,
+                        widget_instance,
+                        model,
+                        field_info.selected_item,
+                        field_info.selected_items,
+                    )
+                elif use_table_model:
                     # QTableView-specific selection bindings
                     _setup_table_selection_bindings(
                         host,
