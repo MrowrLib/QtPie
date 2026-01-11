@@ -24,6 +24,19 @@ ALL_CLASS_TYPES = [
     pytest.param(AppBase, app, id="App"),
 ]
 
+# Widget only - for features that only work on basic Widget (not Window/App)
+# Used for layout tests where Window has central_widget and App doesn't have layout()
+WIDGET_ONLY = [
+    pytest.param(Widget, widget, id="Widget"),
+]
+
+# Widget and Window only - for features that work on QWidget-based classes
+# Used for name=/classes= tests since App is not a QWidget
+QWIDGET_CLASS_TYPES = [
+    pytest.param(Widget, widget, id="Widget"),
+    pytest.param(Window, window, id="Window"),
+]
+
 
 def create_and_track(
     qt: QtDriver,

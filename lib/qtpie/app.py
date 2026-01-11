@@ -23,12 +23,13 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from qtpie.layout import LayoutType
+from qtpie.layout import GridPosition, LayoutType
 from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 from qtpie.utils.layouts import add_to_layout, create_layout, resolve_icon
+from qtpie.widget import _validate_layout_params
 
 
 @dataclass
@@ -853,12 +854,28 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             apply_layout_margins(qt_layout, config.margins)
 
             # Add widgets to layout
+            from qtpie.variable import _VariableDescriptor
+
             for name, widget_instance in widget_fields:
                 fld = config.fields.get(name)
-                if fld is not None and fld.exclude_from_layout:
-                    continue
-                label = fld.label if fld else None
-                grid = fld.grid if fld else None
+                label: str | None = None
+                grid: GridPosition | None = None
+
+                # Check if this is a Variable[T, W] field - get label/grid from descriptor
+                descriptor = getattr(cls, name, None)
+                if isinstance(descriptor, _VariableDescriptor):
+                    if descriptor.exclude_from_layout:
+                        continue
+                    label = descriptor.label
+                    grid = descriptor.grid  # type: ignore[assignment]
+                elif fld is not None:
+                    # Regular QWidget field
+                    if fld.exclude_from_layout:
+                        continue
+                    label = fld.label
+                    grid = fld.grid
+
+                _validate_layout_params(name, config.layout, label, grid)
                 _add_to_layout_for_app(qt_layout, widget_instance, config.layout, label, grid)
 
         window.setCentralWidget(central)

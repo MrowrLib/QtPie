@@ -23,7 +23,7 @@ from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor
-from .widget import IconType, _resolve_icon
+from .widget import IconType, _resolve_icon, _validate_layout_params
 
 
 @dataclass
@@ -442,14 +442,38 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 apply_layout_margins(qt_layout, config.margins)
 
                 # Add non-menu widgets to layout (in field definition order)
+                from .variable import _VariableDescriptor
+
                 for name, widget_instance in non_menu_widgets:
                     fld = config.fields.get(name)
-                    if fld is not None and fld.exclude_from_layout:
-                        continue
-                    # Resolve Translatable labels (keep original for retranslation)
-                    label_translatable = fld.label if fld and isinstance(fld.label, Translatable) else None
-                    label = fld.label.resolve() if fld and isinstance(fld.label, Translatable) else (fld.label if fld else None)
-                    grid = fld.grid if fld else None
+                    label: str | None = None
+                    label_translatable: Any = None
+                    grid: GridPosition | None = None
+
+                    # Check if this is a Variable[T, W] field - get label/grid from descriptor
+                    descriptor = getattr(cls, name, None)
+                    if isinstance(descriptor, _VariableDescriptor):
+                        if descriptor.exclude_from_layout:
+                            continue
+                        raw_label = descriptor.label
+                        if isinstance(raw_label, Translatable):
+                            label = raw_label.resolve()
+                            label_translatable = raw_label
+                        else:
+                            label = raw_label
+                        grid = descriptor.grid  # type: ignore[assignment]
+                    elif fld is not None:
+                        # Regular QWidget field
+                        if fld.exclude_from_layout:
+                            continue
+                        if isinstance(fld.label, Translatable):
+                            label = fld.label.resolve()
+                            label_translatable = fld.label
+                        else:
+                            label = fld.label
+                        grid = fld.grid
+
+                    _validate_layout_params(name, config.layout, label, grid)
                     _add_to_layout(qt_layout, widget_instance, config.layout, label, grid, label_translatable)
 
             self.setCentralWidget(central)
