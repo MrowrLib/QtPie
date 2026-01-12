@@ -3,7 +3,7 @@
 from pytestqt.qtbot import QtBot
 from qtpy.QtCore import Qt
 from qtpy.QtTest import QTest
-from qtpy.QtWidgets import QWidget
+from qtpy.QtWidgets import QApplication, QWidget
 
 
 class QtDriver:
@@ -62,3 +62,13 @@ class QtDriver:
             modifiers: Keyboard modifiers held during click (default: none).
         """
         QTest.mouseDClick(widget, button, modifiers)
+
+    def process_events(self) -> None:
+        """
+        Process pending Qt events.
+
+        Useful for tests that need to wait for Qt signals to be processed.
+        """
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()

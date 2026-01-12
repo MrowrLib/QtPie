@@ -66,6 +66,16 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
     if is_primitive_type(inner_type):
         return Observable(default)
 
+    # Qt value types (QIcon, QPixmap, etc.) → Observable
+    # These are value types, not objects with fields, so treat like primitives
+    try:
+        from qtpy.QtGui import QIcon, QPixmap
+
+        if isinstance(default, (QIcon, QPixmap)):
+            return Observable(default)
+    except ImportError:
+        pass
+
     # Union types (e.g., str | None, int | None) → Observable if all members are primitives
     if isinstance(inner_type, types.UnionType):
         type_args = get_args(inner_type)
@@ -86,7 +96,13 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
             raise ValueError(f"Cannot create Variable[{inner_type.__name__}] without a default value. Use new(default=YourClass(...)) or provide constructor args.") from e
     else:
         # Copy the default so each instance gets its own object
-        default = deepcopy(default)
+        # (prevents shared mutable state between instances)
+        try:
+            default = deepcopy(default)
+        except TypeError:
+            # Object can't be copied (e.g., Qt objects like QIcon, QPixmap)
+            # Use original value - assume user knows what they're doing
+            pass
     return ObservableProxy(default)
 
 
@@ -725,6 +741,8 @@ class _VariableDescriptor[T]:
         validators: list[str] | None = None,
         object_name: str | None = None,
         css_classes: list[str] | None = None,
+        # Variable[T, Dock[W]] support
+        dock_info: dict[str, Any] | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -741,6 +759,8 @@ class _VariableDescriptor[T]:
         # Widget objectName and CSS classes
         self._object_name = object_name
         self._css_classes = css_classes or []
+        # Dock info for Variable[T, Dock[W]] - contains dock_area, dock_title, etc.
+        self.dock_info = dock_info
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -922,7 +942,15 @@ class _VariableDescriptor[T]:
 
                             create_format_binding(obj, bind_expr, make_setter(setter, widget_instance), variable=var)  # type: ignore[arg-type]
                     else:
-                        bind(var).to(widget_instance)
+                        # Auto-bind for:
+                        # 1. Primitive types (str, int, bool, etc.) - bound to widget's default property
+                        # 2. Complex types with Widget[T] subclass - bound via shared proxy
+                        # Skip binding for complex types with plain QWidget (no meaningful binding)
+                        from .bindings.bind import is_widget_with_record
+
+                        should_bind = is_primitive_type(self._inner_type) or is_widget_with_record(widget_instance)
+                        if should_bind:
+                            bind(var).to(widget_instance)
 
                 var.widget = widget_instance  # Use setter
 
@@ -961,6 +989,37 @@ def create_variable_descriptor(
     validators: list[Any] | None = None,
     object_name: str | None = None,
     css_classes: list[str] | None = None,
+    dock_info: dict[str, Any] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info)
+
+
+def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | None:  # pyright: ignore[reportUnusedFunction] - used in window.py
+    """Get the Observable for a Variable by name.
+
+    Args:
+        obj: The widget instance (Window or Widget)
+        binding: The Variable name (e.g., "_show_dock")
+
+    Returns:
+        The Observable if found, None otherwise
+    """
+    # Get the Variable from the widget
+    var = getattr(obj, binding, None)
+    if var is None:
+        return None
+
+    # If it's a Variable, get its observable (use public property)
+    if isinstance(var, Variable):
+        wrapper = cast(AnyObservable[Any], var.observable)  # pyright: ignore[reportUnknownMemberType] - Variable[T] has partially unknown T
+        # For Observable (primitive types), return it directly
+        if isinstance(wrapper, Observable):
+            return wrapper
+        return None
+
+    # If it's an Observable directly
+    if isinstance(var, Observable):
+        return cast(Observable[Any], var)
+
+    return None

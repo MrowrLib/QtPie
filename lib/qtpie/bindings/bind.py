@@ -9,7 +9,7 @@ from ..variable import Variable
 from .registry import get_binding_registry
 
 
-def _is_widget_with_record(widget: QObject) -> bool:
+def is_widget_with_record(widget: QObject) -> bool:
     """Check if widget is a Widget[T] subclass with record support."""
     # Check for our Widget class by looking for the QtPie markers
     widget_type: Any = type(widget)
@@ -44,7 +44,7 @@ class Binding[T]:
                      will update the Variable. Default True.
         """
         # Special case: Widget[T] subclass - bind via .record with shared proxy
-        if _is_widget_with_record(widget):
+        if is_widget_with_record(widget):
             self._bind_to_widget_record(widget)
             return
 

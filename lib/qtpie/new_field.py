@@ -87,6 +87,28 @@ class NewField:
         self.variable_bindings: dict[str, Any] = {}  # child_var_name -> binding_value
         # Ref bindings - deferred attribute references to resolve after field instantiation
         self.ref_bindings: dict[str, Any] = {}  # kwarg_name -> Ref instance
+        # Dock[T] support
+        self.is_dock: bool = False
+        self.dock_content_type: type | None = None  # The widget type inside Dock[T]
+        self.dock_area: str | None = None  # dock="left", "right", "top", "bottom"
+        self.dock_title: str | None = None  # title="Explorer"
+        self.dock_below: str | None = None  # below="_explorer" (vertical split)
+        self.dock_right_of: str | None = None  # rightOf="_console" (horizontal split)
+        self.dock_left_of: str | None = None  # leftOf="_console" (horizontal split)
+        self.dock_above: str | None = None  # above="_explorer" (vertical split)
+        self.dock_group: str | None = None  # group="inspector" (tabify together)
+        self.dock_group_selected_index: str | None = None  # groupSelectedIndex="_tab_index"
+        self.dock_icon: str | None = None  # icon="terminal.svg" (tab icon)
+        self.dock_visible: str | None = None  # visible="_show_dock" or "{expr}"
+        self.dock_floating: str | None = None  # floating="_is_floating"
+        self.dock_closable: bool | None = None  # closable=False (no X button)
+        self.dock_floatable: bool | None = None  # floatable=False (can't pop out)
+        self.dock_movable: bool | None = None  # movable=False (can't drag)
+        self.dock_allowed_areas: list[str] | None = None  # allowedAreas=["left", "right"]
+        self.dock_vertical_title_bar: bool | None = None  # verticalTitleBar=True
+        # Variable[T, Dock[W]] support - Variable with a docked widget
+        self.is_variable_dock: bool = False
+        self.variable_dock_content_type: type | None = None  # The widget type W inside Variable[T, Dock[W]]
 
     def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
         """Store widget constructor args: new("value")(placeholder="...").
@@ -120,6 +142,76 @@ class NewField:
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
 
+            # Check if widget_type is Dock[X] - Variable[T, Dock[W]]
+            # If so, extract the inner content type X and mark as variable dock
+            dock_info: dict[str, Any] | None = None
+            if widget_type is not None and self._is_dock_type_param(widget_type):
+                # Extract the content widget type from Dock[W]
+                dock_args = get_args(widget_type)
+                if dock_args:
+                    self.is_variable_dock = True
+                    self.variable_dock_content_type = dock_args[0]
+                    # Extract dock-specific kwargs from self.kwargs (not widget_kwargs)
+                    # For Variable[T, Dock[W]], dock params are in new(..., dock="left", title="...")
+                    self.dock_area = self.kwargs.pop("dock", None)
+                    # title= was normalized to windowTitle by _normalize_kwargs_aliases
+                    self.dock_title = self.kwargs.pop("windowTitle", None)
+                    self.dock_below = self.kwargs.pop("below", None)
+                    self.dock_right_of = self.kwargs.pop("rightOf", None)
+                    self.dock_left_of = self.kwargs.pop("leftOf", None)
+                    self.dock_above = self.kwargs.pop("above", None)
+                    self.dock_group = self.kwargs.pop("group", None)
+                    self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
+                    self.dock_icon = self.kwargs.pop("icon", None)
+                    self.dock_visible = self.kwargs.pop("visible", None)
+                    self.dock_floating = self.kwargs.pop("floating", None)
+                    self.dock_closable = self.kwargs.pop("closable", None)
+                    self.dock_floatable = self.kwargs.pop("floatable", None)
+                    self.dock_movable = self.kwargs.pop("movable", None)
+                    self.dock_allowed_areas = self.kwargs.pop("allowedAreas", None)
+                    self.dock_vertical_title_bar = self.kwargs.pop("verticalTitleBar", None)
+                    # Also check widget_kwargs in case of chained call pattern
+                    if not self.dock_area and self.widget_kwargs:
+                        widget_kwargs_copy = dict(self.widget_kwargs)
+                        self.dock_area = self.dock_area or widget_kwargs_copy.pop("dock", None)
+                        self.dock_title = self.dock_title or widget_kwargs_copy.pop("windowTitle", None)
+                        self.dock_below = self.dock_below or widget_kwargs_copy.pop("below", None)
+                        self.dock_right_of = self.dock_right_of or widget_kwargs_copy.pop("rightOf", None)
+                        self.dock_left_of = self.dock_left_of or widget_kwargs_copy.pop("leftOf", None)
+                        self.dock_above = self.dock_above or widget_kwargs_copy.pop("above", None)
+                        self.dock_group = self.dock_group or widget_kwargs_copy.pop("group", None)
+                        self.dock_group_selected_index = self.dock_group_selected_index or widget_kwargs_copy.pop("groupSelectedIndex", None)
+                        self.dock_icon = self.dock_icon or widget_kwargs_copy.pop("icon", None)
+                        self.dock_visible = self.dock_visible or widget_kwargs_copy.pop("visible", None)
+                        self.dock_floating = self.dock_floating or widget_kwargs_copy.pop("floating", None)
+                        self.dock_closable = self.dock_closable if self.dock_closable is not None else widget_kwargs_copy.pop("closable", None)
+                        self.dock_floatable = self.dock_floatable if self.dock_floatable is not None else widget_kwargs_copy.pop("floatable", None)
+                        self.dock_movable = self.dock_movable if self.dock_movable is not None else widget_kwargs_copy.pop("movable", None)
+                        self.dock_allowed_areas = self.dock_allowed_areas or widget_kwargs_copy.pop("allowedAreas", None)
+                        self.dock_vertical_title_bar = self.dock_vertical_title_bar if self.dock_vertical_title_bar is not None else widget_kwargs_copy.pop("verticalTitleBar", None)
+                        self.widget_kwargs = widget_kwargs_copy
+                    # Store dock info for window.py to use
+                    dock_info = {
+                        "dock_area": self.dock_area,
+                        "dock_title": self.dock_title,
+                        "dock_below": self.dock_below,
+                        "dock_right_of": self.dock_right_of,
+                        "dock_left_of": self.dock_left_of,
+                        "dock_above": self.dock_above,
+                        "dock_group": self.dock_group,
+                        "dock_group_selected_index": self.dock_group_selected_index,
+                        "dock_icon": self.dock_icon,
+                        "dock_visible": self.dock_visible,
+                        "dock_floating": self.dock_floating,
+                        "dock_closable": self.dock_closable,
+                        "dock_floatable": self.dock_floatable,
+                        "dock_movable": self.dock_movable,
+                        "dock_allowed_areas": self.dock_allowed_areas,
+                        "dock_vertical_title_bar": self.dock_vertical_title_bar,
+                    }
+                    # Use the content type as widget_type for the descriptor
+                    widget_type = self.variable_dock_content_type
+
             # Extract layout params from widget_kwargs (they're layout params, not widget constructor params)
             widget_kwargs_copy = dict(self.widget_kwargs)
             label = widget_kwargs_copy.pop("label", None)
@@ -147,8 +239,51 @@ class NewField:
                 validators,
                 object_name,
                 css_classes,
+                dock_info,
             )
             setattr(owner, name, descriptor)
+            return
+
+        # Handle Dock[T] - creates a Dock wrapper around a widget in a QDockWidget
+        if self._is_dock_type():
+            self.is_dock = True
+            # Extract the content widget type from Dock[T]
+            type_args = get_args(self.field_type)
+            if type_args:
+                self.dock_content_type = type_args[0]
+
+            # Extract dock-specific kwargs
+            self.dock_area = self.kwargs.pop("dock", None)
+            # title= was normalized to windowTitle by _normalize_kwargs_aliases
+            self.dock_title = self.kwargs.pop("windowTitle", None)
+            self.dock_below = self.kwargs.pop("below", None)
+            self.dock_right_of = self.kwargs.pop("rightOf", None)
+            self.dock_left_of = self.kwargs.pop("leftOf", None)
+            self.dock_above = self.kwargs.pop("above", None)
+            self.dock_group = self.kwargs.pop("group", None)
+            self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
+            self.dock_icon = self.kwargs.pop("icon", None)
+            self.dock_visible = self.kwargs.pop("visible", None)
+            self.dock_floating = self.kwargs.pop("floating", None)
+            self.dock_closable = self.kwargs.pop("closable", None)
+            self.dock_floatable = self.kwargs.pop("floatable", None)
+            self.dock_movable = self.kwargs.pop("movable", None)
+            self.dock_allowed_areas = self.kwargs.pop("allowedAreas", None)
+            self.dock_vertical_title_bar = self.kwargs.pop("verticalTitleBar", None)
+
+            # Extract name= for objectName
+            self.object_name = self.kwargs.pop("name", None)
+
+            # Extract classes= for CSS classes
+            classes = self.kwargs.pop("classes", None)
+            if classes is not None:
+                self.css_classes = classes
+
+            # layout=False doesn't apply to docks (they're not in layouts)
+            # But pop it anyway to avoid passing to constructor
+            self.kwargs.pop("layout", None)
+
+            # Remaining kwargs go to content widget constructor
             return
 
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
@@ -511,6 +646,25 @@ class NewField:
             if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
                 return False
             return issubclass(self.field_type, QTabWidget)
+        except (ImportError, TypeError):
+            return False
+
+    def _is_dock_type(self) -> bool:
+        """Check if the field type is a Dock[T] generic alias."""
+        if self.field_type is None:
+            return False
+        return self._is_dock_type_param(self.field_type)
+
+    def _is_dock_type_param(self, type_to_check: Any) -> bool:
+        """Check if a given type is a Dock[T] generic alias."""
+        if type_to_check is None:
+            return False
+        try:
+            from .dock import Dock
+
+            # Check if the origin is Dock (e.g., Dock[ExplorerPanel])
+            origin = get_origin(type_to_check)
+            return origin is Dock
         except (ImportError, TypeError):
             return False
 

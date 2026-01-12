@@ -11,12 +11,13 @@ from observant import Observable, ObservableDict, ObservableList, ObservableProx
 if TYPE_CHECKING:
     from qtpie.variable import Variable
     from qtpie.widget import Widget
+    from qtpie.window import Window
 
 # Return type for binding sources
 type BindingSource = Variable[Any] | Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]
 
 
-def resolve_binding_source(widget: Widget[Any], path: str) -> BindingSource | None:
+def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> BindingSource | None:
     """Resolve a binding path to its source Observable/Variable.
 
     Resolution order:

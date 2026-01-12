@@ -97,6 +97,9 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 # Skip menu marker types (Separator, Section) - handled by @menu
                 if _is_menu_marker_type(field.field_type):
                     continue
+                # Skip Dock[T] fields - they're created by _create_dock_fields in window.py
+                if field.is_dock:
+                    continue
                 if field.field_type is not None:
                     # Validate required bindings for QtPie Widget subclasses
                     _validate_required_bindings(field)

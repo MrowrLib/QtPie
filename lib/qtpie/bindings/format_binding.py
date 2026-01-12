@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from qtpie.widget import Widget
+    from qtpie.window import Window
 
 
 def is_format_string(template: str) -> bool:
@@ -383,7 +384,7 @@ def _get_variable_names(fields: list[_FormatField]) -> set[str]:
     return names
 
 
-def _get_observables_for_name(widget: Widget[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]]:
+def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]]:
     """Get observables for a variable name (may be nested path).
 
     Returns a list of observables to subscribe to. This includes Observable,
@@ -434,7 +435,7 @@ def _get_root_names(names: set[str]) -> set[str]:
 
 
 def create_format_binding(
-    widget: Widget[Any],
+    widget: Widget[Any] | Window[Any],
     template: str,
     setter: Callable[[Any], None],
     *,
@@ -455,7 +456,7 @@ def create_format_binding(
       - {#app} - the QApplication instance (for accessing App class properties)
 
     Args:
-        widget: The Widget instance to resolve paths from.
+        widget: The Widget or Window instance to resolve paths from.
         template: Format string like '{name}, age {age}' or '{len(name)}'.
         setter: Callable to set the formatted value (e.g., label.setText).
         variable: Optional Variable/Observable to use for #self/#var resolution.

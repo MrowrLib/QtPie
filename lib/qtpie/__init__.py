@@ -3,6 +3,7 @@
 from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
 from .dict_widget_repeater import DictWidgetRepeater
+from .dock import Dock
 from .entrypoint import entrypoint
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .new import new
@@ -23,6 +24,7 @@ __all__ = [
     "AppBase",
     "AppConfig",
     "ColorScheme",
+    "Dock",
     "app",
     "DictWidgetRepeater",
     "Menu",
