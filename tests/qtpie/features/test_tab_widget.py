@@ -510,3 +510,206 @@ class TestTabWidgetReactiveList:
         # Clear all
         instance._tab_defs.clear()
         assert_that(instance._tabs.count()).is_equal_to(0)
+
+
+# =============================================================================
+# Field Reference Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTabWidgetFieldReferences:
+    """Test tabs= with field references (existing widgets)."""
+
+    def test_tabs_with_newfield_references(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs=[field_ref, ...] references existing widget fields."""
+
+        @widget(title="User Editor")
+        class UserEditor(Widget):
+            _label: QLabel = new("User content")
+
+        @widget(title="Dog Editor")
+        class DogEditor(Widget):
+            _label: QLabel = new("Dog content")
+
+        @decorator
+        class TestClass(base_class):
+            _user: UserEditor = new(layout=False)
+            _dogs: DogEditor = new(layout=False)
+            _tabs: QTabWidget = new(tabs=[_user, _dogs])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        # Tab names from windowTitle()
+        assert_that(instance._tabs.tabText(0)).is_equal_to("User Editor")
+        assert_that(instance._tabs.tabText(1)).is_equal_to("Dog Editor")
+        # Same widget instances (not new copies)
+        assert instance._tabs.widget(0) is instance._user
+        assert instance._tabs.widget(1) is instance._dogs
+
+    def test_tabs_with_string_references(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs=["field_name", ...] references existing widget fields by name."""
+
+        @widget(title="Settings")
+        class SettingsPanel(Widget):
+            _label: QLabel = new("Settings")
+
+        @widget(title="Profile")
+        class ProfilePanel(Widget):
+            _label: QLabel = new("Profile")
+
+        @decorator
+        class TestClass(base_class):
+            _settings: SettingsPanel = new(layout=False)
+            _profile: ProfilePanel = new(layout=False)
+            _tabs: QTabWidget = new(tabs=["_settings", "_profile"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        assert_that(instance._tabs.tabText(0)).is_equal_to("Settings")
+        assert_that(instance._tabs.tabText(1)).is_equal_to("Profile")
+        assert instance._tabs.widget(0) is instance._settings
+        assert instance._tabs.widget(1) is instance._profile
+
+    def test_tabs_dict_with_newfield_references(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs={"Tab Name": field_ref} with explicit tab names."""
+
+        @widget(title="Original Title")
+        class SomePanel(Widget):
+            _label: QLabel = new("Content")
+
+        @decorator
+        class TestClass(base_class):
+            _panel1: SomePanel = new(layout=False)
+            _panel2: SomePanel = new(layout=False)
+            _tabs: QTabWidget = new(tabs={"First Tab": _panel1, "Second Tab": _panel2})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        # Explicit names override windowTitle
+        assert_that(instance._tabs.tabText(0)).is_equal_to("First Tab")
+        assert_that(instance._tabs.tabText(1)).is_equal_to("Second Tab")
+        assert instance._tabs.widget(0) is instance._panel1
+        assert instance._tabs.widget(1) is instance._panel2
+
+    def test_tabs_dict_with_string_references(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs={"Tab Name": "field_name"} with string refs and explicit names."""
+
+        @widget
+        class Panel(Widget):
+            _label: QLabel = new("Content")
+
+        @decorator
+        class TestClass(base_class):
+            _panel_a: Panel = new(layout=False)
+            _panel_b: Panel = new(layout=False)
+            _tabs: QTabWidget = new(tabs={"Alpha": "_panel_a", "Beta": "_panel_b"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        assert_that(instance._tabs.tabText(0)).is_equal_to("Alpha")
+        assert_that(instance._tabs.tabText(1)).is_equal_to("Beta")
+
+    def test_tabs_with_variable_widget_references(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs=[var_field, ...] works with Variable[T, W] fields."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class User:
+            name: str = ""
+
+        @dataclass
+        class Dog:
+            breed: str = ""
+
+        @widget(title="User Form")
+        class UserForm(Widget):
+            _label: QLabel = new("User form")
+
+        @widget(title="Dog Form")
+        class DogForm(Widget):
+            _label: QLabel = new("Dog form")
+
+        @decorator
+        class TestClass(base_class):
+            _user: Variable[User, UserForm] = new(User("Alice"))(layout=False)
+            _dog: Variable[Dog, DogForm] = new(Dog("Labrador"))(layout=False)
+            _tabs: QTabWidget = new(tabs=[_user, _dog])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        # Tab names from widget's windowTitle
+        assert_that(instance._tabs.tabText(0)).is_equal_to("User Form")
+        assert_that(instance._tabs.tabText(1)).is_equal_to("Dog Form")
+        # Widget instances come from Variable.widget
+        assert instance._tabs.widget(0) is instance._user.widget
+        assert instance._tabs.widget(1) is instance._dog.widget
+
+    def test_tabs_fallback_to_field_name_when_no_title(self, base_class, decorator, qt: QtDriver) -> None:
+        """Tab name falls back to field name if no windowTitle."""
+
+        @widget  # No title=
+        class UntitledPanel(Widget):
+            _label: QLabel = new("Content")
+
+        @decorator
+        class TestClass(base_class):
+            _my_panel: UntitledPanel = new(layout=False)
+            _tabs: QTabWidget = new(tabs=[_my_panel])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(1)
+        # Falls back to field name
+        assert_that(instance._tabs.tabText(0)).is_equal_to("_my_panel")
+
+    def test_tabs_mixed_refs_and_classes(self, base_class, decorator, qt: QtDriver) -> None:
+        """tabs= can mix field references and widget classes."""
+
+        @widget(title="Existing Panel")
+        class ExistingPanel(Widget):
+            _label: QLabel = new("Existing")
+
+        @widget(title="New Panel")
+        class NewPanel(Widget):
+            _label: QLabel = new("New")
+
+        @decorator
+        class TestClass(base_class):
+            _existing: ExistingPanel = new(layout=False)
+            _tabs: QTabWidget = new(tabs=[_existing, NewPanel])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.count()).is_equal_to(2)
+        # First is existing, second is new
+        assert instance._tabs.widget(0) is instance._existing
+        assert isinstance(instance._tabs.widget(1), NewPanel)
+        assert instance._tabs.widget(1) is not instance._existing
+
+    def test_tabs_ref_with_selected_index_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Field references work with selectedIndex= binding."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[int] = new(1)  # Start on second tab
+            _tab_a: TabA = new(layout=False)
+            _tab_b: TabB = new(layout=False)
+            _tabs: QTabWidget = new(
+                tabs=[_tab_a, _tab_b],
+                selectedIndex="_selected",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._tabs.currentIndex()).is_equal_to(1)
+        assert instance._tabs.currentWidget() is instance._tab_b
+
+        # Change selection via Variable
+        instance._selected.value = 0
+        assert instance._tabs.currentWidget() is instance._tab_a

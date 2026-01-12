@@ -958,6 +958,78 @@ def _set_tabs_from_list(
     return tab_widgets
 
 
+def _resolve_widget_from_field(host: QWidget, field_name: str) -> QWidget | None:
+    """Resolve a widget from a field name on the host.
+
+    Handles:
+    - Regular widget fields: returns the widget
+    - Variable[T, W]: returns .widget
+    - Variable[T, Dock[W]]: returns .widget.widget (the inner content widget)
+    """
+    if not hasattr(host, field_name):
+        return None
+
+    field_value = getattr(host, field_name)
+
+    # Check if it's a Variable with a widget
+    if hasattr(field_value, "widget"):
+        widget = field_value.widget
+        # Check if it's a Dock (Variable[T, Dock[W]])
+        if hasattr(widget, "widget"):
+            # It's a Dock, get the inner widget
+            return widget.widget  # type: ignore[no-any-return]
+        return widget  # type: ignore[no-any-return]
+
+    # Regular widget field
+    if isinstance(field_value, QWidget):
+        return field_value
+
+    return None
+
+
+def _set_tabs_from_normalized(
+    host: QWidget,
+    tab_widget: Any,  # QTabWidget
+    tabs: list[dict[str, Any]],
+) -> dict[str, QWidget]:
+    """Populate QTabWidget from normalized tab definitions.
+
+    Tab definitions are dicts with:
+    - {"type": "class", "cls": WidgetClass, "name": "TabName" | None}
+    - {"type": "ref", "field": "field_name", "name": "TabName" | None}
+    """
+    tab_widget.clear()
+    tab_widgets: dict[str, QWidget] = {}
+
+    for tab_def in tabs:
+        tab_type = tab_def.get("type")
+        explicit_name = tab_def.get("name")
+
+        if tab_type == "class":
+            # Create new widget instance
+            widget_cls = tab_def["cls"]
+            widget = widget_cls(parent=tab_widget)
+            # Name: explicit > windowTitle > class name
+            name = explicit_name or widget.windowTitle() or widget_cls.__name__
+
+        elif tab_type == "ref":
+            # Reference existing widget by field name
+            field_name = tab_def["field"]
+            widget = _resolve_widget_from_field(host, field_name)
+            if widget is None:
+                continue  # Skip if field not found
+            # Name: explicit > windowTitle > field name
+            name = explicit_name or widget.windowTitle() or field_name
+
+        else:
+            continue  # Unknown type
+
+        tab_widgets[name] = widget
+        tab_widget.addTab(widget, name)
+
+    return tab_widgets
+
+
 def _bind_tab_widget_to_dict(
     tab_widget: Any,  # QTabWidget
     obs: ObservableDict[str, type[QWidget]],
@@ -1140,10 +1212,9 @@ def _apply_tab_widget_bindings(
                 # Subscribe for reactive updates
                 _bind_tab_widget_to_list(tab_widget, obs, tab_widgets)  # pyright: ignore[reportArgumentType]
 
-    elif isinstance(tabs_source, dict):
-        tab_widgets = _set_tabs_from_dict(tab_widget, tabs_source)  # pyright: ignore[reportUnknownArgumentType]
     elif isinstance(tabs_source, list):
-        tab_widgets = _set_tabs_from_list(tab_widget, tabs_source)  # pyright: ignore[reportUnknownArgumentType]
+        # Normalized tab definitions (list of dicts with type markers)
+        tab_widgets = _set_tabs_from_normalized(host, tab_widget, tabs_source)  # pyright: ignore[reportUnknownArgumentType]
 
     # Set up selection bindings
     if field_info.tab_selected_index:

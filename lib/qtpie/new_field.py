@@ -77,7 +77,12 @@ class NewField:
         self.model_sort: str | Callable[[Any], Any] | None = None
         # QTabWidget support
         self.is_tab_widget: bool = False
-        self.tabs: dict[str, type] | list[type] | str | None = None  # tabs= dict, list, or Variable ref
+        # tabs= can be:
+        # - str: Variable reference like "_tab_defs"
+        # - list[dict]: Normalized tabs with type markers:
+        #   - {"type": "class", "cls": WidgetClass, "name": "TabName" | None}
+        #   - {"type": "ref", "field": "field_name", "name": "TabName" | None}
+        self.tabs: list[dict[str, Any]] | str | None = None
         self.tab_selected_index: str | None = None  # Variable name for selectedIndex binding
         self.tab_selected_widget: str | None = None  # Variable name for selectedWidget binding
         # Translation support - track Translatable markers for binding registration
@@ -532,7 +537,8 @@ class NewField:
             if self._is_qtabwidget_type():
                 self.is_tab_widget = True
                 # tabs= can be dict, list, or Variable reference string
-                self.tabs = self.kwargs.pop("tabs", None)
+                raw_tabs = self.kwargs.pop("tabs", None)
+                self.tabs = self._normalize_tabs(raw_tabs)
                 # Selection bindings for QTabWidget
                 self.tab_selected_index = self.kwargs.pop("selectedIndex", None)
                 self.tab_selected_widget = self.kwargs.pop("selectedWidget", None)
@@ -719,6 +725,58 @@ class NewField:
             return issubclass(self.field_type, QTabWidget)
         except (ImportError, TypeError):
             return False
+
+    def _normalize_tabs(self, tabs: dict[str, Any] | list[Any] | str | None) -> list[dict[str, Any]] | str | None:
+        """Normalize tabs= to a consistent format.
+
+        Supports:
+        - tabs=[WidgetClass, ...] - list of widget classes (create new)
+        - tabs=[field_ref, ...] - list of NewField references (use existing)
+        - tabs=["field_name", ...] - list of string field names (use existing)
+        - tabs={"Tab Name": WidgetClass, ...} - dict with classes (create new)
+        - tabs={"Tab Name": field_ref, ...} - dict with NewField refs (use existing)
+        - tabs={"Tab Name": "field_name", ...} - dict with string refs (use existing)
+        - tabs="_var_name" - Variable reference for reactive tabs
+
+        Returns normalized list of dicts:
+        - {"type": "class", "cls": WidgetClass, "name": "TabName" | None}
+        - {"type": "ref", "field": "field_name", "name": "TabName" | None}
+        Or str for Variable references.
+        """
+        if tabs is None:
+            return None
+
+        # String = Variable reference, keep as-is for reactive binding
+        if isinstance(tabs, str):
+            return tabs
+
+        if isinstance(tabs, dict):
+            result: list[dict[str, Any]] = []
+            for name, value in tabs.items():
+                if isinstance(value, NewField):
+                    # NewField reference - use its field name
+                    result.append({"type": "ref", "field": value.name, "name": name})
+                elif isinstance(value, str):
+                    # String reference to a field
+                    result.append({"type": "ref", "field": value, "name": name})
+                elif isinstance(value, type):
+                    # Widget class - create new instance
+                    result.append({"type": "class", "cls": value, "name": name})
+            return result
+
+        # At this point, tabs must be a list (all other cases returned above)
+        result = []
+        for item in tabs:
+            if isinstance(item, NewField):
+                # NewField reference - use its field name
+                result.append({"type": "ref", "field": item.name, "name": None})
+            elif isinstance(item, str):
+                # String reference to a field
+                result.append({"type": "ref", "field": item, "name": None})
+            elif isinstance(item, type):
+                # Widget class - create new instance
+                result.append({"type": "class", "cls": item, "name": None})
+        return result if result else None
 
     def _is_dock_type(self) -> bool:
         """Check if the field type is a Dock[T] generic alias."""
