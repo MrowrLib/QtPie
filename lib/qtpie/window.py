@@ -645,7 +645,8 @@ def _create_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             continue
 
         # Instantiate the content widget
-        content_widget = content_type(*fld.args, **fld.kwargs)
+        # For Dock[T], widget args come from chained call: new(dock_kwargs)(widget_args)
+        content_widget = content_type(*fld.widget_args, **fld.widget_kwargs)
 
         # Create the QDockWidget
         title = fld.dock_title or name

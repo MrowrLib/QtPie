@@ -561,7 +561,8 @@ class TestContentWidgetConstructorArgs:
 
         @window
         class TestWindow(Window):
-            _label: Dock[QLabel] = new("Hello World", dock="left", title="Label Dock")
+            # new(dock_kwargs)(widget_args)
+            _label: Dock[QLabel] = new(dock="left", title="Label Dock")("Hello World")
 
         win = TestWindow()
         qt.track(win)
@@ -573,7 +574,8 @@ class TestContentWidgetConstructorArgs:
 
         @window
         class TestWindow(Window):
-            _button: Dock[QPushButton] = new(dock="left", title="Button Dock", text="Click Me")
+            # new(dock_kwargs)(widget_kwargs)
+            _button: Dock[QPushButton] = new(dock="left", title="Button Dock")(text="Click Me")
 
         win = TestWindow()
         qt.track(win)
@@ -766,7 +768,8 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            # new(var_default)(dock_kwargs)
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -779,7 +782,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -792,7 +795,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -805,7 +808,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("Hello", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("Hello")(dock="right", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -817,7 +820,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -835,7 +838,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _count: Variable[int, Dock[QSpinBox]] = new(42, dock="right", title="Count")
+            _count: Variable[int, Dock[QSpinBox]] = new(42)(dock="right", title="Count")
 
         win = TestWindow()
         qt.track(win)
@@ -850,7 +853,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="left", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="left", title="Name")
 
         win = TestWindow()
         qt.track(win)
@@ -863,7 +866,7 @@ class TestVariableDockPrimitive:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="My Name Field")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="My Name Field")
 
         win = TestWindow()
         qt.track(win)
@@ -903,8 +906,8 @@ class TestVariableDockComplex:
 
         @window
         class TestWindow(Window):
-            # Using QWidget as content type since DogEditor has no auto-binding
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), dock="right", title="Dog Editor")
+            # new(var_default)(dock_kwargs)
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(dock="right", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -916,7 +919,7 @@ class TestVariableDockComplex:
 
         @window
         class TestWindow(Window):
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), dock="right", title="Dog Editor")
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(dock="right", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -928,7 +931,7 @@ class TestVariableDockComplex:
 
         @window
         class TestWindow(Window):
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), dock="right", title="Dog Editor")
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(dock="right", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -943,7 +946,7 @@ class TestVariableDockComplex:
 
         @window
         class TestWindow(Window):
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), dock="right", title="Dog Editor")
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(dock="right", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -959,7 +962,7 @@ class TestVariableDockComplex:
 
         @window
         class TestWindow(Window):
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), dock="bottom", title="Dog Editor")
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(dock="bottom", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -973,7 +976,7 @@ class TestVariableDockComplex:
         @window
         class TestWindow(Window):
             _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
-            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5), below="_explorer", title="Dog Editor")
+            _dog: Variable[Dog, Dock[QWidget]] = new(Dog("Buddy", 5))(below="_explorer", title="Dog Editor")
 
         win = TestWindow()
         qt.track(win)
@@ -1000,7 +1003,7 @@ class TestVariableDockMixed:
         @window
         class TestWindow(Window):
             _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
             _console: Dock[ConsolePanel] = new(dock="bottom", title="Console")
 
         win = TestWindow()
@@ -1025,7 +1028,7 @@ class TestVariableDockMixed:
         @window
         class TestWindow(Window):
             _label: QLabel = new("Hello")
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="Name")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="Name")
             _button: QPushButton = new("Click")
 
         win = TestWindow()
@@ -1329,7 +1332,7 @@ class TestVariableDockReactiveTitle:
         @window
         class TestWindow(Window):
             _tab_title: Variable[str] = new("Name Editor")
-            _name: Variable[str, Dock[QLineEdit]] = new("", dock="right", title="_tab_title")
+            _name: Variable[str, Dock[QLineEdit]] = new("")(dock="right", title="_tab_title")
 
         win = TestWindow()
         qt.track(win)
@@ -1348,8 +1351,7 @@ class TestVariableDockReactiveTitle:
         class TestWindow(Window):
             _field_name: Variable[str] = new("Name")
             _required: Variable[bool] = new(True)
-            _name: Variable[str, Dock[QLineEdit]] = new(
-                "",
+            _name: Variable[str, Dock[QLineEdit]] = new("")(
                 dock="right",
                 title="{_field_name}{'*' if _required else ''}",
             )
@@ -1535,8 +1537,7 @@ class TestDockFeaturesVariableDock:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new(
-                "",
+            _name: Variable[str, Dock[QLineEdit]] = new("")(
                 dock="right",
                 title="Name",
                 closable=False,
@@ -1553,8 +1554,7 @@ class TestDockFeaturesVariableDock:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new(
-                "",
+            _name: Variable[str, Dock[QLineEdit]] = new("")(
                 dock="right",
                 title="Name",
                 allowedAreas=["left", "right"],
@@ -1573,8 +1573,7 @@ class TestDockFeaturesVariableDock:
 
         @window
         class TestWindow(Window):
-            _name: Variable[str, Dock[QLineEdit]] = new(
-                "",
+            _name: Variable[str, Dock[QLineEdit]] = new("")(
                 dock="left",
                 title="Name",
                 verticalTitleBar=True,

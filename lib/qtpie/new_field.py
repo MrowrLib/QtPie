@@ -109,16 +109,81 @@ class NewField:
         # Variable[T, Dock[W]] support - Variable with a docked widget
         self.is_variable_dock: bool = False
         self.variable_dock_content_type: type | None = None  # The widget type W inside Variable[T, Dock[W]]
+        # Chaining support: track all chained () calls for multi-level patterns
+        # e.g., new(var_default)(dock_kwargs)(widget_kwargs)
+        self._chain_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-    def __call__(self, *widget_args: Any, **widget_kwargs: Any) -> NewField:
-        """Store widget constructor args: new("value")(placeholder="...").
+    def __call__(self, *call_args: Any, **call_kwargs: Any) -> NewField:
+        """Store chained call args: new(...)(...)(...).
 
-        For Variable[T, W], the first new() call stores Variable args,
-        and the second call stores widget constructor args.
+        Supports multiple levels of chaining:
+        - Dock[T]: new(dock_kwargs)(widget_kwargs)
+        - Variable[T, W]: new(var_default)(widget_kwargs)
+        - Variable[T, Dock[W]]: new(var_default)(dock_kwargs)(widget_kwargs)
         """
-        self.widget_args = widget_args
-        self.widget_kwargs = widget_kwargs
+        self._chain_calls.append((call_args, call_kwargs))
         return self
+
+    def _interpret_chain_for_dock(self) -> tuple[dict[str, Any], tuple[Any, ...], dict[str, Any]]:
+        """Interpret chain calls for Dock[T] pattern.
+
+        Pattern: new(dock_kwargs)(widget_args)
+        - First call (self.kwargs): dock kwargs
+        - Chain[0]: widget args/kwargs
+
+        Returns:
+            (dock_kwargs, widget_args, widget_kwargs)
+        """
+        dock_kwargs = dict(self.kwargs)
+        widget_args: tuple[Any, ...] = ()
+        widget_kwargs: dict[str, Any] = {}
+
+        if self._chain_calls:
+            widget_args, widget_kwargs = self._chain_calls[0]
+
+        return dock_kwargs, widget_args, widget_kwargs
+
+    def _interpret_chain_for_variable_dock(self) -> tuple[dict[str, Any], tuple[Any, ...], dict[str, Any]]:
+        """Interpret chain calls for Variable[T, Dock[W]] pattern.
+
+        Pattern: new(var_default)(dock_kwargs)(widget_args)
+        - First call (self.args): variable default
+        - Chain[0]: dock kwargs
+        - Chain[1]: widget args/kwargs
+
+        Returns:
+            (dock_kwargs, widget_args, widget_kwargs)
+        """
+        dock_kwargs: dict[str, Any] = {}
+        widget_args: tuple[Any, ...] = ()
+        widget_kwargs: dict[str, Any] = {}
+
+        if len(self._chain_calls) >= 1:
+            # First chain call is dock kwargs
+            _, dock_kwargs = self._chain_calls[0]
+        if len(self._chain_calls) >= 2:
+            # Second chain call is widget args/kwargs
+            widget_args, widget_kwargs = self._chain_calls[1]
+
+        return dock_kwargs, widget_args, widget_kwargs
+
+    def _interpret_chain_for_variable(self) -> tuple[tuple[Any, ...], dict[str, Any]]:
+        """Interpret chain calls for Variable[T, W] pattern (no Dock).
+
+        Pattern: new(var_default)(widget_args)
+        - First call (self.args): variable default
+        - Chain[0]: widget args/kwargs
+
+        Returns:
+            (widget_args, widget_kwargs)
+        """
+        widget_args: tuple[Any, ...] = ()
+        widget_kwargs: dict[str, Any] = {}
+
+        if self._chain_calls:
+            widget_args, widget_kwargs = self._chain_calls[0]
+
+        return widget_args, widget_kwargs
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
@@ -151,45 +216,36 @@ class NewField:
                 if dock_args:
                     self.is_variable_dock = True
                     self.variable_dock_content_type = dock_args[0]
-                    # Extract dock-specific kwargs from self.kwargs (not widget_kwargs)
-                    # For Variable[T, Dock[W]], dock params are in new(..., dock="left", title="...")
-                    self.dock_area = self.kwargs.pop("dock", None)
-                    # title= was normalized to windowTitle by _normalize_kwargs_aliases
-                    self.dock_title = self.kwargs.pop("windowTitle", None)
-                    self.dock_below = self.kwargs.pop("below", None)
-                    self.dock_right_of = self.kwargs.pop("rightOf", None)
-                    self.dock_left_of = self.kwargs.pop("leftOf", None)
-                    self.dock_above = self.kwargs.pop("above", None)
-                    self.dock_group = self.kwargs.pop("group", None)
-                    self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
-                    self.dock_icon = self.kwargs.pop("icon", None)
-                    self.dock_visible = self.kwargs.pop("visible", None)
-                    self.dock_floating = self.kwargs.pop("floating", None)
-                    self.dock_closable = self.kwargs.pop("closable", None)
-                    self.dock_floatable = self.kwargs.pop("floatable", None)
-                    self.dock_movable = self.kwargs.pop("movable", None)
-                    self.dock_allowed_areas = self.kwargs.pop("allowedAreas", None)
-                    self.dock_vertical_title_bar = self.kwargs.pop("verticalTitleBar", None)
-                    # Also check widget_kwargs in case of chained call pattern
-                    if not self.dock_area and self.widget_kwargs:
-                        widget_kwargs_copy = dict(self.widget_kwargs)
-                        self.dock_area = self.dock_area or widget_kwargs_copy.pop("dock", None)
-                        self.dock_title = self.dock_title or widget_kwargs_copy.pop("windowTitle", None)
-                        self.dock_below = self.dock_below or widget_kwargs_copy.pop("below", None)
-                        self.dock_right_of = self.dock_right_of or widget_kwargs_copy.pop("rightOf", None)
-                        self.dock_left_of = self.dock_left_of or widget_kwargs_copy.pop("leftOf", None)
-                        self.dock_above = self.dock_above or widget_kwargs_copy.pop("above", None)
-                        self.dock_group = self.dock_group or widget_kwargs_copy.pop("group", None)
-                        self.dock_group_selected_index = self.dock_group_selected_index or widget_kwargs_copy.pop("groupSelectedIndex", None)
-                        self.dock_icon = self.dock_icon or widget_kwargs_copy.pop("icon", None)
-                        self.dock_visible = self.dock_visible or widget_kwargs_copy.pop("visible", None)
-                        self.dock_floating = self.dock_floating or widget_kwargs_copy.pop("floating", None)
-                        self.dock_closable = self.dock_closable if self.dock_closable is not None else widget_kwargs_copy.pop("closable", None)
-                        self.dock_floatable = self.dock_floatable if self.dock_floatable is not None else widget_kwargs_copy.pop("floatable", None)
-                        self.dock_movable = self.dock_movable if self.dock_movable is not None else widget_kwargs_copy.pop("movable", None)
-                        self.dock_allowed_areas = self.dock_allowed_areas or widget_kwargs_copy.pop("allowedAreas", None)
-                        self.dock_vertical_title_bar = self.dock_vertical_title_bar if self.dock_vertical_title_bar is not None else widget_kwargs_copy.pop("verticalTitleBar", None)
-                        self.widget_kwargs = widget_kwargs_copy
+
+                    # Use triple-chaining pattern: new(var_default)(dock_kwargs)(widget_kwargs)
+                    dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_variable_dock()
+
+                    # Normalize title -> windowTitle in dock_kwargs
+                    if "title" in dock_kwargs:
+                        dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
+
+                    # Extract dock-specific kwargs from dock_kwargs
+                    self.dock_area = dock_kwargs.pop("dock", None)
+                    self.dock_title = dock_kwargs.pop("windowTitle", None)
+                    self.dock_below = dock_kwargs.pop("below", None)
+                    self.dock_right_of = dock_kwargs.pop("rightOf", None)
+                    self.dock_left_of = dock_kwargs.pop("leftOf", None)
+                    self.dock_above = dock_kwargs.pop("above", None)
+                    self.dock_group = dock_kwargs.pop("group", None)
+                    self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
+                    self.dock_icon = dock_kwargs.pop("icon", None)
+                    self.dock_visible = dock_kwargs.pop("visible", None)
+                    self.dock_floating = dock_kwargs.pop("floating", None)
+                    self.dock_closable = dock_kwargs.pop("closable", None)
+                    self.dock_floatable = dock_kwargs.pop("floatable", None)
+                    self.dock_movable = dock_kwargs.pop("movable", None)
+                    self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
+                    self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+
+                    # Store widget args/kwargs for later widget creation
+                    self.widget_args = widget_args
+                    self.widget_kwargs = widget_kwargs
+
                     # Store dock info for window.py to use
                     dock_info = {
                         "dock_area": self.dock_area,
@@ -211,6 +267,11 @@ class NewField:
                     }
                     # Use the content type as widget_type for the descriptor
                     widget_type = self.variable_dock_content_type
+            else:
+                # Regular Variable[T, W] - use single-chaining pattern: new(var_default)(widget_kwargs)
+                widget_args, widget_kwargs = self._interpret_chain_for_variable()
+                self.widget_args = widget_args
+                self.widget_kwargs = widget_kwargs
 
             # Extract layout params from widget_kwargs (they're layout params, not widget constructor params)
             widget_kwargs_copy = dict(self.widget_kwargs)
@@ -252,38 +313,48 @@ class NewField:
             if type_args:
                 self.dock_content_type = type_args[0]
 
-            # Extract dock-specific kwargs
-            self.dock_area = self.kwargs.pop("dock", None)
-            # title= was normalized to windowTitle by _normalize_kwargs_aliases
-            self.dock_title = self.kwargs.pop("windowTitle", None)
-            self.dock_below = self.kwargs.pop("below", None)
-            self.dock_right_of = self.kwargs.pop("rightOf", None)
-            self.dock_left_of = self.kwargs.pop("leftOf", None)
-            self.dock_above = self.kwargs.pop("above", None)
-            self.dock_group = self.kwargs.pop("group", None)
-            self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
-            self.dock_icon = self.kwargs.pop("icon", None)
-            self.dock_visible = self.kwargs.pop("visible", None)
-            self.dock_floating = self.kwargs.pop("floating", None)
-            self.dock_closable = self.kwargs.pop("closable", None)
-            self.dock_floatable = self.kwargs.pop("floatable", None)
-            self.dock_movable = self.kwargs.pop("movable", None)
-            self.dock_allowed_areas = self.kwargs.pop("allowedAreas", None)
-            self.dock_vertical_title_bar = self.kwargs.pop("verticalTitleBar", None)
+            # Use double-chaining pattern: new(dock_kwargs)(widget_kwargs)
+            dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_dock()
 
-            # Extract name= for objectName
-            self.object_name = self.kwargs.pop("name", None)
+            # Normalize title -> windowTitle in dock_kwargs
+            if "title" in dock_kwargs:
+                dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
 
-            # Extract classes= for CSS classes
-            classes = self.kwargs.pop("classes", None)
+            # Extract dock-specific kwargs from dock_kwargs
+            self.dock_area = dock_kwargs.pop("dock", None)
+            self.dock_title = dock_kwargs.pop("windowTitle", None)
+            self.dock_below = dock_kwargs.pop("below", None)
+            self.dock_right_of = dock_kwargs.pop("rightOf", None)
+            self.dock_left_of = dock_kwargs.pop("leftOf", None)
+            self.dock_above = dock_kwargs.pop("above", None)
+            self.dock_group = dock_kwargs.pop("group", None)
+            self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
+            self.dock_icon = dock_kwargs.pop("icon", None)
+            self.dock_visible = dock_kwargs.pop("visible", None)
+            self.dock_floating = dock_kwargs.pop("floating", None)
+            self.dock_closable = dock_kwargs.pop("closable", None)
+            self.dock_floatable = dock_kwargs.pop("floatable", None)
+            self.dock_movable = dock_kwargs.pop("movable", None)
+            self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
+            self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+
+            # Extract name= for objectName from dock_kwargs
+            self.object_name = dock_kwargs.pop("name", None)
+
+            # Extract classes= for CSS classes from dock_kwargs
+            classes = dock_kwargs.pop("classes", None)
             if classes is not None:
                 self.css_classes = classes
 
             # layout=False doesn't apply to docks (they're not in layouts)
             # But pop it anyway to avoid passing to constructor
-            self.kwargs.pop("layout", None)
+            dock_kwargs.pop("layout", None)
 
-            # Remaining kwargs go to content widget constructor
+            # Store widget args/kwargs for content widget creation
+            self.widget_args = widget_args
+            self.widget_kwargs = widget_kwargs
+
+            # Remaining dock_kwargs are ignored (they should all be consumed)
             return
 
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source

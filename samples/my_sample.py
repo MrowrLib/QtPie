@@ -153,30 +153,37 @@ class UserEditor(Widget[User]):
     # error_messages: list[QLabel] = new(bind="validation_error_messages", stylesheet="color: red;")
 
 
+@entrypoint
 @widget
 class SomeTabs(Widget):
-    tabs: QTabWidget = new()
-    user: Variable[User, UserEditor] = new(User("", ""))(layout=False)
-    dogs: Variable[list[Dog], DogEditor] = new([])(layout=False)
+    # user: Variable[User, UserEditor] = new(User("", ""))(layout=False)
+    # dogs: Variable[list[Dog], DogEditor] = new([])(layout=False)
 
-    btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
+    # ... oh ^ I wanna be able to bind these! without it making new ones, hmm!
+    # tabs: QTabWidget = new(tabs=[user, dogs])
 
-    btn_print_user: QPushButton = new("Print User", clicked="print_user")
-    btn_print_dogs: QPushButton = new("Print Dogs", clicked="print_dogs")
+    # Instead of this:
+    # How do I even pass the class constructor args here in this syntax?
+    tabs: QTabWidget = new(tabs={"User": UserEditor, "Dogs": DogEditor})
 
-    def __setup__(self) -> None:
-        self.tabs.addTab(self.user.widget, "User")
-        self.tabs.addTab(self.dogs.widget, "Dogs")
+    # btn_add_dog: QPushButton = new("Add Dog", clicked="add_dog")
 
-    def add_dog(self) -> None:
-        self.dogs.append(Dog(name="New Dog", age=1))
+    # btn_print_user: QPushButton = new("Print User", clicked="print_user")
+    # btn_print_dogs: QPushButton = new("Print Dogs", clicked="print_dogs")
 
-    def print_user(self) -> None:
-        print(f"User: {self.user.value.username}, Email: {self.user.value.email}")
+    # def __setup__(self) -> None:
+    #     self.tabs.addTab(self.user.widget, "User")
+    #     self.tabs.addTab(self.dogs.widget, "Dogs")
 
-    def print_dogs(self) -> None:
-        for dog in self.dogs:
-            print(f"Dog: {dog.name}, Age: {dog.age}")
+    # def add_dog(self) -> None:
+    #     self.dogs.append(Dog(name="New Dog", age=1))
+
+    # def print_user(self) -> None:
+    #     print(f"User: {self.user.value.username}, Email: {self.user.value.email}")
+
+    # def print_dogs(self) -> None:
+    #     for dog in self.dogs:
+    #         print(f"Dog: {dog.name}, Age: {dog.age}")
 
 
 @dataclass
@@ -693,7 +700,6 @@ class DogsCollection:
     dogs: list[Dog]
 
 
-@entrypoint
 @widget(record=DogsCollection(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)]))
 class MyComboBox(Widget[DogsCollection]):
     # Let's have a search box which when typed in filters down the list of dogs shown
