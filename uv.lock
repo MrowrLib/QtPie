@@ -4,7 +4,10 @@ requires-python = ">=3.13"
 
 [manifest]
 members = [
+    "forc",
     "forc-project",
+    "forc-tests",
+    "fork-test-apis",
     "qtpie",
     "tests",
     "v2-prototyping",
@@ -172,6 +175,17 @@ wheels = [
 ]
 
 [[package]]
+name = "forc"
+version = "0.1.0"
+source = { editable = "examples/forc/src" }
+dependencies = [
+    { name = "qtpie" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "qtpie" }]
+
+[[package]]
 name = "forc-project"
 version = "0.1.0"
 source = { editable = "examples/forc" }
@@ -181,6 +195,26 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "poethepoet", specifier = ">=0.40.0" }]
+
+[[package]]
+name = "forc-tests"
+version = "0.1.0"
+source = { virtual = "examples/forc/tests" }
+dependencies = [
+    { name = "forc" },
+    { name = "qtpie", extra = ["test"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "forc" },
+    { name = "qtpie", extras = ["test"] },
+]
+
+[[package]]
+name = "fork-test-apis"
+version = "0.1.0"
+source = { virtual = "examples/forc/test-apis" }
 
 [[package]]
 name = "ghp-import"

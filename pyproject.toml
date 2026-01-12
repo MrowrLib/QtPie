@@ -11,6 +11,9 @@ members = [
   "lib",
   "tests",
   "examples/forc",
+  "examples/forc/src",
+  "examples/forc/tests",
+  "examples/forc/test-apis",
 ]
 
 [tool.uv.sources]

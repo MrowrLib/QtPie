@@ -198,75 +198,87 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     _watcher: QssWatcher | ScssWatcher | None = None
     _translation_watcher: Any = None
 
-    if is_app_subclass:
-        # Target is an App or QApplication subclass
-        app = cast(QApplication, target())
-
-        # Load translations before creating widgets
-        _translation_watcher = _load_translations(app, config)
-
-        # Apply stylesheet to the app
-        _watcher = _apply_stylesheet(app, config)
-    else:
-        # Create a default App with dark/light mode support
+    def create_default_app() -> QApplication:
+        """Create app with dark/light mode from config."""
         app_kwargs: dict[str, Any] = {}
         if config.dark_mode:
             app_kwargs["dark_mode"] = True
         if config.light_mode:
             app_kwargs["light_mode"] = True
+        return App(**app_kwargs)
 
-        app = App(**app_kwargs)
+    def setup_app(application: QApplication) -> None:
+        """Apply translations and stylesheet to app."""
+        nonlocal _translation_watcher, _watcher
+        _translation_watcher = _load_translations(application, config)
+        _watcher = _apply_stylesheet(application, config)
 
-        # Load translations before creating widgets
-        _translation_watcher = _load_translations(app, config)
+    if is_app_subclass:
+        # Target is an App or QApplication subclass
+        app = cast(QApplication, target())
+        setup_app(app)
 
-        # Apply stylesheet to the app
-        _watcher = _apply_stylesheet(app, config)
+    elif is_function:
+        func = cast(Callable[..., Any], target)
 
-        if is_function:
-            # Target is a function
-            func = cast(Callable[..., Any], target)
-            if asyncio.iscoroutinefunction(func):
-                # Async function - need to run it in the event loop
-                loop = qasync.QEventLoop(app)
-                asyncio.set_event_loop(loop)
+        if asyncio.iscoroutinefunction(func):
+            # Async function - need app for event loop first
+            app = create_default_app()
+            setup_app(app)
 
-                # Handle CTRL-C gracefully
-                def handle_sigint(*_: object) -> None:
-                    app.quit()
+            loop = qasync.QEventLoop(app)
+            asyncio.set_event_loop(loop)
 
-                signal.signal(signal.SIGINT, handle_sigint)
+            # Handle CTRL-C gracefully
+            def handle_sigint(*_: object) -> None:
+                app.quit()
 
-                # Timer to let Python process signals
-                signal_timer = QTimer()
-                signal_timer.timeout.connect(lambda: None)
-                signal_timer.start(100)
+            signal.signal(signal.SIGINT, handle_sigint)
 
-                with loop:
-                    result: Any = loop.run_until_complete(func())  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                    if isinstance(result, QWidget):
-                        window = result
-                    # Now continue with the event loop
-                    quit_event = asyncio.Event()
-                    app.aboutToQuit.connect(quit_event.set)
-                    if window is not None:
-                        _apply_window_config(window, config)
-                        window.show()
-                    loop.run_until_complete(quit_event.wait())  # pyright: ignore[reportUnknownMemberType]
-                return
-            else:
-                # Sync function
-                result = func()
+            # Timer to let Python process signals
+            signal_timer = QTimer()
+            signal_timer.timeout.connect(lambda: None)
+            signal_timer.start(100)
+
+            with loop:
+                result: Any = loop.run_until_complete(func())  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
                 if isinstance(result, QWidget):
                     window = result
-        elif is_class:
-            # Target is a widget class (decorated with @widget or @window)
+                # Now continue with the event loop
+                quit_event = asyncio.Event()
+                app.aboutToQuit.connect(quit_event.set)
+                if window is not None:
+                    _apply_window_config(window, config)
+                    window.show()
+                loop.run_until_complete(quit_event.wait())  # pyright: ignore[reportUnknownMemberType]
+            return
+        else:
+            # Sync function - call it first to check if it returns an app
+            result = func()
+
+            if isinstance(result, QApplication):
+                # Function returned an app - use it directly
+                app = result
+            else:
+                # Create default app
+                app = create_default_app()
+                if isinstance(result, QWidget):
+                    window = result
+
+            setup_app(app)
+
+    else:
+        # Widget class
+        app = create_default_app()
+        setup_app(app)
+
+        if is_class:
             widget_cls = cast(type[QWidget], target)
             window = widget_cls()
 
-        # Handle window= parameter
-        if config.window is not None and window is None:
-            window = config.window()
+    # Handle window= parameter
+    if config.window is not None and window is None:
+        window = config.window()
 
     # Apply config to window
     if window is not None:

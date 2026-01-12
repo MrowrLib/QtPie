@@ -1,0 +1,6 @@
+[project]
+dependencies = []
+description = "Example APIs for Forc local development"
+name = "fork-test-apis"
+requires-python = ">=3.13"
+version = "0.1.0"

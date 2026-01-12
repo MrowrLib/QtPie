@@ -1,11 +1,35 @@
 {
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "bd prime",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bd prime",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(uv run ruff:*)",
       "Bash(uv run pyright:*)",
       "Bash(uv run python:*)"
     ],
-    "deny": [],
-    "ask": []
+    "ask": [],
+    "deny": []
   }
 }

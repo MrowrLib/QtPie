@@ -14,6 +14,7 @@ from qtpie.entrypoint import (
     _compile_scss_to_string,  # pyright: ignore[reportPrivateUsage]
     _is_main_module,  # pyright: ignore[reportPrivateUsage]
     _load_qrc_stylesheet,  # pyright: ignore[reportPrivateUsage]
+    _run_entrypoint,  # pyright: ignore[reportPrivateUsage]
     _should_auto_run,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -334,6 +335,61 @@ class TestApplyStylesheet:
         # Should load once and not return a watcher (can't watch QRC)
         assert_that(result).is_none()
         assert_that(qapp.styleSheet()).contains("color: blue")
+
+
+class TestFunctionReturningApp:
+    """Tests for @entrypoint with functions that return QApplication."""
+
+    def test_entrypoint_accepts_function_returning_app(self) -> None:
+        """@entrypoint should accept function that returns QApplication."""
+        from qtpie import App
+
+        @entrypoint
+        def my_main() -> App:
+            return App()
+
+        # Should have config stored
+        assert_that(hasattr(my_main, ENTRY_CONFIG_ATTR)).is_true()
+        # Function should still be callable
+        assert_that(callable(my_main)).is_true()
+
+    def test_entrypoint_with_config_on_app_returning_function(self) -> None:
+        """@entrypoint config should be stored for app-returning functions."""
+        from qtpie import App
+
+        @entrypoint(dark_mode=True, title="Test App")
+        def my_main() -> App:
+            return App()
+
+        config = getattr(my_main, ENTRY_CONFIG_ATTR)
+        assert_that(config.dark_mode).is_true()
+        assert_that(config.title).is_equal_to("Test App")
+
+    def test_run_entrypoint_uses_returned_app(self, qapp: App) -> None:
+        """_run_entrypoint should use the app returned by function."""
+        from unittest.mock import MagicMock, patch
+
+        # Create a mock app
+        mock_app = MagicMock(spec=App)
+        mock_app.run = MagicMock()
+
+        def my_main() -> MagicMock:
+            return mock_app
+
+        config = EntryConfig()
+
+        # Patch _load_translations and _apply_stylesheet to avoid side effects
+        with (
+            patch("qtpie.entrypoint._load_translations") as mock_load_tr,
+            patch("qtpie.entrypoint._apply_stylesheet") as mock_apply_ss,
+        ):
+            _run_entrypoint(my_main, config)
+
+        # Should have called setup on the returned app
+        mock_load_tr.assert_called_once_with(mock_app, config)
+        mock_apply_ss.assert_called_once_with(mock_app, config)
+        # Should have called run on the returned app
+        mock_app.run.assert_called_once()
 
 
 class TestEntrypointStylesheetConfig:
