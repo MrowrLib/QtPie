@@ -1,6 +1,3 @@
-# pyright: reportOptionalMemberAccess=false
-# pyright: reportAttributeAccessIssue=false
-# pyright: reportUnknownMemberType=false
 """Tests for YAML file format implementation."""
 
 import tempfile
@@ -75,7 +72,8 @@ class TestYamlFormatRequest:
         self.fmt.save_request(req, path)
         loaded = self.fmt.load_request(path)
 
-        assert_that(loaded.auth).is_instance_of(BasicAuth)
+        assert loaded.auth is not None
+        assert isinstance(loaded.auth, BasicAuth)
         assert_that(loaded.auth.username).is_equal_to("user")
         assert_that(loaded.auth.password).is_equal_to("pass")
 
@@ -90,7 +88,8 @@ class TestYamlFormatRequest:
         self.fmt.save_request(req, path)
         loaded = self.fmt.load_request(path)
 
-        assert_that(loaded.auth).is_instance_of(BearerAuth)
+        assert loaded.auth is not None
+        assert isinstance(loaded.auth, BearerAuth)
         assert_that(loaded.auth.token).is_equal_to("secret-token")
 
     def test_save_and_load_request_with_api_key_auth(self):
@@ -104,7 +103,8 @@ class TestYamlFormatRequest:
         self.fmt.save_request(req, path)
         loaded = self.fmt.load_request(path)
 
-        assert_that(loaded.auth).is_instance_of(ApiKeyAuth)
+        assert loaded.auth is not None
+        assert isinstance(loaded.auth, ApiKeyAuth)
         assert_that(loaded.auth.key).is_equal_to("X-API-Key")
         assert_that(loaded.auth.value).is_equal_to("my-key")
         assert_that(loaded.auth.location).is_equal_to("header")
@@ -185,10 +185,11 @@ class TestYamlFormatCollection:
         assert_that(loaded.name).is_equal_to("API")
         assert_that(loaded.items).is_length(2)
         # Items are sorted: 'auth' directory comes before 'health.yaml'
-        assert_that(loaded.items[0]).is_instance_of(Collection)
-        assert_that(loaded.items[0].name).is_equal_to("Auth")
-        assert_that(loaded.items[0].items).is_length(1)
-        assert_that(loaded.items[1]).is_instance_of(Request)
+        inner_coll = loaded.items[0]
+        assert isinstance(inner_coll, Collection)
+        assert_that(inner_coll.name).is_equal_to("Auth")
+        assert_that(inner_coll.items).is_length(1)
+        assert isinstance(loaded.items[1], Request)
         assert_that(loaded.items[1].name).is_equal_to("Health")
 
 
