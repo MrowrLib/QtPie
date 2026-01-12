@@ -822,6 +822,4 @@ Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for a
 - `bd close <id>` - Complete work
 - `bd sync` - Sync with git (run at session end)
 
-Read AGENTS.md for more info.
-
 For full workflow details: `bd prime`

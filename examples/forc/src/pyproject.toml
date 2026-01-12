@@ -1,6 +1,10 @@
 [project]
 dependencies = [
   "qtpie",
+  "cattrs>=24.1.0",
+  "ruamel.yaml>=0.18.0",
+  "python-dotenv>=1.0.0",
+  "httpx>=0.27.0",
 ]
 description = "Free Open-source Rest Client"
 name = "forc"
@@ -12,4 +16,4 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["forc"]

@@ -17,6 +17,7 @@ members = [
 ]
 
 [tool.uv.sources]
+forc = {workspace = true}
 qtpie = {workspace = true}
 
 [dependency-groups]
@@ -34,7 +35,7 @@ dev = [
 ]
 
 [tool.pyright]
-exclude = ["v1/", ".venv/", "samples/.venv/"]
+exclude = ["v1/", ".venv/", "samples/.venv/", "examples/forc/.venv/"]
 pythonPlatform = "All"
 pythonVersion = "3.13"
 reportPrivateImportUsage = false

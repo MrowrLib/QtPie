@@ -16,4 +16,4 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src", "tests", "test-apis"]
+packages = ["tests", "test-apis"]

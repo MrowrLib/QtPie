@@ -1,12 +1,9 @@
 [project]
 dependencies = [
-    "qtpie[test]",
+  "qtpie[test]",
 ]
 description = "Add your description here"
 name = "tests"
 readme = "README.md"
 requires-python = ">=3.13"
 version = "0.1.0"
-
-[tool.uv.sources]
-qtpie = { workspace = true }

@@ -1,7 +1,11 @@
 [project]
 dependencies = [
-  "forc",
-  "qtpie[test]",
+    "assertpy>=1.1",
+    "forc",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-sugar>=1.1.1",
+    "qtpie[test]",
 ]
 description = "Tests for Forc"
 name = "forc-tests"
