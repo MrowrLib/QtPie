@@ -75,6 +75,11 @@ class NewField:
         self.model_filter: str | None = None  # Filter expression evaluated per item
         # Sort key for model widgets: "{age}", "method_name", or callable
         self.model_sort: str | Callable[[Any], Any] | None = None
+        # QTabWidget support
+        self.is_tab_widget: bool = False
+        self.tabs: dict[str, type] | list[type] | str | None = None  # tabs= dict, list, or Variable ref
+        self.tab_selected_index: str | None = None  # Variable name for selectedIndex binding
+        self.tab_selected_widget: str | None = None  # Variable name for selectedWidget binding
         # Translation support - track Translatable markers for binding registration
         self.translatable_args: list[tuple[int, Any]] = []  # (index, Translatable)
         self.translatable_kwargs: dict[str, Any] = {}  # kwarg_name -> Translatable
@@ -317,6 +322,15 @@ class NewField:
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)
 
+            # Extract QTabWidget-specific kwargs
+            if self._is_qtabwidget_type():
+                self.is_tab_widget = True
+                # tabs= can be dict, list, or Variable reference string
+                self.tabs = self.kwargs.pop("tabs", None)
+                # Selection bindings for QTabWidget
+                self.tab_selected_index = self.kwargs.pop("selectedIndex", None)
+                self.tab_selected_widget = self.kwargs.pop("selectedWidget", None)
+
             # layout=False → exclude from layout
             layout_kwarg = self.kwargs.pop("layout", None)
             if layout_kwarg is False:
@@ -485,6 +499,20 @@ class NewField:
     def _is_model_widget_type(self) -> bool:
         """Check if the field type is a model widget (QComboBox, QListView, QTableView, QTreeView)."""
         return self._is_qcombobox_type() or self._is_qlistview_type() or self._is_qtableview_type() or self._is_qtreeview_type()
+
+    def _is_qtabwidget_type(self) -> bool:
+        """Check if the field type is a QTabWidget subclass."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QTabWidget
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QTabWidget)
+        except (ImportError, TypeError):
+            return False
 
     def _is_signal(self, name: str) -> bool:
         """Check if name is a signal on the field type."""
