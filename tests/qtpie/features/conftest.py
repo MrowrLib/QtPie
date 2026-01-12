@@ -50,6 +50,13 @@ QWIDGET_CLASS_TYPES = [
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
 
+# Window and App only - for features that require QMainWindow (docks, menus, etc.)
+# App internally creates a Window, so docks work on both
+WINDOW_CLASS_TYPES = [
+    pytest.param(Window, window, id="Window"),
+    pytest.param(AppBase, app, id="App"),
+]
+
 
 def create_and_track(
     qt: QtDriver,
@@ -72,3 +79,14 @@ def create_and_track(
         qt.track(instance)
 
     return instance
+
+
+def get_main_window(instance: Any, base_class: type) -> Window:
+    """Get the QMainWindow from an instance.
+
+    - Window: returns the instance itself
+    - AppBase: returns instance.window
+    """
+    if base_class is AppBase:
+        return instance.window  # type: ignore[return-value]
+    return instance  # type: ignore[return-value]
