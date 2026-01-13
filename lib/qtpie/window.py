@@ -130,6 +130,31 @@ class Window[T = None](QMainWindow):
             raise TypeError(f"{type(self).__name__} must be decorated with @window")
         super().__init__(*args, **kwargs)
 
+    def build[W](self, cls: type[W], /, *args: Any, **kwargs: Any) -> W:
+        """Build an instance at runtime with new()-like signal and property wiring.
+
+        This is the runtime equivalent of new(). Use it when you need to create
+        widget instances dynamically (not at class definition time).
+
+        Args:
+            cls: The class to instantiate.
+            *args: Positional arguments passed to the constructor.
+            **kwargs: Keyword arguments. Signal names (e.g., clicked="handler")
+                      are extracted and connected to methods on this Window.
+
+        Returns:
+            The created instance with signals connected and properties applied.
+
+        Example:
+            def on_reload(self) -> None:
+                old_widget = self.my_widget
+                old_widget.deleteLater()
+                self.my_widget = self.build(MyWidget, on_action="handle_action")
+        """
+        from qtpie.create import create_instance
+
+        return create_instance(self, cls, *args, **kwargs)
+
     if TYPE_CHECKING:
         # Lie to pyright: say record returns T for field autocomplete
         @property

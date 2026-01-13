@@ -2,6 +2,7 @@
 
 from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
+from .create import create_instance
 from .dict_widget_repeater import DictWidgetRepeater
 from .dock import Dock
 from .entrypoint import entrypoint
@@ -28,6 +29,7 @@ __all__ = [
     "Dock",
     "Stretch",
     "app",
+    "create_instance",
     "DictWidgetRepeater",
     "Menu",
     "MenuConfig",

@@ -1,20 +1,25 @@
-from forc.app.menus import FileMenu
-from forc.app.widgets.layout import SidebarWidget
-from forc.app.widgets.requests import RequestEditorWidget
-from forc.app.widgets.response import ResponseViewerWidget
-from qtpie import App, Dock, app, new
+from typing import override
+
+from forc.app.windows import ForcWindow
+from qtpie import App, app, new
 
 from .qrc_resources import qt_resource_data
 
 _qrc = qt_resource_data  # Prevent unused import from being removed
 
 
-@app(title="Forc - Free Open-source Rest Client", icon=":/icon.png")
+@app(title="Forc - Free Open-source Rest Client")
 class ForcApp(App):
-    """Main Forc application with dock-based layout."""
+    main_window: ForcWindow = new(on_reload_window="on_reload_window")
 
-    _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")
-    _request: RequestEditorWidget = new()
-    _response: Dock[ResponseViewerWidget] = new(dock="right", title="Response")
+    @override
+    def on_run(self) -> None:
+        self.main_window.show()
 
-    _file_menu: FileMenu = new(on_quit="quit")
+    def on_reload_window(self) -> None:
+        """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""
+        self.setQuitOnLastWindowClosed(False)
+        self.main_window.close()
+        self.main_window = self.build(ForcWindow, on_reload_window="on_reload_window")
+        self.main_window.show()
+        self.setQuitOnLastWindowClosed(True)

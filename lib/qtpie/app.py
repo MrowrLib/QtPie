@@ -368,6 +368,24 @@ class AppBase[T = None]:
             reason: The activation reason (DoubleClick, Trigger, Context, etc.)
         """
 
+    def on_run(self) -> None:
+        """Called when the application starts running.
+
+        This hook is called after the event loop has started, making it safe
+        to perform async operations or any initialization that requires
+        a running event loop.
+
+        Override this method to perform startup tasks.
+
+        Example::
+
+            @app
+            class MyApp(App):
+                def on_run(self) -> None:
+                    print("App is now running!")
+                    self.load_initial_data()
+        """
+
     # -------------------------------------------------------------------------
     # Window control methods
     # -------------------------------------------------------------------------
@@ -401,6 +419,31 @@ class AppBase[T = None]:
     def tray_icon(self) -> QSystemTrayIcon | None:
         """Access the system tray icon, if any."""
         return getattr(self, "_tray_icon", None)
+
+    def build[W](self, cls: type[W], /, *args: Any, **kwargs: Any) -> W:
+        """Build an instance at runtime with new()-like signal and property wiring.
+
+        This is the runtime equivalent of new(). Use it when you need to create
+        widget instances dynamically (not at class definition time).
+
+        Args:
+            cls: The class to instantiate.
+            *args: Positional arguments passed to the constructor.
+            **kwargs: Keyword arguments. Signal names (e.g., clicked="handler")
+                      are extracted and connected to methods on this App.
+
+        Returns:
+            The created instance with signals connected and properties applied.
+
+        Example:
+            def on_reload_window(self) -> None:
+                self.main_window.close()
+                self.main_window = self.build(ForcWindow, on_reload="on_reload")
+                self.main_window.show()
+        """
+        from qtpie.create import create_instance
+
+        return create_instance(self, cls, *args, **kwargs)
 
     def __init__(self) -> None:
         """Initialize AppBase with declarative features.
@@ -538,6 +581,11 @@ class App[T = None](AppBase[T], QApplication):
         # Auto-show window if show=True in config
         if self._qtpie_config.show:
             self.show()
+
+        # Schedule on_run hook to be called after the event loop starts
+        if type(self).on_run is not App.on_run:
+            QTimer.singleShot(0, self.on_run)
+
         return run_app(self)
 
     async def run_async(self) -> int:
@@ -834,8 +882,8 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             menu_fields.append((name, instance))
             continue
 
-        # QWidget -> central widget
-        if isinstance(instance, QWidget):
+        # QWidget -> central widget (but not QMainWindow - those are top-level)
+        if isinstance(instance, QWidget) and not isinstance(instance, QMainWindow):
             widget_fields.append((name, instance))
             continue
 
