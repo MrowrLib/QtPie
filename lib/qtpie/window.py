@@ -24,7 +24,7 @@ from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
-from .widget import IconType, _resolve_icon, _validate_layout_params
+from .widget import IconType, _validate_layout_params
 
 
 @dataclass
@@ -55,6 +55,8 @@ class WindowConfig:
     corners: dict[str, str] | None = None  # {"top_left": "left", "bottom_right": "bottom", ...}
     dock_state_key: str | None = None  # Key for QSettings persistence
     docks_locked: str | None = None  # Variable binding for lock/unlock all docks
+    # Window icon (resolved at runtime)
+    icon: IconType = None
 
 
 class Window[T = None](QMainWindow):
@@ -144,6 +146,15 @@ class Window[T = None](QMainWindow):
 
         Returns:
             The created instance with signals connected and properties applied.
+
+        Supported (see create_instance for full details):
+            - Signal connections: clicked="method_name" or clicked=lambda: ...
+            - Widget props: enabled=False, toolTip="...", etc.
+            - name=, classes=, bind=, visible=, enabled=, ref(), t()
+            - Variable bindings for child widgets with required bindings (bare Variable[T])
+
+        NOT supported (only work with new() at class definition time):
+            - list/dict repeaters, label=, grid=, stretch=, layout hints
 
         Example:
             def on_reload(self) -> None:
@@ -368,10 +379,7 @@ def window[W: Window[Any]](
     """
     if title is not None:
         kwargs["windowTitle"] = title
-    # icon is resolved and stored for later application
-    resolved_icon = _resolve_icon(icon)
-    if resolved_icon is not None:
-        kwargs["windowIcon"] = resolved_icon
+    # icon is stored raw and resolved at runtime (when Qt resources are available)
     if stylesheet is not None:
         kwargs["styleSheet"] = stylesheet
 
@@ -387,6 +395,7 @@ def window[W: Window[Any]](
         config.corners = corners
         config.dock_state_key = dockStateKey
         config.docks_locked = docksLocked
+        config.icon = icon
 
         # Auto-wrap async methods (e.g., async def on_close)
         from qtpie.async_wrap import wrap_async_methods
@@ -488,7 +497,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Skip reactive props (with {}) and Translatable - they'll be handled by apply_reactive_widget_props
         from .bindings import is_format_string
         from .translations.translatable import Translatable
-        from .utils.layouts import apply_object_name_and_classes, apply_widget_props
+        from .utils.layouts import apply_object_name_and_classes, apply_widget_props, resolve_icon
 
         def skip_reactive_or_translatable(prop_name: str, value: Any) -> bool:
             if isinstance(value, str) and is_format_string(value):
@@ -498,6 +507,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
             return False
 
         apply_widget_props(self, config.widget_props, skip_filter=skip_reactive_or_translatable)
+
+        # Apply icon at runtime (when Qt resources are available)
+        if config.icon is not None:
+            resolved_icon = resolve_icon(config.icon)
+            if resolved_icon is not None:
+                self.setWindowIcon(resolved_icon)
 
         # Apply objectName and CSS classes
         apply_object_name_and_classes(

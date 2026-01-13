@@ -305,6 +305,15 @@ class Widget[T = None](QWidget):
         Returns:
             The created instance with signals connected and properties applied.
 
+        Supported (see create_instance for full details):
+            - Signal connections: clicked="method_name" or clicked=lambda: ...
+            - Widget props: enabled=False, toolTip="...", etc.
+            - name=, classes=, bind=, visible=, enabled=, ref(), t()
+            - Variable bindings for child widgets with required bindings (bare Variable[T])
+
+        NOT supported (only work with new() at class definition time):
+            - list/dict repeaters, label=, grid=, stretch=, layout hints
+
         Example:
             def on_add_item(self) -> None:
                 new_item = self.build(ItemWidget, on_remove="on_remove_item")
@@ -404,10 +413,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     # title is an alias for windowTitle
     if title is not None:
         kwargs["windowTitle"] = title
-    # icon is resolved and stored for later application
-    resolved_icon = _resolve_icon(icon)
-    if resolved_icon is not None:
-        kwargs["windowIcon"] = resolved_icon
+    # icon is stored raw and resolved at runtime (when Qt resources are available)
     # stylesheet is an alias for styleSheet
     if stylesheet is not None:
         kwargs["styleSheet"] = stylesheet
@@ -421,6 +427,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         target._qtpie_config.widget_props = kwargs
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
+        target._qtpie_config.icon = icon
 
         # Auto-wrap async methods (e.g., async def closeEvent)
         from qtpie.async_wrap import wrap_async_methods
@@ -814,6 +821,12 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
         config.css_classes,
         default_name=type(widget).__name__,
     )
+
+    # Apply icon at runtime (when Qt resources are available)
+    if config.icon is not None:
+        resolved_icon = resolve_icon(config.icon)
+        if resolved_icon is not None:
+            widget.setWindowIcon(resolved_icon)
 
     # Apply widget properties, skipping reactive ones
     def skip_reactive(prop_name: str, value: Any) -> bool:

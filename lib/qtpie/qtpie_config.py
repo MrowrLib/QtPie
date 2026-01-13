@@ -4,6 +4,7 @@ from typing import Any
 
 from .layout import LayoutType
 from .new_field import NewField
+from .utils.layouts import IconType
 
 __all__ = ["_QtPieConfig"]
 
@@ -24,6 +25,7 @@ class _QtPieConfig:
         "object_name",
         "css_classes",
         "required_bindings",
+        "icon",
     )
 
     def __init__(self) -> None:
@@ -39,3 +41,4 @@ class _QtPieConfig:
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
         self.required_bindings: set[str] = set()  # Bare Variable[T] fields that must be provided
+        self.icon: IconType = None  # Window icon (resolved at runtime)

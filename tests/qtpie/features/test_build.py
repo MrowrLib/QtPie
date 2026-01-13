@@ -10,6 +10,7 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportImplicitOverride=false
 """Tests for create() - runtime instantiation with new()-like features.
 
 create_instance() is the top-level function.
@@ -21,7 +22,7 @@ from assertpy import assert_that
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QLabel, QPushButton
 
-from qtpie import Widget, widget
+from qtpie import Widget, new, widget
 from qtpie.create import create_instance
 from qtpie.testing import QtDriver
 
@@ -307,3 +308,165 @@ class TestCssClasses:
         assert_that(classes).contains("highlight")
         assert_that(classes).contains("large")
         assert_that(classes).contains("bold")
+
+
+# =============================================================================
+# bind= format bindings
+# =============================================================================
+
+
+class TestBindExpr:
+    """Test bind= format string bindings."""
+
+    def test_bind_to_variable(self, qt: QtDriver) -> None:
+        """bind= creates reactive binding to parent Variable."""
+        from qtpie import Variable
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(42)
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.label = self.build(QLabel, bind="Count: {_count}")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.label.text()).is_equal_to("Count: 42")
+
+        # Update the variable
+        parent._count.value = 100
+        assert_that(parent.label.text()).is_equal_to("Count: 100")
+
+    def test_bind_with_expression(self, qt: QtDriver) -> None:
+        """bind= with complex expression."""
+        from qtpie import Variable
+
+        @widget
+        class Parent(Widget):
+            _x: Variable[int] = new(10)
+            _y: Variable[int] = new(20)
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.label = self.build(QLabel, bind="Sum: {_x + _y}")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.label.text()).is_equal_to("Sum: 30")
+
+        parent._x.value = 5
+        assert_that(parent.label.text()).is_equal_to("Sum: 25")
+
+
+# =============================================================================
+# visible=/enabled= property bindings
+# =============================================================================
+
+
+class TestPropertyBindings:
+    """Test visible= and enabled= property bindings."""
+
+    def test_visible_binding_simple(self, qt: QtDriver) -> None:
+        """visible= with simple variable reference."""
+        from qtpie import Variable
+
+        @widget
+        class Parent(Widget):
+            _show_label: Variable[bool] = new(True)
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.label = self.build(QLabel, "Hello", visible="_show_label")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.label.isVisible()).is_true()
+
+        parent._show_label.value = False
+        assert_that(parent.label.isVisible()).is_false()
+
+    def test_enabled_binding_expression(self, qt: QtDriver) -> None:
+        """enabled= with expression binding."""
+        from qtpie import Variable
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.btn = self.build(QPushButton, "Submit", enabled="{_count > 0}")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.btn.isEnabled()).is_false()
+
+        parent._count.value = 5
+        assert_that(parent.btn.isEnabled()).is_true()
+
+
+# =============================================================================
+# ref() deferred bindings
+# =============================================================================
+
+
+class TestRefBindings:
+    """Test ref() deferred attribute references."""
+
+    def test_ref_resolves_at_build_time(self, qt: QtDriver) -> None:
+        """ref() resolves attribute from context."""
+        from qtpie import ref
+
+        @widget
+        class Parent(Widget):
+            my_tooltip = "This is my tooltip"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.btn = self.build(QPushButton, "Click", toolTip=ref("my_tooltip"))
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.btn.toolTip()).is_equal_to("This is my tooltip")
+
+
+# =============================================================================
+# t() translatable support
+# =============================================================================
+
+
+class TestTranslatableSupport:
+    """Test t() translatable strings in build()."""
+
+    def test_translatable_positional_arg(self, qt: QtDriver) -> None:
+        """Translatable in positional arg resolves to current translation."""
+        from qtpie.translations.translatable import Translatable
+
+        # Create a mock translatable that just returns its text
+        class MockTranslatable(Translatable):
+            def resolve(self, widget_context: str | None = None) -> str:
+                return f"[{self.text}]"
+
+        label = create_instance(None, QLabel, MockTranslatable("Hello"))
+        qt.track(label)
+
+        assert_that(label.text()).is_equal_to("[Hello]")
+
+    def test_translatable_in_prop(self, qt: QtDriver) -> None:
+        """Translatable in widget prop resolves correctly."""
+        from qtpie.translations.translatable import Translatable
+
+        class MockTranslatable(Translatable):
+            def resolve(self, widget_context: str | None = None) -> str:
+                return f"translated:{self.text}"
+
+        btn = create_instance(None, QPushButton, "Click", toolTip=MockTranslatable("Tooltip"))
+        qt.track(btn)
+
+        assert_that(btn.toolTip()).is_equal_to("translated:Tooltip")

@@ -227,6 +227,15 @@ class Menu[T = None](QMenu):
         Returns:
             The created instance with signals connected and properties applied.
 
+        Supported (see create_instance for full details):
+            - Signal connections: triggered="method_name" or triggered=lambda: ...
+            - Widget props: enabled=False, toolTip="...", etc.
+            - name=, classes=, bind=, visible=, enabled=, ref(), t()
+            - Variable bindings for child widgets with required bindings (bare Variable[T])
+
+        NOT supported (only work with new() at class definition time):
+            - list/dict repeaters, label=, grid=, stretch=, layout hints
+
         Example:
             def add_recent_file(self, path: str) -> None:
                 action = self.build(QAction, path, triggered="open_recent")

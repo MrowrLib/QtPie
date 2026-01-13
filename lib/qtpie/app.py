@@ -435,6 +435,15 @@ class AppBase[T = None]:
         Returns:
             The created instance with signals connected and properties applied.
 
+        Supported (see create_instance for full details):
+            - Signal connections: clicked="method_name" or clicked=lambda: ...
+            - Widget props: enabled=False, toolTip="...", etc.
+            - name=, classes=, bind=, visible=, enabled=, ref(), t()
+            - Variable bindings for child widgets with required bindings (bare Variable[T])
+
+        NOT supported (only work with new() at class definition time):
+            - list/dict repeaters, label=, grid=, stretch=, layout hints
+
         Example:
             def on_reload_window(self) -> None:
                 self.main_window.close()

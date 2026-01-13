@@ -593,3 +593,28 @@ class TestWidgetIcon:
         w = qt.track(MyWidget())
         assert_that(w.windowTitle()).is_equal_to("My Widget")
         assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_string_resolved_at_runtime(self, qt: QtDriver, tmp_path: Path) -> None:
+        """icon= string path is resolved at instance creation, not at class definition.
+
+        This ensures Qt resource paths like ':/icon.png' work even when the
+        resource is registered after the class is defined.
+        """
+        from qtpy.QtGui import QImage
+
+        # Create icon file AFTER class definition
+        icon_file = tmp_path / "deferred_widget_icon.png"
+
+        # Define class with path to file that doesn't exist yet
+        @widget(icon=str(icon_file))
+        class MyWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        # Now create the icon file
+        img = QImage(16, 16, QImage.Format.Format_ARGB32)
+        img.fill(0xFF00FF00)  # Green
+        img.save(str(icon_file))
+
+        # Icon should be resolved now at instantiation time
+        w = qt.track(MyWidget())
+        assert_that(w.windowIcon().isNull()).is_false()

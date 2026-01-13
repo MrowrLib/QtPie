@@ -7,7 +7,7 @@ from forc.app.widgets.response import ResponseViewerWidget
 from qtpie import Dock, Window, new, window
 
 
-@window(title="Forc - Free Open-source Rest Client")  # , icon=":/icon.png")
+@window(title="Forc - Free Open-source Rest Client", icon=":/icon.png")
 class ForcWindow(Window):
     """Main Forc window with dock-based layout."""
 
