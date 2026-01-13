@@ -20,11 +20,12 @@ type BindingSource = Variable[Any] | Observable[Any] | ObservableList[Any] | Obs
 def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> BindingSource | None:
     """Resolve a binding path to its source Observable/Variable.
 
-    Resolution order:
+    Resolution order (on widget, then parent hierarchy):
     1. Original path: self.<path> exactly as written (e.g., '_dogs' -> widget._dogs)
     2. Stripped path: self.<path_without_underscore> (e.g., '_dogs' -> widget.dogs)
     3. Record: self.record.<path> if Widget[T]
     4. Underscore fallback: self._<path> if no match (e.g., 'name' -> widget._name)
+    5. Parent hierarchy: Walk up parent() chain looking for Variables
 
     'dog.breed?.name' is passed through to observable_for_path().
 
@@ -49,39 +50,68 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
 
     stripped_parts = lookup_path.replace("?.", ".").split(".", 1)
     stripped_first = stripped_parts[0]
+    underscore_first = f"_{stripped_first}"
 
-    # Helper to check if an attribute is a valid binding source
-    def try_resolve_attr(attr_name: str, nested_rest: str | None = None) -> BindingSource | None:
-        if hasattr(widget, attr_name):
-            raw_attr = getattr(widget, attr_name)
-            if isinstance(raw_attr, Variable):
-                attr = cast("Variable[Any]", raw_attr)
-                if nested_rest:
-                    # Check if rest is a property on Variable itself (e.g., validation_error_messages)
-                    if hasattr(attr, nested_rest) and not nested_rest.startswith("_"):
-                        prop_val = getattr(attr, nested_rest)
-                        if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
-                            return cast(BindingSource, prop_val)
-                    # Nested path into Variable[ComplexType]
-                    observable = attr.observable
-                    if isinstance(observable, ObservableProxy):
-                        return observable.observable_for_path(nested_rest)
-                return attr
-            # Handle Observable properties directly (e.g., is_dirty, is_valid)
-            if isinstance(raw_attr, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
-                return cast(BindingSource, raw_attr)
+    # Helper to check if an attribute is a valid binding source on any object
+    def try_resolve_attr_on(obj: Any, attr_name: str, nested_rest: str | None = None) -> BindingSource | None:
+        try:
+            if not hasattr(obj, attr_name):
+                return None
+            raw_attr = getattr(obj, attr_name)
+        except Exception:
+            return None
+        if isinstance(raw_attr, Variable):
+            attr = cast("Variable[Any]", raw_attr)
+            if nested_rest:
+                # Check if rest is a property on Variable itself (e.g., validation_error_messages)
+                if hasattr(attr, nested_rest) and not nested_rest.startswith("_"):
+                    prop_val = getattr(attr, nested_rest)
+                    if isinstance(prop_val, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
+                        return cast(BindingSource, prop_val)
+                # Nested path into Variable[ComplexType]
+                observable = attr.observable
+                if isinstance(observable, ObservableProxy):
+                    return observable.observable_for_path(nested_rest)
+            return attr
+        # Handle Observable properties directly (e.g., is_dirty, is_valid)
+        if isinstance(raw_attr, (Observable, ObservableList, ObservableDict, ObservableSet, ObservableProxy)):
+            return cast(BindingSource, raw_attr)
         return None
 
-    # 1. Try original path first (e.g., '_dogs' -> widget._dogs)
-    result = try_resolve_attr(original_first, rest)
-    if result is not None:
-        return result
-
-    # 2. Try stripped path if different (e.g., '_dogs' stripped to 'dogs' -> widget.dogs)
-    if has_leading_underscore:
-        result = try_resolve_attr(stripped_first, rest)
+    # Try exact and stripped variants on a given object (NOT underscore fallback)
+    def try_exact_variants_on(obj: Any) -> BindingSource | None:
+        # 1. Try original path first (e.g., '_dogs' -> obj._dogs)
+        result = try_resolve_attr_on(obj, original_first, rest)
         if result is not None:
             return result
+
+        # 2. Try stripped path if different (e.g., '_dogs' stripped to 'dogs' -> obj.dogs)
+        if has_leading_underscore:
+            result = try_resolve_attr_on(obj, stripped_first, rest)
+            if result is not None:
+                return result
+
+        return None
+
+    # Try all name variants including underscore fallback (for parent hierarchy)
+    def try_all_variants_on(obj: Any) -> BindingSource | None:
+        # 1. Try exact variants first
+        result = try_exact_variants_on(obj)
+        if result is not None:
+            return result
+
+        # 2. Try underscore fallback (e.g., 'name' -> obj._name)
+        if not has_leading_underscore:
+            result = try_resolve_attr_on(obj, underscore_first, rest)
+            if result is not None:
+                return result
+
+        return None
+
+    # First, try exact match on the widget itself (NOT underscore fallback)
+    result = try_exact_variants_on(widget)
+    if result is not None:
+        return result
 
     # Ensure _qtpie state exists for widget-level property access
     from qtpie.state import QtPieState
@@ -89,7 +119,7 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
     if not hasattr(widget, "_qtpie"):
         widget._qtpie = QtPieState(widget)  # type: ignore[attr-defined]
 
-    # 3. Try record if Widget[T] - use ORIGINAL path first, then stripped
+    # Try record if Widget[T] - use ORIGINAL path first, then stripped
     if hasattr(widget, "_qtpie_config"):
         config = widget._qtpie_config
         if config.record_type is not None:
@@ -110,10 +140,35 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
                 except AttributeError:
                     pass
 
-    # 4. Underscore fallback (e.g., 'name' -> widget._name)
+    # Underscore fallback on widget itself (e.g., 'name' -> widget._name)
+    # This comes AFTER record check to prioritize record fields
     if not has_leading_underscore:
-        first_with_underscore = f"_{stripped_first}"
-        result = try_resolve_attr(first_with_underscore, rest)
+        result = try_resolve_attr_on(widget, underscore_first, rest)
+        if result is not None:
+            return result
+
+    # Walk up parent hierarchy looking for Variables
+    from qtpy.QtWidgets import QApplication
+
+    current: Any = widget
+    while True:
+        if not hasattr(current, "parent") or not callable(current.parent):
+            break
+        parent: Any = current.parent()
+        if parent is None:
+            break
+
+        # Try all name variants on parent
+        result = try_all_variants_on(parent)
+        if result is not None:
+            return result
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        result = try_all_variants_on(app)
         if result is not None:
             return result
 

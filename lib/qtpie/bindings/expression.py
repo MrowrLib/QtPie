@@ -7,6 +7,18 @@ from typing import Any, cast
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
 
+def _try_get_variable_from_obj(obj: Any, var_name: str) -> Any | None:
+    """Try to get a Variable from an object by name (with underscore variants)."""
+    from qtpie.variable import Variable
+
+    for attr_name in [var_name, f"_{var_name}"]:
+        if hasattr(obj, attr_name):
+            raw_attr: Any = getattr(obj, attr_name)
+            if isinstance(raw_attr, Variable):
+                return raw_attr  # pyright: ignore[reportUnknownVariableType]
+    return None
+
+
 def create_expression_binding(
     context: Any,
     expression: str,
@@ -42,9 +54,13 @@ def create_expression_binding(
     observables: list[Observable[Any]] = []
     reactive_collections: list[ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]] = []
 
+    # Track which variables we found on the context vs need to search parents for
+    found_on_context: set[str] = set()
+
     for var_name in var_names:
         source = resolve_binding_source(context, var_name)  # type: ignore[arg-type]
         if source is not None:
+            found_on_context.add(var_name)
             if isinstance(source, Variable):
                 obs: Any = source.observable
                 if isinstance(obs, Observable):
@@ -61,12 +77,66 @@ def create_expression_binding(
             for attr_name in [var_name, f"_{var_name}"]:
                 if hasattr(context, attr_name):
                     raw_attr: Any = getattr(context, attr_name)
-                    if isinstance(raw_attr, Observable):
+                    if isinstance(raw_attr, Variable):
+                        found_on_context.add(var_name)
+                        obs = raw_attr.observable  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                        if isinstance(obs, Observable):
+                            observables.append(cast(Observable[Any], obs))
+                        elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                            reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
+                        break
+                    elif isinstance(raw_attr, Observable):
+                        found_on_context.add(var_name)
                         observables.append(cast(Observable[Any], raw_attr))
                         break
                     elif isinstance(raw_attr, (ObservableList, ObservableDict, ObservableProxy)):
+                        found_on_context.add(var_name)
                         reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
                         break
+
+    # Search parent widget hierarchy for variables not found on context
+    # This allows expressions like isinstance(selected_collection_item, Request) where
+    # selected_collection_item is on a parent widget
+    vars_needing_parent_lookup = var_names - found_on_context
+    parent_var_sources: dict[str, Variable[Any]] = {}
+
+    if vars_needing_parent_lookup and hasattr(context, "parent") and callable(context.parent):
+        from qtpy.QtWidgets import QApplication
+
+        current: Any = context
+        while vars_needing_parent_lookup:
+            parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+            if parent_obj is None:
+                break
+
+            for var_name in list(vars_needing_parent_lookup):
+                found_var = _try_get_variable_from_obj(parent_obj, var_name)
+                if found_var is not None:
+                    parent_var_sources[var_name] = found_var
+                    vars_needing_parent_lookup.discard(var_name)
+                    # Subscribe to the parent's Variable
+                    obs = found_var.observable
+                    if isinstance(obs, Observable):
+                        observables.append(cast(Observable[Any], obs))
+                    elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
+
+            current = parent_obj
+
+        # Also check QApplication.instance() for app-level Variables
+        if vars_needing_parent_lookup:
+            app_instance = QApplication.instance()
+            if app_instance is not None:
+                for var_name in list(vars_needing_parent_lookup):
+                    found_var = _try_get_variable_from_obj(app_instance, var_name)
+                    if found_var is not None:
+                        parent_var_sources[var_name] = found_var
+                        vars_needing_parent_lookup.discard(var_name)
+                        obs = found_var.observable
+                        if isinstance(obs, Observable):
+                            observables.append(cast(Observable[Any], obs))
+                        elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                            reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
 
     # Also check for nested Observable paths like "view_model.is_dirty" or "record.is_valid"
     # Find patterns like "name.attr" or "name.attr.method()" in the expression
@@ -90,12 +160,28 @@ def create_expression_binding(
                     reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obj))
                 break
 
+    # Get module globals for class lookups (for isinstance checks)
+    # This allows expressions like isinstance(item, Request) to work
+    module_globals: dict[str, Any] = {}
+    context_class = type(context)  # pyright: ignore[reportUnknownVariableType]
+    if hasattr(context_class, "__module__"):  # pyright: ignore[reportUnknownArgumentType]
+        import sys
+
+        module = sys.modules.get(context_class.__module__)
+        if module is not None:
+            module_globals = vars(module)
+
     def compute() -> Any:
         # Build context with current values
         eval_context: dict[str, Any] = {}
 
         for var_name in var_names:
-            # Try with underscore prefix first, then without
+            # First check if we found this in parent hierarchy
+            if var_name in parent_var_sources:
+                eval_context[var_name] = parent_var_sources[var_name].value  # pyright: ignore[reportUnknownMemberType]
+                continue
+
+            # Try with underscore prefix first, then without on the context
             for attr_name in [f"_{var_name}", var_name]:
                 if hasattr(context, attr_name):
                     raw_attr: Any = getattr(context, attr_name)
@@ -104,6 +190,10 @@ def create_expression_binding(
                     else:
                         eval_context[var_name] = raw_attr
                     break
+            else:
+                # Not found on context - check module globals (for classes like Request)
+                if var_name in module_globals:
+                    eval_context[var_name] = module_globals[var_name]
 
         # Evaluate the expression
         try:
@@ -112,20 +202,95 @@ def create_expression_binding(
         except Exception:
             return None
 
-    # Set initial value
-    setter(compute())
-
     # Subscribe to ALL reactive objects - when any changes, recompute
     # Observable.on_change takes Callable[[T], None]
     def on_observable_change(_: Any) -> None:
         setter(compute())
 
-    for obs in observables:
-        obs.on_change(on_observable_change)
-
     # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
     def on_collection_change() -> None:
         setter(compute())
 
+    # Track subscribed observables to avoid duplicates
+    subscribed: set[int] = set()
+
+    def subscribe_to_observable(obs: Observable[Any]) -> None:
+        obs_id = id(obs)
+        if obs_id not in subscribed:
+            subscribed.add(obs_id)
+            obs.on_change(on_observable_change)
+
+    def subscribe_to_collection(coll: ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]) -> None:
+        coll_id = id(coll)
+        if coll_id not in subscribed:
+            subscribed.add(coll_id)
+            coll.on_change(on_collection_change)
+
+    for obs in observables:
+        subscribe_to_observable(obs)
+
     for coll in reactive_collections:
-        coll.on_change(on_collection_change)
+        subscribe_to_collection(coll)
+
+    # Set initial value
+    setter(compute())
+
+    # Deferred parent lookup: if we still have unresolved variables, try again after parenting
+    # This handles cases where the variable is on a parent widget that isn't connected yet
+    if vars_needing_parent_lookup and hasattr(context, "parent") and callable(context.parent):
+        from qtpy.QtCore import QObject, QTimer
+
+        def try_deferred_parent_lookup() -> bool:
+            """Try to find and subscribe to parent Variables. Returns True if any new ones found."""
+            nonlocal vars_needing_parent_lookup
+            found_any = False
+
+            from qtpy.QtWidgets import QApplication
+
+            current: Any = context
+            while vars_needing_parent_lookup:
+                parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+                if parent_obj is None:
+                    break
+
+                for var_name in list(vars_needing_parent_lookup):
+                    found_var = _try_get_variable_from_obj(parent_obj, var_name)
+                    if found_var is not None:
+                        parent_var_sources[var_name] = found_var
+                        vars_needing_parent_lookup.discard(var_name)
+                        found_any = True
+                        # Subscribe to the parent's Variable
+                        obs = found_var.observable  # pyright: ignore[reportUnknownMemberType]
+                        if isinstance(obs, Observable):
+                            subscribe_to_observable(cast(Observable[Any], obs))
+                        elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                            subscribe_to_collection(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
+
+                current = parent_obj
+
+            # Also check QApplication.instance()
+            if vars_needing_parent_lookup:
+                app_instance = QApplication.instance()
+                if app_instance is not None:
+                    for var_name in list(vars_needing_parent_lookup):
+                        found_var = _try_get_variable_from_obj(app_instance, var_name)
+                        if found_var is not None:
+                            parent_var_sources[var_name] = found_var
+                            vars_needing_parent_lookup.discard(var_name)
+                            found_any = True
+                            obs = found_var.observable  # pyright: ignore[reportUnknownMemberType]
+                            if isinstance(obs, Observable):
+                                subscribe_to_observable(cast(Observable[Any], obs))
+                            elif isinstance(obs, (ObservableList, ObservableDict, ObservableProxy)):
+                                subscribe_to_collection(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
+
+            return found_any
+
+        def on_deferred_check() -> None:
+            """Deferred check for parent Variables after event loop processes."""
+            if try_deferred_parent_lookup():
+                setter(compute())
+
+        # Schedule deferred check after current call stack completes
+        if isinstance(context, QObject):
+            QTimer.singleShot(0, on_deferred_check)

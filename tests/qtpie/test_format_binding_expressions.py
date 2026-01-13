@@ -420,19 +420,19 @@ class TestCombinedExpressions:
 class TestErrorHandling:
     """Test graceful error handling in expressions."""
 
-    def test_invalid_expression_shows_error(self, qt: QtDriver) -> None:
-        """Invalid expression shows error message."""
+    def test_invalid_expression_shows_none(self, qt: QtDriver) -> None:
+        """Invalid expression shows 'None' (allows using `or 'default'` pattern)."""
 
         @widget
         class Test(Widget):
             _label: QLabel = new(bind="{undefined_variable}")
 
         w = qt.track(Test())
-        # Should show an error rather than crash
-        assert_that(w._label.text()).contains("error")
+        # Should show "None" rather than crash (allows `or 'default'` pattern)
+        assert_that(w._label.text()).is_equal_to("None")
 
-    def test_exception_in_expression(self, qt: QtDriver) -> None:
-        """Exception in expression is caught."""
+    def test_exception_in_expression_shows_none(self, qt: QtDriver) -> None:
+        """Exception in expression shows 'None' (allows using `or 'default'` pattern)."""
 
         @widget
         class Test(Widget):
@@ -440,8 +440,24 @@ class TestErrorHandling:
             _label: QLabel = new(bind="{1 / _value}")
 
         w = qt.track(Test())
-        # Division by zero should be caught
-        assert_that(w._label.text()).contains("error")
+        # Division by zero should be caught, show "None"
+        assert_that(w._label.text()).is_equal_to("None")
+
+    def test_none_with_fallback(self, qt: QtDriver) -> None:
+        """None values can use 'or' fallback pattern."""
+
+        @widget
+        class Test(Widget):
+            _value: Variable[str | None] = new(None)
+            _label: QLabel = new(bind="{_value or 'N/A'}")
+
+        w = qt.track(Test())
+        # Should fall back to 'N/A' since _value is None
+        assert_that(w._label.text()).is_equal_to("N/A")
+
+        # When value is set, should show the value
+        w._value.value = "Hello"
+        assert_that(w._label.text()).is_equal_to("Hello")
 
 
 class TestObjectPropertyBinding:

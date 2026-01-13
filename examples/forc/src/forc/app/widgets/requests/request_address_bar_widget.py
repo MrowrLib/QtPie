@@ -5,9 +5,8 @@ from qtpie import Widget, new, widget
 
 @widget(layout="horizontal")
 class RequestAddressBarWidget(Widget):
-    """HTTP method selector, URL input, and Send button."""
-
-    # Placeholder - will use Variable[HttpMethod] later
-    _method: QLabel = new("[GET v]")
-    _url: QLineEdit = new(placeholderText="Enter request URL...")
+    _method: QLabel = new(bind="{selected_collection_item?.method?.name}")
+    _url: QLineEdit = new(bind="selected_collection_item?.url")
     _send: QPushButton = new("Send")
+
+    # , placeholderText="Enter request URL...")

@@ -250,7 +250,7 @@ class Ref:
                     if callable(value) and not isinstance(value, type):
                         value = value()
                 except Exception:
-                    value = f"<error: {field.expression}>"
+                    value = None  # Return None on errors (allows `or 'default'` in expressions)
 
                 # Apply format spec if present
                 if field.format_spec:

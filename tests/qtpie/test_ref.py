@@ -697,17 +697,17 @@ class TestRefExpressions:
         assert_that(result).is_equal_to("Title: My App")
 
     def test_expression_error_shows_placeholder(self, qt: QtDriver) -> None:
-        """Expression errors show error placeholder."""
+        """Expression errors show 'None' (allows `or 'default'` pattern)."""
 
         @widget
         class MyWidget(Widget):
             _x: Variable[int] = new(5)
 
         w = qt.track(MyWidget())
-        # _nonexistent doesn't exist
+        # _nonexistent doesn't exist - shows None
         r = ref("Value: {_nonexistent}")
         result = r.resolve(w)
-        assert_that(result).contains("<error:")
+        assert_that(result).is_equal_to("Value: None")
 
     def test_expression_with_self_placeholder(self, qt: QtDriver) -> None:
         """ref("{#self}") refers to the instance."""

@@ -210,6 +210,208 @@ def _resolve_or_create_variable(
     return None
 
 
+def _apply_model_binding(
+    host: QWidget,
+    widget_instance: QWidget,
+    source: Any,  # BindingSource
+    bind_path: str,
+    field_info: Any,  # NewField
+) -> bool:
+    """Apply model binding for QComboBox, QListView, QTreeView, QTableView.
+
+    Returns True if model binding was applied, False otherwise.
+    """
+
+    from observant import Observable, ObservableList
+
+    from qtpie.variable import Variable as VarType
+
+    obs_list: ObservableList[Any] | None = None
+    root_variable: VarType[Any] | None = None
+
+    # For nested paths like "workspace.collections", find the ROOT Variable
+    # so we can re-sync when it changes from None to a real object
+    bind_path_normalized = bind_path.replace("?.", ".")
+    if "." in bind_path_normalized:
+        root_name = bind_path_normalized.split(".")[0]
+        # Try to find root variable on host or in parent hierarchy
+        root_attr: Any = getattr(host, root_name, None)
+        if root_attr is None:
+            # Walk up parent hierarchy
+            from qtpy.QtWidgets import QApplication
+
+            current: Any = host
+            while root_attr is None:
+                if not hasattr(current, "parent") or not callable(current.parent):
+                    break
+                parent: Any = current.parent()
+                if parent is None:
+                    break
+                root_attr = getattr(parent, root_name, None)
+                current = parent
+            # Fallback to QApplication
+            if root_attr is None:
+                app = QApplication.instance()
+                if app is not None:
+                    root_attr = getattr(app, root_name, None)
+        if root_attr is not None and isinstance(root_attr, VarType):
+            root_variable = cast(VarType[Any], root_attr)
+
+    # Extract ObservableList from Variable or use directly
+    if isinstance(source, VarType):
+        wrapper = source.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        if isinstance(wrapper, ObservableList):
+            obs_list = wrapper  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(wrapper, (Observable, ObservableProxy)):
+            # Source might be Observable[list] or ObservableProxy with nested list
+            # Create a synced ObservableList that updates when source changes
+            val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(val, list):
+                obs_list = ObservableList(cast(list[Any], val))
+            elif val is None:
+                # Initially None - create empty list, will populate later
+                obs_list = ObservableList[Any]()
+    elif isinstance(source, ObservableList):
+        obs_list = source  # pyright: ignore[reportUnknownVariableType]
+    elif isinstance(source, Observable):
+        val = source.get()  # pyright: ignore[reportUnknownVariableType]
+        if isinstance(val, list):
+            obs_list = ObservableList(cast(list[Any], val))
+        elif val is None:
+            obs_list = ObservableList[Any]()
+
+    if obs_list is None:
+        return False
+
+    # Decide which model type to use
+    # QTableView (or explicit columns=) uses ReactiveTableModel
+    # QTreeView (or explicit children=) uses ReactiveTreeModel
+    # Others (QComboBox, QListView) use ReactiveListModel
+    use_table_model = _is_table_view(widget_instance) or field_info.table_columns is not None
+    use_tree_model = _is_tree_view(widget_instance) or field_info.tree_children is not None
+
+    if use_tree_model:
+        # Create ReactiveTreeModel for QTreeView
+        from qtpie.bindings.format_binding import create_item_formatter
+        from qtpie.models import ReactiveTreeModel
+
+        # Check for format= to customize item display
+        format_fn = None
+        if field_info.model_format is not None:
+            format_fn = create_item_formatter(field_info.model_format)
+
+        # Default children attribute to "children" if not specified
+        children_attr = field_info.tree_children or "children"
+
+        model = ReactiveTreeModel(
+            obs_list,
+            parent=widget_instance,
+            children_attr=children_attr,
+            format_fn=format_fn,
+        )
+    elif use_table_model:
+        # Create ReactiveTableModel for QTableView
+        from qtpie.models import ReactiveTableModel
+
+        model = ReactiveTableModel(
+            obs_list,
+            parent=widget_instance,
+            columns=field_info.table_columns,
+            headers=field_info.table_headers,
+        )
+    else:
+        # Create ReactiveListModel for QComboBox, QListView, etc.
+        from qtpie.bindings.format_binding import create_item_formatter
+        from qtpie.models import ReactiveListModel
+
+        # Check for format= to customize item display
+        format_fn = None
+        if field_info.model_format is not None:
+            format_fn = create_item_formatter(field_info.model_format)
+
+        model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
+
+    # Wrap in filter/sort proxy if filter= or sort= is specified
+    if field_info.model_filter is not None or field_info.model_sort is not None:
+        from qtpie.models import ReactiveFilterProxyModel
+
+        proxy = ReactiveFilterProxyModel(
+            parent=widget_instance,
+            filter_expr=field_info.model_filter,
+            sort_key=field_info.model_sort,
+            widget=host,  # type: ignore[arg-type]
+        )
+        proxy.setSourceModel(model)
+        widget_instance.setModel(proxy)  # type: ignore[attr-defined]
+    else:
+        widget_instance.setModel(model)  # type: ignore[attr-defined]
+
+    # For nested paths, subscribe to ROOT Variable to re-sync when it changes
+    if root_variable is not None:
+        nested_path = ".".join(bind_path_normalized.split(".")[1:])
+
+        def make_root_sync_for_model(root_var: VarType[Any], target: ObservableList[Any], path: str) -> None:
+            def on_root_change(*_: Any) -> None:
+                root_val: Any = root_var.value
+                if root_val is None:
+                    target.clear()
+                    return
+                # Traverse nested path
+                nested_val: Any = root_val
+                for part in path.split("."):
+                    if nested_val is None:
+                        break
+                    nested_val = getattr(nested_val, part, None)
+                if isinstance(nested_val, list):
+                    target.clear()
+                    target.extend(cast(list[Any], nested_val))
+                elif nested_val is None:
+                    target.clear()
+
+            root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
+
+        make_root_sync_for_model(root_variable, obs_list, nested_path)
+
+    # Set up selection bindings based on widget type
+    if use_tree_model:
+        # QTreeView selection bindings
+        _setup_tree_selection_bindings(
+            host,
+            widget_instance,
+            model,
+            field_info.selected_item,
+            field_info.selected_items,
+        )
+    elif use_table_model:
+        # QTableView-specific selection bindings
+        _setup_table_selection_bindings(
+            host,
+            widget_instance,
+            model,
+            field_info.selected_row,
+            field_info.selected_column,
+            field_info.selected_cell,
+            field_info.selected_item,
+            field_info.selected_rows,
+            field_info.selected_columns,
+            field_info.selected_cells,
+            field_info.selected_items,
+        )
+    else:
+        # QComboBox/QListView selection bindings
+        _setup_selection_bindings(
+            host,
+            widget_instance,
+            model,
+            field_info.selected_index,
+            field_info.selected_item,
+            field_info.selected_indexes,
+            field_info.selected_items_list,
+        )
+
+    return True
+
+
 def _setup_selection_bindings(
     host: QWidget,
     widget: QWidget,
@@ -1485,7 +1687,21 @@ def apply_auto_bindings(
             continue
 
         # Handle format strings
-        if is_format_string(bind_path):
+        # Also handle nested paths for NON-record widgets (paths like "parent_var.field")
+        # because ObservableProxy creates new Observables for each path lookup.
+        # But DON'T convert nested paths for Widget[T] record bindings - those should use
+        # the existing record binding code path which handles optional chaining properly.
+        is_nested_path = "." in bind_path.replace("?.", ".")
+
+        # Check if this is a record binding (Widget[T] with a record type)
+        has_record = hasattr(config, "record_type") and config.record_type is not None  # type: ignore[union-attr]
+
+        # For record bindings, only use format binding if it's explicitly a format string
+        # For non-record widgets, convert nested paths to format bindings for parent hierarchy lookup
+        use_format_binding = is_format_string(bind_path) or (is_nested_path and not has_record and not _is_model_widget(widget_instance))
+        format_template = bind_path if is_format_string(bind_path) else f"{{{bind_path}}}" if use_format_binding and is_nested_path else None
+
+        if use_format_binding and (is_format_string(bind_path) or format_template is not None):
             from qtpie.bindings.registry import get_binding_registry
 
             registry = get_binding_registry()
@@ -1501,7 +1717,7 @@ def apply_auto_bindings(
                     return setter_fn
 
                 widget_setter = make_setter(setter, widget_instance)
-                create_format_binding(host, bind_path, widget_setter)  # type: ignore[arg-type]
+                create_format_binding(host, bind_path if is_format_string(bind_path) else format_template, widget_setter)  # type: ignore[arg-type]
 
                 # Register for hot-reload if this was a Translatable
                 if translatable is not None:
@@ -1520,171 +1736,26 @@ def apply_auto_bindings(
         # Resolve the binding source
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
         if source is None:
+            # Source not found - might not be parented yet
+            # Schedule deferred retry for model widgets
+            if _is_model_widget(widget_instance):
+                from qtpy.QtCore import QTimer
+
+                def make_deferred_model_bind(w: QWidget, h: QWidget, bp: str, fi: Any) -> Callable[[], None]:
+                    def retry_bind() -> None:
+                        # Re-attempt resolution after parenting
+                        deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                        if deferred_source is not None:
+                            _apply_model_binding(h, w, deferred_source, bp, fi)
+
+                    return retry_bind
+
+                QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info))
             continue
 
         # Check if this is a model widget (QComboBox, QListView, etc.) with a list source
         if _is_model_widget(widget_instance):
-            obs_list: ObservableList[Any] | None = None
-            root_variable: VarType[Any] | None = None
-
-            # For nested paths like "workspace.collections", find the ROOT Variable
-            # so we can re-sync when it changes from None to a real object
-            bind_path_normalized = bind_path.replace("?.", ".")
-            if "." in bind_path_normalized:
-                root_name = bind_path_normalized.split(".")[0]
-                root_attr: Any = getattr(host, root_name, None)
-                if root_attr is not None and isinstance(root_attr, VarType):
-                    root_variable = cast(VarType[Any], root_attr)
-
-            # Extract ObservableList from Variable or use directly
-            if isinstance(source, VarType):
-                wrapper = source.observable
-                if isinstance(wrapper, ObservableList):
-                    obs_list = wrapper
-                elif isinstance(wrapper, (Observable, ObservableProxy)):
-                    # Source might be Observable[list] or ObservableProxy with nested list
-                    # Create a synced ObservableList that updates when source changes
-                    val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()
-                    if isinstance(val, list):
-                        obs_list = ObservableList(cast(list[Any], val))
-                    elif val is None:
-                        # Initially None - create empty list, will populate later
-                        obs_list = ObservableList[Any]()
-            elif isinstance(source, ObservableList):
-                obs_list = source
-            elif isinstance(source, Observable):
-                val = source.get()
-                if isinstance(val, list):
-                    obs_list = ObservableList(cast(list[Any], val))
-                elif val is None:
-                    obs_list = ObservableList[Any]()
-
-            if obs_list is not None:
-                # Decide which model type to use
-                # QTableView (or explicit columns=) uses ReactiveTableModel
-                # QTreeView (or explicit children=) uses ReactiveTreeModel
-                # Others (QComboBox, QListView) use ReactiveListModel
-                use_table_model = _is_table_view(widget_instance) or field_info.table_columns is not None
-                use_tree_model = _is_tree_view(widget_instance) or field_info.tree_children is not None
-
-                if use_tree_model:
-                    # Create ReactiveTreeModel for QTreeView
-                    from qtpie.bindings.format_binding import create_item_formatter
-                    from qtpie.models import ReactiveTreeModel
-
-                    # Check for format= to customize item display
-                    format_fn = None
-                    if field_info.model_format is not None:
-                        format_fn = create_item_formatter(field_info.model_format)
-
-                    # Default children attribute to "children" if not specified
-                    children_attr = field_info.tree_children or "children"
-
-                    model = ReactiveTreeModel(
-                        obs_list,
-                        parent=widget_instance,
-                        children_attr=children_attr,
-                        format_fn=format_fn,
-                    )
-                elif use_table_model:
-                    # Create ReactiveTableModel for QTableView
-                    from qtpie.models import ReactiveTableModel
-
-                    model = ReactiveTableModel(
-                        obs_list,
-                        parent=widget_instance,
-                        columns=field_info.table_columns,
-                        headers=field_info.table_headers,
-                    )
-                else:
-                    # Create ReactiveListModel for QComboBox, QListView, etc.
-                    from qtpie.bindings.format_binding import create_item_formatter
-                    from qtpie.models import ReactiveListModel
-
-                    # Check for format= to customize item display
-                    format_fn = None
-                    if field_info.model_format is not None:
-                        format_fn = create_item_formatter(field_info.model_format)
-
-                    model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
-
-                # Wrap in filter/sort proxy if filter= or sort= is specified
-                if field_info.model_filter is not None or field_info.model_sort is not None:
-                    from qtpie.models import ReactiveFilterProxyModel
-
-                    proxy = ReactiveFilterProxyModel(
-                        parent=widget_instance,
-                        filter_expr=field_info.model_filter,
-                        sort_key=field_info.model_sort,
-                        widget=host,  # type: ignore[arg-type]
-                    )
-                    proxy.setSourceModel(model)
-                    widget_instance.setModel(proxy)  # type: ignore[attr-defined]
-                else:
-                    widget_instance.setModel(model)  # type: ignore[attr-defined]
-
-                # For nested paths, subscribe to ROOT Variable to re-sync when it changes
-                if root_variable is not None:
-                    nested_path = ".".join(bind_path_normalized.split(".")[1:])
-
-                    def make_root_sync_for_model(root_var: VarType[Any], target: ObservableList[Any], path: str) -> None:
-                        def on_root_change(*_: Any) -> None:
-                            root_val: Any = root_var.value
-                            if root_val is None:
-                                target.clear()
-                                return
-                            # Traverse nested path
-                            nested_val: Any = root_val
-                            for part in path.split("."):
-                                if nested_val is None:
-                                    break
-                                nested_val = getattr(nested_val, part, None)
-                            if isinstance(nested_val, list):
-                                target.clear()
-                                target.extend(cast(list[Any], nested_val))
-                            elif nested_val is None:
-                                target.clear()
-
-                        root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
-
-                    make_root_sync_for_model(root_variable, obs_list, nested_path)
-
-                # Set up selection bindings based on widget type
-                if use_tree_model:
-                    # QTreeView selection bindings
-                    _setup_tree_selection_bindings(
-                        host,
-                        widget_instance,
-                        model,
-                        field_info.selected_item,
-                        field_info.selected_items,
-                    )
-                elif use_table_model:
-                    # QTableView-specific selection bindings
-                    _setup_table_selection_bindings(
-                        host,
-                        widget_instance,
-                        model,
-                        field_info.selected_row,
-                        field_info.selected_column,
-                        field_info.selected_cell,
-                        field_info.selected_item,
-                        field_info.selected_rows,
-                        field_info.selected_columns,
-                        field_info.selected_cells,
-                        field_info.selected_items,
-                    )
-                else:
-                    # QComboBox/QListView selection bindings
-                    _setup_selection_bindings(
-                        host,
-                        widget_instance,
-                        model,
-                        field_info.selected_index,
-                        field_info.selected_item,
-                        field_info.selected_indexes,
-                        field_info.selected_items_list,
-                    )
+            if _apply_model_binding(host, widget_instance, source, bind_path, field_info):
                 continue
 
         # Create the binding

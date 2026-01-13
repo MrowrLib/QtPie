@@ -81,9 +81,12 @@ def _extract_ast_names(expr: str) -> set[str]:
     Example: "dog.name.upper()" → {"dog"}
     Example: "x + y * z" → {"x", "y", "z"}
     Example: "len(name)" → {"name"}
+    Example: "item?.name or 'default'" → {"item"}
     """
+    # Normalize ?. to . so AST can parse optional chaining expressions
+    normalized = expr.replace("?.", ".")
     try:
-        tree = ast.parse(expr, mode="eval")
+        tree = ast.parse(normalized, mode="eval")
     except SyntaxError:
         return set()
 
@@ -366,11 +369,8 @@ def _eval_with_optional_chaining(expr: str, context: dict[str, Any]) -> Any:
 
     Example: 'workspace?.name' with workspace=None returns None instead of raising.
     Example: 'workspace?.owner?.name' returns None if workspace or owner is None.
+    Example: 'workspace?.name or "default"' returns "default" if workspace is None.
     """
-    # Parse the expression to find ?. chains
-    # Strategy: for simple dotted paths with ?., manually traverse
-    # For complex expressions, we need a different approach
-
     # Check if this is a simple dotted path (no operators, function calls, etc.)
     # Simple: workspace?.name, config?.theme?.name
     # Complex: workspace?.name + other, func(workspace?.name)
@@ -379,15 +379,64 @@ def _eval_with_optional_chaining(expr: str, context: dict[str, Any]) -> Any:
         # Simple dotted path - traverse manually with None checks
         return _traverse_optional_path(expr, context)
 
-    # For complex expressions, convert ?. to a safe pattern
-    # This is a simple approach: split on ?. and build getattr chain
-    # More sophisticated parsing would require a full expression parser
-    # For now, just try eval and let it fail gracefully
+    # For complex expressions, we transform ?. into a safe getattr pattern
+    # "a?.b?.c or 'x'" becomes "(getattr(getattr(a, 'b', None), 'c', None) if a is not None else None) or 'x'"
+    # But simpler: we use a helper that does safe attribute access
+    def _safe_getattr(obj: Any, name: str) -> Any:
+        if obj is None:
+            return None
+        return getattr(obj, name, None)
+
+    # Add safe_getattr to eval context
+    eval_context = {**context, "_safe_getattr": _safe_getattr}
+
+    # Transform expr: replace "a?.b" with "_safe_getattr(a, 'b')"
+    import re
+
+    def replace_optional_chain(match: re.Match[str]) -> str:
+        # match.group(0) is like "foo?.bar" or "foo.bar?.baz"
+        # Parse into (name, is_optional_access) pairs where is_optional_access
+        # means "accessing THIS name should use safe getattr"
+        # 'foo?.bar.baz?.qux' -> [('foo', False), ('bar', True), ('baz', False), ('qux', True)]
+        chain = match.group(0)
+        parts: list[tuple[str, bool]] = []
+        current = ""
+        i = 0
+        next_is_optional = False
+        while i < len(chain):
+            if chain[i : i + 2] == "?.":
+                parts.append((current, next_is_optional))
+                next_is_optional = True  # The NEXT access is optional
+                current = ""
+                i += 2
+            elif chain[i] == ".":
+                parts.append((current, next_is_optional))
+                next_is_optional = False  # Regular access
+                current = ""
+                i += 1
+            else:
+                current += chain[i]
+                i += 1
+        if current:
+            parts.append((current, next_is_optional))
+
+        # Build the safe access chain
+        if not parts:
+            return chain
+        result = parts[0][0]
+        for name, is_optional in parts[1:]:
+            if is_optional:
+                result = f"_safe_getattr({result}, '{name}')"
+            else:
+                result = f"({result}).{name}"
+        return result
+
+    # Match chains like "foo?.bar.baz?.qux" (identifier followed by ?. or . sequences)
+    transformed = re.sub(r"\b[\w]+(?:[?]?\.[\w]+)+", replace_optional_chain, expr)
+
     try:
-        # Replace ?. with . and hope for the best (caller catches exceptions)
-        safe_expr = expr.replace("?.", ".")
-        return eval(safe_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-    except (AttributeError, TypeError):
+        return eval(transformed, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
+    except Exception:
         return None
 
 
@@ -503,48 +552,85 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
     root_name = normalized.split(".")[0]
 
     # For nested paths like "workspace.name", also try to subscribe to the ROOT Variable
-    # This is critical for bare Variables resolved from hierarchy (descriptors)
+    # This is critical because the root Variable's Observable is what changes when the value is replaced
     if "." in normalized:
         # Try root name directly on widget (handles descriptors like bare Variables)
         root_attr: Any = getattr(widget, root_name, None)
         if root_attr is not None and isinstance(root_attr, Variable):
             add_source(cast(BindingSource, root_attr))
 
-    # If we didn't find anything, search parent hierarchy
-    if not result:
-        from qtpy.QtWidgets import QApplication
+    # Also try underscore variants for root name
+    lookup_name = root_name.lstrip("_")
+    underscore_name = f"_{lookup_name}"
 
-        # Also try underscore variants
-        lookup_name = root_name.lstrip("_")
-        underscore_name = f"_{lookup_name}"
+    # Track if we found the root Variable on current widget (for nested paths)
+    found_root_on_widget = False
+    if "." in normalized:
+        for attr_name in [root_name, lookup_name, underscore_name]:
+            try:
+                root_attr = getattr(widget, attr_name, None)
+                if root_attr is not None and isinstance(root_attr, Variable):
+                    # Only add if not already in result (avoid duplicates)
+                    root_var = cast("Variable[Any, Any]", root_attr)
+                    obs_id = id(root_var.observable)
+                    if not any(id(obs) == obs_id for obs in result):
+                        add_source(root_var)
+                    found_root_on_widget = True
+                    break
+            except Exception:
+                continue
 
+    # Search parent hierarchy for:
+    # 1. The full path (if result is empty) - normal case
+    # 2. The ROOT Variable (if nested path and not found on widget) - critical for parent hierarchy bindings
+    from qtpy.QtWidgets import QApplication
+
+    # We need to search parents if:
+    # - We didn't find anything yet (normal case)
+    # - OR we have a nested path and didn't find the root on the widget
+    needs_parent_search = not result or ("." in normalized and not found_root_on_widget)
+
+    if needs_parent_search:
         current: Any = widget
         while True:
             if not hasattr(current, "parent") or not callable(current.parent):
                 break
-            parent: Any = current.parent()
-            if parent is None:
+            parent_obj: Any = current.parent()
+            if parent_obj is None:
                 break
 
-            # Try all name variants
+            # Try all name variants for root Variable
+            found_in_parent = False
             for attr_name in [root_name, lookup_name, underscore_name]:
-                found = _try_get_variable(parent, attr_name)
+                found = _try_get_variable(parent_obj, attr_name)
                 if found is not None:
-                    add_source(cast(BindingSource, found))
+                    # For nested paths, always add the root Variable
+                    # For simple names, only add if result is empty
+                    if "." in normalized or not result:
+                        obs_id = id(found.observable)
+                        # Avoid duplicates
+                        if not any(id(obs) == obs_id for obs in result):
+                            add_source(cast(BindingSource, found))
+                        found_in_parent = True
                     break
-            if result:
+
+            # If we found what we need, stop searching
+            if found_in_parent or (result and "." not in normalized):
                 break
 
-            current = parent
+            current = parent_obj
 
         # Fallback: check QApplication.instance()
-        if not result:
+        if not result or ("." in normalized and not found_root_on_widget):
             app = QApplication.instance()
             if app is not None:
                 for attr_name in [root_name, lookup_name, underscore_name]:
                     found = _try_get_variable(app, attr_name)
                     if found is not None:
-                        add_source(cast(BindingSource, found))
+                        if "." in normalized or not result:
+                            obs_id = id(found.observable)
+                            if not any(id(obs) == obs_id for obs in result):
+                                add_source(cast(BindingSource, found))
                         break
 
     return result
@@ -766,7 +852,7 @@ def create_format_binding(
                     if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()
                 except Exception:
-                    value = f"<error: {field.expression}>"
+                    value = None  # Return None on errors (allows `or 'default'` in expressions)
 
                 # Apply format spec if present
                 if field.format_spec:
@@ -775,7 +861,7 @@ def create_format_binding(
                     except Exception:
                         value = str(value)  # pyright: ignore[reportUnknownArgumentType]
                 else:
-                    value = str(value)  # pyright: ignore[reportUnknownArgumentType]
+                    value = str(value) if value is not None else "None"  # pyright: ignore[reportUnknownArgumentType]
 
                 result_parts.append(value)
 
@@ -983,7 +1069,7 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
                     if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()
                 except Exception:
-                    value = f"<error: {field.expression}>"
+                    value = None  # Return None on errors (allows `or 'default'` in expressions)
 
                 # Apply format spec if present
                 if field.format_spec:
