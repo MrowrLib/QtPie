@@ -1,0 +1,11 @@
+name: Get Post Comments
+method: GET
+url: ${BASE_URL}/posts/1/comments
+headers:
+  - key: Accept
+    value: application/json
+query_params:
+  - key: limit
+    value: "10"
+  - key: offset
+    value: "0"

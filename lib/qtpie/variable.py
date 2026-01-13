@@ -19,6 +19,15 @@ from observant import (
 
 from .utils.common import is_primitive_type, is_signal_on_type
 
+
+class NoDefault:
+    """Sentinel for 'no default provided' (distinct from None which is a valid default)."""
+
+    __slots__ = ()
+
+
+NO_DEFAULT = NoDefault()
+
 # TypeVars for list/dict/set item types (used in overloads)
 _ItemT = TypeVar("_ItemT")
 _KeyT = TypeVar("_KeyT")
@@ -31,16 +40,23 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
 
     Note: Mutable defaults (list, dict, complex objects) are deep-copied
     to ensure each instance gets its own copy.
+
+    Args:
+        inner_type: The type inside Variable[T], e.g., str, list[int], MyClass, etc.
+        default: The default value, or NO_DEFAULT if no default was provided.
     """
+    # Check if no default was provided (distinct from None which is a valid default)
+    no_default_provided = isinstance(default, NoDefault)
+
     if inner_type is None:
         # No type info, use Observable with the default
-        return Observable(default)
+        return Observable(None if no_default_provided else default)
 
     inner_origin = get_origin(inner_type)
 
     # list[T] → ObservableList
     if inner_origin is list:
-        if default is None:
+        if no_default_provided or default is None:
             default = []
         else:
             default = deepcopy(default)
@@ -48,7 +64,7 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
 
     # dict[K, V] → ObservableDict
     if inner_origin is dict:
-        if default is None:
+        if no_default_provided or default is None:
             default = {}
         else:
             default = deepcopy(default)
@@ -56,7 +72,7 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
 
     # set[T] → ObservableSet
     if inner_origin is set:
-        if default is None:
+        if no_default_provided or default is None:
             default = set()  # pyright: ignore[reportUnknownVariableType]
         else:
             default = deepcopy(default)
@@ -64,28 +80,29 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
 
     # Primitives → Observable
     if is_primitive_type(inner_type):
-        return Observable(default)
+        return Observable(None if no_default_provided else default)
 
     # Qt value types (QIcon, QPixmap, etc.) → Observable
     # These are value types, not objects with fields, so treat like primitives
-    try:
-        from qtpy.QtGui import QIcon, QPixmap
+    if not no_default_provided:
+        try:
+            from qtpy.QtGui import QIcon, QPixmap
 
-        if isinstance(default, (QIcon, QPixmap)):
-            return Observable(default)
-    except ImportError:
-        pass
+            if isinstance(default, (QIcon, QPixmap)):
+                return Observable(default)
+        except ImportError:
+            pass
 
     # Union types (e.g., str | None, int | None) → Observable if all members are primitives
     if isinstance(inner_type, types.UnionType):
         type_args = get_args(inner_type)
         # Check if all args are primitive types (including None)
         if all(is_primitive_type(t) for t in type_args):
-            return Observable(default)
+            return Observable(None if no_default_provided else default)
 
     # Complex types → ObservableProxy
-    # Need to create an instance if default is None
-    if default is None:
+    # Need to create an instance if no default was provided
+    if no_default_provided:
         # UnionType can't be instantiated
         if isinstance(inner_type, types.UnionType):
             raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default=...) or provide constructor args.")

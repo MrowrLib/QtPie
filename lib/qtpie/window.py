@@ -470,10 +470,24 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
     config = cls._qtpie_config
 
     def wrapped_init(self: Window[Any], *args: Any, **kwargs: Any) -> None:
+        # Extract _qtpie_bindings before passing kwargs to original init
+        _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
+
         # Set translation context to class name (used by t() markers)
         from qtpie.translations import set_translation_context
 
         set_translation_context(type(self).__name__)
+
+        # Apply parent variable bindings BEFORE original_init runs
+        # This ensures required Variables exist before child widgets are created
+        if _qtpie_bindings is not None:
+            # Initialize QtPieState early so Variables have somewhere to register
+            if not hasattr(self, "_qtpie"):
+                self._qtpie = QtPieState(self)
+            parent, bindings = _qtpie_bindings
+            from .new_fields import _apply_variable_bindings_direct
+
+            _apply_variable_bindings_direct(parent, self, bindings)
 
         # Call original __init__
         original_init(self, *args, **kwargs)
@@ -698,14 +712,17 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         if config.record_default is not None and hasattr(self, "record"):
             self.record = config.record_default
 
-        # Call __setup__ hook (before bindings, so record can be initialized)
+        # Call __setup__ hook (required bindings are now available)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
 
         # Apply bindings using shared logic (after __setup__ so record is available)
-        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
+        from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props, pre_create_selection_variables
         from .bindings.expression import create_expression_binding
+
+        # Pre-create Variables for selection bindings (bare Variable[T] without new())
+        pre_create_selection_variables(self, config)
 
         apply_auto_bindings(self, config)
         apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)

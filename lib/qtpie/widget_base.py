@@ -12,7 +12,7 @@ from .new_field import NewField
 from .new_fields import new_fields
 from .qtpie_config import _QtPieConfig
 from .state import QtPieState
-from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
+from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 
 
 class _RecordDescriptor[T]:
@@ -37,7 +37,7 @@ class _RecordDescriptor[T]:
             from observant import ObservableProxy
 
             try:
-                wrapper = _create_observable_for_type(self._record_type, None)
+                wrapper = _create_observable_for_type(self._record_type, NO_DEFAULT)
             except ValueError:
                 # Type requires constructor args - create proxy with None target
                 # User must set it in __setup__ or later

@@ -1,0 +1,9 @@
+name: Development
+variables:
+  - key: BASE_URL
+    value: https://jsonplaceholder.typicode.com
+  - key: API_KEY
+    value: dev-key-12345
+    secret: true
+  - key: TIMEOUT
+    value: "30"

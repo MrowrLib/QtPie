@@ -7,7 +7,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from .layout import GridPosition, Stretch
 from .utils.common import is_signal_on_type
-from .variable import Variable, create_variable_descriptor
+from .variable import NO_DEFAULT, Variable, create_variable_descriptor
 
 
 class NewField:
@@ -1021,14 +1021,17 @@ class NewField:
         return hasattr(self.field_type, "_qtpie_config")
 
     def _get_variable_default(self) -> Any:
-        """Extract default value for a Variable field."""
+        """Extract default value for a Variable field.
+
+        Returns _NO_DEFAULT sentinel if no default was provided (distinct from None).
+        """
         # Check for explicit default= kwarg
         if "default" in self.kwargs:
             return self.kwargs["default"]
         # Check for single arg (primitive, list, dict, or object)
         if len(self.args) == 1:
             return self.args[0]
-        return None
+        return NO_DEFAULT
 
     def _extract_refs(self) -> None:
         """Extract Ref markers from kwargs for deferred resolution.

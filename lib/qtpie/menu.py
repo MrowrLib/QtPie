@@ -417,16 +417,27 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
         from qtpy.QtGui import QAction
 
         from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
-        from .widget import (
-            _has_unset_required_bindings,  # pyright: ignore[reportPrivateUsage]
-        )
+
+        # Extract _qtpie_bindings before passing kwargs to original init
+        _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
 
         nonlocal config
+
+        # Apply parent variable bindings BEFORE original_init runs
+        # This ensures required Variables exist before child widgets are created
+        if _qtpie_bindings is not None:
+            # Initialize QtPieState early so Variables have somewhere to register
+            if not hasattr(self, "_qtpie"):
+                self._qtpie = QtPieState(self)  # pyright: ignore[reportPrivateUsage]
+            parent, bindings = _qtpie_bindings
+            from .new_fields import _apply_variable_bindings_direct
+
+            _apply_variable_bindings_direct(parent, self, bindings)
 
         # Call original __init__
         original_init(self, *args, **kwargs)
 
-        # Initialize QtPie state
+        # Initialize QtPie state (if not already done for bindings)
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)  # pyright: ignore[reportPrivateUsage]
 
@@ -502,22 +513,18 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
             if hasattr(self, "record"):
                 self.record = config.record_default  # pyright: ignore[reportAttributeAccessIssue]
 
-        # Call __setup__ hook
+        # Call __setup__ hook (required bindings are now available)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
 
         # Apply bindings (after __setup__ so record is available)
-        # Skip if we have unset required bindings
-        if _has_unset_required_bindings(self, config):  # type: ignore[arg-type]
-            self._qtpie_pending_auto_bindings = True  # type: ignore[attr-defined]
-        else:
-            apply_auto_bindings(self, config)  # type: ignore[arg-type]
-            apply_property_bindings(self, config)  # type: ignore[arg-type]
-            apply_reactive_widget_props(self, config)  # type: ignore[arg-type]
+        apply_auto_bindings(self, config)  # type: ignore[arg-type]
+        apply_property_bindings(self, config)  # type: ignore[arg-type]
+        apply_reactive_widget_props(self, config)  # type: ignore[arg-type]
 
-            # Apply property bindings for QActions (not handled by apply_property_bindings)
-            _apply_action_property_bindings(self, config)
+        # Apply property bindings for QActions (not handled by apply_property_bindings)
+        _apply_action_property_bindings(self, config)
 
         # Enable dirty/valid hooks
         state = self._qtpie  # pyright: ignore[reportPrivateUsage]

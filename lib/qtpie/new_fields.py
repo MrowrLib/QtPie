@@ -119,14 +119,15 @@ def new_fields[T](cls: type[T]) -> type[T]:
                         if key in resolved_kwargs and isinstance(resolved_kwargs[key], Translatable):
                             resolved_kwargs[key] = translatable.resolve()
 
+                    # Pass variable bindings via special kwarg so child can apply them
+                    # BEFORE __setup__ runs (for deterministic timing)
+                    if field.variable_bindings:
+                        resolved_kwargs["_qtpie_bindings"] = (self, field.variable_bindings)
+
                     instance = field.field_type(*resolved_args, **resolved_kwargs)
 
                     # Resolve any #parent refs on the child now that we know the parent
                     _resolve_parent_refs(self, instance)
-
-                    # Apply variable bindings (wire up parent Variables to child)
-                    if field.variable_bindings:
-                        _apply_variable_bindings(self, instance, field)
 
                     # Resolve any deferred bindings on the child (its grandchildren may have
                     # been waiting for the child's Variable bindings to be applied)
@@ -241,10 +242,10 @@ def _validate_required_bindings(field: NewField) -> None:
         )
 
 
-def _apply_variable_bindings(parent: Any, child: Any, field: NewField) -> None:
+def _apply_variable_bindings_direct(parent: Any, child: Any, bindings: dict[str, Any]) -> None:  # pyright: ignore[reportUnusedFunction] - imported dynamically in widget/window/menu __init__
     """Wire up variable bindings between parent and child widgets.
 
-    For each binding in field.variable_bindings:
+    For each binding in bindings dict:
     - Direct variable reference (e.g., count="_my_count") -> share Observable (two-way)
     - Expression binding (e.g., enabled="{len(_items) > 0}") -> computed (one-way)
     - Literal value (e.g., label_text="Hello") -> set as default value
@@ -252,9 +253,9 @@ def _apply_variable_bindings(parent: Any, child: Any, field: NewField) -> None:
     Args:
         parent: The parent widget instance
         child: The child widget instance
-        field: The NewField with variable_bindings
+        bindings: Dict mapping child variable names to binding values
     """
-    for child_var_name, binding_value in field.variable_bindings.items():
+    for child_var_name, binding_value in bindings.items():
         # Determine binding type
         if isinstance(binding_value, str):
             if "{" in binding_value and "}" in binding_value:

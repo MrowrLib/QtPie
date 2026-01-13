@@ -21,7 +21,7 @@ from .signals import create_signal_expression_handler
 from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
-from .variable import RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
+from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget_base import WidgetBase
 
 # Re-export for backwards compatibility (window.py imports from here)
@@ -50,7 +50,7 @@ class _RecordDescriptor[T]:
             from observant import ObservableProxy
 
             try:
-                wrapper = _create_observable_for_type(self._record_type, None)
+                wrapper = _create_observable_for_type(self._record_type, NO_DEFAULT)
             except ValueError:
                 # Type requires constructor args - create proxy with None target
                 # User must set it in __setup__ or later
@@ -456,10 +456,24 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
     config = cls._qtpie_config
 
     def wrapped_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Extract _qtpie_bindings before passing kwargs to original init
+        _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
+
         # Set translation context to class name (used by t() markers)
         from qtpie.translations import set_translation_context
 
         set_translation_context(type(self).__name__)
+
+        # Apply parent variable bindings BEFORE original_init runs
+        # This ensures required Variables exist before child widgets are created
+        if _qtpie_bindings is not None:
+            # Initialize QtPieState early so Variables have somewhere to register
+            if not hasattr(self, "_qtpie"):
+                self._qtpie = QtPieState(self)
+            parent, bindings = _qtpie_bindings
+            from .new_fields import _apply_variable_bindings_direct
+
+            _apply_variable_bindings_direct(parent, self, bindings)
 
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
@@ -594,30 +608,25 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
         if config.record_default is not None and hasattr(self, "record"):
             self.record = config.record_default
 
-        # Call __setup__ hook if defined (before bindings, so record can be initialized)
+        # Call __setup__ hook if defined (required bindings are now available)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
 
         # Apply bindings (after __setup__ so record is available)
-        # BUT: if we have required bindings that haven't been set up yet (provided by parent),
-        # defer binding application until after the parent applies Variable bindings
         from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props, pre_create_selection_variables
         from .bindings.expression import create_expression_binding
 
         # Pre-create Variables for selection bindings (bare Variable[T] without new())
         pre_create_selection_variables(self, config)
 
-        if _has_unset_required_bindings(self, config):
-            self._qtpie_pending_auto_bindings = True  # type: ignore[attr-defined]
-        else:
-            apply_auto_bindings(self, config)
+        apply_auto_bindings(self, config)
 
-            # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
-            apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)
+        # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
+        apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)
 
-            # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
-            apply_reactive_widget_props(self, config)
+        # Apply reactive widget props from @widget decorator (windowTitle="{title}", etc.)
+        apply_reactive_widget_props(self, config)
 
         # Enable on_dirty_changed and on_valid_changed hooks (subscribes to future Variable changes)
         state = getattr(self, "_qtpie", None)
@@ -629,28 +638,6 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._qtpie_config.init_wrapped = True
-
-
-def _has_unset_required_bindings(widget: Widget[Any], config: _QtPieConfig) -> bool:
-    """Check if the widget has required bindings that haven't been set up yet.
-
-    Returns True if any required Variable binding is missing (not yet provided by parent).
-    """
-    if not config.required_bindings:
-        return False
-
-    # Check if _qtpie state exists and has the required Variables
-    state = getattr(widget, "_qtpie", None)
-    if state is None:
-        # No state yet - all required bindings are unset
-        return True
-
-    # Check each required binding
-    for name in config.required_bindings:
-        if name not in state.variables:
-            return True
-
-    return False
 
 
 def _validate_layout_params(
