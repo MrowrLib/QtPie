@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QLabel, QTreeView, QWidget
 from qtpie import Variable, new
 from qtpie.testing import QtDriver
 
-from .conftest import WIDGET_CLASS_TYPES, create_and_track
+from .conftest import RECORD_CLASS_TYPES, WIDGET_CLASS_TYPES, create_and_track
 
 
 @dataclass
@@ -450,32 +450,6 @@ class TestTreeViewSelectionBindings:
         # Verify the Variable exists and is empty
         assert_that(instance._selected.value).is_equal_to([])
 
-    def test_format_binding_to_selectedItems_with_record(self, base_class, decorator, qt: QtDriver) -> None:
-        """QLabel format binding to {len(_selected)} works with Widget[T] record type."""
-        from qtpie import Widget
-
-        @dataclass
-        class Container:
-            nodes: "list[TreeNode]" = field(default_factory=list)  # noqa: UP037
-
-        if base_class.__name__ != "Widget":
-            pytest.skip("Record binding only works with Widget")
-            return
-
-        @decorator(record=Container(nodes=[TreeNode("A"), TreeNode("B"), TreeNode("C")]))
-        class TestClass(Widget[Container]):
-            _selected: Variable[list[TreeNode]]  # Bare Variable for selection
-            _tree: QTreeView = new(bind="nodes", selectedItems="_selected", children="children")
-            _count_label: QLabel = new(bind="Selected: {len(_selected)}")
-
-        instance = create_and_track(qt, TestClass, base_class)
-
-        # Initially should show count of 0
-        assert_that(instance._count_label.text()).is_equal_to("Selected: 0")
-
-        # Verify the Variable exists and is empty
-        assert_that(instance._selected.value).is_equal_to([])
-
     def test_format_binding_updates_when_variable_changes(self, base_class, decorator, qt: QtDriver) -> None:
         """QLabel format binding updates when the Variable value changes programmatically."""
 
@@ -509,9 +483,34 @@ class TestTreeViewSelectionBindings:
         instance._selected.value = []
         assert_that(instance._count_label.text()).is_equal_to("Selected: 0")
 
+
+@pytest.mark.parametrize("base_class,decorator", RECORD_CLASS_TYPES)
+class TestTreeViewRecordBindings:
+    """Test QTreeView with Widget[T] record bindings."""
+
+    def test_format_binding_to_selectedItems_with_record(self, base_class, decorator, qt: QtDriver) -> None:
+        """QLabel format binding to {len(_selected)} works with Widget[T] record type."""
+
+        @dataclass
+        class Container:
+            nodes: "list[TreeNode]" = field(default_factory=list)  # noqa: UP037
+
+        @decorator(record=Container(nodes=[TreeNode("A"), TreeNode("B"), TreeNode("C")]))
+        class TestClass(base_class[Container]):  # type: ignore[misc]
+            _selected: Variable[list[TreeNode]]  # Bare Variable for selection
+            _tree: QTreeView = new(bind="nodes", selectedItems="_selected", children="children")
+            _count_label: QLabel = new(bind="Selected: {len(_selected)}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially should show count of 0
+        assert_that(instance._count_label.text()).is_equal_to("Selected: 0")
+
+        # Verify the Variable exists and is empty
+        assert_that(instance._selected.value).is_equal_to([])
+
     def test_user_scenario_self_referential_record(self, base_class, decorator, qt: QtDriver) -> None:
         """User's exact scenario: Widget[Cat] with self-referential Cat.kittens."""
-        from qtpie import Widget
 
         @dataclass
         class Cat:
@@ -519,14 +518,10 @@ class TestTreeViewSelectionBindings:
             age: int
             kittens: "list[Cat]" = field(default_factory=list)  # noqa: UP037
 
-        if base_class.__name__ != "Widget":
-            pytest.skip("Record binding only works with Widget")
-            return
-
         cat = Cat(name="Mittens", age=4, kittens=[Cat(name="Fluffy", age=1, kittens=[]), Cat(name="Snowball", age=2, kittens=[Cat(name="Tiny", age=0, kittens=[])])])
 
         @decorator(record=cat)
-        class TestClass(Widget[Cat]):
+        class TestClass(base_class[Cat]):  # type: ignore[misc]
             _selected_kittens: Variable[list[Cat]]
             _tree: QTreeView = new(bind="kittens", format="{name} ({age} yrs)", children="kittens", selectedItems="_selected_kittens")
             _selected_kittens_info: QLabel = new(bind="Selected Kitten Count: {len(_selected_kittens)}")

@@ -29,6 +29,7 @@ class KeyValue:
     key: str
     value: str
     enabled: bool = True
+    secret: bool = False  # If True, value is sensitive (hidden in UI, excluded from git export)
 
 
 @dataclass

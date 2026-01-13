@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QListView
 from qtpie import Variable, new
 from qtpie.testing import QtDriver
 
-from .conftest import WIDGET_CLASS_TYPES, create_and_track
+from .conftest import RECORD_CLASS_TYPES, WIDGET_CLASS_TYPES, create_and_track
 
 
 @dataclass
@@ -342,7 +342,7 @@ class TestListViewSelectionParamsNotStolen:
         assert_that(instance._custom.my_format).is_equal_to("{name}")
 
 
-@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+@pytest.mark.parametrize("base_class,decorator", RECORD_CLASS_TYPES)
 class TestListViewRecordBindingWithLocalVariable:
     """Test QListView bound to record field with local Variable for selection.
 
@@ -355,28 +355,19 @@ class TestListViewRecordBindingWithLocalVariable:
 
     def test_record_dogs_with_local_dogs_variable(self, base_class, decorator, qt: QtDriver) -> None:
         """bind='dogs' resolves to record.dogs, selectedItems='_dogs' resolves to local _dogs."""
-        from dataclasses import dataclass
-
-        from qtpie import Widget
 
         @dataclass
         class DogsContainer:
             dogs: list[Dog]
 
-        if base_class.__name__ == "Widget":
-            # Widget with record type - must use Widget[DogsContainer] for record type inference
-            @decorator(record=DogsContainer(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)]))
-            class TestClass(Widget[DogsContainer]):
-                # Local Variable for storing selected items - NOT the same as record.dogs
-                _dogs: Variable[list[Dog]]
-                # bind="dogs" should use record.dogs, selectedItems uses local _dogs
-                _list: QListView = new(bind="dogs", format="{name}", selectedItems="_dogs")
+        record = DogsContainer(dogs=[Dog("Fido", 3), Dog("Rex", 5), Dog("Buddy", 2)])
 
-            instance = create_and_track(qt, TestClass, base_class)
-        else:
-            # Skip non-Widget base classes for this test
-            pytest.skip("Record binding only works with Widget")
-            return
+        @decorator(record=record)
+        class TestClass(base_class[DogsContainer]):  # type: ignore[misc]
+            _dogs: Variable[list[Dog]]
+            _list: QListView = new(bind="dogs", format="{name}", selectedItems="_dogs")
+
+        instance = create_and_track(qt, TestClass, base_class)
 
         model = instance._list.model()
 

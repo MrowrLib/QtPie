@@ -35,7 +35,7 @@ dev = [
 ]
 
 [tool.pyright]
-exclude = ["v1/", ".venv/", "samples/.venv/", "examples/forc/.venv/"]
+exclude = ["v1/", ".venv/", "samples/.venv/", "examples/forc/.venv/", "examples/forc/tests/.venv/"]
 pythonPlatform = "All"
 pythonVersion = "3.13"
 reportPrivateImportUsage = false

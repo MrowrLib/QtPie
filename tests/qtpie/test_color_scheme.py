@@ -1,10 +1,16 @@
-"""Tests for color scheme helpers."""
+"""Tests for color scheme helpers.
 
-import os
-import sys
+Some tests in this file require a real display and are skipped by default.
+To run all tests including display-dependent ones:
+
+    uv run pytest tests/qtpie/test_color_scheme.py -v --onscreen
+
+"""
+
 from unittest.mock import patch
 
 from assertpy import assert_that
+from conftest import requires_display
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QApplication
 
@@ -16,8 +22,13 @@ from qtpie.styles import (
 )
 
 
+@requires_display  # Run with: uv run pytest tests/ -v --onscreen
 class TestSetColorSchemeWithApp:
-    """Tests for set_color_scheme when an app exists."""
+    """Tests for set_color_scheme when an app exists.
+
+    Note: These tests require a real display because the offscreen platform
+    returns ColorScheme.Unknown when querying the color scheme.
+    """
 
     def test_set_dark_mode_on_existing_app(self, qapp: QApplication) -> None:
         """Sets dark color scheme via Qt API when app exists."""
@@ -59,34 +70,11 @@ class TestSetColorSchemeWithoutApp:
 
             assert_that(get_configured_color_scheme()).is_equal_to(ColorScheme.Light)
 
-    def test_set_dark_mode_sets_env_var_on_windows(self) -> None:
-        """Sets QT_QPA_PLATFORM env var for dark mode on Windows."""
-        with (
-            patch.object(QApplication, "instance", return_value=None),
-            patch.object(sys, "platform", "win32"),
-        ):
-            os.environ.pop("QT_QPA_PLATFORM", None)
-
-            set_color_scheme(ColorScheme.Dark)
-
-            assert_that(os.environ.get("QT_QPA_PLATFORM")).is_equal_to("windows:darkmode=2")
-
-    def test_set_light_mode_sets_env_var_on_windows(self) -> None:
-        """Sets QT_QPA_PLATFORM env var for light mode on Windows."""
-        with (
-            patch.object(QApplication, "instance", return_value=None),
-            patch.object(sys, "platform", "win32"),
-        ):
-            os.environ.pop("QT_QPA_PLATFORM", None)
-
-            set_color_scheme(ColorScheme.Light)
-
-            assert_that(os.environ.get("QT_QPA_PLATFORM")).is_equal_to("windows:darkmode=0")
-
 
 class TestEnableDarkMode:
     """Tests for enable_dark_mode helper."""
 
+    @requires_display  # Run with: uv run pytest tests/ -v --onscreen
     def test_enable_dark_mode_with_app(self, qapp: QApplication) -> None:
         """Enables dark mode via Qt API when app exists."""
         enable_dark_mode()
@@ -106,6 +94,7 @@ class TestEnableDarkMode:
 class TestEnableLightMode:
     """Tests for enable_light_mode helper."""
 
+    @requires_display  # Run with: uv run pytest tests/ -v --onscreen
     def test_enable_light_mode_with_app(self, qapp: QApplication) -> None:
         """Enables light mode via Qt API when app exists."""
         enable_light_mode()

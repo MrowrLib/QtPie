@@ -57,6 +57,13 @@ WINDOW_CLASS_TYPES = [
     pytest.param(AppBase, app, id="App"),
 ]
 
+# Classes that support Widget[T] record binding (excludes WidgetBaseLabel which is a mixin)
+RECORD_CLASS_TYPES = [
+    pytest.param(Widget, widget, id="Widget"),
+    pytest.param(Window, window, id="Window"),
+    pytest.param(AppBase, app, id="App"),
+]
+
 
 def create_and_track(
     qt: QtDriver,

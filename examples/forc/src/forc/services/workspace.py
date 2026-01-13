@@ -3,9 +3,9 @@
 from pathlib import Path
 
 from forc.domain.formats import YamlFormat
-from forc.domain.models import Collection, Environment, Request, Workspace
+from forc.domain.models import Collection, Environment, KeyValue, Request, Workspace
 
-from .secrets import SecretsService
+from .environments import EnvironmentsService
 
 
 class WorkspaceService:
@@ -14,12 +14,17 @@ class WorkspaceService:
     def __init__(
         self,
         format_handler: YamlFormat | None = None,
-        secrets: SecretsService | None = None,
+        environments: EnvironmentsService | None = None,
     ) -> None:
         self._format = format_handler or YamlFormat()
-        self._secrets = secrets or SecretsService()
+        self._environments = environments or EnvironmentsService()
         self._workspace: Workspace | None = None
         self._path: Path | None = None
+
+    @property
+    def environments(self) -> EnvironmentsService:
+        """Get the environments service."""
+        return self._environments
 
     @property
     def workspace(self) -> Workspace | None:
@@ -47,7 +52,7 @@ class WorkspaceService:
         """
         self._workspace = self._format.load_workspace(path)
         self._path = path
-        self._secrets.set_workspace(path)
+        self._environments.load(self._workspace.environments, self._workspace.active_environment)
         return self._workspace
 
     def save(self, path: Path | None = None) -> None:
@@ -81,7 +86,6 @@ class WorkspaceService:
         """
         self._workspace = Workspace(name=name)
         self._path = path
-        self._secrets.set_workspace(path)
         self.save()
         return self._workspace
 
@@ -89,36 +93,33 @@ class WorkspaceService:
         """Close the current workspace."""
         self._workspace = None
         self._path = None
+        self._environments.clear()
 
-    # Environment operations
+    # Environment operations (delegate to EnvironmentsService)
 
     def get_active_environment(self) -> Environment | None:
         """Get the active environment."""
-        if self._workspace is None:
-            return None
-        if self._workspace.active_environment is None:
-            return None
-        for env in self._workspace.environments:
-            if env.name == self._workspace.active_environment:
-                return env
-        return None
+        return self._environments.active
 
     def set_active_environment(self, name: str | None) -> None:
         """Set the active environment by name."""
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
+        self._environments.set_active(name)
         self._workspace.active_environment = name
 
     def add_environment(self, environment: Environment) -> None:
         """Add an environment to the workspace."""
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
+        self._environments.add(environment)
         self._workspace.environments.append(environment)
 
     def remove_environment(self, name: str) -> None:
         """Remove an environment by name."""
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
+        self._environments.remove(name)
         self._workspace.environments = [e for e in self._workspace.environments if e.name != name]
         if self._workspace.active_environment == name:
             self._workspace.active_environment = None
@@ -137,29 +138,19 @@ class WorkspaceService:
             raise RuntimeError("No workspace loaded")
         self._workspace.collections = [c for c in self._workspace.collections if c.name != name]
 
-    # Variable resolution
+    # Variable resolution (delegate to EnvironmentsService)
 
     def resolve_variables(self, text: str) -> str:
-        """Resolve ${VAR} placeholders using active environment and secrets.
+        """Resolve ${VAR} placeholders using active environment.
 
         Resolution order:
-        1. Active environment variables
-        2. Secrets (.env file)
-        3. System environment variables
+        1. Active environment variables (includes secrets)
+        2. System environment variables (fallback)
         """
-        env = self.get_active_environment()
-        if env:
-            for kv in env.variables:
-                if kv.enabled:
-                    text = text.replace(f"${{{kv.key}}}", kv.value)
-
-        # Remaining placeholders resolved by secrets service
-        return self._secrets.resolve(text)
+        return self._environments.resolve(text)
 
     def resolve_request(self, request: Request) -> Request:
         """Create a copy of the request with all variables resolved."""
-        from forc.domain.models import KeyValue
-
         resolved_headers = [KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled) for kv in request.headers]
         resolved_params = [KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled) for kv in request.query_params]
 

@@ -1,7 +1,5 @@
 """Color scheme helpers for Qt applications."""
 
-import os
-import sys
 from enum import Enum
 from typing import cast
 
@@ -17,7 +15,7 @@ class ColorScheme(Enum):
     Light = "light"
 
 
-# Stores color scheme when set before app exists (for macOS/Linux)
+# Stores color scheme when set before app exists
 _deferred_color_scheme: ColorScheme | None = None
 
 
@@ -40,9 +38,9 @@ def set_color_scheme(
     app: QGuiApplication | None = None,
 ) -> None:
     """
-    Set the application color scheme.
+    Set the application color scheme using Qt 6.8+ runtime API.
 
-    If an app instance is provided or one exists, uses the Qt 6.8+ runtime API.
+    If an app instance is provided or one exists, applies immediately.
     If no app exists yet, stores the preference and applies it when the app is created.
 
     Args:
@@ -58,10 +56,6 @@ def set_color_scheme(
     if app is None:
         # No app exists yet - store for later
         _deferred_color_scheme = scheme
-        if sys.platform == "win32":
-            # darkmode=0 is light, darkmode=2 is dark (Windows only)
-            darkmode_value = "2" if scheme == ColorScheme.Dark else "0"
-            os.environ["QT_QPA_PLATFORM"] = f"windows:darkmode={darkmode_value}"
     else:
         # App exists - use Qt 6.8+ runtime API
         qt_scheme = Qt.ColorScheme.Dark if scheme == ColorScheme.Dark else Qt.ColorScheme.Light

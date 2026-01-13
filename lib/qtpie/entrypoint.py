@@ -12,6 +12,7 @@ import qasync  # type: ignore[import-untyped]
 from qtpy.QtCore import QFile, QIODeviceBase, QTextStream, QTimer
 from qtpy.QtWidgets import QApplication, QWidget
 
+from qtpie.styles.color_scheme import ColorScheme, set_color_scheme
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
 
 # Import App and run_app lazily to avoid circular imports
@@ -220,6 +221,11 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     if is_app_subclass:
         # Target is an App or QApplication subclass
         app = cast(QApplication, target())
+        # Apply color scheme from config to the app
+        if config.dark_mode:
+            set_color_scheme(ColorScheme.Dark, app)
+        elif config.light_mode:
+            set_color_scheme(ColorScheme.Light, app)
         setup_app(app)
 
     elif is_function:
@@ -263,6 +269,11 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             if isinstance(result, QApplication):
                 # Function returned an app - use it directly
                 app = result
+                # Apply color scheme from config to the returned app
+                if config.dark_mode:
+                    set_color_scheme(ColorScheme.Dark, app)
+                elif config.light_mode:
+                    set_color_scheme(ColorScheme.Light, app)
             else:
                 # Create default app
                 app = create_default_app()

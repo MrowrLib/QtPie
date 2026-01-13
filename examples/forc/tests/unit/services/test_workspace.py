@@ -152,34 +152,36 @@ class TestWorkspaceServiceVariableResolution:
 
         assert_that(result).is_equal_to("http://localhost:3000/v1/users")
 
-    def test_resolve_from_env_file(self):
-        # Write to .env
-        env_file = self.tmp_dir / "test" / ".env"
-        env_file.write_text("SECRET_KEY=abc123\n")
-        # Reload secrets
-        self.svc.load(self.tmp_dir / "test")
+    def test_resolve_secret_variable(self):
+        """Secret variables resolve the same as regular ones."""
+        env = Environment(
+            name="dev",
+            variables=[
+                KeyValue(key="SECRET_KEY", value="abc123", secret=True),
+            ],
+        )
+        self.svc.add_environment(env)
+        self.svc.set_active_environment("dev")
 
         result = self.svc.resolve_variables("Key: ${SECRET_KEY}")
 
         assert_that(result).is_equal_to("Key: abc123")
 
-    def test_environment_takes_precedence_over_secrets(self):
-        # Set in .env
-        env_file = self.tmp_dir / "test" / ".env"
-        env_file.write_text("VALUE=from_secrets\n")
-
-        # Set in environment and save
-        env = Environment(name="dev", variables=[KeyValue(key="VALUE", value="from_env")])
+    def test_secret_and_regular_vars_together(self):
+        """Both secret and regular variables resolve correctly."""
+        env = Environment(
+            name="dev",
+            variables=[
+                KeyValue(key="BASE_URL", value="https://api.example.com"),
+                KeyValue(key="API_KEY", value="secret123", secret=True),
+            ],
+        )
         self.svc.add_environment(env)
         self.svc.set_active_environment("dev")
-        self.svc.save()
 
-        # Reload to pick up .env (environments persist from save)
-        self.svc.load(self.tmp_dir / "test")
+        result = self.svc.resolve_variables("${BASE_URL}?key=${API_KEY}")
 
-        result = self.svc.resolve_variables("${VALUE}")
-
-        assert_that(result).is_equal_to("from_env")
+        assert_that(result).is_equal_to("https://api.example.com?key=secret123")
 
     def test_disabled_env_vars_not_resolved(self):
         env = Environment(
