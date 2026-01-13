@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from qtpie.utils import is_signal
+from qtpie.utils.common import resolve_signal_from_hierarchy
 
 
 def connect_item_signals(
@@ -37,21 +38,63 @@ def connect_item_signals(
                 signal.connect(expr_handler)
             else:
                 # Simple string handler - could be method name or signal name
+                # First check on context itself
                 target = getattr(context, handler, None)
-                if target is None:
-                    raise AttributeError(f"{type(context).__name__} has no method or signal '{handler}' for signal connection {item_name}.{signal_name}=\"{handler}\"")
 
-                if is_signal(target):
-                    # Target is a Signal - connect signal-to-signal
-                    signal.connect(target)
-                elif callable(target):
-                    # Target is a method
-                    signal.connect(target)
+                if target is not None:
+                    # Found on context - connect directly
+                    if is_signal(target):
+                        signal.connect(target)
+                    elif callable(target):
+                        signal.connect(target)
+                    else:
+                        raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for signal connection {item_name}.{signal_name}="{handler}"')
                 else:
-                    raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for signal connection {item_name}.{signal_name}="{handler}"')
+                    # Not found on context - use lazy resolution wrapper
+                    # This defers hierarchy lookup to emit time, when parent() is set
+                    lazy_handler = create_lazy_hierarchy_handler(context, handler, item_name, signal_name)
+                    signal.connect(lazy_handler)
         elif callable(handler):
             # Direct callable (lambda, function, etc.)
             signal.connect(handler)
+
+
+def create_lazy_hierarchy_handler(
+    context: Any,
+    handler_name: str,
+    item_name: str,
+    signal_name: str,
+) -> Callable[..., None]:
+    """Create a wrapper that resolves the handler from hierarchy at emit time.
+
+    This allows signal connections like clicked="on_parent_action" to work
+    even when the widget isn't parented yet at connection time. The handler
+    is looked up lazily when the signal is actually emitted.
+    """
+
+    def lazy_handler(*args: Any, **kwargs: Any) -> None:
+        # First check on context (may have been added since connection time)
+        target = getattr(context, handler_name, None)
+
+        # If still not found, search up the parent hierarchy
+        if target is None:
+            target = resolve_signal_from_hierarchy(context, handler_name)
+
+        if target is None:
+            raise AttributeError(
+                f"{type(context).__name__} has no method or signal '{handler_name}' for signal connection {item_name}.{signal_name}=\"{handler_name}\" (checked context and parent hierarchy)"
+            )
+
+        if is_signal(target):
+            # Target is a Signal - emit it
+            target.emit(*args, **kwargs)  # type: ignore[union-attr]
+        elif callable(target):
+            # Target is a method - call it
+            target(*args, **kwargs)
+        else:
+            raise AttributeError(f'{type(context).__name__}.{handler_name} is not callable or a Signal for signal connection {item_name}.{signal_name}="{handler_name}"')
+
+    return lazy_handler
 
 
 def connect_field_signals(

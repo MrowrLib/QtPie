@@ -255,6 +255,7 @@ def _connect_signals(
         return
 
     from qtpie.bindings import is_format_string
+    from qtpie.signals.connect import create_lazy_hierarchy_handler
 
     def expression_handler_factory(ctx: Any, expr: str) -> Callable[..., Any]:
         return create_signal_expression_handler(ctx, expr, ["#self", "#widget", "#app"])
@@ -270,17 +271,21 @@ def _connect_signals(
                 expr_handler = expression_handler_factory(context, handler)
                 signal.connect(expr_handler)
             else:
-                # Method name or signal name on context
+                # Method name or signal name - first check on context itself
                 target = getattr(context, handler, None)
-                if target is None:
-                    raise AttributeError(f"{type(context).__name__} has no method or signal '{handler}' for signal connection {instance_name}.{signal_name}=\"{handler}\"")
 
-                if is_signal(target):
-                    signal.connect(target)
-                elif callable(target):
-                    signal.connect(target)
+                if target is not None:
+                    # Found on context - connect directly
+                    if is_signal(target):
+                        signal.connect(target)
+                    elif callable(target):
+                        signal.connect(target)
+                    else:
+                        raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for signal connection {instance_name}.{signal_name}="{handler}"')
                 else:
-                    raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for signal connection {instance_name}.{signal_name}="{handler}"')
+                    # Not found on context - use lazy resolution wrapper
+                    lazy_handler = create_lazy_hierarchy_handler(context, handler, instance_name, signal_name)
+                    signal.connect(lazy_handler)
         elif callable(handler):
             signal.connect(handler)
 

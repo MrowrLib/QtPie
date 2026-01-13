@@ -1152,19 +1152,29 @@ class TestMenuSignalToSignal:
 
         assert_that(lambda_called).is_true()
 
-    def test_invalid_handler_raises_in_menu(self, qt: QtDriver) -> None:
-        """Nonexistent handler name raises AttributeError in Menu."""
-        import pytest
+    def test_invalid_handler_uses_lazy_resolution_in_menu(self, qt: QtDriver) -> None:
+        """Nonexistent handler is deferred until emit (lazy resolution for hierarchy search).
+
+        With lazy hierarchy resolution, nonexistent handlers don't error at init time.
+        The menu is created successfully, and the error only occurs at emit time.
+        Note: Qt's event loop catches exceptions from signal handlers, so we can't
+        easily test the exception with pytest.raises.
+        """
 
         @menu(text="&File")
         class FileMenu(Menu):
             new_action: QAction = new("&New", triggered="nonexistent")
 
-        with pytest.raises(AttributeError, match="nonexistent"):
-            qt.track(FileMenu())
+        # Menu is created successfully - error deferred to emit time
+        m = qt.track(FileMenu())
+        assert m.new_action is not None
 
     def test_non_callable_non_signal_raises_in_menu(self, qt: QtDriver) -> None:
-        """Handler pointing to non-callable, non-signal attribute raises in Menu."""
+        """Handler pointing to non-callable, non-signal attribute raises at init.
+
+        Note: If the handler name exists on the menu (but isn't callable/signal),
+        the error is raised at init. Only nonexistent handlers use lazy resolution.
+        """
         import pytest
 
         @menu(text="&File")

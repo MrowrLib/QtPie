@@ -300,18 +300,22 @@ class TestSignalConnections:
         w._btn.click()
         assert_that(w.was_clicked).is_true()
 
-    def test_signal_missing_method_raises(self) -> None:
-        """Missing method name raises AttributeError."""
-        import pytest
+    def test_signal_missing_method_uses_lazy_resolution(self, qt: QtDriver) -> None:
+        """Missing method name is deferred until emit (lazy resolution for hierarchy search).
+
+        With lazy hierarchy resolution, nonexistent handlers don't error at init time.
+        The widget is created successfully, and the error only occurs at emit time.
+        Note: Qt's event loop catches exceptions from signal handlers, so we can't
+        easily test the exception with pytest.raises.
+        """
 
         @widget
         class MyWidget(Widget):
             _btn: QPushButton = new("Click", clicked="nonexistent_method")
 
-        with pytest.raises(AttributeError) as exc_info:
-            MyWidget()
-
-        assert "nonexistent_method" in str(exc_info.value)
+        # Widget is created successfully - error deferred to emit time
+        w = qt.track(MyWidget())
+        assert w._btn is not None
 
     def test_multiple_signals(self, qt: QtDriver) -> None:
         """Multiple signals can be connected."""

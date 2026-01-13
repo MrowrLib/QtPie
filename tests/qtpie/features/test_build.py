@@ -160,8 +160,14 @@ class TestSignalToSignal:
 class TestSignalErrors:
     """Test error handling for signal connections."""
 
-    def test_missing_handler_raises(self, qt: QtDriver) -> None:
-        """Missing handler raises AttributeError with helpful message."""
+    def test_missing_handler_uses_lazy_resolution(self, qt: QtDriver) -> None:
+        """Missing handler is deferred until emit (lazy resolution for hierarchy search).
+
+        With lazy hierarchy resolution, nonexistent handlers don't error at init time.
+        The widget is created successfully, and the error only occurs at emit time.
+        Note: Qt's event loop catches exceptions from signal handlers, so we can't
+        easily test the exception with pytest.raises.
+        """
 
         @widget
         class ChildWidget(Widget):
@@ -172,8 +178,9 @@ class TestSignalErrors:
 
         parent = Parent()
 
-        with pytest.raises(AttributeError, match="nonexistent"):
-            create_instance(parent, ChildWidget, on_action="nonexistent")
+        # Widget is created successfully - error deferred to emit time
+        child = qt.track(create_instance(parent, ChildWidget, on_action="nonexistent"))
+        assert child is not None
 
     def test_non_callable_handler_raises(self, qt: QtDriver) -> None:
         """Non-callable, non-signal handler raises AttributeError."""

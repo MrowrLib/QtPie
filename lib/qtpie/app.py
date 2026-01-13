@@ -331,6 +331,54 @@ class AppBase[T = None]:
             state.remove_validator(field_name, validator_name)
 
     # -------------------------------------------------------------------------
+    # Signal Resolution
+    # -------------------------------------------------------------------------
+
+    def signal(self, name: str) -> Any:
+        """Get a signal by name.
+
+        For App/AppBase, only checks this instance (no parent hierarchy).
+
+        Args:
+            name: The signal name (e.g., "on_reload_window")
+
+        Returns:
+            The signal if found
+
+        Raises:
+            AttributeError: If signal not found
+
+        Example:
+            self.signal("on_reload_window").emit()
+        """
+        from .utils.common import is_signal
+
+        target = getattr(self, name, None)
+        if target is not None and is_signal(target):
+            return target
+
+        raise AttributeError(f"Signal '{name}' not found on {type(self).__name__}")
+
+    def emit_signal(self, name: str, *args: Any, **kwargs: Any) -> None:
+        """Emit a signal by name.
+
+        Convenience method that combines signal() lookup with emit().
+
+        Args:
+            name: The signal name (e.g., "on_reload_window")
+            *args: Arguments to pass to signal.emit()
+            **kwargs: Keyword arguments to pass to signal.emit()
+
+        Raises:
+            AttributeError: If signal not found
+
+        Example:
+            self.emit_signal("on_reload_window")
+        """
+        sig = self.signal(name)
+        sig.emit(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
     # Lifecycle hooks (override in subclass)
     # -------------------------------------------------------------------------
 

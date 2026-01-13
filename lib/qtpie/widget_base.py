@@ -233,6 +233,60 @@ class WidgetBase[T = None]:
         return self._qtpie.validation_error_messages
 
     # -------------------------------------------------------------------------
+    # Signal Resolution
+    # -------------------------------------------------------------------------
+
+    def signal(self, name: str) -> Any:
+        """Get a signal by name, searching up the parent hierarchy.
+
+        First checks this widget, then walks up parent() chain, then QApplication.
+
+        Args:
+            name: The signal name (e.g., "on_reload_window")
+
+        Returns:
+            The signal if found
+
+        Raises:
+            AttributeError: If signal not found in hierarchy
+
+        Example:
+            self.signal("on_reload_window").emit()
+        """
+        from .utils.common import is_signal, resolve_signal_from_hierarchy
+
+        # First check on self
+        target = getattr(self, name, None)
+        if target is not None and is_signal(target):
+            return target
+
+        # Search up hierarchy
+        target = resolve_signal_from_hierarchy(self, name)
+        if target is not None and is_signal(target):
+            return target
+
+        raise AttributeError(f"Signal '{name}' not found on {type(self).__name__} or in parent hierarchy")
+
+    def emit_signal(self, name: str, *args: Any, **kwargs: Any) -> None:
+        """Emit a signal by name, searching up the parent hierarchy.
+
+        Convenience method that combines signal() lookup with emit().
+
+        Args:
+            name: The signal name (e.g., "on_reload_window")
+            *args: Arguments to pass to signal.emit()
+            **kwargs: Keyword arguments to pass to signal.emit()
+
+        Raises:
+            AttributeError: If signal not found in hierarchy
+
+        Example:
+            self.emit_signal("on_reload_window")
+        """
+        sig = self.signal(name)
+        sig.emit(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
     # Lifecycle Hooks
     # -------------------------------------------------------------------------
 

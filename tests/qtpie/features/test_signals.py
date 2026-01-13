@@ -7,6 +7,8 @@
 # pyright: reportUnknownMemberType=false
 # pyright: reportCallIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportUnknownVariableType=false
+# pyright: reportAttributeAccessIssue=false
 """Tests for signal connections across Widget, Window, Menu, and App.
 
 Tests method name strings, lambdas, and expression connections.
@@ -297,3 +299,197 @@ class TestSignalEdgeCases:
 
         instance.button.click()
         assert_that(instance.button.isEnabled()).is_false()
+
+
+# =============================================================================
+# Signal Hierarchy Resolution (signals search up parent chain)
+# =============================================================================
+
+
+class TestSignalHierarchyResolution:
+    """Signal connections search up the parent hierarchy."""
+
+    def test_signal_connects_to_parent_method(self, qt: QtDriver) -> None:
+        """Signal connection string finds method on parent widget."""
+        from qtpie import Widget, widget
+
+        parent_called = [False]
+
+        @widget
+        class Child(Widget):
+            button: QPushButton = new("Click", clicked="on_parent_click")
+
+        @widget
+        class Parent(Widget):
+            child: Child = new()
+
+            def on_parent_click(self) -> None:
+                parent_called[0] = True
+
+        parent = qt.track(Parent())
+        parent.child.button.click()
+
+        assert_that(parent_called[0]).is_true()
+
+    def test_signal_connects_to_grandparent_method(self, qt: QtDriver) -> None:
+        """Signal connection walks up multiple parent levels."""
+        from qtpie import Widget, widget
+
+        grandparent_called = [False]
+
+        @widget
+        class GrandChild(Widget):
+            button: QPushButton = new("Click", clicked="on_grandparent_click")
+
+        @widget
+        class Child(Widget):
+            grandchild: GrandChild = new()
+
+        @widget
+        class GrandParent(Widget):
+            child: Child = new()
+
+            def on_grandparent_click(self) -> None:
+                grandparent_called[0] = True
+
+        grandparent = qt.track(GrandParent())
+        grandparent.child.grandchild.button.click()
+
+        assert_that(grandparent_called[0]).is_true()
+
+    def test_signal_connects_to_parent_signal(self, qt: QtDriver) -> None:
+        """Signal connection can connect to parent's Signal for signal-to-signal."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        parent_signal_emitted = [False]
+
+        @widget
+        class Child(Widget):
+            button: QPushButton = new("Click", clicked="on_action")
+
+        @widget
+        class Parent(Widget):
+            on_action = Signal()
+            child: Child = new()
+
+            def __setup__(self) -> None:
+                self.on_action.connect(self._handle_action)
+
+            def _handle_action(self) -> None:
+                parent_signal_emitted[0] = True
+
+        parent = qt.track(Parent())
+        parent.child.button.click()
+
+        assert_that(parent_signal_emitted[0]).is_true()
+
+    def test_closest_parent_method_wins(self, qt: QtDriver) -> None:
+        """Closer parent's method takes precedence over further parent."""
+        from qtpie import Widget, widget
+
+        which_called = [None]
+
+        @widget
+        class GrandChild(Widget):
+            button: QPushButton = new("Click", clicked="on_click")
+
+        @widget
+        class Child(Widget):
+            grandchild: GrandChild = new()
+
+            def on_click(self) -> None:
+                which_called[0] = "child"
+
+        @widget
+        class GrandParent(Widget):
+            child: Child = new()
+
+            def on_click(self) -> None:
+                which_called[0] = "grandparent"
+
+        grandparent = qt.track(GrandParent())
+        grandparent.child.grandchild.button.click()
+
+        # Child is closer to GrandChild than GrandParent
+        assert_that(which_called[0]).is_equal_to("child")
+
+    def test_signal_method_returns_signal_object(self, qt: QtDriver) -> None:
+        """self.signal(name) returns the signal from parent hierarchy."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            pass
+
+        @widget
+        class Parent(Widget):
+            on_action = Signal()
+            child: Child = new()
+
+        parent = qt.track(Parent())
+        sig = parent.child.signal("on_action")
+
+        # Should be the same signal object
+        assert sig is parent.on_action
+
+    def test_emit_signal_emits_parent_signal(self, qt: QtDriver) -> None:
+        """self.emit_signal(name) emits signal found in parent hierarchy."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        signal_received = [False]
+
+        @widget
+        class Child(Widget):
+            button: QPushButton = new("Click", clicked="on_click")
+
+            def on_click(self) -> None:
+                self.emit_signal("on_action")
+
+        @widget
+        class Parent(Widget):
+            on_action = Signal()
+            child: Child = new()
+
+            def __setup__(self) -> None:
+                self.on_action.connect(self._handle)
+
+            def _handle(self) -> None:
+                signal_received[0] = True
+
+        parent = qt.track(Parent())
+        parent.child.button.click()
+
+        assert_that(signal_received[0]).is_true()
+
+    def test_signal_not_found_raises_error(self, qt: QtDriver) -> None:
+        """signal() raises AttributeError if signal not found anywhere."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            pass
+
+        @widget
+        class Parent(Widget):
+            child: Child = new()
+
+        parent = qt.track(Parent())
+
+        with pytest.raises(AttributeError, match="Signal 'nonexistent' not found"):
+            parent.child.signal("nonexistent")
+
+
+# Note: App signal hierarchy tests are complex because:
+# 1. App (QApplication) is a singleton and can't be created multiple times
+# 2. AppBase doesn't inherit from QObject so signals don't work
+# 3. The Qt parent() hierarchy from Widget to App goes via window management, not parent()
+#
+# The signal hierarchy lookup for QApplication.instance() is implemented in
+# resolve_signal_from_hierarchy() and will be tested in integration tests.
+# For unit tests, we focus on Widget/Window hierarchy which is the primary use case.

@@ -24,6 +24,47 @@ def is_signal(obj: object) -> bool:
     return type_name in ("SignalInstance", "pyqtBoundSignal")
 
 
+def resolve_signal_from_hierarchy(widget: object, name: str) -> object | None:
+    """Search up the parent hierarchy for a signal or callable by name.
+
+    Resolution order:
+    1. widget.parent() (Qt parent)
+    2. parent().parent(), etc.
+    3. QApplication.instance()
+
+    Returns the signal or callable if found, None otherwise.
+    """
+    from typing import Any
+
+    from qtpy.QtWidgets import QApplication, QWidget
+
+    current: Any = widget
+    while True:
+        if not isinstance(current, QWidget):
+            break
+        parent: Any = current.parent()
+        if parent is None:
+            break
+
+        # Try to find signal/method on parent
+        target = getattr(parent, name, None)
+        if target is not None:
+            if is_signal(target) or callable(target):
+                return target
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        target = getattr(app, name, None)
+        if target is not None:
+            if is_signal(target) or callable(target):
+                return target
+
+    return None
+
+
 def is_signal_on_type(name: str, target_type: type) -> bool:
     """Check if name is a signal on the given type.
 
