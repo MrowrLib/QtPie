@@ -11,7 +11,15 @@ from qtpie.utils.common import is_signal_on_type
 class _RuntimeData:
     """Data that needs context to be applied."""
 
-    __slots__ = ("signal_connections", "property_bindings", "bind_expr", "ref_bindings")
+    __slots__ = (
+        "signal_connections",
+        "property_bindings",
+        "bind_expr",
+        "ref_bindings",
+        "layout_target",
+        "label",
+        "grid",
+    )
 
     def __init__(
         self,
@@ -19,11 +27,17 @@ class _RuntimeData:
         property_bindings: dict[str, str],
         bind_expr: str | None,
         ref_bindings: dict[str, Any],
+        layout_target: str | bool | None,
+        label: str | None,
+        grid: tuple[int, ...] | None,
     ) -> None:
         self.signal_connections = signal_connections
         self.property_bindings = property_bindings
         self.bind_expr = bind_expr
         self.ref_bindings = ref_bindings
+        self.layout_target = layout_target
+        self.label = label
+        self.grid = grid
 
 
 def create_instance[T](context: Any, cls: type[T], /, *args: Any, **kwargs: Any) -> T:
@@ -55,14 +69,16 @@ def create_instance[T](context: Any, cls: type[T], /, *args: Any, **kwargs: Any)
         - t("text") -> Translatable strings (resolved immediately, registered for hot-reload)
         - Variable bindings for child widgets with required bindings (bare Variable[T]):
             child = self.build(ChildWidget, count="_my_count")  # passes Variable
+        - layout="_attr" or layout=True -> Add widget to a layout on the context
+        - label="Label:" -> For QFormLayout, adds widget with label
+        - grid=(row, col) or grid=(row, col, rowspan, colspan) -> For QGridLayout positioning
 
     NOT supported (only work with new() at class definition time):
         - list[QWidget] repeaters (e.g., `_items: list[QLabel] = new(bind="_data")`)
         - dict[K, V] repeaters
-        - label= for QFormLayout
-        - grid=(row, col) for QGridLayout
         - Automatic field-to-record binding in Widget[T]
         - stretch= and other layout hints
+
 
     Example:
         # At runtime, recreate a window with signal connections:
@@ -72,6 +88,10 @@ def create_instance[T](context: Any, cls: type[T], /, *args: Any, **kwargs: Any)
         # With reactive bindings:
         self.label = create_instance(self, QLabel, bind="Count: {_count}")
         self.btn = create_instance(self, QPushButton, "Submit", enabled="{_count > 0}")
+
+        # With layout (in __setup__ or after construction):
+        self.dynamic_btn = self.build(QPushButton, "OK", layout="_row")
+        self.name_field = self.build(QLineEdit, layout="_form", label="Name:")
     """
     instance, runtime_data = _create_instance_internal(cls, *args, **kwargs)
     _apply_context_bindings(context, instance, runtime_data, cls.__name__)
@@ -94,6 +114,11 @@ def _create_instance_internal[T](cls: type[T], /, *args: Any, **kwargs: Any) -> 
     bind_expr: str | None = None
     ref_bindings: dict[str, Any] = {}
 
+    # Layout-related kwargs
+    layout_target: str | bool | None = None
+    label: str | None = None
+    grid: tuple[int, ...] | None = None
+
     # Extract special QtPie kwargs
     if "name" in kwargs:
         object_name = kwargs.pop("name")
@@ -101,6 +126,12 @@ def _create_instance_internal[T](cls: type[T], /, *args: Any, **kwargs: Any) -> 
         css_classes = kwargs.pop("classes")
     if "bind" in kwargs:
         bind_expr = kwargs.pop("bind")
+    if "layout" in kwargs:
+        layout_target = kwargs.pop("layout")
+    if "label" in kwargs:
+        label = kwargs.pop("label")
+    if "grid" in kwargs:
+        grid = kwargs.pop("grid")
 
     for key, value in kwargs.items():
         # Check if it's a signal on the class
@@ -178,6 +209,9 @@ def _create_instance_internal[T](cls: type[T], /, *args: Any, **kwargs: Any) -> 
         property_bindings=property_bindings,
         bind_expr=bind_expr,
         ref_bindings=ref_bindings,
+        layout_target=layout_target,
+        label=label,
+        grid=grid,
     )
 
     return instance, runtime_data
@@ -204,6 +238,10 @@ def _apply_context_bindings(
     # Apply ref() bindings
     if runtime_data.ref_bindings:
         _apply_ref_bindings(context, instance, runtime_data.ref_bindings)
+
+    # Apply layout= (add to layout)
+    if runtime_data.layout_target is not None and runtime_data.layout_target is not False:
+        _apply_layout(context, instance, runtime_data)
 
 
 def _connect_signals(
@@ -324,6 +362,57 @@ def _apply_ref_bindings(context: Any, instance: Any, ref_bindings: dict[str, Any
         setter = getattr(instance, setter_name, None)
         if setter is not None and callable(setter):
             setter(resolved_value)
+
+
+def _apply_layout(context: Any, instance: Any, runtime_data: _RuntimeData) -> None:
+    """Apply layout= to add instance to a layout on context.
+
+    Args:
+        context: The parent object containing the layout.
+        instance: The widget to add.
+        runtime_data: Contains layout_target, label, and grid.
+    """
+    from qtpy.QtWidgets import QFormLayout, QGridLayout, QLayout, QWidget
+
+    layout_target = runtime_data.layout_target
+
+    # layout=True means use context's default layout
+    if layout_target is True:
+        if hasattr(context, "layout") and callable(context.layout):
+            layout = context.layout()
+        else:
+            return
+    # layout="attr_name" means get that attribute from context
+    elif isinstance(layout_target, str):
+        layout = getattr(context, layout_target, None)
+    else:
+        # Could be a direct layout reference
+        layout = layout_target
+
+    if layout is None or not isinstance(layout, QLayout):
+        return
+
+    # Must be a QWidget to add to layout
+    if not isinstance(instance, QWidget):
+        return
+
+    # Handle different layout types
+    if isinstance(layout, QFormLayout):
+        if runtime_data.label is not None:
+            layout.addRow(runtime_data.label, instance)
+        else:
+            layout.addRow(instance)
+    elif isinstance(layout, QGridLayout):
+        if runtime_data.grid is not None:
+            row, col = runtime_data.grid[0], runtime_data.grid[1]
+            rowspan = runtime_data.grid[2] if len(runtime_data.grid) > 2 else 1
+            colspan = runtime_data.grid[3] if len(runtime_data.grid) > 3 else 1
+            layout.addWidget(instance, row, col, rowspan, colspan)
+        else:
+            layout.addWidget(instance)
+    else:
+        # QVBoxLayout, QHBoxLayout, etc.
+        layout.addWidget(instance)
 
 
 def _is_ref(value: Any) -> bool:

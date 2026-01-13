@@ -208,8 +208,7 @@ class TestWidgetBuildMethod:
 
         @widget
         class ParentWidget(Widget):
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.action_called = False
                 self.child = self.build(ChildWidget, on_action="on_action")
 
@@ -326,8 +325,7 @@ class TestBindExpr:
         class Parent(Widget):
             _count: Variable[int] = new(42)
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.label = self.build(QLabel, bind="Count: {_count}")
 
         parent = Parent()
@@ -348,8 +346,7 @@ class TestBindExpr:
             _x: Variable[int] = new(10)
             _y: Variable[int] = new(20)
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.label = self.build(QLabel, bind="Sum: {_x + _y}")
 
         parent = Parent()
@@ -377,8 +374,7 @@ class TestPropertyBindings:
         class Parent(Widget):
             _show_label: Variable[bool] = new(True)
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.label = self.build(QLabel, "Hello", visible="_show_label")
 
         parent = Parent()
@@ -397,8 +393,7 @@ class TestPropertyBindings:
         class Parent(Widget):
             _count: Variable[int] = new(0)
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.btn = self.build(QPushButton, "Submit", enabled="{_count > 0}")
 
         parent = Parent()
@@ -426,8 +421,7 @@ class TestRefBindings:
         class Parent(Widget):
             my_tooltip = "This is my tooltip"
 
-            def __init__(self) -> None:
-                super().__init__()
+            def __setup__(self) -> None:
                 self.btn = self.build(QPushButton, "Click", toolTip=ref("my_tooltip"))
 
         parent = Parent()
@@ -470,3 +464,299 @@ class TestTranslatableSupport:
         qt.track(btn)
 
         assert_that(btn.toolTip()).is_equal_to("translated:Tooltip")
+
+
+# =============================================================================
+# layout= support (add to layout)
+# =============================================================================
+
+
+class TestLayoutSupport:
+    """Test layout=, label=, grid= support in build().
+
+    NOTE: layout= only works in __setup__ or methods called after construction,
+    because nested layouts are created after __init__ runs.
+    """
+
+    def test_layout_string_adds_to_named_layout(self, qt: QtDriver) -> None:
+        """layout='attr_name' adds widget to that layout on context."""
+        from PySide6.QtWidgets import QHBoxLayout
+
+        @widget
+        class Parent(Widget):
+            _row: QHBoxLayout = new()
+
+            def __setup__(self) -> None:
+                self.dynamic_label = self.build(QLabel, "Dynamic", layout="_row")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._row.count()).is_equal_to(1)
+        assert_that(parent._row.itemAt(0).widget()).is_same_as(parent.dynamic_label)
+
+    def test_layout_true_adds_to_default_layout(self, qt: QtDriver) -> None:
+        """layout=True adds widget to context's default layout."""
+
+        @widget
+        class Parent(Widget):
+            _existing: QLabel = new("Existing")
+
+            def __setup__(self) -> None:
+                self.dynamic_label = self.build(QLabel, "Dynamic", layout=True)
+
+        parent = Parent()
+        qt.track(parent)
+
+        main_layout = parent.layout()
+        assert_that(main_layout.count()).is_equal_to(2)
+
+    def test_layout_with_form_and_label(self, qt: QtDriver) -> None:
+        """layout= with QFormLayout and label= adds row with label."""
+        from PySide6.QtWidgets import QFormLayout, QLineEdit
+
+        @widget
+        class Parent(Widget):
+            _form: QFormLayout = new()
+
+            def __setup__(self) -> None:
+                self.name_field = self.build(QLineEdit, layout="_form", label="Name:")
+                self.email_field = self.build(QLineEdit, layout="_form", label="Email:")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._form.rowCount()).is_equal_to(2)
+        assert_that(parent._form.labelForField(parent.name_field).text()).is_equal_to("Name:")
+        assert_that(parent._form.labelForField(parent.email_field).text()).is_equal_to("Email:")
+
+    def test_layout_with_grid_and_position(self, qt: QtDriver) -> None:
+        """layout= with QGridLayout and grid= positions widget."""
+        from PySide6.QtWidgets import QGridLayout
+
+        @widget
+        class Parent(Widget):
+            _grid: QGridLayout = new()
+
+            def __setup__(self) -> None:
+                self.cell_00 = self.build(QLabel, "(0,0)", layout="_grid", grid=(0, 0))
+                self.cell_01 = self.build(QLabel, "(0,1)", layout="_grid", grid=(0, 1))
+                self.cell_10 = self.build(QLabel, "(1,0)", layout="_grid", grid=(1, 0))
+                self.cell_11 = self.build(QLabel, "(1,1)", layout="_grid", grid=(1, 1))
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._grid.count()).is_equal_to(4)
+        assert_that(parent._grid.itemAtPosition(0, 0).widget()).is_same_as(parent.cell_00)
+        assert_that(parent._grid.itemAtPosition(0, 1).widget()).is_same_as(parent.cell_01)
+        assert_that(parent._grid.itemAtPosition(1, 0).widget()).is_same_as(parent.cell_10)
+        assert_that(parent._grid.itemAtPosition(1, 1).widget()).is_same_as(parent.cell_11)
+
+    def test_layout_with_grid_span(self, qt: QtDriver) -> None:
+        """layout= with QGridLayout and grid= with rowspan/colspan."""
+        from PySide6.QtWidgets import QGridLayout
+
+        @widget
+        class Parent(Widget):
+            _grid: QGridLayout = new()
+
+            def __setup__(self) -> None:
+                # Header spans 2 columns
+                self.header = self.build(QLabel, "Header", layout="_grid", grid=(0, 0, 1, 2))
+                # Sidebar spans 2 rows
+                self.sidebar = self.build(QLabel, "Sidebar", layout="_grid", grid=(1, 0, 2, 1))
+                # Content cell
+                self.content = self.build(QLabel, "Content", layout="_grid", grid=(1, 1))
+
+        parent = Parent()
+        qt.track(parent)
+
+        # Header at (0,0) and (0,1)
+        assert_that(parent._grid.itemAtPosition(0, 0).widget()).is_same_as(parent.header)
+        assert_that(parent._grid.itemAtPosition(0, 1).widget()).is_same_as(parent.header)
+        # Sidebar at (1,0) and (2,0)
+        assert_that(parent._grid.itemAtPosition(1, 0).widget()).is_same_as(parent.sidebar)
+        assert_that(parent._grid.itemAtPosition(2, 0).widget()).is_same_as(parent.sidebar)
+        # Content at (1,1)
+        assert_that(parent._grid.itemAtPosition(1, 1).widget()).is_same_as(parent.content)
+
+    def test_layout_false_does_not_add(self, qt: QtDriver) -> None:
+        """layout=False does not add widget to any layout."""
+
+        @widget
+        class Parent(Widget):
+            _existing: QLabel = new("Existing")
+
+            def __setup__(self) -> None:
+                self.hidden = self.build(QLabel, "Hidden", layout=False)
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent.layout().count()).is_equal_to(1)
+        assert_that(parent.hidden.text()).is_equal_to("Hidden")
+
+    def test_multiple_widgets_to_same_layout(self, qt: QtDriver) -> None:
+        """Multiple build() calls can add to the same layout."""
+        from PySide6.QtWidgets import QHBoxLayout
+
+        @widget
+        class Parent(Widget):
+            _buttons: QHBoxLayout = new()
+
+            def __setup__(self) -> None:
+                self.btn1 = self.build(QPushButton, "OK", layout="_buttons")
+                self.btn2 = self.build(QPushButton, "Cancel", layout="_buttons")
+                self.btn3 = self.build(QPushButton, "Apply", layout="_buttons")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._buttons.count()).is_equal_to(3)
+        assert_that(parent._buttons.itemAt(0).widget()).is_same_as(parent.btn1)
+        assert_that(parent._buttons.itemAt(1).widget()).is_same_as(parent.btn2)
+        assert_that(parent._buttons.itemAt(2).widget()).is_same_as(parent.btn3)
+
+    def test_layout_to_vbox(self, qt: QtDriver) -> None:
+        """layout= works with QVBoxLayout."""
+        from PySide6.QtWidgets import QVBoxLayout
+
+        @widget
+        class Parent(Widget):
+            _column: QVBoxLayout = new()
+
+            def __setup__(self) -> None:
+                self.top = self.build(QLabel, "Top", layout="_column")
+                self.middle = self.build(QLabel, "Middle", layout="_column")
+                self.bottom = self.build(QLabel, "Bottom", layout="_column")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._column.count()).is_equal_to(3)
+        assert_that(parent._column.itemAt(0).widget()).is_same_as(parent.top)
+        assert_that(parent._column.itemAt(1).widget()).is_same_as(parent.middle)
+        assert_that(parent._column.itemAt(2).widget()).is_same_as(parent.bottom)
+
+    def test_layout_to_hbox(self, qt: QtDriver) -> None:
+        """layout= works with QHBoxLayout."""
+        from PySide6.QtWidgets import QHBoxLayout
+
+        @widget
+        class Parent(Widget):
+            _row: QHBoxLayout = new()
+
+            def __setup__(self) -> None:
+                self.left = self.build(QLabel, "Left", layout="_row")
+                self.center = self.build(QLabel, "Center", layout="_row")
+                self.right = self.build(QLabel, "Right", layout="_row")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._row.count()).is_equal_to(3)
+        assert_that(parent._row.itemAt(0).widget()).is_same_as(parent.left)
+        assert_that(parent._row.itemAt(1).widget()).is_same_as(parent.center)
+        assert_that(parent._row.itemAt(2).widget()).is_same_as(parent.right)
+
+    def test_layout_from_method_after_construction(self, qt: QtDriver) -> None:
+        """layout= works when called from a method after construction."""
+        from PySide6.QtWidgets import QHBoxLayout
+
+        @widget
+        class Parent(Widget):
+            _row: QHBoxLayout = new()
+
+            def add_item(self, text: str) -> QLabel:
+                return self.build(QLabel, text, layout="_row")
+
+        parent = Parent()
+        qt.track(parent)
+
+        # Add items dynamically
+        label1 = parent.add_item("Item 1")
+        label2 = parent.add_item("Item 2")
+        label3 = parent.add_item("Item 3")
+
+        assert_that(parent._row.count()).is_equal_to(3)
+        assert_that(parent._row.itemAt(0).widget()).is_same_as(label1)
+        assert_that(parent._row.itemAt(1).widget()).is_same_as(label2)
+        assert_that(parent._row.itemAt(2).widget()).is_same_as(label3)
+
+    def test_layout_with_other_build_features(self, qt: QtDriver) -> None:
+        """layout= works together with other build() features."""
+        from PySide6.QtWidgets import QHBoxLayout
+
+        from qtpie import Variable
+
+        @widget
+        class Parent(Widget):
+            _row: QHBoxLayout = new()
+            _enabled: Variable[bool] = new(True)
+
+            def __setup__(self) -> None:
+                self.btn = self.build(
+                    QPushButton,
+                    "Click",
+                    layout="_row",
+                    enabled="_enabled",
+                    clicked="on_click",
+                    toolTip="A button",
+                )
+                self.clicked_count = 0
+
+            def on_click(self) -> None:
+                self.clicked_count += 1
+
+        parent = Parent()
+        qt.track(parent)
+
+        # In layout
+        assert_that(parent._row.count()).is_equal_to(1)
+        # Props applied
+        assert_that(parent.btn.toolTip()).is_equal_to("A button")
+        # Signal connected
+        parent.btn.click()
+        assert_that(parent.clicked_count).is_equal_to(1)
+        # Binding works
+        parent._enabled.value = False
+        assert_that(parent.btn.isEnabled()).is_false()
+
+    def test_form_layout_without_label(self, qt: QtDriver) -> None:
+        """QFormLayout without label= adds widget spanning both columns."""
+        from PySide6.QtWidgets import QFormLayout, QLineEdit
+
+        @widget
+        class Parent(Widget):
+            _form: QFormLayout = new()
+
+            def __setup__(self) -> None:
+                self.labeled = self.build(QLineEdit, layout="_form", label="Name:")
+                self.spanning = self.build(QLineEdit, layout="_form")  # No label
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._form.rowCount()).is_equal_to(2)
+        # First row has label
+        assert_that(parent._form.labelForField(parent.labeled)).is_not_none()
+        # Second row spans (no label widget)
+        assert_that(parent._form.labelForField(parent.spanning)).is_none()
+
+    def test_grid_layout_without_position(self, qt: QtDriver) -> None:
+        """QGridLayout without grid= adds widget at next available position."""
+        from PySide6.QtWidgets import QGridLayout
+
+        @widget
+        class Parent(Widget):
+            _grid: QGridLayout = new()
+
+            def __setup__(self) -> None:
+                self.first = self.build(QLabel, "First", layout="_grid")
+                self.second = self.build(QLabel, "Second", layout="_grid")
+
+        parent = Parent()
+        qt.track(parent)
+
+        assert_that(parent._grid.count()).is_equal_to(2)
