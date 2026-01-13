@@ -90,6 +90,61 @@ class TestEntryConfig:
         assert_that(config.watch_stylesheet).is_true()
         assert_that(config.scss_search_paths).is_equal_to(("path1", "path2"))
 
+    def test_entry_config_scss_output(self) -> None:
+        """EntryConfig should accept scss_output value."""
+        config = EntryConfig(
+            stylesheet="styles.scss",
+            scss_output="compiled/styles.qss",
+        )
+        assert_that(config.stylesheet).is_equal_to("styles.scss")
+        assert_that(config.scss_output).is_equal_to("compiled/styles.qss")
+
+
+class TestScssOutputPath:
+    """Tests for scss_output parameter in _apply_stylesheet."""
+
+    def test_scss_output_writes_to_specified_path(self, qapp: App, tmp_path: Path) -> None:
+        """scss_output should write compiled QSS to the specified path."""
+        scss_file = tmp_path / "styles.scss"
+        scss_file.write_text("$color: orange; QWidget { background: $color; }")
+
+        output_path = tmp_path / "output" / "compiled.qss"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        config = EntryConfig(
+            stylesheet=str(scss_file),
+            watch_stylesheet=True,
+            scss_output=str(output_path),
+        )
+        watcher = _apply_stylesheet(qapp, config)
+
+        assert_that(watcher).is_not_none()
+        # Verify the QSS file was written to the specified path
+        assert_that(output_path.exists()).is_true()
+        qss_content = output_path.read_text()
+        assert_that(qss_content).contains("orange")
+        assert_that(qss_content).contains("background")
+
+        watcher.stop()  # type: ignore[union-attr]
+
+    def test_scss_output_uses_temp_when_not_specified(self, qapp: App, tmp_path: Path) -> None:
+        """Without scss_output, compiled QSS goes to temp directory."""
+        scss_file = tmp_path / "styles.scss"
+        scss_file.write_text("QWidget { color: blue; }")
+
+        config = EntryConfig(
+            stylesheet=str(scss_file),
+            watch_stylesheet=True,
+            # No scss_output - should use temp
+        )
+        watcher = _apply_stylesheet(qapp, config)
+
+        assert_that(watcher).is_not_none()
+        # The watcher should exist and stylesheet should be applied
+        assert_that(qapp.styleSheet()).contains("blue")
+
+        watcher.stop()  # type: ignore[union-attr]
+
 
 class TestEntryPointDecorator:
     """Tests for @entrypoint decorator behavior."""

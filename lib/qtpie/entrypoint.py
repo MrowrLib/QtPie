@@ -50,6 +50,7 @@ class EntryConfig:
     stylesheet: str | None = None
     watch_stylesheet: bool = False
     scss_search_paths: tuple[str, ...] = field(default_factory=tuple)
+    scss_output: str | None = None  # Output path for compiled SCSS -> QSS
     window: type[QWidget] | None = None
     # Translation support
     translations: str | tuple[str, ...] | None = None
@@ -126,10 +127,13 @@ def _apply_stylesheet(app: QApplication, config: EntryConfig) -> QssWatcher | Sc
     if config.watch_stylesheet and not is_qrc:
         # Set up a watcher - it will handle initial load too
         if is_scss:
-            # Create a temp file for compiled QSS
-            temp_dir = Path(tempfile.gettempdir()) / "qtpie_scss"
-            temp_dir.mkdir(exist_ok=True)
-            qss_path = str(temp_dir / f"{Path(stylesheet_path).stem}.qss")
+            # Use configured output path or create a temp file
+            if config.scss_output:
+                qss_path = config.scss_output
+            else:
+                temp_dir = Path(tempfile.gettempdir()) / "qtpie_scss"
+                temp_dir.mkdir(exist_ok=True)
+                qss_path = str(temp_dir / f"{Path(stylesheet_path).stem}.qss")
             return ScssWatcher(app, stylesheet_path, qss_path, search_paths or None)
         else:
             # QSS file
@@ -314,6 +318,7 @@ def entrypoint[T](
     stylesheet: str | None = ...,
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
+    scss_output: str | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | list[str] | None = ...,
     language: str = ...,
@@ -332,6 +337,7 @@ def entrypoint[T](
     stylesheet: str | None = ...,
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
+    scss_output: str | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | list[str] | None = ...,
     language: str = ...,
@@ -350,6 +356,7 @@ def entrypoint[T](
     stylesheet: str | None = ...,
     watch_stylesheet: bool = ...,
     scss_search_paths: list[str] | None = ...,
+    scss_output: str | None = ...,
     window: type[QWidget] | None = ...,
     translations: str | list[str] | None = ...,
     language: str = ...,
@@ -367,6 +374,7 @@ def entrypoint(
     stylesheet: str | None = None,
     watch_stylesheet: bool = False,
     scss_search_paths: list[str] | None = None,
+    scss_output: str | None = None,
     window: type[QWidget] | None = None,
     translations: str | list[str] | None = None,
     language: str = "en",
@@ -395,6 +403,8 @@ def entrypoint(
             Not applicable to QRC paths.
         scss_search_paths: Directories for SCSS @import resolution.
             If not provided, the SCSS file's parent folder is used.
+        scss_output: Output path for compiled SCSS -> QSS file.
+            If not provided, uses a temp directory. Only used with SCSS files.
         window: A widget class to instantiate as the main window.
         translations: Path or list of paths to translation YAML files.
         language: Language code to use (e.g., "en", "fr", "de"). Default is "en".
@@ -447,6 +457,7 @@ def entrypoint(
         stylesheet=stylesheet,
         watch_stylesheet=watch_stylesheet,
         scss_search_paths=tuple(scss_search_paths) if scss_search_paths else (),
+        scss_output=scss_output,
         window=window,
         translations=translations if isinstance(translations, str) else tuple(translations) if translations else None,
         language=language,

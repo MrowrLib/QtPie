@@ -10,6 +10,7 @@ version = "0.1.0"
 
 [tool.poe.tasks]
 forc = "uv run src/forc/app/__main__.py"
+qrc = "pyside6-rcc -o src/forc/app/qrc_resources.py resources/resources.qrc"
 
 [build-system]
 build-backend = "hatchling.build"

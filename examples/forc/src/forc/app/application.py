@@ -1,11 +1,17 @@
-from qtpy.QtWidgets import QLabel
-
 from forc.app.widgets.layout import SidebarWidget
+from forc.app.widgets.requests import RequestEditorWidget
+from forc.app.widgets.response import ResponseViewerWidget
 from qtpie import App, Dock, app, new
 
+from .qrc_resources import qt_resource_data
 
-@app(title="Free Open-source Rest Client")
+_qrc = qt_resource_data  # Prevent unused import from being removed
+
+
+@app(title="Forc - Free Open-source Rest Client", icon=":/icon.png")
 class ForcApp(App):
-    header: QLabel = new("Free Open-source Rest Client")
+    """Main Forc application with dock-based layout."""
 
-    sidebar: Dock[SidebarWidget] = new(dock="left")
+    _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")
+    _request: RequestEditorWidget = new()
+    _response: Dock[ResponseViewerWidget] = new(dock="right", title="Response")
