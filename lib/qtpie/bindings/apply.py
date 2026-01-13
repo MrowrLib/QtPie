@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from observant import Observable, ObservableDict, ObservableList
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 if TYPE_CHECKING:
@@ -1284,7 +1284,7 @@ def apply_auto_bindings(
 
                 def make_setter(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
                     def setter_fn(val: Any) -> None:
-                        s(w, val)
+                        s(w, val)  # noqa: B023 - val is parameter, not loop var
 
                     return setter_fn
 
@@ -1313,14 +1313,39 @@ def apply_auto_bindings(
         # Check if this is a model widget (QComboBox, QListView, etc.) with a list source
         if _is_model_widget(widget_instance):
             obs_list: ObservableList[Any] | None = None
+            root_variable: VarType[Any] | None = None
+
+            # For nested paths like "workspace.collections", find the ROOT Variable
+            # so we can re-sync when it changes from None to a real object
+            bind_path_normalized = bind_path.replace("?.", ".")
+            if "." in bind_path_normalized:
+                root_name = bind_path_normalized.split(".")[0]
+                root_attr: Any = getattr(host, root_name, None)
+                if root_attr is not None and isinstance(root_attr, VarType):
+                    root_variable = cast(VarType[Any], root_attr)
 
             # Extract ObservableList from Variable or use directly
             if isinstance(source, VarType):
                 wrapper = source.observable
                 if isinstance(wrapper, ObservableList):
                     obs_list = wrapper
+                elif isinstance(wrapper, (Observable, ObservableProxy)):
+                    # Source might be Observable[list] or ObservableProxy with nested list
+                    # Create a synced ObservableList that updates when source changes
+                    val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()
+                    if isinstance(val, list):
+                        obs_list = ObservableList(cast(list[Any], val))
+                    elif val is None:
+                        # Initially None - create empty list, will populate later
+                        obs_list = ObservableList[Any]()
             elif isinstance(source, ObservableList):
                 obs_list = source
+            elif isinstance(source, Observable):
+                val = source.get()
+                if isinstance(val, list):
+                    obs_list = ObservableList(cast(list[Any], val))
+                elif val is None:
+                    obs_list = ObservableList[Any]()
 
             if obs_list is not None:
                 # Decide which model type to use
@@ -1385,6 +1410,32 @@ def apply_auto_bindings(
                     widget_instance.setModel(proxy)  # type: ignore[attr-defined]
                 else:
                     widget_instance.setModel(model)  # type: ignore[attr-defined]
+
+                # For nested paths, subscribe to ROOT Variable to re-sync when it changes
+                if root_variable is not None:
+                    nested_path = ".".join(bind_path_normalized.split(".")[1:])
+
+                    def make_root_sync_for_model(root_var: VarType[Any], target: ObservableList[Any], path: str) -> None:
+                        def on_root_change(*_: Any) -> None:
+                            root_val: Any = root_var.value
+                            if root_val is None:
+                                target.clear()
+                                return
+                            # Traverse nested path
+                            nested_val: Any = root_val
+                            for part in path.split("."):
+                                if nested_val is None:
+                                    break
+                                nested_val = getattr(nested_val, part, None)
+                            if isinstance(nested_val, list):
+                                target.clear()
+                                target.extend(cast(list[Any], nested_val))
+                            elif nested_val is None:
+                                target.clear()
+
+                        root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
+
+                    make_root_sync_for_model(root_variable, obs_list, nested_path)
 
                 # Set up selection bindings based on widget type
                 if use_tree_model:
