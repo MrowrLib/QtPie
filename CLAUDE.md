@@ -75,6 +75,18 @@ If ANY check fails, fix it FIRST, then re-run ALL checks again.
 
 ---
 
+## ⛔ NEVER COMMIT ⛔
+
+**DO NOT EVER CREATE GIT COMMITS.**
+
+- NEVER run `git commit`
+- NEVER run `git push`
+- NEVER run `git add` with intent to commit
+- The user will handle all git operations themselves
+- This is non-negotiable - NO EXCEPTIONS
+
+---
+
 ## Design Principles
 
 1. **Declarative over imperative** - define what, not how

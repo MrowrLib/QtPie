@@ -45,6 +45,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._format_fns = format_fns or {}
 
         # Determine columns - explicit or auto-detect from first item or dataclass
+        self._columns_explicit = columns is not None
         if columns is not None:
             self._columns = list(columns)
         else:
@@ -138,6 +139,14 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
     def _on_insert(self, index: int, item: T) -> None:
         """Handle item insertion."""
+        # Re-detect columns if we had none and columns weren't explicit
+        if not self._columns_explicit and not self._columns:
+            new_columns = self._auto_detect_columns()
+            if new_columns:
+                self.beginResetModel()
+                self._columns = new_columns
+                self.endResetModel()
+                return  # Reset already handles the insert
         self.beginInsertRows(QModelIndex(), index, index)
         self.endInsertRows()
 
