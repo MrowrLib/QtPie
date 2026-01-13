@@ -10,6 +10,67 @@ from typing import Any
 from ..utils.common import is_signal
 
 
+def _resolve_var_for_expression(context_obj: Any, var_name: str) -> Any | None:
+    """Resolve a variable for signal expression context, walking parent hierarchy.
+
+    Returns the resolved value ready for use in eval context:
+    - Variable -> unwrapped value
+    - Signal -> .emit method (so it can be called directly)
+    - Other -> raw value
+
+    Returns None if not found.
+    """
+    from ..variable import Variable
+
+    # Try on context_obj itself (exact name, then underscore prefix)
+    for attr_name in [var_name, f"_{var_name}"]:
+        if hasattr(context_obj, attr_name):
+            raw_attr: Any = getattr(context_obj, attr_name)
+            if isinstance(raw_attr, Variable):
+                return raw_attr.value
+            elif is_signal(raw_attr):
+                return raw_attr.emit
+            else:
+                return raw_attr
+
+    # Walk parent hierarchy
+    if hasattr(context_obj, "parent") and callable(context_obj.parent):
+        current: Any = context_obj
+        while True:
+            parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+            if parent_obj is None:
+                break
+
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(parent_obj, attr_name):
+                    raw_attr = getattr(parent_obj, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        return raw_attr.value
+                    elif is_signal(raw_attr):
+                        return raw_attr.emit
+                    else:
+                        return raw_attr
+
+            current = parent_obj
+
+        # Check QApplication.instance() for app-level Variables
+        from qtpy.QtWidgets import QApplication
+
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(app_instance, attr_name):
+                    raw_attr = getattr(app_instance, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        return raw_attr.value
+                    elif is_signal(raw_attr):
+                        return raw_attr.emit
+                    else:
+                        return raw_attr
+
+    return None
+
+
 def create_signal_expression_handler(
     context_obj: Any,
     expression: str,
@@ -37,7 +98,6 @@ def create_signal_expression_handler(
         - Self placeholders for the context_obj instance
     """
     from ..bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields
-    from ..variable import Variable
 
     # Parse the expression to get the inner content
     fields = _parse_format_fields(expression)
@@ -79,25 +139,9 @@ def create_signal_expression_handler(
 
         # Add all variable values to context
         for var_name in var_names:
-            # Try exact match first
-            if hasattr(context_obj, var_name):
-                raw_attr: Any = getattr(context_obj, var_name)
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif is_signal(raw_attr):
-                    # Wrap signal so it can be called directly (calls .emit())
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
-            # Try underscore fallback
-            elif hasattr(context_obj, f"_{var_name}"):
-                raw_attr = getattr(context_obj, f"_{var_name}")
-                if isinstance(raw_attr, Variable):
-                    context[var_name] = raw_attr.value
-                elif is_signal(raw_attr):
-                    context[var_name] = raw_attr.emit
-                else:
-                    context[var_name] = raw_attr
+            resolved = _resolve_var_for_expression(context_obj, var_name)
+            if resolved is not None:
+                context[var_name] = resolved
 
         # Replace special placeholders
         eval_expr = expr

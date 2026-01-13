@@ -1,7 +1,6 @@
 from typing import Any
 
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QLabel
 
 from forc.app.menus import FileMenu, ViewMenu
 from forc.app.widgets.layout import SidebarWidget
@@ -12,11 +11,15 @@ from qtpie import Dock, Window, new, window
 from qtpie.variable import Variable
 
 
-@window(title="Forc :: Free Open-source Rest Client", icon=":/icon.png")
+@window(
+    title="Forc :: Free Open-source Rest Client",
+    icon=":/icon.png",
+    collection_item_clicked="on_collection_item_clicked",
+)
 class ForcWindow(Window):
     collection_item_clicked = Signal(Request)
 
-    collection_item: Variable[Any | None] = new(None)  # <--- I wanna store this in the state of the Window
+    collection_item: Variable[Any | None] = new(None)
 
     _request: RequestEditorWidget = new()
 
@@ -26,5 +29,5 @@ class ForcWindow(Window):
     _file_menu: FileMenu = new()
     _view_menu: ViewMenu = new()
 
-    # also try it here
-    item_info: QLabel = new(bind="{collection_item?.name}")
+    def on_collection_item_clicked(self, request: Request) -> None:
+        print("Collection item clicked in Window:", request)
