@@ -392,6 +392,50 @@ def bind_computed_format(
             key_wrapper.on_change(lambda: on_change(None))
 
 
+def rebind_child_widgets(parent: QWidget) -> None:
+    """Re-apply bindings on child Widget[T] instances that bind to parent's record.
+
+    When a parent Widget[T] gets its record set AFTER its children were created,
+    those children may have failed to resolve their bind="record" bindings.
+    This method walks through child widgets and re-applies their bindings.
+
+    Args:
+        parent: The parent widget whose children should be rebound.
+    """
+    from qtpie.bindings.apply import apply_auto_bindings
+    from qtpie.bindings.bind import is_widget_with_record
+    from qtpie.variable import RecordVariable
+
+    for child in parent.findChildren(QWidget):
+        child_config = getattr(type(child), "_qtpie_config", None)
+        if child_config is None:
+            continue
+
+        # Check if this child has a record type
+        child_record_type = getattr(child_config, "record_type", None)
+        if child_record_type is None:
+            continue
+
+        # Check the child's fields for bind="record" patterns
+        fields = getattr(child_config, "fields", {})
+        needs_rebind = False
+        for field_info in fields.values():
+            bind_val = getattr(field_info, "bind", None)
+            if bind_val == "record":
+                needs_rebind = True
+                break
+
+        if needs_rebind or is_widget_with_record(child):
+            # The child Widget[T] should inherit parent's record
+            parent_record = getattr(parent, "record", None)
+            if parent_record is not None and isinstance(parent_record, RecordVariable):
+                # Share the parent's ObservableProxy with the child
+                child_record_var: RecordVariable[Any] = RecordVariable(parent_record.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+                child.record = child_record_var  # type: ignore[union-attr]
+                # Re-apply bindings on child
+                apply_auto_bindings(child, child_config)  # type: ignore[arg-type]
+
+
 def connect_child_signals(
     widget: QWidget,
     wrapper: Observable[Any] | ObservableProxy[Any],

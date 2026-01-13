@@ -38,6 +38,9 @@ class NewField:
         self.is_list_widget: bool = False
         self.list_widget_type: type | None = None  # The QWidget type inside list[QWidget]
         self.list_format: str | Callable[[Any], str] | None = None  # Format for list items
+        # list[Dock[W]] support
+        self.is_list_dock: bool = False
+        self.list_dock_content_type: type | None = None  # The widget type inside list[Dock[W]]
         # set[QWidget] support
         self.is_set_widget: bool = False
         self.set_widget_type: type | None = None  # The QWidget type inside set[QWidget]
@@ -402,6 +405,41 @@ class NewField:
             self._extract_target_layout()
             # Args/kwargs are passed directly to layout constructor
             return
+
+        # Handle list[Dock[W]] - creates a DockWidgetRepeater bound to a list source
+        if origin is list:
+            type_args = get_args(self.field_type)
+            if type_args and self._is_dock_type_param(type_args[0]):
+                self.is_list_dock = True
+                # Extract the widget type from Dock[W]
+                dock_args = get_args(type_args[0])
+                if dock_args:
+                    self.list_dock_content_type = dock_args[0]
+
+                # Extract bind= (required for list docks)
+                self.bind = self.kwargs.pop("bind", None)
+
+                # Extract format= for dock title formatting
+                self.list_format = self.kwargs.pop("format", None)
+
+                # Extract dock-specific kwargs
+                # Note: title may have been normalized to windowTitle by _normalize_kwargs_aliases
+                self.dock_area = self.kwargs.pop("dock", None)
+                self.dock_title = self.kwargs.pop("windowTitle", None) or self.kwargs.pop("title", None)
+                self.dock_group = self.kwargs.pop("group", None)
+                self.dock_closable = self.kwargs.pop("closable", None)
+                self.dock_floatable = self.kwargs.pop("floatable", None)
+                self.dock_movable = self.kwargs.pop("movable", None)
+
+                # Extract selection bindings for list[Dock[W]]
+                self.selected_index = self.kwargs.pop("selectedIndex", None)
+                self.selected_item = self.kwargs.pop("selectedItem", None)
+
+                # layout=False → exclude from layout (not really applicable for docks)
+                self.kwargs.pop("layout", None)
+
+                # Remaining kwargs go to widget constructor
+                return
 
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
         if origin is list:

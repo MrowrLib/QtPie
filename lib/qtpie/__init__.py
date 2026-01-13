@@ -5,6 +5,7 @@ from .bindings import bind, register_binding
 from .create import create_instance
 from .dict_widget_repeater import DictWidgetRepeater
 from .dock import Dock
+from .dock_widget_repeater import DockWidgetRepeater
 from .entrypoint import entrypoint
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
@@ -31,6 +32,7 @@ __all__ = [
     "app",
     "create_instance",
     "DictWidgetRepeater",
+    "DockWidgetRepeater",
     "Menu",
     "MenuConfig",
     "RecordVariable",

@@ -9,7 +9,7 @@ from observant import Observable, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, resolve_sort, setup_repeater_layout
+from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, rebind_child_widgets, resolve_sort, setup_repeater_layout
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -242,6 +242,26 @@ class SetWidgetRepeater[T](QWidget):
         """Create a widget for an item and add it to the layout."""
         wrapper = self._create_item_wrapper(item)
         widget = self._create_widget_for_item()
+
+        # If the widget is a Widget[T] with a record type, assign the wrapper as its record
+        # This ensures the widget and the repeater share the same ObservableProxy
+        widget_config = getattr(type(widget), "_qtpie_config", None)
+        if widget_config is not None and getattr(widget_config, "record_type", None) is not None:
+            from .bindings.apply import apply_auto_bindings
+            from .variable import RecordVariable
+
+            if isinstance(wrapper, ObservableProxy):
+                record_var: RecordVariable[Any] = RecordVariable(wrapper)
+                widget.record = record_var  # type: ignore[union-attr]
+            else:
+                # Primitive type - just set the value directly
+                widget.record = item  # type: ignore[union-attr]
+
+            # Re-apply auto-bindings now that record is populated
+            apply_auto_bindings(widget, widget_config)  # type: ignore[arg-type]
+
+            # Also re-apply bindings on child Widget[T] instances that bind to parent's record
+            rebind_child_widgets(widget)
 
         self._bind_widget_to_item(widget, item, wrapper)
         connect_child_signals(widget, wrapper, self._signal_connections, self._parent_widget)

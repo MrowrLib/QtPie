@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, NoReturn, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
 from observant import Observable
 from qtpy.QtWidgets import (
@@ -51,6 +51,7 @@ class WindowConfig:
     # Dock fields - field names that are Dock[T] types
     dock_fields: list[str] = field(default_factory=lambda: [])
     variable_dock_fields: list[str] = field(default_factory=lambda: [])  # Variable[T, Dock[W]] fields
+    list_dock_fields: list[str] = field(default_factory=lambda: [])  # list[Dock[W]] fields
     # Window-level dock configuration
     corners: dict[str, str] | None = None  # {"top_left": "left", "bottom_right": "bottom", ...}
     dock_state_key: str | None = None  # Key for QSettings persistence
@@ -371,6 +372,9 @@ def _collect_fields(cls: type[Window[Any]]) -> None:
             # Track dock fields separately (after __set_name__ has run, is_dock is set)
             if value.is_dock:
                 config.dock_fields.append(name)
+            # Track list[Dock[W]] fields
+            elif value.is_list_dock:
+                config.list_dock_fields.append(name)
         # Check for Variable[T, Dock[W]] descriptors
         elif isinstance(value, _VariableDescriptor) and value.dock_info is not None:
             config.variable_dock_fields.append(name)
@@ -601,6 +605,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
         # Create Variable dock fields (Variable[T, Dock[W]] = new(..., dock="right", ...))
         _create_variable_dock_fields(self, config)
+
+        # Create list dock fields (list[Dock[W]] = new(bind="...", dock="right", ...))
+        _create_list_dock_fields(self, config)
 
         # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
         # Skip reactive props (with {}) and Translatable - they'll be handled by apply_reactive_widget_props
@@ -1612,3 +1619,94 @@ def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> N
         floating_binding = dock_info.get("dock_floating")
         if floating_binding:
             _setup_dock_floating_binding(window, dock, floating_binding)
+
+
+def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
+    """Create list[Dock[W]] fields for the window.
+
+    For list[Dock[W]] = new(bind="...", dock="right", group="..."), creates a
+    DockWidgetRepeater that dynamically creates/removes docks as items are
+    added/removed from the bound list.
+    """
+    from observant import ObservableList
+
+    from .bindings import resolve_binding_source
+    from .dock_widget_repeater import DockWidgetRepeater
+
+    if not config.list_dock_fields:
+        return
+
+    for name in config.list_dock_fields:
+        field = config.fields.get(name)
+        if field is None or not field.is_list_dock:
+            continue
+
+        content_type = field.list_dock_content_type
+        if content_type is None:
+            continue
+
+        if field.bind is None:
+            raise ValueError(f"list[Dock[{content_type.__name__}]] field '{name}' requires bind='...'")
+
+        # Resolve the binding source
+        source = resolve_binding_source(window, field.bind)
+        if source is None:
+            raise ValueError(f"Could not resolve bind='{field.bind}' for list dock field '{name}'")
+
+        # Get the ObservableList
+        obs_list: ObservableList[Any]
+        if isinstance(source, Variable):
+            wrapper = source.observable
+            if isinstance(wrapper, ObservableList):
+                obs_list = wrapper
+            elif isinstance(wrapper, Observable):
+                # Observable containing a list - get the list value
+                raw_list: Any = wrapper.get()
+                if isinstance(raw_list, list):
+                    obs_list = ObservableList[Any](cast(list[Any], raw_list))
+                else:
+                    raise TypeError(f"bind='{field.bind}' is Observable but doesn't contain a list")
+            else:
+                raise TypeError(f"bind='{field.bind}' resolved to unsupported type {type(wrapper).__name__}")
+        elif isinstance(source, ObservableList):
+            obs_list = source
+        else:
+            raise TypeError(f"bind='{field.bind}' must resolve to Variable[list[...]] or ObservableList, got {type(source).__name__}")
+
+        # Determine title expression (only strings allowed for dock titles)
+        title_expr = field.dock_title
+        if title_expr is None and isinstance(field.list_format, str):
+            title_expr = field.list_format
+        if title_expr is None:
+            title_expr = "{#self}"
+
+        # Resolve selection bindings
+        from .variable import _get_variable_observable
+
+        selected_index_obs = None
+        selected_item_obs = None
+        if field.selected_index:
+            selected_index_obs = _get_variable_observable(window, field.selected_index)
+        if field.selected_item:
+            selected_item_obs = _get_variable_observable(window, field.selected_item)
+
+        # Create the DockWidgetRepeater
+        repeater: DockWidgetRepeater[Any, QWidget] = DockWidgetRepeater(
+            observable_list=obs_list,
+            item_type=None,  # Could extract from type hints if needed
+            widget_type=content_type,
+            window=window,
+            dock_area=field.dock_area or "right",
+            group=field.dock_group,
+            title=title_expr,
+            closable=field.dock_closable if field.dock_closable is not None else True,
+            floatable=field.dock_floatable if field.dock_floatable is not None else True,
+            movable=field.dock_movable if field.dock_movable is not None else True,
+            widget_args=field.args,
+            widget_kwargs=field.kwargs,
+            selected_index_observable=selected_index_obs,
+            selected_item_observable=selected_item_obs,
+        )
+
+        # Store on window instance
+        setattr(window, name, repeater)
