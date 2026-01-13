@@ -290,6 +290,31 @@ class Widget[T = None](QWidget):
         sig = self.signal(name)
         sig.emit(*args, **kwargs)
 
+    def var(self, name: str) -> Any:
+        """Resolve a variable by name from the binding context.
+
+        Searches in this order:
+        1. This widget (with and without underscore prefix)
+        2. Parent widget hierarchy (walking up parent() chain)
+        3. QApplication.instance() for app-level Variables
+
+        Args:
+            name: The variable name to resolve (e.g., "count" or "_count").
+
+        Returns:
+            The resolved value (unwrapped from Variable if applicable).
+
+        Raises:
+            AttributeError: If variable not found in context or parent hierarchy.
+
+        Example:
+            count = self.var("count")  # Gets current value of _count Variable
+            item = self.var("selected_item")  # May resolve from parent widget
+        """
+        from qtpie.bindings.expression import resolve_var
+
+        return resolve_var(self, name)
+
     # -------------------------------------------------------------------------
     # Lifecycle Hooks
     # -------------------------------------------------------------------------

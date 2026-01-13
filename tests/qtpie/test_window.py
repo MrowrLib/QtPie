@@ -996,10 +996,10 @@ class TestWindowFormatBindingExpressions:
 
         @window(title="Test")
         class MainWindow(Window):
-            var: Variable[str, QLabel] = new("hello")(bind="{#self.upper()}")
+            my_var: Variable[str, QLabel] = new("hello")(bind="{#self.upper()}")
 
         w = qt.track(MainWindow())
-        assert_that(w.var.widget.text()).is_equal_to("HELLO")
+        assert_that(w.my_var.widget.text()).is_equal_to("HELLO")
 
     def test_mixed_text_and_expressions(self, qt: QtDriver) -> None:
         """Multiple expressions in one binding work."""
@@ -1225,7 +1225,7 @@ class TestWindowVariableWidget:
         @window(title="Test")
         class MainWindow(Window):
             label: QLabel = new("Some label")  # Regular widget to ensure central widget is created
-            var: Variable[str, QLineEdit] = new("")
+            my_var: Variable[str, QLineEdit] = new("")
 
         w = qt.track(MainWindow())
         central = w.centralWidget()
@@ -1236,7 +1236,7 @@ class TestWindowVariableWidget:
         found = False
         for i in range(layout.count()):
             item = layout.itemAt(i)
-            if item and item.widget() == w.var.widget:
+            if item and item.widget() == w.my_var.widget:
                 found = True
                 break
         assert found, "Variable widget should be in the layout"

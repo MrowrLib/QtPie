@@ -381,6 +381,27 @@ class AppBase[T = None]:
         sig = self.signal(name)
         sig.emit(*args, **kwargs)
 
+    def var(self, name: str) -> Any:
+        """Resolve a variable by name from the app.
+
+        Searches on this app instance (with and without underscore prefix).
+
+        Args:
+            name: The variable name to resolve (e.g., "count" or "_count").
+
+        Returns:
+            The resolved value (unwrapped from Variable if applicable).
+
+        Raises:
+            AttributeError: If variable not found.
+
+        Example:
+            theme = self.var("theme")  # Gets current value of _theme Variable
+        """
+        from qtpie.bindings.expression import resolve_var
+
+        return resolve_var(self, name)
+
     # -------------------------------------------------------------------------
     # Lifecycle hooks (override in subclass)
     # -------------------------------------------------------------------------

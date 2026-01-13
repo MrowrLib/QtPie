@@ -19,6 +19,65 @@ def _try_get_variable_from_obj(obj: Any, var_name: str) -> Any | None:
     return None
 
 
+def resolve_var(context: Any, name: str) -> Any:
+    """Resolve a variable by name from the binding context.
+
+    Searches in this order:
+    1. The context object itself (with and without underscore prefix)
+    2. Parent widget hierarchy (walking up parent() chain)
+    3. QApplication.instance() for app-level Variables
+
+    Args:
+        context: The context object (Widget, Window, App, or Menu instance).
+        name: The variable name to resolve (e.g., "count" or "_count").
+
+    Returns:
+        The resolved value (unwrapped from Variable if applicable).
+
+    Raises:
+        AttributeError: If variable not found in context or parent hierarchy.
+
+    Example:
+        # In a widget method:
+        count = self.var("count")  # Gets current value of _count Variable
+        item = self.var("selected_item")  # May resolve from parent widget
+    """
+    from qtpie.variable import Variable
+
+    # Try on context itself (with underscore variants)
+    for attr_name in [name, f"_{name}"]:
+        if hasattr(context, attr_name):
+            raw_attr: Any = getattr(context, attr_name)
+            if isinstance(raw_attr, Variable):
+                return raw_attr.value  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            return raw_attr  # pyright: ignore[reportUnknownVariableType]
+
+    # Search parent hierarchy (if context has parent() method)
+    if hasattr(context, "parent") and callable(context.parent):
+        from qtpy.QtWidgets import QApplication
+
+        current: Any = context
+        while True:
+            parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+            if parent_obj is None:
+                break
+
+            found_var = _try_get_variable_from_obj(parent_obj, name)
+            if found_var is not None:
+                return found_var.value  # pyright: ignore[reportUnknownMemberType]
+
+            current = parent_obj
+
+        # Check QApplication.instance() for app-level Variables
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            found_var = _try_get_variable_from_obj(app_instance, name)
+            if found_var is not None:
+                return found_var.value  # pyright: ignore[reportUnknownMemberType]
+
+    raise AttributeError(f"Variable '{name}' not found on {type(context).__name__} or in parent hierarchy")
+
+
 def create_expression_binding(
     context: Any,
     expression: str,
