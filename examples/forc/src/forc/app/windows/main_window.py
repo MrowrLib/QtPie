@@ -12,7 +12,7 @@ from qtpie.variable import Variable
 
 @window(title="Forc :: Free Open-source Rest Client", icon=":/icon.png")
 class ForcWindow(Window):
-    selected_collection_item: Variable[Any | None] = new(None)  # <--- I wanna store this in the state of the Window
+    collection_item: Variable[Any | None] = new(None)  # <--- I wanna store this in the state of the Window
 
     _request: RequestEditorWidget = new()
 
@@ -23,4 +23,4 @@ class ForcWindow(Window):
     _view_menu: ViewMenu = new()
 
     # also try it here
-    item_info: QLabel = new(bind="{selected_collection_item?.name}")
+    item_info: QLabel = new(bind="{collection_item?.name}")

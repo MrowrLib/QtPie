@@ -13,9 +13,19 @@ _ = Request  # to avoid unused import removal
 class RequestEditorWidget(Widget):
     """Central widget for editing a request. Contains address bar and tabs."""
 
-    _select_request_header: QLabel = new("Requests", visible="{not isinstance(selected_collection_item, Request)}", stylesheet="font-size: 18pt; font-weight: bold;")
-    _select_request_message: QLabel = new(
-        "Select a request from the collections tree to view or edit it.", visible="{not isinstance(selected_collection_item, Request)}", stylesheet="font-size: 12pt; font-style: italic;"
+    _select_request_header: QLabel = new(
+        "Requests",
+        visible="{not isinstance(collection_item, Request)}",
+        stylesheet="font-size: 18pt; font-weight: bold;",
     )
-    _address_bar: RequestAddressBarWidget = new(visible="{isinstance(selected_collection_item, Request)}")
-    _tabs: RequestTabsWidget = new(visible="{isinstance(selected_collection_item, Request)}")
+    _select_request_message: QLabel = new(
+        "Select a request from the collections tree to view or edit it.",
+        visible="{not isinstance(collection_item, Request)}",
+        stylesheet="font-size: 12pt; font-style: italic;",
+    )
+    _address_bar: RequestAddressBarWidget = new(
+        visible="{isinstance(collection_item, Request)}",
+    )
+    _tabs: RequestTabsWidget = new(
+        visible="{isinstance(collection_item, Request)}",
+    )

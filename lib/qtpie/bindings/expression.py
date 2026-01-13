@@ -95,8 +95,8 @@ def create_expression_binding(
                         break
 
     # Search parent widget hierarchy for variables not found on context
-    # This allows expressions like isinstance(selected_collection_item, Request) where
-    # selected_collection_item is on a parent widget
+    # This allows expressions like isinstance(collection_item, Request) where
+    # collection_item is on a parent widget
     vars_needing_parent_lookup = var_names - found_on_context
     parent_var_sources: dict[str, Variable[Any]] = {}
 

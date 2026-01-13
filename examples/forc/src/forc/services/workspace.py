@@ -151,8 +151,13 @@ class WorkspaceService:
 
     def resolve_request(self, request: Request) -> Request:
         """Create a copy of the request with all variables resolved."""
-        resolved_headers = [KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled) for kv in request.headers]
-        resolved_params = [KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled) for kv in request.query_params]
+        resolved_headers = [
+            KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled) for kv in request.headers
+        ]
+        resolved_params = [
+            KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled)
+            for kv in request.query_params
+        ]
 
         return Request(
             name=request.name,
