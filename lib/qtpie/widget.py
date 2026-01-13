@@ -538,17 +538,20 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                 else:
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
-                                # TODO: Add target_layout support to _VariableDescriptor if needed
+                                target_layout_name = descriptor.target_layout
 
                             # Determine target layout
                             target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)
                             if target is None:
                                 continue
 
-                            # Only validate for default layout
+                            # For default layout: validate and use decorator's layout type
+                            # For nested layout: detect actual layout type and use appropriate add method
                             if target_layout_name is None:
                                 _validate_layout_params(name, config.layout, var_label, grid)
-                            _add_to_layout(target, var.widget, config.layout if target_layout_name is None else "vertical", var_label, grid, var_label_translatable)
+                                _add_to_layout(target, var.widget, config.layout, var_label, grid, var_label_translatable)
+                            else:
+                                _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
 
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)

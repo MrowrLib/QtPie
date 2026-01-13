@@ -810,3 +810,72 @@ class TestNestedLayouts:
 
         with pytest.raises(TypeError, match="requires label="):
             create_and_track(qt, TestClass, base_class)
+
+    # --- Variable[T, W] in nested layouts ---
+
+    def test_variable_in_nested_hbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in nested QHBoxLayout."""
+
+        @decorator
+        class TestClass(base_class):
+            _row: QHBoxLayout = new()
+            _name: Variable[str, QLineEdit] = new("Hello")(layout="_row")  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Variable's widget should be in the nested layout
+        assert_that(instance._row.count()).is_equal_to(1)
+        assert_that(instance._name.value).is_equal_to("Hello")
+
+    def test_variable_in_nested_grid(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in nested QGridLayout with grid= position."""
+
+        @decorator
+        class TestClass(base_class):
+            _grid: QGridLayout = new()
+            _count: Variable[int, QSpinBox] = new(42)(layout="_grid", grid=(0, 0))  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Widget at (0,0)
+        item = instance._grid.itemAtPosition(0, 0)
+        assert item is not None
+        assert_that(item.widget()).is_instance_of(QSpinBox)
+
+    def test_variable_in_nested_form(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in nested QFormLayout with label=."""
+
+        @decorator
+        class TestClass(base_class):
+            _form: QFormLayout = new()
+            _email: Variable[str, QLineEdit] = new("")(layout="_form", label="Email:")  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Form should have 1 row with label
+        assert_that(instance._form.rowCount()).is_equal_to(1)
+        label_item = instance._form.itemAt(0, QFormLayout.ItemRole.LabelRole)
+        assert label_item is not None
+        assert_that(label_item.widget().text()).is_equal_to("Email:")
+
+    def test_variable_in_nested_grid_requires_grid(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in nested QGridLayout requires grid= parameter."""
+
+        @decorator
+        class TestClass(base_class):
+            _grid: QGridLayout = new()
+            _val: Variable[int, QSpinBox] = new(0)(layout="_grid")  # type: ignore[type-arg]  # Missing grid=
+
+        with pytest.raises(TypeError, match="requires grid="):
+            create_and_track(qt, TestClass, base_class)
+
+    def test_variable_in_nested_form_requires_label(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in nested QFormLayout requires label= parameter."""
+
+        @decorator
+        class TestClass(base_class):
+            _form: QFormLayout = new()
+            _val: Variable[str, QLineEdit] = new("")(layout="_form")  # type: ignore[type-arg]  # Missing label=
+
+        with pytest.raises(TypeError, match="requires label="):
+            create_and_track(qt, TestClass, base_class)

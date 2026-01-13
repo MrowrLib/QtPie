@@ -743,6 +743,8 @@ class _VariableDescriptor[T]:
         css_classes: list[str] | None = None,
         # Variable[T, Dock[W]] support
         dock_info: dict[str, Any] | None = None,
+        # Nested layout support
+        target_layout: str | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -754,6 +756,8 @@ class _VariableDescriptor[T]:
         self.label = label
         self.grid = grid
         self.exclude_from_layout = exclude_from_layout
+        # Target layout for nested layouts
+        self.target_layout = target_layout
         # Validator method names to auto-register
         self.validators = validators or []
         # Widget objectName and CSS classes
@@ -990,9 +994,10 @@ def create_variable_descriptor(
     object_name: str | None = None,
     css_classes: list[str] | None = None,
     dock_info: dict[str, Any] | None = None,
+    target_layout: str | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info)
+    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout)
 
 
 def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | None:  # pyright: ignore[reportUnusedFunction] - used in window.py

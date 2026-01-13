@@ -979,7 +979,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                 elif name in config.variable_names:
                     var = getattr(app, name, None)
                     if isinstance(var, Variable) and var.widget is not None:
-                        # Get label/grid/exclude_from_layout from the descriptor
+                        # Get label/grid/exclude_from_layout/target_layout from the descriptor
                         descriptor = getattr(cls, name, None)
                         var_label: str | None = None
                         grid: GridPosition | None = None
@@ -989,6 +989,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                                 continue
                             var_label = descriptor.label
                             grid = descriptor.grid  # type: ignore[assignment]
+                            target_layout_name = descriptor.target_layout
 
                         # Determine target layout
                         target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)

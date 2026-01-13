@@ -290,6 +290,13 @@ class NewField:
             grid = widget_kwargs_copy.pop("grid", None)
             layout_kwarg = widget_kwargs_copy.pop("layout", None)
             exclude_from_layout = layout_kwarg is False
+            # layout= can be False (exclude), string (target layout name), or NewField reference
+            target_layout: str | None = None
+            if layout_kwarg is not False and layout_kwarg is not None:
+                if isinstance(layout_kwarg, NewField):
+                    target_layout = layout_kwarg.name
+                elif isinstance(layout_kwarg, str):
+                    target_layout = layout_kwarg
 
             # Extract name= and classes= for widget configuration (not constructor params)
             object_name: str | None = widget_kwargs_copy.pop("name", None)
@@ -312,6 +319,7 @@ class NewField:
                 object_name,
                 css_classes,
                 dock_info,
+                target_layout,
             )
             setattr(owner, name, descriptor)
             return
