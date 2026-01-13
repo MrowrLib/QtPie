@@ -69,8 +69,9 @@ class NewField:
         self.selected_columns: str | None = None  # Variable name for selectedColumns binding (list[int])
         self.selected_cells: str | None = None  # Variable name for selectedCells binding (list[tuple])
         self.selected_items: str | None = None  # Variable name for selectedItems binding (list[T])
-        # QTreeView-specific: children attribute name
+        # QTreeView-specific: children attribute name and expand behavior
         self.tree_children: str | None = None  # Attribute name for child items: "children"
+        self.tree_expand: bool = False  # If True, expandAll() on init and when root changes
         # Filter expression for model widgets: "{_search} in {name}"
         self.model_filter: str | None = None  # Filter expression evaluated per item
         # Sort key for model widgets: "{age}", "method_name", or callable
@@ -569,6 +570,8 @@ class NewField:
                 elif self._is_qtreeview_type():
                     # children= specifies attribute for child items
                     self.tree_children = self.kwargs.pop("children", None)
+                    # expand= calls expandAll() on init and when root observable changes
+                    self.tree_expand = self.kwargs.pop("expand", False)
                     # QTreeView selection bindings (multi)
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)

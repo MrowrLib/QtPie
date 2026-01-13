@@ -347,10 +347,19 @@ def _apply_model_binding(
         widget_instance.setModel(model)  # type: ignore[attr-defined]
 
     # For nested paths, subscribe to ROOT Variable to re-sync when it changes
+    # Also handle expand=True for QTreeView
+    should_expand = use_tree_model and getattr(field_info, "tree_expand", False)
+
     if root_variable is not None:
         nested_path = ".".join(bind_path_normalized.split(".")[1:])
 
-        def make_root_sync_for_model(root_var: VarType[Any], target: ObservableList[Any], path: str) -> None:
+        def make_root_sync_for_model(
+            root_var: VarType[Any],
+            target: ObservableList[Any],
+            path: str,
+            tree_widget: QWidget | None,
+            expand_on_change: bool,
+        ) -> None:
             def on_root_change(*_: Any) -> None:
                 root_val: Any = root_var.value
                 if root_val is None:
@@ -365,12 +374,24 @@ def _apply_model_binding(
                 if isinstance(nested_val, list):
                     target.clear()
                     target.extend(cast(list[Any], nested_val))
+                    # Expand all if requested (QTreeView with expand=True)
+                    if expand_on_change and tree_widget is not None:
+                        from qtpy.QtCore import QTimer
+
+                        # Defer expandAll to after model updates
+                        QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
                 elif nested_val is None:
                     target.clear()
 
             root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
 
-        make_root_sync_for_model(root_variable, obs_list, nested_path)
+        make_root_sync_for_model(
+            root_variable,
+            obs_list,
+            nested_path,
+            widget_instance if should_expand else None,
+            should_expand,
+        )
 
     # Set up selection bindings based on widget type
     if use_tree_model:
@@ -382,6 +403,14 @@ def _apply_model_binding(
             field_info.selected_item,
             field_info.selected_items,
         )
+
+        # Handle expand=True: expandAll immediately and on data changes
+        if should_expand:
+            from qtpy.QtCore import QTimer
+
+            # Expand all immediately after model is set (defer to let model populate)
+            QTimer.singleShot(0, widget_instance.expandAll)  # type: ignore[attr-defined]
+
     elif use_table_model:
         # QTableView-specific selection bindings
         _setup_table_selection_bindings(
