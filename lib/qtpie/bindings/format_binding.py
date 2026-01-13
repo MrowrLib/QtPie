@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
@@ -358,6 +358,93 @@ def _split_field_content(content: str) -> tuple[str, str]:
     return content, ""
 
 
+def _eval_with_optional_chaining(expr: str, context: dict[str, Any]) -> Any:
+    """Evaluate an expression with ?. optional chaining support.
+
+    Converts expressions like 'workspace?.name' to safe navigation that returns
+    None if any intermediate value is None.
+
+    Example: 'workspace?.name' with workspace=None returns None instead of raising.
+    Example: 'workspace?.owner?.name' returns None if workspace or owner is None.
+    """
+    # Parse the expression to find ?. chains
+    # Strategy: for simple dotted paths with ?., manually traverse
+    # For complex expressions, we need a different approach
+
+    # Check if this is a simple dotted path (no operators, function calls, etc.)
+    # Simple: workspace?.name, config?.theme?.name
+    # Complex: workspace?.name + other, func(workspace?.name)
+    normalized = expr.replace("?.", ".")
+    if _is_simple_name(normalized):
+        # Simple dotted path - traverse manually with None checks
+        return _traverse_optional_path(expr, context)
+
+    # For complex expressions, convert ?. to a safe pattern
+    # This is a simple approach: split on ?. and build getattr chain
+    # More sophisticated parsing would require a full expression parser
+    # For now, just try eval and let it fail gracefully
+    try:
+        # Replace ?. with . and hope for the best (caller catches exceptions)
+        safe_expr = expr.replace("?.", ".")
+        return eval(safe_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+    except (AttributeError, TypeError):
+        return None
+
+
+def _traverse_optional_path(expr: str, context: dict[str, Any]) -> Any:
+    """Traverse a dotted path with ?. optional chaining.
+
+    Returns None if any segment is None or missing.
+    """
+    # Parse segments: "workspace?.name" -> [("workspace", True), ("name", False)]
+    segments: list[tuple[str, bool]] = []
+    remaining = expr
+    while remaining:
+        optional_idx = remaining.find("?.")
+        regular_idx = remaining.find(".")
+
+        if optional_idx == -1 and regular_idx == -1:
+            # Last segment
+            segments.append((remaining, False))
+            break
+        elif optional_idx != -1 and (regular_idx == -1 or optional_idx < regular_idx):
+            # Optional chain comes first
+            segments.append((remaining[:optional_idx], True))
+            remaining = remaining[optional_idx + 2 :]  # Skip ?.
+        else:
+            # Regular chain comes first
+            segments.append((remaining[:regular_idx], False))
+            remaining = remaining[regular_idx + 1 :]  # Skip .
+
+    if not segments:
+        return None
+
+    # Get the root from context
+    root_name, is_optional = segments[0]
+    if root_name not in context:
+        return None
+    current: Any = context[root_name]
+
+    # If root is optional and None, return None
+    if is_optional and current is None:
+        return None
+
+    # Traverse remaining segments
+    for attr_name, is_opt in segments[1:]:
+        if current is None:
+            return None
+        if not hasattr(current, attr_name):
+            if is_opt:
+                return None
+            # Required attribute missing - let caller handle
+            raise AttributeError(f"'{type(current).__name__}' has no attribute '{attr_name}'")
+        current = getattr(current, attr_name)
+        if is_opt and current is None:
+            return None
+
+    return current
+
+
 def _get_variable_names(fields: list[_FormatField]) -> set[str]:
     """Extract all variable names/paths from format fields.
 
@@ -384,39 +471,37 @@ def _get_variable_names(fields: list[_FormatField]) -> set[str]:
     return names
 
 
-def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]]:
+def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]]:
     """Get observables for a variable name (may be nested path).
 
     Returns a list of observables to subscribe to. This includes Observable,
-    ObservableList, ObservableDict, and ObservableSet since they all have on_change methods.
+    ObservableList, ObservableDict, ObservableSet, and ObservableProxy since they all have on_change methods.
     """
     from qtpie.variable import Variable
 
-    result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]] = []
+    # All observable types have on_change, so we can use a union
+    result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]] = []
 
-    # Try to resolve as binding source
+    def add_source(source: BindingSource) -> None:
+        if isinstance(source, Variable):
+            result.append(source.observable)
+        else:
+            result.append(source)
+
+    # Try to resolve as binding source (full path)
     source = resolve_binding_source(widget, name)
     if source is not None:
-        if isinstance(source, Variable):
-            obs = source.observable
-            if isinstance(obs, Observable):
-                result.append(obs)
-            elif isinstance(obs, ObservableList):
-                result.append(obs)
-            elif isinstance(obs, ObservableDict):
-                result.append(obs)
-            elif isinstance(obs, ObservableSet):
-                result.append(obs)
-            # else: ObservableProxy - doesn't directly fit Observable[Any], skip
-        elif isinstance(source, Observable):
-            result.append(source)
-        elif isinstance(source, ObservableList):
-            result.append(source)
-        elif isinstance(source, ObservableDict):
-            result.append(source)
-        elif isinstance(source, ObservableSet):
-            result.append(source)
-        # else: ObservableProxy - for nested paths, skip for now
+        add_source(source)
+
+    # For nested paths like "workspace.name", also try to subscribe to the ROOT Variable
+    # This is critical for bare Variables resolved from hierarchy (descriptors)
+    normalized = name.replace("?.", ".")
+    if "." in normalized:
+        root_name = normalized.split(".")[0]
+        # Try root name directly on widget (handles descriptors like bare Variables)
+        root_attr: Any = getattr(widget, root_name, None)
+        if root_attr is not None and isinstance(root_attr, Variable):
+            add_source(cast(BindingSource, root_attr))
 
     return result
 
@@ -480,8 +565,8 @@ def create_format_binding(
     root_names = _get_root_names(var_names)
 
     # Collect all observables to subscribe to
-    # Include ObservableList, ObservableDict, and ObservableSet since they also have on_change
-    all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any]] = []
+    # Include ObservableList, ObservableDict, ObservableSet, and ObservableProxy since they all have on_change
+    all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]] = []
 
     for name in var_names:
         obs_list = _get_observables_for_name(widget, name)
@@ -586,7 +671,11 @@ def create_format_binding(
 
                 # Evaluate the expression
                 try:
-                    value: Any = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    # Handle ?. optional chaining by converting to safe navigation
+                    if "?." in eval_expr:
+                        value = _eval_with_optional_chaining(eval_expr, context)
+                    else:
+                        value = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
                     # Unwrap Observable/ObservableProxy results (from nested property access)
                     if isinstance(value, Observable):
                         value = value.get()  # pyright: ignore[reportUnknownVariableType]

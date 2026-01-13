@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QLabel, QPushButton
+from qtpy.QtWidgets import QLabel, QTableView
 
 from forc.domain.models import Workspace
 from forc.services import WorkspaceService
@@ -12,18 +12,7 @@ class CollectionsTreeWidget(Widget):
     workspace_service: Variable[WorkspaceService]
     workspace: Variable[Workspace | None]
 
-    _placeholder: QLabel = new(bind="Collections Tree Placeholder for {workspace.name}")
+    _placeholder: QLabel = new(bind="Collections Tree Placeholder for {workspace?.name}")
 
-    btn_check_workspace_value: QPushButton = new("Check Workspace Value", clicked="on_check_workspace_value")
-
-    def __setup__(self) -> None:
-        if self.workspace.value is None:
-            print("No workspace loaded; collections tree will be empty.")
-        else:
-            print(f"Loaded workspace: {self.workspace.value.name}")
-
-    def on_check_workspace_value(self) -> None:
-        if self.workspace.value is None:
-            print("Workspace is currently None.")
-        else:
-            print(f"Workspace is loaded: {self.workspace.value.name}")
+    _show_collections: QTableView = new(bind="workspace.collections")
+    _show_collections_labels: list[QLabel] = new(bind="workspace.collections", format="Collection: {name}")

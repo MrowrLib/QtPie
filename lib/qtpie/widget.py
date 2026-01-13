@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
 
-from observant import Observable, ObservableDict, ObservableList, ObservableSet
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import (
     QLayout,
     QSpacerItem,
@@ -1071,6 +1071,16 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         else:
             wrapper = source
 
+        # For nested paths like "workspace.collections", we also need to subscribe to the ROOT Variable
+        # so that when workspace changes from None to a real object, we re-sync
+        root_variable: Variable[Any] | None = None
+        bind_path_normalized = field.bind.replace("?.", ".")
+        if "." in bind_path_normalized:
+            root_name = bind_path_normalized.split(".")[0]
+            root_attr: Any = getattr(widget, root_name, None)
+            if root_attr is not None and isinstance(root_attr, Variable):
+                root_variable = root_attr
+
         # Handle ObservableDict -> DictWidgetRepeater
         if isinstance(wrapper, ObservableDict):
             from .dict_widget_repeater import DictWidgetRepeater
@@ -1105,19 +1115,94 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             val: Any = wrapper.get()  # pyright: ignore[reportUnknownVariableType]
             if isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
-
-                # Sync: when Observable changes, update ObservableList
-                def make_sync(obs: Observable[Any], target: ObservableList[Any]) -> None:
-                    def on_source_change(new_val: Any) -> None:
-                        if isinstance(new_val, list):
-                            target.clear()
-                            target.extend(cast(list[Any], new_val))
-
-                    obs.on_change(on_source_change)
-
-                make_sync(wrapper, obs_list)  # pyright: ignore[reportUnknownArgumentType]
+            elif val is None:
+                # Initial value is None - start with empty list, populate when value arrives
+                obs_list = ObservableList[Any]()
             else:
                 raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list or dict")  # pyright: ignore[reportUnknownArgumentType]
+
+            # Sync: when Observable changes, update ObservableList
+            def make_sync(obs: Observable[Any], target: ObservableList[Any]) -> None:
+                def on_source_change(new_val: Any) -> None:
+                    if isinstance(new_val, list):
+                        target.clear()
+                        target.extend(cast(list[Any], new_val))
+                    elif new_val is None:
+                        target.clear()
+
+                obs.on_change(on_source_change)
+
+            make_sync(wrapper, obs_list)  # pyright: ignore[reportUnknownArgumentType]
+
+            # For nested paths, also subscribe to ROOT Variable to re-sync when it changes
+            # BUT only if the nested path is on the VALUE (not on the Variable itself)
+            if root_variable is not None:
+                nested_path = ".".join(bind_path_normalized.split(".")[1:])
+                first_nested = nested_path.split(".")[0] if nested_path else ""
+
+                # Skip if nested path is a Variable property (e.g., validation_error_messages)
+                # Those are already properly subscribed via resolve_binding_source
+                is_variable_property = hasattr(root_variable, first_nested) and not first_nested.startswith("_")
+
+                if not is_variable_property:
+
+                    def make_root_sync(root_var: Variable[Any], target: ObservableList[Any], path: str) -> None:
+                        def on_root_change(*_: Any) -> None:
+                            root_val = root_var.value
+                            if root_val is None:
+                                target.clear()
+                                return
+                            # Traverse nested path
+                            nested_val: Any = root_val
+                            for part in path.split("."):
+                                if nested_val is None:
+                                    break
+                                nested_val = getattr(nested_val, part, None)
+                            if isinstance(nested_val, list):
+                                target.clear()
+                                target.extend(cast(list[Any], nested_val))
+                            elif nested_val is None:
+                                target.clear()
+
+                        root_var.observable.on_change(on_root_change)
+
+                    make_root_sync(root_variable, obs_list, nested_path)
+        elif isinstance(wrapper, ObservableProxy):
+            # ObservableProxy - need to handle nested path like "workspace.collections"
+            # Start with empty list, sync when root object changes
+            obs_list = ObservableList[Any]()
+
+            # Get the nested path (e.g., "collections" from "workspace.collections")
+            bind_path = field.bind.replace("?.", ".")
+            parts = bind_path.split(".")
+            nested_path = ".".join(parts[1:]) if len(parts) > 1 else None
+
+            def make_proxy_sync(proxy: ObservableProxy[Any], target: ObservableList[Any], path: str | None) -> None:
+                def on_proxy_change() -> None:
+                    root_val = proxy.unwrap()
+                    if root_val is None:
+                        target.clear()
+                        return
+                    # Get nested value
+                    if path:
+                        nested_val = root_val
+                        for part in path.split("."):
+                            if nested_val is None:
+                                break
+                            nested_val = getattr(nested_val, part, None)
+                    else:
+                        nested_val = root_val
+                    if isinstance(nested_val, list):
+                        target.clear()
+                        target.extend(cast(list[Any], nested_val))
+                    elif nested_val is None:
+                        target.clear()
+
+                proxy.on_change(on_proxy_change)
+                # Also trigger initial sync
+                on_proxy_change()
+
+            make_proxy_sync(wrapper, obs_list, nested_path)  # pyright: ignore[reportUnknownArgumentType]
         else:
             raise TypeError(f"bind='{field.bind}' resolved to {type(wrapper).__name__}, expected Variable[list[...]], Variable[dict[...]], ObservableList, or ObservableDict")
 
