@@ -132,6 +132,8 @@ class MenuConfig:
     record_default: Any | None = None
     # Ordered list of items (actions, separators, sections) by field name
     item_order: list[str] = field(default_factory=lambda: list[str]())
+    # Signal connections from decorator: {signal_name: handler_name}
+    signal_connections: dict[str, str] = field(default_factory=lambda: dict[str, str]())
 
 
 # =============================================================================
@@ -435,10 +437,27 @@ def menu[M: Menu[Any]](
         @menu(text="&File")
         class FileMenu(Menu):
             ...
+
+        @menu(text="&File", on_menu_action="_on_menu_action")
+        class FileMenu(Menu):
+            on_menu_action = Signal()
+            def _on_menu_action(self): ...
     """
 
     def decorator(target_cls: type[M]) -> type[M]:
+        from qtpie.utils.common import is_signal_on_type
+
         config = target_cls._qtpie_config  # pyright: ignore[reportPrivateUsage]
+
+        # Extract signal connections from props
+        # Signal connections are props where the key is a Signal name on the class
+        signal_connections: dict[str, str] = {}
+        widget_props: dict[str, Any] = {}
+        for key, value in props.items():
+            if is_signal_on_type(key, target_cls) and isinstance(value, str):
+                signal_connections[key] = value
+            else:
+                widget_props[key] = value
 
         # Store decorator options
         config.text = text
@@ -447,9 +466,10 @@ def menu[M: Menu[Any]](
             config.css_classes = classes
         if record is not None:
             config.record_default = record
+        config.signal_connections = signal_connections
 
         # Wrap __init__ to set up menu
-        _wrap_init_for_menu(target_cls, props)
+        _wrap_init_for_menu(target_cls, widget_props)
 
         return target_cls
 
@@ -580,6 +600,9 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
         # Apply property bindings for QActions (not handled by apply_property_bindings)
         _apply_action_property_bindings(self, config)
 
+        # Connect signals from decorator (e.g., @menu(on_menu_action="_on_menu_action"))
+        _connect_decorator_signals(self, config)
+
         # Enable dirty/valid hooks
         state = self._qtpie  # pyright: ignore[reportPrivateUsage]
         state.enable_dirty_hook()
@@ -587,6 +610,37 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     config.init_wrapped = True
+
+
+def _connect_decorator_signals(menu: Menu[Any], config: MenuConfig) -> None:
+    """Connect signals defined in @menu decorator kwargs.
+
+    Example:
+        @menu(text="&File", on_menu_action="_on_menu_action")
+        class FileMenu(Menu):
+            on_menu_action = Signal()
+            def _on_menu_action(self): ...
+
+    Args:
+        menu: The Menu instance
+        config: The MenuConfig containing signal_connections
+    """
+    from .utils.common import is_signal
+
+    for signal_name, handler_name in config.signal_connections.items():
+        signal = getattr(menu, signal_name, None)
+        if signal is None:
+            continue
+
+        if not is_signal(signal):
+            continue
+
+        handler = getattr(menu, handler_name, None)
+        if handler is None:
+            raise AttributeError(f"Handler '{handler_name}' not found on {type(menu).__name__} for signal '{signal_name}'")
+
+        if callable(handler):
+            signal.connect(handler)
 
 
 def _get_section_text(name: str, field: NewField | None) -> str:

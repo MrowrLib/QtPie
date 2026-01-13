@@ -485,15 +485,28 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         kwargs["styleSheet"] = stylesheet
 
     def decorator(target: type[W]) -> type[W]:
+        from qtpie.utils.common import is_signal_on_type
+
+        # Extract signal connections from kwargs
+        # Signal connections are kwargs where the key is a Signal name on the class
+        signal_connections: dict[str, str] = {}
+        widget_props: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if is_signal_on_type(key, target) and isinstance(value, str):
+                signal_connections[key] = value
+            else:
+                widget_props[key] = value
+
         # Store layout config
         target._qtpie_config.layout = layout
         target._qtpie_config.margins = margins
         target._qtpie_config.auto_bind = auto_bind
         target._qtpie_config.record_default = record
-        target._qtpie_config.widget_props = kwargs
+        target._qtpie_config.widget_props = widget_props
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
         target._qtpie_config.icon = icon
+        target._qtpie_config.signal_connections = signal_connections
 
         # Auto-wrap async methods (e.g., async def closeEvent)
         from qtpie.async_wrap import wrap_async_methods
@@ -1259,6 +1272,29 @@ def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
     from qtpie.signals import connect_field_signals
 
     connect_field_signals(widget, config.fields, _create_signal_expression_handler)
+
+    # Connect signals from decorator (e.g., @widget(on_reload="_on_reload"))
+    _connect_decorator_signals(widget, config)
+
+
+def _connect_decorator_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Connect signals declared in @widget decorator.
+
+    For example: @widget(on_reload="_on_reload") connects widget.on_reload to widget._on_reload.
+    """
+    for signal_name, handler_name in config.signal_connections.items():
+        signal = getattr(widget, signal_name, None)
+        if signal is None:
+            continue
+
+        handler = getattr(widget, handler_name, None)
+        if handler is None:
+            raise AttributeError(f"{type(widget).__name__} has no method '{handler_name}' for signal connection @widget({signal_name}=\"{handler_name}\")")
+
+        if callable(handler):
+            signal.connect(handler)
+        else:
+            raise AttributeError(f'{type(widget).__name__}.{handler_name} is not callable for signal connection @widget({signal_name}="{handler_name}")')
 
 
 def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> Callable[..., Any]:

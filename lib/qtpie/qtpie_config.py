@@ -26,6 +26,7 @@ class _QtPieConfig:
         "css_classes",
         "required_bindings",
         "icon",
+        "signal_connections",
     )
 
     def __init__(self) -> None:
@@ -42,3 +43,4 @@ class _QtPieConfig:
         self.css_classes: list[str] = []  # CSS classes for the widget
         self.required_bindings: set[str] = set()  # Bare Variable[T] fields that must be provided
         self.icon: IconType = None  # Window icon (resolved at runtime)
+        self.signal_connections: dict[str, str] = {}  # Signal connections from decorator

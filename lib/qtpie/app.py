@@ -75,6 +75,9 @@ class AppConfig:
     # Required bindings - bare Variable[T] fields that must be provided
     required_bindings: set[str] = field(default_factory=lambda: set[str]())
 
+    # Signal connections from decorator: {signal_name: handler_name}
+    signal_connections: dict[str, str] = field(default_factory=lambda: {})
+
     # For AppBase: track if we're in a real QApplication context
     is_qapplication: bool = False
 
@@ -766,12 +769,25 @@ def app[A: AppBase[Any]](
         kwargs["styleSheet"] = stylesheet
 
     def decorator(target: type[A]) -> type[A]:
+        from qtpie.utils.common import is_signal_on_type
+
         config = target._qtpie_config
+
+        # Extract signal connections from kwargs
+        # Signal connections are kwargs where the key is a Signal name on the class
+        signal_connections: dict[str, str] = {}
+        widget_props: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if is_signal_on_type(key, target) and isinstance(value, str):
+                signal_connections[key] = value
+            else:
+                widget_props[key] = value
+
         config.layout = layout
         config.margins = margins
         config.auto_bind = auto_bind
         config.record_default = record
-        config.widget_props = kwargs
+        config.widget_props = widget_props
         config.object_name = name
         config.css_classes = classes or []
         config.window = window
@@ -783,6 +799,7 @@ def app[A: AppBase[Any]](
         config.tray_icon = tray_icon
         config.corners = corners
         config.docks_locked = docksLocked
+        config.signal_connections = signal_connections
 
         # Wrap __init__
         _wrap_init_for_app(target)
@@ -833,6 +850,9 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         from qtpie.signals import connect_field_signals
 
         connect_field_signals(self, config.fields, _create_app_signal_expression_handler)
+
+        # Connect signals from decorator (e.g., @app(on_reload="_on_reload"))
+        _connect_decorator_signals(self, config)
 
         # Set initial record value if provided via @app(record=...)
         # new_fields may have already set this (so child widgets can bind to parent.record)
@@ -905,6 +925,26 @@ def _apply_app_widget_props(app: AppBase[Any], config: AppConfig) -> None:
         return isinstance(value, str) and is_format_string(value)
 
     apply_widget_props(app, config.widget_props, skip_filter=skip_reactive)
+
+
+def _connect_decorator_signals(app: AppBase[Any], config: AppConfig) -> None:
+    """Connect signals declared in @app decorator.
+
+    For example: @app(on_reload="_on_reload") connects app.on_reload to app._on_reload.
+    """
+    for signal_name, handler_name in config.signal_connections.items():
+        signal = getattr(app, signal_name, None)
+        if signal is None:
+            continue
+
+        handler = getattr(app, handler_name, None)
+        if handler is None:
+            raise AttributeError(f"{type(app).__name__} has no method '{handler_name}' for signal connection @app({signal_name}=\"{handler_name}\")")
+
+        if callable(handler):
+            signal.connect(handler)
+        else:
+            raise AttributeError(f'{type(app).__name__}.{handler_name} is not callable for signal connection @app({signal_name}="{handler_name}")')
 
 
 def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[Any]]) -> None:

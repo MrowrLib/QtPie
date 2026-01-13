@@ -493,3 +493,150 @@ class TestSignalHierarchyResolution:
 # The signal hierarchy lookup for QApplication.instance() is implemented in
 # resolve_signal_from_hierarchy() and will be tested in integration tests.
 # For unit tests, we focus on Widget/Window hierarchy which is the primary use case.
+
+
+# =============================================================================
+# Decorator Signal Connections (@widget(on_signal="_handler"))
+# =============================================================================
+
+
+class TestDecoratorSignalConnections:
+    """Test signal connections via decorator kwargs."""
+
+    def test_widget_decorator_signal_connection(self, qt: QtDriver) -> None:
+        """@widget(on_signal="_handler") connects signal to handler."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        handler_called = [False]
+
+        @widget(on_action="_handle_action")
+        class TestWidget(Widget):
+            on_action = Signal()
+
+            def _handle_action(self) -> None:
+                handler_called[0] = True
+
+        w = qt.track(TestWidget())
+        w.on_action.emit()
+
+        assert_that(handler_called[0]).is_true()
+
+    def test_window_decorator_signal_connection(self, qt: QtDriver) -> None:
+        """@window(on_signal="_handler") connects signal to handler."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Window, window
+
+        handler_called = [False]
+
+        @window(title="Test", on_reload="_handle_reload")
+        class TestWindow(Window):
+            on_reload = Signal()
+
+            def _handle_reload(self) -> None:
+                handler_called[0] = True
+
+        w = qt.track(TestWindow())
+        w.on_reload.emit()
+
+        assert_that(handler_called[0]).is_true()
+
+    def test_menu_decorator_signal_connection(self, qt: QtDriver) -> None:
+        """@menu(on_signal="_handler") connects signal to handler."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Menu, menu
+
+        handler_called = [False]
+
+        @menu(text="&File", on_menu_action="_handle_action")
+        class TestMenu(Menu):
+            on_menu_action = Signal()
+
+            def _handle_action(self) -> None:
+                handler_called[0] = True
+
+        m = qt.track(TestMenu())
+        m.on_menu_action.emit()
+
+        assert_that(handler_called[0]).is_true()
+
+    def test_decorator_signal_with_args(self, qt: QtDriver) -> None:
+        """Decorator-connected signals pass arguments correctly."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        received_args = []
+
+        @widget(on_data="_handle_data")
+        class TestWidget(Widget):
+            on_data = Signal(int, str)
+
+            def _handle_data(self, num: int, text: str) -> None:
+                received_args.append((num, text))
+
+        w = qt.track(TestWidget())
+        w.on_data.emit(42, "hello")
+
+        assert_that(received_args).contains((42, "hello"))
+
+    def test_decorator_multiple_signal_connections(self, qt: QtDriver) -> None:
+        """Multiple signals can be connected via decorator kwargs."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        calls = {"reload": 0, "save": 0}
+
+        @widget(on_reload="_handle_reload", on_save="_handle_save")
+        class TestWidget(Widget):
+            on_reload = Signal()
+            on_save = Signal()
+
+            def _handle_reload(self) -> None:
+                calls["reload"] += 1
+
+            def _handle_save(self) -> None:
+                calls["save"] += 1
+
+        w = qt.track(TestWidget())
+        w.on_reload.emit()
+        w.on_save.emit()
+        w.on_save.emit()
+
+        assert_that(calls["reload"]).is_equal_to(1)
+        assert_that(calls["save"]).is_equal_to(2)
+
+    def test_decorator_signal_missing_handler_raises_error(self, qt: QtDriver) -> None:
+        """Decorator signal connection with missing handler raises AttributeError."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        @widget(on_action="_nonexistent_handler")
+        class TestWidget(Widget):
+            on_action = Signal()
+
+        with pytest.raises(AttributeError, match="_nonexistent_handler"):
+            qt.track(TestWidget())
+
+    def test_decorator_kwargs_not_signals_passed_as_props(self, qt: QtDriver) -> None:
+        """Non-signal decorator kwargs are treated as widget props."""
+        from PySide6.QtCore import Signal
+
+        from qtpie import Widget, widget
+
+        @widget(on_action="_handle", windowTitle="Custom Title")
+        class TestWidget(Widget):
+            on_action = Signal()
+
+            def _handle(self) -> None:
+                pass
+
+        w = qt.track(TestWidget())
+
+        # windowTitle should be set as a property
+        assert_that(w.windowTitle()).is_equal_to("Custom Title")

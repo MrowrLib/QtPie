@@ -26,22 +26,13 @@ class ForcApp(App):
     def on_run(self) -> None:
         self.main_window.show()
 
+    def __setup__(self) -> None:
+        self.workspace = self.workspace_service.value.load(Path("fixtures/demo-api"))
+
     def _on_reload_window(self) -> None:
         """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""
-        print("CALLED RELOAD WINDOW")
         self.setQuitOnLastWindowClosed(False)
         self.main_window.close()
         self.main_window = self.build(ForcWindow)
         self.main_window.show()
         self.setQuitOnLastWindowClosed(True)
-
-    def __setup__(self) -> None:
-        self.workspace = self.workspace_service.value.load(Path("fixtures/demo-api"))
-        print(self.workspace.value)
-
-        # Hook up the signal connection here, for now. then let's find a nice DSL way to do this in qtpie
-        #
-        # Ok, now it's time to do this!
-        #
-        # Let's do it via @app() .... so like @app(on_reload_window="_on_reload_window")
-        # self.on_reload_window.connect(self._on_reload_window)

@@ -57,6 +57,8 @@ class WindowConfig:
     docks_locked: str | None = None  # Variable binding for lock/unlock all docks
     # Window icon (resolved at runtime)
     icon: IconType = None
+    # Signal connections from decorator: {signal_name: handler_name}
+    signal_connections: dict[str, str] = field(default_factory=lambda: {})
 
 
 class Window[T = None](QMainWindow):
@@ -438,18 +440,32 @@ def window[W: Window[Any]](
         kwargs["styleSheet"] = stylesheet
 
     def decorator(target: type[W]) -> type[W]:
+        from qtpie.utils.common import is_signal_on_type
+
         config = target._qtpie_config
+
+        # Extract signal connections from kwargs
+        # Signal connections are kwargs where the key is a Signal name on the class
+        signal_connections: dict[str, str] = {}
+        widget_props: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if is_signal_on_type(key, target) and isinstance(value, str):
+                signal_connections[key] = value
+            else:
+                widget_props[key] = value
+
         config.layout = layout
         config.margins = margins
         config.auto_bind = auto_bind
         config.record_default = record
-        config.widget_props = kwargs
+        config.widget_props = widget_props
         config.object_name = name
         config.css_classes = classes or []
         config.corners = corners
         config.dock_state_key = dockStateKey
         config.docks_locked = docksLocked
         config.icon = icon
+        config.signal_connections = signal_connections
 
         # Auto-wrap async methods (e.g., async def on_close)
         from qtpie.async_wrap import wrap_async_methods
@@ -594,6 +610,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         from qtpie.signals import connect_field_signals
 
         connect_field_signals(self, config.fields, _create_window_signal_expression_handler)
+
+        # Connect signals from decorator (e.g., @window(on_reload="_on_reload"))
+        _connect_decorator_signals(self, config)
 
         # Auto-add QMenu fields to menu bar (in declaration order)
         # And track non-menu QWidget fields for central widget, plus layout items
@@ -803,6 +822,37 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 def _create_window_signal_expression_handler(window: Window[Any], expression: str) -> Callable[..., Any]:
     """Create a signal handler from an expression string like "{my_signal(123)}"."""
     return create_signal_expression_handler(window, expression, ["#window", "#widget", "#self"])
+
+
+def _connect_decorator_signals(window: Window[Any], config: WindowConfig) -> None:
+    """Connect signals defined in @window decorator kwargs.
+
+    Example:
+        @window(title="My App", on_reload="_on_reload")
+        class MainWindow(Window):
+            on_reload = Signal()
+            def _on_reload(self): ...
+
+    Args:
+        window: The Window instance
+        config: The WindowConfig containing signal_connections
+    """
+    from .utils.common import is_signal
+
+    for signal_name, handler_name in config.signal_connections.items():
+        signal = getattr(window, signal_name, None)
+        if signal is None:
+            continue
+
+        if not is_signal(signal):
+            continue
+
+        handler = getattr(window, handler_name, None)
+        if handler is None:
+            raise AttributeError(f"Handler '{handler_name}' not found on {type(window).__name__} for signal '{signal_name}'")
+
+        if callable(handler):
+            signal.connect(handler)
 
 
 def _create_dock_fields(window: Window[Any], config: WindowConfig) -> None:
