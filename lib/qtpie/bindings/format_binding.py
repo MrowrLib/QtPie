@@ -435,7 +435,7 @@ def _get_root_names(names: set[str]) -> set[str]:
 
 
 def create_format_binding(
-    widget: Widget[Any] | Window[Any],
+    widget: Widget[Any] | Window[Any] | Any,  # Also accepts AppBase
     template: str,
     setter: Callable[[Any], None],
     *,

@@ -15,6 +15,7 @@ from qtpy.QtCore import QTimer
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
     QApplication,
+    QDockWidget,
     QLayout,
     QMainWindow,
     QMenu,
@@ -44,6 +45,13 @@ class AppConfig:
     # Track fields for signal connections and handling
     fields: dict[str, NewField] = field(default_factory=lambda: {})
     variable_names: list[str] = field(default_factory=lambda: [])
+    # Dock fields - field names that are Dock[T] types
+    dock_fields: list[str] = field(default_factory=lambda: [])
+    variable_dock_fields: list[str] = field(default_factory=lambda: [])
+    # Dock area corner assignments
+    corners: dict[str, str] | None = None
+    # Dock locked binding
+    docks_locked: str | None = None
 
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
@@ -122,11 +130,19 @@ def run_app(app: QApplication) -> int:
 
 def _collect_fields_for_app(cls: type) -> None:
     """Collect NewField instances from class before they're processed."""
+    from qtpie.variable import _VariableDescriptor
+
     config: AppConfig = cls._qtpie_config  # type: ignore[attr-defined]
     for name in getattr(cls, "__annotations__", {}):
         value = getattr(cls, name, None)
         if isinstance(value, NewField):
             config.fields[name] = value  # pyright: ignore[reportUnknownMemberType]
+            # Track dock fields separately (after __set_name__ has run, is_dock is set)
+            if value.is_dock:
+                config.dock_fields.append(name)
+        # Check for Variable[T, Dock[W]] descriptors
+        elif isinstance(value, _VariableDescriptor) and value.dock_info is not None:
+            config.variable_dock_fields.append(name)
 
 
 def _detect_required_bindings_for_app(cls: type) -> None:
@@ -565,6 +581,9 @@ def app[A: AppBase[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     record: Any | None = None,
+    # Dock settings
+    corners: dict[str, str] | None = None,
+    docksLocked: str | None = None,
     **kwargs: Any,
 ) -> Callable[[type[A]], type[A]]: ...
 
@@ -591,6 +610,9 @@ def app[A: AppBase[Any]](
     classes: list[str] | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
+    # Dock settings
+    corners: dict[str, str] | None = None,
+    docksLocked: str | None = None,
     **kwargs: Any,
 ) -> type[A] | Callable[[type[A]], type[A]]:
     """Decorator for App/AppBase classes with declarative features.
@@ -654,6 +676,8 @@ def app[A: AppBase[Any]](
         config.icon = icon
         config.window_icon = window_icon
         config.tray_icon = tray_icon
+        config.corners = corners
+        config.docks_locked = docksLocked
 
         # Wrap __init__
         _wrap_init_for_app(target)
@@ -824,8 +848,11 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     if system_tray_menu is not None:
         app._system_tray_menu = system_tray_menu  # type: ignore[attr-defined]
 
+    # Check if we have dock fields
+    has_docks = bool(config.dock_fields) or bool(config.variable_dock_fields)
+
     # Only create window if there are fields to display
-    if not menu_fields and not widget_fields:
+    if not menu_fields and not widget_fields and not has_docks:
         return
 
     # Create the auto-Window
@@ -901,6 +928,10 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                 _add_to_layout_for_app(qt_layout, widget_instance, config.layout, label, grid)
 
         window.setCentralWidget(central)
+
+    # Create dock widgets
+    if has_docks:
+        _create_docks_for_app(app, window, config, cls)
 
     # Store the auto-Window on the app
     app._auto_window = window  # type: ignore[attr-defined]
@@ -1256,3 +1287,566 @@ def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:
         record.is_dirty.on_change(update_dirty_from_record)
         # Initial sync
         update_dirty_from_record()
+
+
+def _create_docks_for_app(
+    app: AppBase[Any],
+    window: QMainWindow,
+    config: AppConfig,
+    cls: type[AppBase[Any]],
+) -> None:
+    """Create Dock[T] fields for the app's auto-window.
+
+    This function handles dock creation for AppBase, adapting the logic from
+    Window's _create_dock_fields to work with AppBase's auto-created QMainWindow.
+    """
+    # Apply corner assignments
+    if config.corners:
+        _apply_corner_assignments_for_app(window, config.corners)
+
+    # First, create regular Dock[T] fields
+    if config.dock_fields:
+        _create_dock_fields_for_app(app, window, config)
+
+    # Then, create Variable[T, Dock[W]] fields
+    if config.variable_dock_fields:
+        _create_variable_dock_fields_for_app(app, window, config, cls)
+
+    # Set up docks locked binding
+    if config.docks_locked:
+        _setup_docks_locked_binding_for_app(app, window, config.docks_locked)
+
+
+def _create_dock_fields_for_app(
+    app: AppBase[Any],
+    window: QMainWindow,
+    config: AppConfig,
+) -> None:
+    """Create Dock[T] fields for the app's auto-window."""
+    from qtpie.dock import Dock, parse_dock_area
+
+    # Build dependency graph for topological sort
+    dock_info: dict[str, dict[str, Any]] = {}
+    for name in config.dock_fields:
+        field = config.fields.get(name)
+        if field is None or not field.is_dock:
+            continue
+
+        deps: list[str] = []
+        if field.dock_below:
+            deps.append(field.dock_below)
+        if field.dock_above:
+            deps.append(field.dock_above)
+        if field.dock_right_of:
+            deps.append(field.dock_right_of)
+        if field.dock_left_of:
+            deps.append(field.dock_left_of)
+
+        dock_info[name] = {"field": field, "deps": deps}
+
+    # Topological sort
+    processed: set[str] = set()
+    ordered_names: list[str] = []
+
+    def process(name: str) -> None:
+        if name in processed:
+            return
+        info = dock_info.get(name)
+        if info is None:
+            return
+        for dep in info["deps"]:
+            process(dep)
+        processed.add(name)
+        ordered_names.append(name)
+
+    for name in dock_info:
+        process(name)
+
+    # Track created docks
+    created_docks: dict[str, Dock[Any]] = {}
+    groups: dict[str, list[str]] = {}
+
+    # Create all dock widgets
+    for name in ordered_names:
+        info = dock_info[name]
+        fld: NewField = info["field"]
+
+        content_type = fld.dock_content_type
+        if content_type is None:
+            continue
+
+        # Create content widget
+        content_widget = content_type(*fld.widget_args, **fld.widget_kwargs)
+
+        # Create QDockWidget
+        title = fld.dock_title or name
+        dock_widget = QDockWidget(title, window)
+        dock_widget.setWidget(content_widget)
+
+        # Apply objectName
+        if fld.object_name:
+            dock_widget.setObjectName(fld.object_name)
+        else:
+            dock_widget.setObjectName(name)
+
+        # Apply dock features
+        _apply_dock_features_for_app(
+            dock_widget,
+            fld.dock_closable,
+            fld.dock_floatable,
+            fld.dock_movable,
+            fld.dock_allowed_areas,
+            fld.dock_vertical_title_bar,
+        )
+
+        # Create Dock wrapper
+        dock = Dock(content_widget, dock_widget)
+        created_docks[name] = dock
+        setattr(app, name, dock)
+
+        # Track group membership
+        if fld.dock_group:
+            if fld.dock_group not in groups:
+                groups[fld.dock_group] = []
+            groups[fld.dock_group].append(name)
+
+        # Determine placement
+        from qtpy.QtCore import Qt as QtCore
+
+        if fld.dock_area:
+            area = parse_dock_area(fld.dock_area)
+            window.addDockWidget(area, dock_widget)
+        elif fld.dock_below:
+            ref_dock = created_docks.get(fld.dock_below)
+            if ref_dock:
+                window.splitDockWidget(ref_dock.dock_widget, dock_widget, QtCore.Orientation.Vertical)
+        elif fld.dock_above:
+            ref_dock = created_docks.get(fld.dock_above)
+            if ref_dock:
+                area = window.dockWidgetArea(ref_dock.dock_widget)
+                window.addDockWidget(area, dock_widget)
+                window.splitDockWidget(dock_widget, ref_dock.dock_widget, QtCore.Orientation.Vertical)
+        elif fld.dock_right_of:
+            ref_dock = created_docks.get(fld.dock_right_of)
+            if ref_dock:
+                window.splitDockWidget(ref_dock.dock_widget, dock_widget, QtCore.Orientation.Horizontal)
+        elif fld.dock_left_of:
+            ref_dock = created_docks.get(fld.dock_left_of)
+            if ref_dock:
+                area = window.dockWidgetArea(ref_dock.dock_widget)
+                window.addDockWidget(area, dock_widget)
+                window.splitDockWidget(dock_widget, ref_dock.dock_widget, QtCore.Orientation.Horizontal)
+
+    # Handle group tabification
+    for _group_name, dock_names in groups.items():
+        if len(dock_names) < 2:
+            continue
+
+        anchor_name: str | None = None
+        for name in dock_names:
+            fld = dock_info[name]["field"]
+            if fld.dock_area or fld.dock_below or fld.dock_above or fld.dock_right_of or fld.dock_left_of:
+                anchor_name = name
+                break
+
+        if anchor_name is None:
+            anchor_name = dock_names[0]
+            anchor_dock = created_docks[anchor_name]
+            window.addDockWidget(parse_dock_area("left"), anchor_dock.dock_widget)
+
+        anchor_dock = created_docks[anchor_name]
+        for name in dock_names:
+            if name == anchor_name:
+                continue
+            dock = created_docks[name]
+            fld = dock_info[name]["field"]
+            if not (fld.dock_area or fld.dock_below or fld.dock_above or fld.dock_right_of or fld.dock_left_of):
+                from qtpy.QtCore import Qt as QtCore
+
+                area = window.dockWidgetArea(anchor_dock.dock_widget)
+                if area == QtCore.DockWidgetArea.NoDockWidgetArea:
+                    area = parse_dock_area("left")
+                window.addDockWidget(area, dock.dock_widget)
+            window.tabifyDockWidget(anchor_dock.dock_widget, dock.dock_widget)
+
+        anchor_dock.dock_widget.raise_()
+
+    # Set up bindings for dock fields
+    _setup_dock_bindings_for_app(app, config, dock_info, created_docks, groups)
+
+
+def _create_variable_dock_fields_for_app(
+    app: AppBase[Any],
+    window: QMainWindow,
+    config: AppConfig,
+    cls: type[AppBase[Any]],
+) -> None:
+    """Create Variable[T, Dock[W]] fields for the app's auto-window."""
+    from qtpie.dock import Dock, parse_dock_area
+    from qtpie.variable import Variable, _VariableDescriptor
+
+    for name in config.variable_dock_fields:
+        var: Variable[Any, Any] = getattr(app, name)
+        if var.widget is None:
+            continue
+
+        descriptor = getattr(cls, name, None)
+        if not isinstance(descriptor, _VariableDescriptor) or descriptor.dock_info is None:
+            continue
+
+        dock_info = descriptor.dock_info
+        inner_widget = var.widget
+
+        # Get title - use field name for initial title if title is a binding
+        title_value = dock_info.get("dock_title")
+        initial_title = name
+        if title_value:
+            # Check if it's a static title (no bindings)
+            if "{" not in title_value and not title_value.startswith("_"):
+                initial_title = title_value
+
+        dock_widget = QDockWidget(initial_title, window)
+        dock_widget.setWidget(inner_widget)
+
+        object_name = dock_info.get("object_name")
+        if object_name:
+            dock_widget.setObjectName(object_name)
+        else:
+            dock_widget.setObjectName(name)
+
+        _apply_dock_features_for_app(
+            dock_widget,
+            dock_info.get("dock_closable"),
+            dock_info.get("dock_floatable"),
+            dock_info.get("dock_movable"),
+            dock_info.get("dock_allowed_areas"),
+            dock_info.get("dock_vertical_title_bar"),
+        )
+
+        dock = Dock(inner_widget, dock_widget)
+        var.widget = dock
+
+        # Set up title binding if reactive
+        if title_value:
+            _setup_dock_title_binding_for_app(app, dock, title_value, name)
+
+        dock_area = dock_info.get("dock_area")
+        if dock_area:
+            area = parse_dock_area(dock_area)
+            window.addDockWidget(area, dock_widget)
+        else:
+            # Default to left if no area specified
+            window.addDockWidget(parse_dock_area("left"), dock_widget)
+
+
+def _apply_dock_features_for_app(
+    dock_widget: QDockWidget,
+    closable: bool | None,
+    floatable: bool | None,
+    movable: bool | None,
+    allowed_areas: list[str] | None,
+    vertical_title_bar: bool | None,
+) -> None:
+    """Apply dock widget features (closable, floatable, movable, etc.)."""
+    from qtpy.QtCore import Qt as QtCore
+
+    features = QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+
+    if closable is False:
+        features &= ~QDockWidget.DockWidgetFeature.DockWidgetClosable
+    if floatable is False:
+        features &= ~QDockWidget.DockWidgetFeature.DockWidgetFloatable
+    if movable is False:
+        features &= ~QDockWidget.DockWidgetFeature.DockWidgetMovable
+
+    dock_widget.setFeatures(features)
+
+    if allowed_areas is not None:
+        areas = QtCore.DockWidgetArea(0)
+        area_map = {
+            "left": QtCore.DockWidgetArea.LeftDockWidgetArea,
+            "right": QtCore.DockWidgetArea.RightDockWidgetArea,
+            "top": QtCore.DockWidgetArea.TopDockWidgetArea,
+            "bottom": QtCore.DockWidgetArea.BottomDockWidgetArea,
+        }
+        for area_name in allowed_areas:
+            area_name_lower = area_name.lower()
+            if area_name_lower in area_map:
+                areas |= area_map[area_name_lower]
+        dock_widget.setAllowedAreas(areas)
+
+    if vertical_title_bar is True:
+        dock_widget.setFeatures(dock_widget.features() | QDockWidget.DockWidgetFeature.DockWidgetVerticalTitleBar)
+
+
+def _setup_dock_bindings_for_app(
+    app: AppBase[Any],
+    config: AppConfig,
+    dock_info: dict[str, dict[str, Any]],
+    created_docks: dict[str, Any],
+    groups: dict[str, list[str]],
+) -> None:
+    """Set up bindings for dock fields (visible=, floating=, title=, icon=, etc.)."""
+    from qtpie.dock import Dock
+
+    groups_with_binding: set[str] = set()
+
+    for name in config.dock_fields:
+        info = dock_info.get(name)
+        if info is None:
+            continue
+        fld = info["field"]
+        dock: Dock[Any] = created_docks[name]
+
+        # title= binding (reactive title)
+        if fld.dock_title:
+            _setup_dock_title_binding_for_app(app, dock, fld.dock_title, name)
+
+        # icon= binding (reactive icon)
+        if fld.dock_icon:
+            _setup_dock_icon_binding_for_app(app, dock, fld.dock_icon)
+
+        # visible= binding
+        if fld.dock_visible:
+            _setup_dock_visible_binding_for_app(app, dock, fld.dock_visible)
+
+        # floating= binding
+        if fld.dock_floating:
+            _setup_dock_floating_binding_for_app(app, dock, fld.dock_floating)
+
+        # groupSelectedIndex= binding
+        if fld.dock_group_selected_index and fld.dock_group:
+            group_name = fld.dock_group
+            if group_name not in groups_with_binding:
+                groups_with_binding.add(group_name)
+                group_dock_names = groups.get(group_name, [])
+                if group_dock_names:
+                    _setup_group_selected_index_binding_for_app(app, fld.dock_group_selected_index, group_dock_names, created_docks)
+
+
+def _setup_dock_visible_binding_for_app(app: AppBase[Any], dock: Any, binding: str) -> None:
+    """Set up two-way binding between Variable and dock visibility."""
+    from qtpie.variable import _get_variable_observable
+
+    observable = _get_variable_observable(app, binding)
+    if observable is None:
+        return
+
+    dock_widget = dock.dock_widget
+
+    def on_variable_change(visible: bool) -> None:
+        if visible and dock_widget.isHidden():
+            dock_widget.setVisible(True)
+        elif not visible and not dock_widget.isHidden():
+            dock_widget.setVisible(False)
+
+    observable.on_change(on_variable_change)
+    on_variable_change(observable.get())
+
+    def on_visibility_change(visible: bool) -> None:
+        if observable.get() != visible:
+            observable.set(visible)
+
+    dock_widget.visibilityChanged.connect(on_visibility_change)
+
+
+def _setup_dock_floating_binding_for_app(app: AppBase[Any], dock: Any, binding: str) -> None:
+    """Set up two-way binding between Variable and dock floating state."""
+    from qtpie.variable import _get_variable_observable
+
+    observable = _get_variable_observable(app, binding)
+    if observable is None:
+        return
+
+    dock_widget = dock.dock_widget
+
+    def on_variable_change(floating: bool) -> None:
+        if dock_widget.isFloating() != floating:
+            dock_widget.setFloating(floating)
+
+    observable.on_change(on_variable_change)
+    on_variable_change(observable.get())
+
+    def on_floating_change(floating: bool) -> None:
+        if observable.get() != floating:
+            observable.set(floating)
+
+    dock_widget.topLevelChanged.connect(on_floating_change)
+
+
+def _setup_dock_title_binding_for_app(app: AppBase[Any], dock: Any, title: str, field_name: str) -> None:
+    """Set up reactive binding for dock title."""
+    dock_widget = dock.dock_widget
+
+    # Check if it's an expression (contains {})
+    if "{" in title:
+        from qtpie.bindings import create_format_binding
+
+        def set_title(value: Any) -> None:
+            dock_widget.setWindowTitle(str(value))
+
+        create_format_binding(app, title, set_title)
+        return
+
+    # Check if it's a variable reference (starts with _)
+    if title.startswith("_"):
+        from qtpie.variable import _get_variable_observable
+
+        observable = _get_variable_observable(app, title)
+        if observable is not None:
+
+            def on_title_change(value: Any) -> None:
+                dock_widget.setWindowTitle(str(value))
+
+            observable.on_change(on_title_change)
+            on_title_change(observable.get())
+            return
+
+    # Static value - already set during dock creation
+
+
+def _setup_dock_icon_binding_for_app(app: AppBase[Any], dock: Any, icon: str) -> None:
+    """Set up reactive binding for dock icon."""
+    from qtpy.QtGui import QIcon, QPixmap
+
+    dock_widget = dock.dock_widget
+
+    def apply_icon(value: Any) -> None:
+        if value is None or value == "":
+            dock_widget.setWindowIcon(QIcon())
+        elif isinstance(value, QIcon):
+            dock_widget.setWindowIcon(value)
+        elif isinstance(value, QPixmap):
+            dock_widget.setWindowIcon(QIcon(value))
+        else:
+            dock_widget.setWindowIcon(QIcon(str(value)))
+
+    # Check if it's an expression (contains {})
+    if "{" in icon:
+        from qtpie.bindings import create_format_binding
+
+        create_format_binding(app, icon, apply_icon)
+        return
+
+    # Check if it's a variable reference (starts with _)
+    if icon.startswith("_"):
+        from qtpie.variable import _get_variable_observable
+
+        observable = _get_variable_observable(app, icon)
+        if observable is not None:
+            observable.on_change(apply_icon)
+            apply_icon(observable.get())
+            return
+
+    # Static value - set once
+    apply_icon(icon)
+
+
+def _setup_group_selected_index_binding_for_app(
+    app: AppBase[Any],
+    binding: str,
+    group_dock_names: list[str],
+    created_docks: dict[str, Any],
+) -> None:
+    """Set up two-way binding between Variable and tab bar current index for a dock group."""
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QTabBar
+
+    from qtpie.variable import _get_variable_observable
+
+    observable = _get_variable_observable(app, binding)
+    if observable is None:
+        return
+
+    if not group_dock_names:
+        return
+
+    first_dock = created_docks.get(group_dock_names[0])
+    if first_dock is None:
+        return
+
+    dock_widget = first_dock.dock_widget
+    window = app.window
+
+    if window is None:
+        return
+
+    def find_tab_bar_for_dock() -> QTabBar | None:
+        for tab_bar in window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == dock_widget.windowTitle():
+                    return tab_bar
+        return None
+
+    def setup_binding() -> None:
+        tab_bar = find_tab_bar_for_dock()
+        if tab_bar is None:
+            return
+
+        def on_variable_change(index: int) -> None:
+            if 0 <= index < tab_bar.count() and tab_bar.currentIndex() != index:
+                tab_bar.setCurrentIndex(index)
+
+        observable.on_change(on_variable_change)
+        on_variable_change(observable.get())
+
+        def on_tab_change(index: int) -> None:
+            if observable.get() != index:
+                observable.set(index)
+
+        tab_bar.currentChanged.connect(on_tab_change)
+
+    QTimer.singleShot(0, setup_binding)
+
+
+def _apply_corner_assignments_for_app(window: QMainWindow, corners: dict[str, str]) -> None:
+    """Apply corner assignments for dock areas."""
+    from qtpy.QtCore import Qt as QtCore
+
+    corner_map = {
+        "top_left": QtCore.Corner.TopLeftCorner,
+        "top_right": QtCore.Corner.TopRightCorner,
+        "bottom_left": QtCore.Corner.BottomLeftCorner,
+        "bottom_right": QtCore.Corner.BottomRightCorner,
+    }
+
+    area_map = {
+        "left": QtCore.DockWidgetArea.LeftDockWidgetArea,
+        "right": QtCore.DockWidgetArea.RightDockWidgetArea,
+        "top": QtCore.DockWidgetArea.TopDockWidgetArea,
+        "bottom": QtCore.DockWidgetArea.BottomDockWidgetArea,
+    }
+
+    for corner_name, area_name in corners.items():
+        corner_name_lower = corner_name.lower().replace("-", "_")
+        area_name_lower = area_name.lower()
+
+        if corner_name_lower in corner_map and area_name_lower in area_map:
+            window.setCorner(corner_map[corner_name_lower], area_map[area_name_lower])
+
+
+def _setup_docks_locked_binding_for_app(app: AppBase[Any], window: QMainWindow, binding: str) -> None:
+    """Set up reactive binding for locking/unlocking all docks."""
+    from qtpie.variable import _get_variable_observable
+
+    observable = _get_variable_observable(app, binding)
+    if observable is None:
+        return
+
+    original_features: dict[QDockWidget, QDockWidget.DockWidgetFeature] = {}
+
+    def on_locked_change(locked: bool) -> None:
+        for dock_widget in window.findChildren(QDockWidget):
+            if locked:
+                if dock_widget not in original_features:
+                    original_features[dock_widget] = dock_widget.features()
+                features = dock_widget.features()
+                features &= ~QDockWidget.DockWidgetFeature.DockWidgetMovable
+                features &= ~QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                dock_widget.setFeatures(features)
+            else:
+                if dock_widget in original_features:
+                    dock_widget.setFeatures(original_features[dock_widget])
+
+    observable.on_change(on_locked_change)
+    on_locked_change(observable.get())
