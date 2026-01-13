@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtCore import Qt
@@ -10,9 +10,6 @@ from qtpy.QtWidgets import QDockWidget, QMainWindow, QWidget
 
 from .dock import Dock
 from .repeaters.utils import create_item_wrapper, rebind_child_widgets
-
-if TYPE_CHECKING:
-    from .window import Window
 
 
 class DockWidgetRepeater[T, W: QWidget]:
@@ -39,7 +36,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         observable_list: ObservableList[T],
         item_type: type | None,
         widget_type: type[W],
-        window: Window[Any],
+        window: QMainWindow,
         dock_area: str = "right",
         group: str | None = None,
         title: str = "{#self}",

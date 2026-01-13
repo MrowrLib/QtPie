@@ -1,5 +1,3 @@
-from typing import Any
-
 from qtpy.QtCore import Signal
 
 from forc.app.menus import FileMenu, ViewMenu
@@ -19,20 +17,17 @@ from qtpie.variable import Variable
 class ForcWindow(Window):
     collection_item_clicked = Signal(Request)
 
-    collection_item: Variable[Any | None] = new(None)
-    open_requests: Variable[list[Request]] = new([])
-
     _file_menu: FileMenu = new()
     _view_menu: ViewMenu = new()
 
-    # finally, I want this as the final:
-    # it makes 1 dock per request already
-    # but does not group!
-    editors: Variable[list[Request], Dock[RequestEditorWidget]] = new(group="requests", dock="right", title="{name}")
-
     _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")
+    _editors: Variable[list[Request], Dock[RequestEditorWidget]] = new(group="requests", dock="right", title="{name}")
     _response: Dock[ResponseViewerWidget] = new(dock="bottom", title="Response")
 
     def on_collection_item_clicked(self, item: Request | Collection) -> None:
         if isinstance(item, Request):
-            self.editors.append(item)
+            for editor in self._editors:
+                if editor == item:
+                    self._editors.remove(editor)
+                    return
+            self._editors.append(item)

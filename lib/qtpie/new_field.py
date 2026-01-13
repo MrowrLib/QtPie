@@ -124,6 +124,10 @@ class NewField:
         # Variable[T, Dock[W]] support - Variable with a docked widget
         self.is_variable_dock: bool = False
         self.variable_dock_content_type: type | None = None  # The widget type W inside Variable[T, Dock[W]]
+        # Variable[list[T], Dock[W]] support - Variable with list of docked widgets
+        self.is_variable_list_dock: bool = False
+        self.variable_list_dock_item_type: type | None = None  # The item type T inside Variable[list[T], Dock[W]]
+        self.variable_list_dock_widget_type: type | None = None  # The widget type W inside Variable[list[T], Dock[W]]
         # Chaining support: track all chained () calls for multi-level patterns
         # e.g., new(var_default)(dock_kwargs)(widget_kwargs)
         self._chain_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -222,66 +226,106 @@ class NewField:
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
 
-            # Check if widget_type is Dock[X] - Variable[T, Dock[W]]
+            # Check if widget_type is Dock[X] - Variable[T, Dock[W]] or Variable[list[T], Dock[W]]
             # If so, extract the inner content type X and mark as variable dock
             dock_info: dict[str, Any] | None = None
             if widget_type is not None and self._is_dock_type_param(widget_type):
                 # Extract the content widget type from Dock[W]
                 dock_args = get_args(widget_type)
                 if dock_args:
-                    self.is_variable_dock = True
-                    self.variable_dock_content_type = dock_args[0]
+                    # Check if inner_type is list[T] - Variable[list[T], Dock[W]]
+                    inner_origin = get_origin(inner_type)
+                    if inner_origin is list:
+                        # This is Variable[list[T], Dock[W]] - a list dock repeater
+                        self.is_variable_list_dock = True
+                        inner_args = get_args(inner_type)
+                        self.variable_list_dock_item_type = inner_args[0] if inner_args else None
+                        self.variable_list_dock_widget_type = dock_args[0]
 
-                    # Use triple-chaining pattern: new(var_default)(dock_kwargs)(widget_kwargs)
-                    dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_variable_dock()
+                        # Extract dock kwargs directly from self.kwargs (no chaining for this pattern)
+                        # Pattern: new(group="requests", dock="right", title="{name}")
+                        self.dock_area = self.kwargs.pop("dock", None)
+                        self.dock_title = self.kwargs.pop("windowTitle", None) or self.kwargs.pop("title", None)
+                        self.dock_group = self.kwargs.pop("group", None)
+                        self.dock_closable = self.kwargs.pop("closable", None)
+                        self.dock_floatable = self.kwargs.pop("floatable", None)
+                        self.dock_movable = self.kwargs.pop("movable", None)
 
-                    # Normalize title -> windowTitle in dock_kwargs
-                    if "title" in dock_kwargs:
-                        dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
+                        # Extract selection bindings
+                        self.selected_index = self.kwargs.pop("selectedIndex", None)
+                        self.selected_item = self.kwargs.pop("selectedItem", None)
 
-                    # Extract dock-specific kwargs from dock_kwargs
-                    self.dock_area = dock_kwargs.pop("dock", None)
-                    self.dock_title = dock_kwargs.pop("windowTitle", None)
-                    self.dock_below = dock_kwargs.pop("below", None)
-                    self.dock_right_of = dock_kwargs.pop("rightOf", None)
-                    self.dock_left_of = dock_kwargs.pop("leftOf", None)
-                    self.dock_above = dock_kwargs.pop("above", None)
-                    self.dock_group = dock_kwargs.pop("group", None)
-                    self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
-                    self.dock_icon = dock_kwargs.pop("icon", None)
-                    self.dock_visible = dock_kwargs.pop("visible", None)
-                    self.dock_floating = dock_kwargs.pop("floating", None)
-                    self.dock_closable = dock_kwargs.pop("closable", None)
-                    self.dock_floatable = dock_kwargs.pop("floatable", None)
-                    self.dock_movable = dock_kwargs.pop("movable", None)
-                    self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
-                    self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+                        # Store dock info for window.py to use
+                        dock_info = {
+                            "dock_area": self.dock_area,
+                            "dock_title": self.dock_title,
+                            "dock_group": self.dock_group,
+                            "dock_closable": self.dock_closable,
+                            "dock_floatable": self.dock_floatable,
+                            "dock_movable": self.dock_movable,
+                            "is_list_dock": True,
+                            "list_dock_item_type": self.variable_list_dock_item_type,
+                            "list_dock_widget_type": self.variable_list_dock_widget_type,
+                            "selected_index": self.selected_index,
+                            "selected_item": self.selected_item,
+                        }
+                        # Don't create a widget - this is a repeater, widget_type stays None
+                        widget_type = None
+                    else:
+                        # This is Variable[T, Dock[W]] - a single dock
+                        self.is_variable_dock = True
+                        self.variable_dock_content_type = dock_args[0]
 
-                    # Store widget args/kwargs for later widget creation
-                    self.widget_args = widget_args
-                    self.widget_kwargs = widget_kwargs
+                        # Use triple-chaining pattern: new(var_default)(dock_kwargs)(widget_kwargs)
+                        dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_variable_dock()
 
-                    # Store dock info for window.py to use
-                    dock_info = {
-                        "dock_area": self.dock_area,
-                        "dock_title": self.dock_title,
-                        "dock_below": self.dock_below,
-                        "dock_right_of": self.dock_right_of,
-                        "dock_left_of": self.dock_left_of,
-                        "dock_above": self.dock_above,
-                        "dock_group": self.dock_group,
-                        "dock_group_selected_index": self.dock_group_selected_index,
-                        "dock_icon": self.dock_icon,
-                        "dock_visible": self.dock_visible,
-                        "dock_floating": self.dock_floating,
-                        "dock_closable": self.dock_closable,
-                        "dock_floatable": self.dock_floatable,
-                        "dock_movable": self.dock_movable,
-                        "dock_allowed_areas": self.dock_allowed_areas,
-                        "dock_vertical_title_bar": self.dock_vertical_title_bar,
-                    }
-                    # Use the content type as widget_type for the descriptor
-                    widget_type = self.variable_dock_content_type
+                        # Normalize title -> windowTitle in dock_kwargs
+                        if "title" in dock_kwargs:
+                            dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
+
+                        # Extract dock-specific kwargs from dock_kwargs
+                        self.dock_area = dock_kwargs.pop("dock", None)
+                        self.dock_title = dock_kwargs.pop("windowTitle", None)
+                        self.dock_below = dock_kwargs.pop("below", None)
+                        self.dock_right_of = dock_kwargs.pop("rightOf", None)
+                        self.dock_left_of = dock_kwargs.pop("leftOf", None)
+                        self.dock_above = dock_kwargs.pop("above", None)
+                        self.dock_group = dock_kwargs.pop("group", None)
+                        self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
+                        self.dock_icon = dock_kwargs.pop("icon", None)
+                        self.dock_visible = dock_kwargs.pop("visible", None)
+                        self.dock_floating = dock_kwargs.pop("floating", None)
+                        self.dock_closable = dock_kwargs.pop("closable", None)
+                        self.dock_floatable = dock_kwargs.pop("floatable", None)
+                        self.dock_movable = dock_kwargs.pop("movable", None)
+                        self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
+                        self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+
+                        # Store widget args/kwargs for later widget creation
+                        self.widget_args = widget_args
+                        self.widget_kwargs = widget_kwargs
+
+                        # Store dock info for window.py to use
+                        dock_info = {
+                            "dock_area": self.dock_area,
+                            "dock_title": self.dock_title,
+                            "dock_below": self.dock_below,
+                            "dock_right_of": self.dock_right_of,
+                            "dock_left_of": self.dock_left_of,
+                            "dock_above": self.dock_above,
+                            "dock_group": self.dock_group,
+                            "dock_group_selected_index": self.dock_group_selected_index,
+                            "dock_icon": self.dock_icon,
+                            "dock_visible": self.dock_visible,
+                            "dock_floating": self.dock_floating,
+                            "dock_closable": self.dock_closable,
+                            "dock_floatable": self.dock_floatable,
+                            "dock_movable": self.dock_movable,
+                            "dock_allowed_areas": self.dock_allowed_areas,
+                            "dock_vertical_title_bar": self.dock_vertical_title_bar,
+                        }
+                        # Use the content type as widget_type for the descriptor
+                        widget_type = self.variable_dock_content_type
             else:
                 # Regular Variable[T, W] - use single-chaining pattern: new(var_default)(widget_kwargs)
                 widget_args, widget_kwargs = self._interpret_chain_for_variable()

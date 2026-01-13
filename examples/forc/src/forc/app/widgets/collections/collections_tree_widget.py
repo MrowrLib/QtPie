@@ -1,10 +1,14 @@
+from typing import Any
+
 from qtpy.QtWidgets import QLabel, QTreeView
 
-from qtpie import Widget, new, widget
+from qtpie import Variable, Widget, new, widget
 
 
 @widget
 class CollectionsTreeWidget(Widget):
+    collection_item: Variable[Any | None] = new(None)
+
     _header: QLabel = new(
         bind="{workspace?.name}",
         stylesheet="font-size: 14pt; font-weight: bold; margin-bottom: 10px;",

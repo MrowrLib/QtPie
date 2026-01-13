@@ -1503,7 +1503,7 @@ def _add_to_layout(
 
 
 def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> None:
-    """Wrap Variable[T, Dock[W]] widgets in dock containers.
+    """Wrap Variable[T, Dock[W]] or Variable[list[T], Dock[W]] in dock containers.
 
     For Variable[T, Dock[W]], the _VariableDescriptor creates the inner widget W
     and stores it on var.widget. This function wraps that widget in a QDockWidget
@@ -1512,6 +1512,11 @@ def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> N
     - self._name.widget -> Dock[W] (the dock wrapper)
     - self._name.widget.widget -> W (the inner widget)
     - self._name.widget.dock_widget -> QDockWidget
+
+    For Variable[list[T], Dock[W]], creates a DockWidgetRepeater that:
+    - Dynamically creates/removes docks as items are added/removed from the list
+    - self._name.value -> list[T] (the list value, also accessible as self._name.append(), etc.)
+    - self._name.widget -> DockWidgetRepeater (the repeater)
     """
     from .dock import Dock, parse_dock_area
 
@@ -1521,8 +1526,6 @@ def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> N
     for name in config.variable_dock_fields:
         # Get the Variable from the instance
         var: Variable[Any, Any] = getattr(window, name)
-        if var.widget is None:
-            continue
 
         # Get the descriptor to access dock_info
         descriptor = getattr(type(window), name, None)
@@ -1530,6 +1533,15 @@ def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> N
             continue
 
         dock_info = descriptor.dock_info
+
+        # Check if this is a Variable[list[T], Dock[W]] - a list dock repeater
+        if dock_info.get("is_list_dock"):
+            _create_variable_list_dock_field(window, name, var, dock_info)
+            continue
+
+        # Otherwise it's Variable[T, Dock[W]] - a single dock
+        if var.widget is None:
+            continue
 
         # The inner widget was already created by the descriptor
         inner_widget = var.widget
@@ -1710,3 +1722,83 @@ def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
 
         # Store on window instance
         setattr(window, name, repeater)
+
+
+def _create_variable_list_dock_field(
+    window: Window[Any],
+    name: str,
+    var: Variable[Any, Any],
+    dock_info: dict[str, Any],
+) -> None:
+    """Create a DockWidgetRepeater for Variable[list[T], Dock[W]].
+
+    This function handles the Variable[list[T], Dock[W]] pattern where:
+    - T is the item type (e.g., Request)
+    - W is a Widget[T] type (e.g., RequestEditorWidget extends Widget[Request])
+
+    Each item in the list gets its own dock tab, with the widget's record bound
+    to that list item.
+    """
+    from observant import ObservableList
+
+    from .dock_widget_repeater import DockWidgetRepeater
+    from .variable import _get_variable_observable
+
+    widget_type = dock_info.get("list_dock_widget_type")
+    if widget_type is None:
+        return
+
+    # Get the ObservableList from the Variable
+    wrapper = var.observable
+    obs_list: ObservableList[Any]
+    if isinstance(wrapper, ObservableList):
+        obs_list = wrapper
+    elif isinstance(wrapper, Observable):
+        # Observable containing a list - need to wrap it
+        raw_list: Any = wrapper.get()
+        if isinstance(raw_list, list):
+            obs_list = ObservableList[Any](cast(list[Any], raw_list))
+            # Update the Variable's observable to use the ObservableList
+            # so mutations via self._name.append() work
+            var._observable = obs_list  # type: ignore[attr-defined]
+        else:
+            raise TypeError(f"Variable '{name}' inner type is not a list")
+    else:
+        raise TypeError(f"Variable '{name}' must have list inner type")
+
+    # Determine title expression
+    title_expr = dock_info.get("dock_title") or "{#self}"
+
+    # Resolve selection bindings
+    selected_index_obs = None
+    selected_item_obs = None
+    if dock_info.get("selected_index"):
+        selected_index_obs = _get_variable_observable(window, dock_info["selected_index"])
+    if dock_info.get("selected_item"):
+        selected_item_obs = _get_variable_observable(window, dock_info["selected_item"])
+
+    # Extract dock feature flags with defaults
+    closable_val = dock_info.get("dock_closable")
+    floatable_val = dock_info.get("dock_floatable")
+    movable_val = dock_info.get("dock_movable")
+
+    # Create the DockWidgetRepeater
+    repeater: DockWidgetRepeater[Any, QWidget] = DockWidgetRepeater(
+        observable_list=obs_list,
+        item_type=dock_info.get("list_dock_item_type"),
+        widget_type=widget_type,
+        window=window,
+        dock_area=dock_info.get("dock_area") or "right",
+        group=dock_info.get("dock_group"),
+        title=title_expr,
+        closable=closable_val if isinstance(closable_val, bool) else True,
+        floatable=floatable_val if isinstance(floatable_val, bool) else True,
+        movable=movable_val if isinstance(movable_val, bool) else True,
+        widget_args=(),
+        widget_kwargs={},
+        selected_index_observable=selected_index_obs,
+        selected_item_observable=selected_item_obs,
+    )
+
+    # Store the repeater on the Variable's widget property
+    var.widget = repeater  # type: ignore[assignment]
