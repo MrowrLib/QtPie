@@ -680,12 +680,80 @@ class RecordVariable[T]:
         def __set__(self, obj: object, value: T | RecordVariable[T]) -> None: ...
 
 
+def _try_get_variable(obj: Any, name: str) -> Variable[Any, Any] | None:
+    """Try to get a Variable by exact name from an object.
+
+    Args:
+        obj: The object to check (parent widget or QApplication)
+        name: The exact Variable name to find
+
+    Returns:
+        The Variable if found, None otherwise.
+    """
+    try:
+        attr = getattr(obj, name, None)
+        if isinstance(attr, Variable):
+            return cast(Variable[Any, Any], attr)
+    except Exception:
+        # getattr can fail on some Qt objects
+        pass
+    return None
+
+
+def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
+    """Walk parent hierarchy to find matching Variable.
+
+    Resolution order:
+    1. widget.parent() (Qt parent)
+    2. parent().parent(), etc.
+    3. QApplication.instance()
+
+    Args:
+        widget: The widget instance to start from
+        var_name: The exact Variable name to find
+
+    Returns:
+        A new Variable sharing the parent's Observable, or None if not found.
+    """
+    from qtpy.QtWidgets import QApplication, QWidget
+
+    # Walk parent chain
+    current: Any = widget
+    while True:
+        if not isinstance(current, QWidget):
+            break
+        parent: Any = current.parent()
+        if parent is None:
+            break
+
+        # Try to find Variable on parent
+        var = _try_get_variable(parent, var_name)
+        if var is not None:
+            # Share the Observable - create a new Variable wrapping the same Observable
+            return Variable(var.observable)
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        var = _try_get_variable(app, var_name)
+        if var is not None:
+            return Variable(var.observable)
+
+    return None
+
+
 class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - used in widget.py
     """Descriptor for bare Variable[T] annotations that require a binding.
 
     When a widget declares `count: Variable[int]` (no = new()), this descriptor
-    is created. It expects the Observable to be injected via a binding from
-    the parent widget.
+    is created. It will:
+    1. First check if a binding was explicitly provided by the parent
+    2. Then walk the parent hierarchy to find a matching Variable
+    3. Finally check QApplication.instance() for app-level Variables
+
+    If no Variable is found, raises AttributeError.
     """
 
     def __init__(self, name: str, inner_type: type | None = None) -> None:
@@ -701,7 +769,7 @@ class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - use
             # Class access - return self but typed as Variable for Pyright
             return self  # type: ignore[return-value]
 
-        # Check if Variable was created by binding
+        # Check if Variable was created by explicit binding
         from .state import QtPieState
 
         if not hasattr(obj, "_qtpie"):
@@ -711,8 +779,18 @@ class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - use
         if self._name in qtpie_state.variables:
             return qtpie_state.variables[self._name]
 
-        # No binding was provided - this is an error
-        raise AttributeError(f"'{self._name}' requires a binding. Use: child: {type(obj).__name__} = new({self._name}=\"_parent_var\")")
+        # Try to resolve from parent hierarchy
+        resolved = _resolve_from_hierarchy(obj, self._name)
+        if resolved is not None:
+            qtpie_state.register_variable(self._name, resolved)
+            return resolved  # type: ignore[return-value]
+
+        # Not found anywhere - raise error
+        raise AttributeError(
+            f"'{self._name}' requires a binding or matching Variable in parent hierarchy. "
+            f'Use: child: {type(obj).__name__} = new({self._name}="_parent_var") '
+            f"or ensure a parent widget has '{self._name}'"
+        )
 
     def __set__(self, obj: object, value: T | Variable[T] | RecordVariable[T]) -> None:
         """Allow setting either a Variable/RecordVariable (for binding injection) or a value."""

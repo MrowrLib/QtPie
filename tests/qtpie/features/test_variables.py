@@ -480,3 +480,169 @@ class TestVariablePerInstance:
 
         assert_that(a._items.value).is_equal_to(["a"])
         assert_that(b._items.value).is_equal_to(["b"])
+
+
+class TestVariableHierarchyResolution:
+    """Bare Variables auto-resolve from parent hierarchy."""
+
+    def test_bare_variable_resolves_from_parent(self, qt: QtDriver) -> None:
+        """Bare Variable finds matching Variable on parent."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int]  # Bare - should resolve from parent
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)
+            _child: Child = new()
+
+        parent = qt.track(Parent())
+        assert_that(parent._child._count.value).is_equal_to(0)
+
+        # Verify Observable is shared (changes propagate)
+        parent._count.value = 42
+        assert_that(parent._child._count.value).is_equal_to(42)
+
+    def test_child_changes_propagate_to_parent(self, qt: QtDriver) -> None:
+        """Changes made through child Variable propagate to parent."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int]
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)
+            _child: Child = new()
+
+        parent = qt.track(Parent())
+
+        # Change via child
+        parent._child._count.value = 99
+        assert_that(parent._count.value).is_equal_to(99)
+
+    def test_closest_parent_wins(self, qt: QtDriver) -> None:
+        """Variable resolves from closest parent, not grandparent."""
+        from qtpie import Widget, widget
+
+        @widget
+        class GrandChild(Widget):
+            _count: Variable[int]
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int] = new(100)  # Closer
+            _grandchild: GrandChild = new()
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)  # Further
+            _child: Child = new()
+
+        parent = qt.track(Parent())
+        # Grandchild should see Child's _count (100), not Parent's (0)
+        assert_that(parent._child._grandchild._count.value).is_equal_to(100)
+
+        # Modifying child's _count should propagate to grandchild
+        parent._child._count.value = 200
+        assert_that(parent._child._grandchild._count.value).is_equal_to(200)
+
+        # Parent's _count should remain unchanged
+        assert_that(parent._count.value).is_equal_to(0)
+
+    def test_skips_to_grandparent_if_parent_lacks_variable(self, qt: QtDriver) -> None:
+        """If parent doesn't have the Variable, look at grandparent."""
+        from qtpie import Widget, widget
+
+        @widget
+        class GrandChild(Widget):
+            _theme: Variable[str]  # Not on parent, only on grandparent
+
+        @widget
+        class Child(Widget):
+            # No _theme Variable here
+            _grandchild: GrandChild = new()
+
+        @widget
+        class GrandParent(Widget):
+            _theme: Variable[str] = new("dark")
+            _child: Child = new()
+
+        grandparent = qt.track(GrandParent())
+        assert_that(grandparent._child._grandchild._theme.value).is_equal_to("dark")
+
+    def test_exact_name_match_required(self, qt: QtDriver) -> None:
+        """Variable requires exact name match (no underscore flexibility)."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            count: Variable[int]  # No underscore
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)  # Has underscore - different name!
+            _child: Child = new()
+
+        # Should raise when accessing because 'count' != '_count'
+        parent = qt.track(Parent())
+        with pytest.raises(AttributeError, match="'count' requires a binding"):
+            _ = parent._child.count  # Access triggers resolution
+
+    def test_raises_error_if_not_found(self, qt: QtDriver) -> None:
+        """Raises AttributeError if Variable not found in hierarchy."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _missing: Variable[str]  # Not anywhere in hierarchy
+
+        @widget
+        class Parent(Widget):
+            _child: Child = new()
+
+        # Should raise when accessing because _missing isn't in hierarchy
+        parent = qt.track(Parent())
+        with pytest.raises(AttributeError, match="'_missing' requires a binding"):
+            _ = parent._child._missing  # Access triggers resolution
+
+    def test_explicit_binding_still_works(self, qt: QtDriver) -> None:
+        """Explicit binding via new() still takes precedence."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int]
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)
+            _other: Variable[int] = new(999)
+            # Explicit binding overrides auto-resolution
+            _child: Child = new(_count="_other")
+
+        parent = qt.track(Parent())
+        # Child should see _other's value, not _count's
+        assert_that(parent._child._count.value).is_equal_to(999)
+
+    def test_multiple_bare_variables_resolve_independently(self, qt: QtDriver) -> None:
+        """Multiple bare Variables each resolve to their matching parent Variable."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int]
+            _name: Variable[str]
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(42)
+            _name: Variable[str] = new("hello")
+            _child: Child = new()
+
+        parent = qt.track(Parent())
+        assert_that(parent._child._count.value).is_equal_to(42)
+        assert_that(parent._child._name.value).is_equal_to("hello")

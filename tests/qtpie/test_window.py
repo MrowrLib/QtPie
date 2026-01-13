@@ -2199,22 +2199,23 @@ class TestWindowVariableBindingsWithChildWidgets:
         app = qt.track(App())
         assert app.child.text.value == "Hello World"
 
-    def test_missing_required_binding_raises_error(self, qt: QtDriver) -> None:
-        """Missing required binding on child widget raises error."""
+    def test_missing_required_binding_raises_error_on_access(self, qt: QtDriver) -> None:
+        """Accessing unresolved bare Variable raises error."""
         import pytest
 
         from qtpie import Widget, widget
 
         @widget
         class RequiresBinding(Widget):
-            count: Variable[int]  # Required
+            count: Variable[int]  # Required - but not in parent hierarchy
 
         @window(title="Test")
         class App(Window):
-            child: RequiresBinding = new()  # Missing count binding!
+            child: RequiresBinding = new()  # No matching 'count' Variable on parent
 
-        with pytest.raises(TypeError, match="requires binding for 'count'"):
-            App()
+        app = qt.track(App())
+        with pytest.raises(AttributeError, match="'count' requires a binding"):
+            _ = app.child.count  # Access triggers resolution attempt
 
     def test_nested_binding_through_widgets(self, qt: QtDriver) -> None:
         """Bindings pass through nested widget hierarchy."""

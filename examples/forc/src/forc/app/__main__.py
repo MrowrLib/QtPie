@@ -6,6 +6,6 @@ from qtpie import entrypoint
 
 
 # Hmm, idea... can we define different stylesheets for light/dark mode and have a toggle in the app to switch?
-@entrypoint(stylesheet="resources/styles/styles.scss", scss_output="resources/styles.qss", watch_stylesheet=True, light_mode=True)
+@entrypoint(stylesheet="resources/styles/styles.scss", scss_output="resources/styles.qss", watch_stylesheet=True)  # , light_mode=True)
 def main():
     return ForcApp()

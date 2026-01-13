@@ -331,6 +331,18 @@ class Widget[T = None](QWidget):
             if name == "record":
                 # Use AttributeError so hasattr() works correctly
                 raise AttributeError(f"{type(self).__name__} has no record type. Use Widget[YourModel] to enable record access.")
+
+            # Check if this is a descriptor that raised AttributeError (e.g., unresolved bare Variable)
+            # If so, invoke the descriptor again to get the original error message
+            from .variable import _RequiredBindingDescriptor
+
+            cls = type(self)
+            if name in cls.__dict__:
+                attr = cls.__dict__[name]
+                if isinstance(attr, _RequiredBindingDescriptor):
+                    # Re-invoke the descriptor to get its error message
+                    attr.__get__(self, cls)
+
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 

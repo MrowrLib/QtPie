@@ -104,9 +104,6 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 if field.is_stretch or field.is_spacer_item or field.is_nested_layout:
                     continue
                 if field.field_type is not None:
-                    # Validate required bindings for QtPie Widget subclasses
-                    _validate_required_bindings(field)
-
                     # Resolve Translatable markers in args before construction
                     resolved_args = list(field.args)
                     for idx, translatable in field.translatable_args:
@@ -211,35 +208,6 @@ def new_fields[T](cls: type[T]) -> type[T]:
     cls.__new_fields_processed__ = True  # type: ignore[attr-defined]
 
     return cls
-
-
-def _validate_required_bindings(field: NewField) -> None:
-    """Validate that all required bindings are provided for QtPie Widget subclasses.
-
-    Raises TypeError if any required binding is missing.
-    """
-    if field.field_type is None:
-        return
-
-    # Check if the field type has _qtpie_config (is a QtPie Widget)
-    config = getattr(field.field_type, "_qtpie_config", None)
-    if config is None:
-        return
-
-    required: set[str] = getattr(config, "required_bindings", set())
-    if not required:
-        return
-
-    # Check which required bindings are provided
-    provided: set[str] = set(field.variable_bindings.keys())
-    missing: set[str] = required - provided
-
-    if missing:
-        # Create clear error message
-        missing_list = ", ".join(f"'{name}'" for name in sorted(missing))
-        raise TypeError(
-            f"{field.field_type.__name__} requires binding for {missing_list}. Use: {field.name}: {field.field_type.__name__} = new({', '.join(f'{m}="_parent_var"' for m in sorted(missing))})"
-        )
 
 
 def _apply_variable_bindings_direct(parent: Any, child: Any, bindings: dict[str, Any]) -> None:  # pyright: ignore[reportUnusedFunction] - imported dynamically in widget/window/menu __init__

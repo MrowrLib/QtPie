@@ -104,19 +104,21 @@ def test_config_tracks_required_bindings():
 # =============================================================================
 
 
-def test_missing_required_binding_raises_error():
-    """Instantiating widget with missing required binding raises error."""
+def test_missing_required_binding_raises_error_on_access():
+    """Accessing unresolved bare Variable raises error."""
 
     @widget
     class Child(Widget):
-        count: Variable[int]  # Required!
+        count: Variable[int]  # Required - but not in parent hierarchy
 
     @widget
     class Parent(Widget):
-        child: Child = new()  # Missing count binding!
+        child: Child = new()  # No matching 'count' Variable on parent
 
-    with pytest.raises(TypeError, match="requires binding for 'count'"):
-        Parent()
+    # Widget creation succeeds, but accessing the unresolved Variable fails
+    parent = Parent()
+    with pytest.raises(AttributeError, match="'count' requires a binding"):
+        _ = parent.child.count  # Access triggers resolution attempt
 
 
 def test_all_bindings_provided_no_error():
