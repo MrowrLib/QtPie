@@ -476,8 +476,13 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
 
     Returns a list of observables to subscribe to. This includes Observable,
     ObservableList, ObservableDict, ObservableSet, and ObservableProxy since they all have on_change methods.
+
+    Also searches parent widget hierarchy for Variables not found on the immediate widget.
     """
-    from qtpie.variable import Variable
+    from qtpie.variable import (
+        Variable,
+        _try_get_variable,  # pyright: ignore[reportPrivateUsage]
+    )
 
     # All observable types have on_change, so we can use a union
     result: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]] = []
@@ -488,20 +493,59 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
         else:
             result.append(source)
 
-    # Try to resolve as binding source (full path)
+    # Try to resolve as binding source (full path) on current widget
     source = resolve_binding_source(widget, name)
     if source is not None:
         add_source(source)
 
+    # Get root name for parent hierarchy lookup
+    normalized = name.replace("?.", ".")
+    root_name = normalized.split(".")[0]
+
     # For nested paths like "workspace.name", also try to subscribe to the ROOT Variable
     # This is critical for bare Variables resolved from hierarchy (descriptors)
-    normalized = name.replace("?.", ".")
     if "." in normalized:
-        root_name = normalized.split(".")[0]
         # Try root name directly on widget (handles descriptors like bare Variables)
         root_attr: Any = getattr(widget, root_name, None)
         if root_attr is not None and isinstance(root_attr, Variable):
             add_source(cast(BindingSource, root_attr))
+
+    # If we didn't find anything, search parent hierarchy
+    if not result:
+        from qtpy.QtWidgets import QApplication
+
+        # Also try underscore variants
+        lookup_name = root_name.lstrip("_")
+        underscore_name = f"_{lookup_name}"
+
+        current: Any = widget
+        while True:
+            if not hasattr(current, "parent") or not callable(current.parent):
+                break
+            parent: Any = current.parent()
+            if parent is None:
+                break
+
+            # Try all name variants
+            for attr_name in [root_name, lookup_name, underscore_name]:
+                found = _try_get_variable(parent, attr_name)
+                if found is not None:
+                    add_source(cast(BindingSource, found))
+                    break
+            if result:
+                break
+
+            current = parent
+
+        # Fallback: check QApplication.instance()
+        if not result:
+            app = QApplication.instance()
+            if app is not None:
+                for attr_name in [root_name, lookup_name, underscore_name]:
+                    found = _try_get_variable(app, attr_name)
+                    if found is not None:
+                        add_source(cast(BindingSource, found))
+                        break
 
     return result
 
@@ -620,7 +664,7 @@ def create_format_binding(
             context["var"] = get_observable_value(variable)
 
         # Add all variable values to context using root names
-        # Resolution order: exact match -> record -> underscore fallback
+        # Resolution order: exact match -> record -> underscore fallback -> parent hierarchy
         for root_name in root_names:
             # 1. Try exact match first (e.g., 'name' -> widget.name)
             if hasattr(widget, root_name):
@@ -653,6 +697,43 @@ def create_format_binding(
                     context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
                 else:
                     context[root_name] = raw_attr
+                continue
+
+            # 4. Search parent widget hierarchy
+            from qtpy.QtWidgets import QApplication as QApp
+
+            from qtpie.variable import _try_get_variable  # pyright: ignore[reportPrivateUsage]
+
+            lookup_name = root_name.lstrip("_")
+            underscore_variant = f"_{lookup_name}"
+            found_in_parent = False
+
+            current: Any = widget
+            while not found_in_parent:
+                if not hasattr(current, "parent") or not callable(current.parent):
+                    break
+                parent_widget: Any = current.parent()
+                if parent_widget is None:
+                    break
+
+                for attr_name in [root_name, lookup_name, underscore_variant]:
+                    found_var = _try_get_variable(parent_widget, attr_name)
+                    if found_var is not None:
+                        context[root_name] = found_var.value  # pyright: ignore[reportUnknownMemberType]
+                        found_in_parent = True
+                        break
+
+                current = parent_widget
+
+            # 5. Fallback: check QApplication.instance()
+            if not found_in_parent and root_name not in context:
+                app_instance = QApp.instance()
+                if app_instance is not None:
+                    for attr_name in [root_name, lookup_name, underscore_variant]:
+                        found_var = _try_get_variable(app_instance, attr_name)
+                        if found_var is not None:
+                            context[root_name] = found_var.value  # pyright: ignore[reportUnknownMemberType]
+                            break
 
         # Process each field and build the result
         result_parts: list[str] = []
@@ -700,16 +781,64 @@ def create_format_binding(
 
         return "".join(result_parts)
 
-    # Set initial value
-    setter(compute())
-
     # Subscribe to ALL observables - when any changes, recompute
     # Use *args because Observable passes value, but ObservableList/Dict pass nothing
     def on_any_change(*_: Any) -> None:
         setter(compute())
 
+    # Track subscribed observables to avoid duplicates
+    subscribed: set[int] = set()
+
+    def subscribe_to(obs: Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]) -> None:
+        obs_id = id(obs)
+        if obs_id not in subscribed:
+            subscribed.add(obs_id)
+            obs.on_change(on_any_change)
+
     for obs in all_observables:
-        obs.on_change(on_any_change)
+        subscribe_to(obs)
+
+    # Set initial value
+    setter(compute())
+
+    # Deferred subscription: check for parent Variables after parenting is complete
+    # This handles bindings that reference Variables in parent widgets but the widget
+    # wasn't parented yet when create_format_binding was called.
+    #
+    # The challenge: Qt parenting can be multi-level (widget -> intermediate -> actual parent).
+    # The child widget only gets ParentChange when it's parented to the intermediate,
+    # NOT when the intermediate is parented to the actual parent with the Variables.
+    #
+    # Solution: Use both immediate event watching AND a deferred timer check.
+    from qtpy.QtCore import QObject, QTimer
+
+    def try_subscribe_from_parents() -> bool:
+        """Try to find and subscribe to parent Variables. Returns True if any found."""
+        found_any = False
+        for name in var_names:
+            obs_list = _get_observables_for_name(widget, name)  # type: ignore[arg-type]
+            for obs in obs_list:
+                obs_id = id(obs)
+                if obs_id not in subscribed:
+                    subscribe_to(obs)
+                    found_any = True
+        return found_any
+
+    def on_deferred_check() -> None:
+        """Deferred check for parent Variables after event loop processes."""
+        if try_subscribe_from_parents():
+            setter(compute())
+
+    # Only do deferred subscription if we have variable names to look up and widget is a QObject
+    if var_names and isinstance(widget, QObject):
+        # Check if already parented to something with the Variables we need
+        if not try_subscribe_from_parents():
+            # Didn't find parent Variables yet - schedule a deferred check
+            # This runs after the current call stack completes, when parenting should be done
+            QTimer.singleShot(0, on_deferred_check)
+        else:
+            # Found parent Variables, recompute
+            setter(compute())
 
 
 # Legacy functions for backwards compatibility

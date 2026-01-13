@@ -131,6 +131,8 @@ def _resolve_or_create_variable(
     For bare `Variable[T]` annotations (no `= new()`), this will create the Variable
     on-the-fly with a None default, allowing it to sync from the widget.
 
+    Also searches the parent widget hierarchy for matching Variables.
+
     Args:
         host: The Widget/Window instance
         path: The binding path (e.g., "_index")
@@ -144,9 +146,12 @@ def _resolve_or_create_variable(
     from qtpie.bindings import resolve_binding_source
     from qtpie.state import QtPieState
     from qtpie.variable import Variable as VarType
-    from qtpie.variable import _RequiredBindingDescriptor  # pyright: ignore[reportPrivateUsage]
+    from qtpie.variable import (
+        _RequiredBindingDescriptor,  # pyright: ignore[reportPrivateUsage]
+        _try_get_variable,  # pyright: ignore[reportPrivateUsage]
+    )
 
-    # First try normal resolution
+    # First try normal resolution on host
     source = resolve_binding_source(host, path)  # type: ignore[arg-type]
     if isinstance(source, VarType):
         return source
@@ -156,7 +161,7 @@ def _resolve_or_create_variable(
     lookup_name = path.lstrip("_")
     underscore_name = f"_{lookup_name}"
 
-    # Check both the exact name and underscore-prefixed name
+    # Check both the exact name and underscore-prefixed name on host
     for attr_name in [lookup_name, underscore_name]:
         cls_attr = getattr(type(host), attr_name, None)
         if isinstance(cls_attr, _RequiredBindingDescriptor):
@@ -174,6 +179,33 @@ def _resolve_or_create_variable(
             qtpie_state.register_variable(attr_name, var)  # pyright: ignore[reportUnknownMemberType]
 
             return var
+
+    # Try to find Variable in parent hierarchy (for selection bindings to parent Variables)
+    from qtpy.QtWidgets import QApplication
+
+    current: Any = host
+    while True:
+        if not hasattr(current, "parent") or not callable(current.parent):
+            break
+        parent: Any = current.parent()
+        if parent is None:
+            break
+
+        # Try both the original path and underscore variants
+        for attr_name in [path, lookup_name, underscore_name]:
+            found = _try_get_variable(parent, attr_name)
+            if found is not None:
+                return found
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        for attr_name in [path, lookup_name, underscore_name]:
+            found = _try_get_variable(app, attr_name)
+            if found is not None:
+                return found
 
     return None
 
@@ -203,14 +235,15 @@ def _setup_selection_bindings(
     if not has_single and not has_multi:
         return
 
-    from qtpy.QtCore import QModelIndex, Qt
-    from qtpy.QtWidgets import QComboBox
+    from qtpy.QtCore import QTimer
 
     from qtpie.variable import Variable as VarType
 
     # Resolve the Variables (creating them if they're bare annotations)
     index_var: VarType[int] | None = None
     item_var: VarType[Any] | None = None
+    indexes_var: VarType[list[int]] | None = None
+    items_list_var: VarType[list[Any]] | None = None
 
     if selected_index_path is not None:
         source = _resolve_or_create_variable(host, selected_index_path, int)
@@ -221,6 +254,68 @@ def _setup_selection_bindings(
         source = _resolve_or_create_variable(host, selected_item_path, None)
         if isinstance(source, VarType):
             item_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    if selected_indexes_path is not None:
+        source = _resolve_or_create_variable(host, selected_indexes_path, None)
+        if isinstance(source, VarType):
+            indexes_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    if selected_items_list_path is not None:
+        source = _resolve_or_create_variable(host, selected_items_list_path, None)
+        if isinstance(source, VarType):
+            items_list_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    # Check if we couldn't resolve any Variables that were requested
+    # If so, the widget might not be parented yet - schedule deferred retry
+    missing_single = (selected_index_path is not None and index_var is None) or (selected_item_path is not None and item_var is None)
+    missing_multi = (selected_indexes_path is not None and indexes_var is None) or (selected_items_list_path is not None and items_list_var is None)
+
+    if missing_single or missing_multi:
+
+        def retry_binding() -> None:
+            # Re-resolve Variables after parenting
+            nonlocal index_var, item_var, indexes_var, items_list_var
+            if selected_index_path is not None and index_var is None:
+                source = _resolve_or_create_variable(host, selected_index_path, int)
+                if isinstance(source, VarType):
+                    index_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_item_path is not None and item_var is None:
+                source = _resolve_or_create_variable(host, selected_item_path, None)
+                if isinstance(source, VarType):
+                    item_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_indexes_path is not None and indexes_var is None:
+                source = _resolve_or_create_variable(host, selected_indexes_path, None)
+                if isinstance(source, VarType):
+                    indexes_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_items_list_path is not None and items_list_var is None:
+                source = _resolve_or_create_variable(host, selected_items_list_path, None)
+                if isinstance(source, VarType):
+                    items_list_var = source  # pyright: ignore[reportUnknownVariableType]
+
+            # If we found them now, set up the actual bindings
+            has_vars = index_var is not None or item_var is not None or indexes_var is not None or items_list_var is not None
+            if has_vars:
+                _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
+
+        QTimer.singleShot(0, retry_binding)
+        return
+
+    # Set up bindings immediately if Variables were found
+    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
+
+
+def _setup_selection_bindings_impl(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveListModel
+    index_var: Any | None,  # Variable[int] | None
+    item_var: Any | None,  # Variable[Any] | None
+    indexes_var: Any | None,  # Variable[list[int]] | None
+    items_list_var: Any | None,  # Variable[list[Any]] | None
+) -> None:
+    """Implementation of selection bindings (called after Variables are resolved)."""
+    from qtpy.QtCore import QModelIndex, Qt
+    from qtpy.QtWidgets import QComboBox
 
     # Flag to prevent circular updates
     updating = {"flag": False}
@@ -434,19 +529,7 @@ def _setup_selection_bindings(
             selection_model.currentChanged.connect(on_view_selection_changed)  # pyright: ignore[reportUnknownMemberType]
 
         # QListView multi-selection bindings (selectedIndexes, selectedItems)
-        indexes_var: VarType[list[int]] | None = None
-        items_list_var: VarType[list[Any]] | None = None
-
-        if selected_indexes_path is not None:
-            source = _resolve_or_create_variable(host, selected_indexes_path, None)
-            if isinstance(source, VarType):
-                indexes_var = source  # pyright: ignore[reportUnknownVariableType]
-
-        if selected_items_list_path is not None:
-            source = _resolve_or_create_variable(host, selected_items_list_path, None)
-            if isinstance(source, VarType):
-                items_list_var = source  # pyright: ignore[reportUnknownVariableType]
-
+        # indexes_var and items_list_var are already resolved and passed in
         if indexes_var is not None or items_list_var is not None:
             from qtpy.QtCore import QItemSelection
 
@@ -515,7 +598,7 @@ def _setup_table_selection_bindings(
     if not has_single and not has_multi:
         return
 
-    from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
+    from qtpy.QtCore import QTimer
 
     from qtpie.variable import Variable as VarType
 
@@ -570,6 +653,99 @@ def _setup_table_selection_bindings(
         source = _resolve_or_create_variable(host, selected_items_path, None)
         if isinstance(source, VarType):
             items_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    # Check if we couldn't resolve any Variables that were requested
+    # If so, the widget might not be parented yet - schedule deferred retry
+    missing_single = (
+        (selected_row_path is not None and row_var is None)
+        or (selected_column_path is not None and column_var is None)
+        or (selected_cell_path is not None and cell_var is None)
+        or (selected_item_path is not None and item_var is None)
+    )
+    missing_multi = (
+        (selected_rows_path is not None and rows_var is None)
+        or (selected_columns_path is not None and columns_var is None)
+        or (selected_cells_path is not None and cells_var is None)
+        or (selected_items_path is not None and items_var is None)
+    )
+
+    if missing_single or missing_multi:
+
+        def retry_binding() -> None:
+            # Re-resolve Variables after parenting
+            nonlocal row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var
+            if selected_row_path is not None and row_var is None:
+                source = _resolve_or_create_variable(host, selected_row_path, int)
+                if isinstance(source, VarType):
+                    row_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_column_path is not None and column_var is None:
+                source = _resolve_or_create_variable(host, selected_column_path, int)
+                if isinstance(source, VarType):
+                    column_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_cell_path is not None and cell_var is None:
+                source = _resolve_or_create_variable(host, selected_cell_path, None)
+                if isinstance(source, VarType):
+                    cell_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_item_path is not None and item_var is None:
+                source = _resolve_or_create_variable(host, selected_item_path, None)
+                if isinstance(source, VarType):
+                    item_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_rows_path is not None and rows_var is None:
+                source = _resolve_or_create_variable(host, selected_rows_path, None)
+                if isinstance(source, VarType):
+                    rows_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_columns_path is not None and columns_var is None:
+                source = _resolve_or_create_variable(host, selected_columns_path, None)
+                if isinstance(source, VarType):
+                    columns_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_cells_path is not None and cells_var is None:
+                source = _resolve_or_create_variable(host, selected_cells_path, None)
+                if isinstance(source, VarType):
+                    cells_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_items_path is not None and items_var is None:
+                source = _resolve_or_create_variable(host, selected_items_path, None)
+                if isinstance(source, VarType):
+                    items_var = source  # pyright: ignore[reportUnknownVariableType]
+
+            # If we found any Variables now, set up the actual bindings
+            has_vars = (
+                row_var is not None
+                or column_var is not None
+                or cell_var is not None
+                or item_var is not None
+                or rows_var is not None
+                or columns_var is not None
+                or cells_var is not None
+                or items_var is not None
+            )
+            if has_vars:
+                _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var)
+
+        QTimer.singleShot(0, retry_binding)
+        return
+
+    # Set up bindings immediately if Variables were found
+    _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var)
+
+
+def _setup_table_selection_bindings_impl(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveTableModel
+    row_var: Any | None,  # Variable[int] | None
+    column_var: Any | None,  # Variable[int] | None
+    cell_var: Any | None,  # Variable[tuple[int, int]] | None
+    item_var: Any | None,  # Variable[Any] | None
+    rows_var: Any | None,  # Variable[list[int]] | None
+    columns_var: Any | None,  # Variable[list[int]] | None
+    cells_var: Any | None,  # Variable[list[tuple[int, int]]] | None
+    items_var: Any | None,  # Variable[list[Any]] | None
+) -> None:
+    """Implementation of table selection bindings (called after Variables are resolved)."""
+    from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
+
+    has_single = row_var is not None or column_var is not None or cell_var is not None or item_var is not None
+    has_multi = rows_var is not None or columns_var is not None or cells_var is not None or items_var is not None
 
     # Flag to prevent circular updates
     updating = {"flag": False}
@@ -802,11 +978,11 @@ def _setup_tree_selection_bindings(
     if selected_item_path is None and selected_items_path is None:
         return
 
-    from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
+    from qtpy.QtCore import QTimer
 
     from qtpie.variable import Variable as VarType
 
-    # Resolve Variables
+    # Resolve Variables - may be None initially if widget isn't parented yet
     item_var: VarType[Any] | None = None
     items_var: VarType[list[Any]] | None = None
 
@@ -819,6 +995,42 @@ def _setup_tree_selection_bindings(
         source = _resolve_or_create_variable(host, selected_items_path, None)
         if isinstance(source, VarType):
             items_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    # If we didn't find the Variables yet, the widget might not be parented.
+    # Schedule a deferred retry after the event loop processes parenting.
+    if (selected_item_path is not None and item_var is None) or (selected_items_path is not None and items_var is None):
+
+        def retry_binding() -> None:
+            # Re-attempt resolution after parenting
+            nonlocal item_var, items_var
+            if selected_item_path is not None and item_var is None:
+                source = _resolve_or_create_variable(host, selected_item_path, None)
+                if isinstance(source, VarType):
+                    item_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_items_path is not None and items_var is None:
+                source = _resolve_or_create_variable(host, selected_items_path, None)
+                if isinstance(source, VarType):
+                    items_var = source  # pyright: ignore[reportUnknownVariableType]
+            # If we found them now, set up the actual bindings
+            if item_var is not None or items_var is not None:
+                _setup_tree_selection_bindings_impl(host, widget, model, item_var, items_var)
+
+        QTimer.singleShot(0, retry_binding)
+        return
+
+    # Set up bindings immediately if Variables were found
+    _setup_tree_selection_bindings_impl(host, widget, model, item_var, items_var)
+
+
+def _setup_tree_selection_bindings_impl(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveTreeModel
+    item_var: Any | None,  # Variable[Any] | None
+    items_var: Any | None,  # Variable[list[Any]] | None
+) -> None:
+    """Implementation of tree selection bindings (called after Variables are resolved)."""
+    from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
 
     # Flag to prevent circular updates
     updating = {"flag": False}

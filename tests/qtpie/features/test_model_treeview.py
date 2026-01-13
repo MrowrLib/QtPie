@@ -539,6 +539,95 @@ class TestTreeViewRecordBindings:
         assert_that(instance._selected_kittens_info.text()).is_equal_to("Selected Kitten Count: 1")
 
 
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewSelectedItemFromParent:
+    """Test selectedItem= binding to Variable in parent widget hierarchy."""
+
+    def test_selectedItem_resolves_from_parent_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItem= finds Variable in parent widget, not just host."""
+        from qtpie import AppBase, Widget, widget
+
+        # Skip AppBase for this test - AppBase is not a QWidget so parent() hierarchy
+        # doesn't work the same way. The child's format binding can't walk up to AppBase.
+        if base_class is AppBase:
+            pytest.skip("AppBase is not a QWidget, parent hierarchy lookup doesn't apply")
+
+        @widget
+        class ChildTreeWidget(Widget):
+            """Child widget with tree that binds selectedItem to parent's Variable."""
+
+            _nodes: Variable[list[TreeNode]] = new([TreeNode("Node 1"), TreeNode("Node 2"), TreeNode("Node 3")])
+            # selectedItem references a Variable that exists on PARENT, not here
+            _tree: QTreeView = new(bind="_nodes", selectedItem="selected_node")
+            # This label is in the CHILD, binding to parent's Variable
+            _child_info: QLabel = new(bind="Child sees: {selected_node?.name}")
+
+        @decorator
+        class ParentWidget(base_class):
+            """Parent widget that owns the selected_node Variable."""
+
+            selected_node: Variable[TreeNode | None] = new(None)
+            _child: ChildTreeWidget = new()
+            _selected_info: QLabel = new(bind="Selected: {selected_node?.name}")
+
+        parent = create_and_track(qt, ParentWidget, base_class)
+
+        # Process events to allow deferred parent binding subscriptions to complete
+        from qtpy.QtWidgets import QApplication
+
+        QApplication.processEvents()
+
+        # Initially nothing selected
+        assert_that(parent.selected_node.value).is_none()
+
+        # Set selection via parent's Variable
+        parent.selected_node.value = parent._child._nodes.value[1]  # "Node 2"
+        assert_that(parent._selected_info.text()).is_equal_to("Selected: Node 2")
+        # Child's label should also update (proves it's the same Variable)
+        assert_that(parent._child._child_info.text()).is_equal_to("Child sees: Node 2")
+
+        # Change selection
+        parent.selected_node.value = parent._child._nodes.value[0]  # "Node 1"
+        assert_that(parent._selected_info.text()).is_equal_to("Selected: Node 1")
+        assert_that(parent._child._child_info.text()).is_equal_to("Child sees: Node 1")
+
+    def test_selectedItem_resolves_from_grandparent_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItem= finds Variable multiple levels up the hierarchy."""
+        from qtpie import Widget, widget
+
+        @widget
+        class GrandchildTreeWidget(Widget):
+            """Grandchild with tree binding to grandparent's Variable."""
+
+            _nodes: Variable[list[TreeNode]] = new([TreeNode("A"), TreeNode("B")])
+            _tree: QTreeView = new(bind="_nodes", selectedItem="selected_node")
+
+        @widget
+        class ChildWidget(Widget):
+            """Middle widget - does NOT have selected_node."""
+
+            _grandchild: GrandchildTreeWidget = new()
+
+        @decorator
+        class GrandparentWidget(base_class):
+            """Grandparent owns the Variable."""
+
+            selected_node: Variable[TreeNode | None] = new(None)
+            _child: ChildWidget = new()
+            _info: QLabel = new(bind="Selection: {selected_node?.name}")
+
+        grandparent = create_and_track(qt, GrandparentWidget, base_class)
+
+        assert_that(grandparent.selected_node.value).is_none()
+
+        # Set selection on grandparent - should propagate to grandchild's tree binding
+        grandparent.selected_node.value = grandparent._child._grandchild._nodes.value[0]
+        assert_that(grandparent._info.text()).is_equal_to("Selection: A")
+
+        grandparent.selected_node.value = grandparent._child._grandchild._nodes.value[1]
+        assert_that(grandparent._info.text()).is_equal_to("Selection: B")
+
+
 class _CustomTreeWidget(QWidget):
     """Custom widget for testing kwargs passthrough."""
 
