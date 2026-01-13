@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, ove
 from observant import Observable, ObservableDict, ObservableList, ObservableSet
 from qtpy.QtWidgets import (
     QLayout,
+    QSpacerItem,
     QWidget,
 )
 
@@ -450,14 +451,54 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 apply_layout_margins(qt_layout, config.margins)
 
-                # Add child widgets to layout (in field definition order)
-                # Use __annotations__ to preserve order across QWidget and Variable[T, W] fields
+                # Track nested layouts by field name for later reference
+                nested_layouts: dict[str, QLayout] = {}
+
+                # First pass: Create and add nested layouts (so they exist before items reference them)
                 for name in getattr(cls, "__annotations__", {}):
-                    # Check if it's a QWidget field
+                    if name in config.fields:
+                        field = config.fields[name]
+                        if field.is_nested_layout:
+                            # Create the nested layout instance
+                            layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            setattr(self, name, layout_instance)
+                            nested_layouts[name] = layout_instance
+
+                            # Add to target layout (default or another nested layout)
+                            target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                            if target is not None and not field.exclude_from_layout:
+                                _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
+
+                # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
+                # Use __annotations__ to preserve order across all field types
+                for name in getattr(cls, "__annotations__", {}):
                     if name in config.fields:
                         field = config.fields[name]
                         if field.exclude_from_layout:
                             continue
+
+                        # Skip nested layouts (already handled in first pass)
+                        if field.is_nested_layout:
+                            continue
+
+                        # Determine target layout
+                        target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                        if target is None:
+                            continue
+
+                        # Handle Stretch
+                        if field.is_stretch:
+                            _add_stretch_to_layout(target, field.stretch_factor)
+                            continue
+
+                        # Handle QSpacerItem
+                        if field.is_spacer_item:
+                            spacer = _create_spacer_item(field)
+                            setattr(self, name, spacer)
+                            _add_spacer_to_layout(target, spacer, field.grid)
+                            continue
+
+                        # Handle regular QWidget
                         widget_instance = getattr(self, name, None)
                         if widget_instance is not None and isinstance(widget_instance, QWidget):
                             # Resolve Translatable labels (keep original for retranslation)
@@ -465,17 +506,25 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                             label_translatable = field.label if isinstance(field.label, Translatable) else None
                             label = field.label.resolve() if isinstance(field.label, Translatable) else field.label
-                            _validate_layout_params(name, config.layout, label, field.grid)
-                            _add_to_layout(qt_layout, widget_instance, config.layout, label, field.grid, label_translatable)
+
+                            # For default layout: validate and use decorator's layout type
+                            # For nested layout: detect actual layout type and use appropriate add method
+                            if field.target_layout is None:
+                                _validate_layout_params(name, config.layout, label, field.grid)
+                                _add_to_layout(target, widget_instance, config.layout, label, field.grid, label_translatable)
+                            else:
+                                _add_widget_to_nested_layout(target, widget_instance, label, field.grid, name)
+
                     # Check if it's a Variable with a widget
                     elif name in config.variable_names:
                         var = getattr(self, name, None)
                         if isinstance(var, Variable) and var.widget is not None:
-                            # Get label/grid/exclude_from_layout from the descriptor
+                            # Get label/grid/exclude_from_layout/target_layout from the descriptor
                             descriptor: Any = getattr(cls, name, None)
                             var_label: str | None = None
                             var_label_translatable: Any = None
                             grid: GridPosition | None = None
+                            target_layout_name: str | None = None
                             if isinstance(descriptor, _VariableDescriptor):
                                 if descriptor.exclude_from_layout:
                                     continue
@@ -489,8 +538,17 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                 else:
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
-                            _validate_layout_params(name, config.layout, var_label, grid)
-                            _add_to_layout(qt_layout, var.widget, config.layout, var_label, grid, var_label_translatable)
+                                # TODO: Add target_layout support to _VariableDescriptor if needed
+
+                            # Determine target layout
+                            target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)
+                            if target is None:
+                                continue
+
+                            # Only validate for default layout
+                            if target_layout_name is None:
+                                _validate_layout_params(name, config.layout, var_label, grid)
+                            _add_to_layout(target, var.widget, config.layout if target_layout_name is None else "vertical", var_label, grid, var_label_translatable)
 
         # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
         _connect_signals(self, config)
@@ -588,6 +646,127 @@ def _add_to_layout(
 ) -> None:
     """Add a widget to the layout."""
     add_to_layout(layout, widget_instance, layout_type, label, grid, label_translatable)
+
+
+def _get_target_layout(
+    default_layout: QLayout,
+    nested_layouts: dict[str, QLayout],
+    target_name: str | None,
+) -> QLayout | None:
+    """Get the target layout for adding items.
+
+    Args:
+        default_layout: The widget's default layout.
+        nested_layouts: Dictionary of nested layouts by field name.
+        target_name: Name of the target layout (or None for default).
+
+    Returns:
+        The target QLayout, or None if target not found.
+    """
+    if target_name is None:
+        return default_layout
+    return nested_layouts.get(target_name)
+
+
+def _add_stretch_to_layout(layout: QLayout, factor: int = 1) -> None:
+    """Add stretch to a layout.
+
+    Only works for QBoxLayout (QVBoxLayout, QHBoxLayout).
+    For other layout types, this is a no-op.
+    """
+    from qtpy.QtWidgets import QBoxLayout
+
+    if isinstance(layout, QBoxLayout):
+        layout.addStretch(factor)
+
+
+def _create_spacer_item(field: NewField) -> QSpacerItem:
+    """Create a QSpacerItem from field configuration."""
+    return QSpacerItem(*field.args, **field.kwargs)
+
+
+def _add_spacer_to_layout(layout: QLayout, spacer: QSpacerItem, grid: GridPosition | None = None) -> None:
+    """Add a spacer item to a layout.
+
+    Works for QBoxLayout and QGridLayout.
+    """
+    from qtpy.QtWidgets import QBoxLayout, QGridLayout
+
+    if isinstance(layout, QBoxLayout):
+        layout.addSpacerItem(spacer)
+    elif isinstance(layout, QGridLayout):
+        if grid is not None:
+            row, col = grid[0], grid[1]
+            rowspan = grid[2] if len(grid) > 2 else 1
+            colspan = grid[3] if len(grid) > 3 else 1
+            layout.addItem(spacer, row, col, rowspan, colspan)
+        else:
+            layout.addItem(spacer)
+
+
+def _add_widget_to_nested_layout(
+    layout: QLayout,
+    widget: QWidget,
+    label: str | None = None,
+    grid: GridPosition | None = None,
+    field_name: str = "",
+) -> None:
+    """Add a widget to a nested layout, respecting grid=/label= based on layout type.
+
+    Unlike _add_to_layout which uses the decorator's layout type, this detects
+    the actual QLayout subclass and uses the appropriate add method.
+
+    Raises:
+        TypeError: If QGridLayout and grid= not provided, or QFormLayout and label= not provided.
+    """
+    from qtpy.QtWidgets import QBoxLayout, QFormLayout, QGridLayout
+
+    if isinstance(layout, QGridLayout):
+        if grid is None:
+            raise TypeError(f"Field '{field_name}' requires grid= for grid layout. Use: new(..., grid=(row, col)) or new(..., grid=(row, col, rowspan, colspan))")
+        row, col = grid[0], grid[1]
+        rowspan = grid[2] if len(grid) > 2 else 1
+        colspan = grid[3] if len(grid) > 3 else 1
+        layout.addWidget(widget, row, col, rowspan, colspan)
+    elif isinstance(layout, QFormLayout):
+        if label is None:
+            raise TypeError(f"Field '{field_name}' requires label= for form layout. Use: new(..., label=\"Field Label\")")
+        layout.addRow(label, widget)
+    elif isinstance(layout, QBoxLayout):
+        layout.addWidget(widget)
+    else:
+        # Fallback for other layout types
+        layout.addWidget(widget)  # type: ignore[union-attr]
+
+
+def _add_layout_to_nested_layout(
+    parent_layout: QLayout,
+    child_layout: QLayout,
+    grid: GridPosition | None = None,
+    field_name: str = "",
+) -> None:
+    """Add a nested layout to a parent layout, respecting grid= for grid layouts.
+
+    Raises:
+        TypeError: If parent is QGridLayout and grid= is not provided.
+    """
+    from qtpy.QtWidgets import QBoxLayout, QFormLayout, QGridLayout
+
+    if isinstance(parent_layout, QGridLayout):
+        if grid is None:
+            raise TypeError(f"Field '{field_name}' requires grid= for grid layout. Use: new(..., grid=(row, col)) or new(..., grid=(row, col, rowspan, colspan))")
+        row, col = grid[0], grid[1]
+        rowspan = grid[2] if len(grid) > 2 else 1
+        colspan = grid[3] if len(grid) > 3 else 1
+        parent_layout.addLayout(child_layout, row, col, rowspan, colspan)
+    elif isinstance(parent_layout, QFormLayout):
+        # QFormLayout.addRow can take a layout
+        parent_layout.addRow(child_layout)
+    elif isinstance(parent_layout, QBoxLayout):
+        parent_layout.addLayout(child_layout)
+    else:
+        # Fallback
+        parent_layout.addLayout(child_layout)  # type: ignore[union-attr]
 
 
 def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:

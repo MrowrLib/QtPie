@@ -379,6 +379,54 @@ def window[W: Window[Any]](
     return decorator  # type: ignore[return-value]
 
 
+def _has_layout_items(
+    cls: type[Window[Any]],
+    config: WindowConfig,
+    dock_field_names: set[str],
+    variable_dock_field_names: set[str],
+) -> bool:
+    """Check if there are any fields that should go in a central widget layout.
+
+    Returns True if there are QWidgets, Variables with widgets, Stretch,
+    QSpacerItem, or QLayout fields that aren't docks or menus.
+    """
+
+    for name in getattr(cls, "__annotations__", {}):
+        # Skip dock fields
+        if name in dock_field_names or name in variable_dock_field_names:
+            continue
+        # Skip central_widget (handled separately)
+        if name in ("central_widget", "_central_widget"):
+            continue
+
+        # Check if it's a field we handle
+        if name in config.fields:
+            field = config.fields[name]
+            # These types go in the layout
+            if field.is_stretch or field.is_spacer_item or field.is_nested_layout:
+                return True
+            # Check if field type is a QWidget (not QMenu)
+            if field.field_type is not None:
+                if _is_qwidget_not_qmenu(field.field_type):
+                    return True
+
+        # Check if it's a Variable with widget
+        if name in config.variable_names:
+            return True
+
+    return False
+
+
+def _is_qwidget_not_qmenu(field_type: type) -> bool:
+    """Check if field_type is a QWidget but not a QMenu."""
+    try:
+        from qtpy.QtWidgets import QMenu, QWidget
+
+        return issubclass(field_type, QWidget) and not issubclass(field_type, QMenu)
+    except (ImportError, TypeError):
+        return False
+
+
 def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
     """Wrap __init__ to add menus, create central widget, apply props, and call __setup__."""
     if cls._qtpie_config.init_wrapped:
@@ -440,8 +488,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         connect_field_signals(self, config.fields, _create_window_signal_expression_handler)
 
         # Auto-add QMenu fields to menu bar (in declaration order)
-        # And collect non-menu QWidget fields for central widget
-        non_menu_widgets: list[tuple[str, QWidget]] = []
+        # And track non-menu QWidget fields for central widget, plus layout items
         dock_field_names = set(config.dock_fields)
         variable_dock_field_names = set(config.variable_dock_fields)
         for name in getattr(cls, "__annotations__", {}):
@@ -459,11 +506,6 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 # Refresh parent-dependent bindings now that menu has a parent
                 if hasattr(instance, "_refresh_parent_bindings"):
                     instance._refresh_parent_bindings()  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
-            elif isinstance(instance, QWidget) and name not in ("central_widget", "_central_widget"):
-                non_menu_widgets.append((name, instance))
-            elif isinstance(instance, Variable) and instance.widget is not None and name not in ("central_widget", "_central_widget"):
-                # Variable[T, W] - add the widget to layout
-                non_menu_widgets.append((name, instance.widget))
 
         # Set up central widget
         # Option 1: If there's an explicit central_widget or _central_widget field, use it
@@ -476,8 +518,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
             explicit_central = explicit_central.widget
         if explicit_central is not None and isinstance(explicit_central, QWidget):
             self.setCentralWidget(explicit_central)
-        # Option 2: Create a container with layout for non-menu widgets
-        elif non_menu_widgets and config.layout is not None:
+        # Option 2: Create a container with layout for non-menu/non-layout fields
+        elif config.layout is not None and _has_layout_items(cls, config, dock_field_names, variable_dock_field_names):
+            from .variable import _VariableDescriptor
+            from .widget import _add_layout_to_nested_layout, _add_spacer_to_layout, _add_stretch_to_layout, _add_widget_to_nested_layout, _create_spacer_item, _get_target_layout
+
             central = QWidget()
             qt_layout = create_layout(config.layout)
             if qt_layout is not None:
@@ -488,40 +533,111 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
                 apply_layout_margins(qt_layout, config.margins)
 
-                # Add non-menu widgets to layout (in field definition order)
-                from .variable import _VariableDescriptor
+                # Track nested layouts by field name for later reference
+                nested_layouts: dict[str, QLayout] = {}
 
-                for name, widget_instance in non_menu_widgets:
-                    fld = config.fields.get(name)
-                    label: str | None = None
-                    label_translatable: Any = None
-                    grid: GridPosition | None = None
+                # First pass: Create and add nested layouts
+                for name in getattr(cls, "__annotations__", {}):
+                    if name in dock_field_names or name in variable_dock_field_names:
+                        continue
+                    if name in config.fields:
+                        field = config.fields[name]
+                        if field.is_nested_layout:
+                            # Create the nested layout instance
+                            layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            setattr(self, name, layout_instance)
+                            nested_layouts[name] = layout_instance
 
-                    # Check if this is a Variable[T, W] field - get label/grid from descriptor
-                    descriptor = getattr(cls, name, None)
-                    if isinstance(descriptor, _VariableDescriptor):
-                        if descriptor.exclude_from_layout:
+                            # Add to target layout (default or another nested layout)
+                            target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                            if target is not None and not field.exclude_from_layout:
+                                _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
+
+                # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
+                for name in getattr(cls, "__annotations__", {}):
+                    if name in dock_field_names or name in variable_dock_field_names:
+                        continue
+                    if name in ("central_widget", "_central_widget"):
+                        continue
+
+                    if name in config.fields:
+                        field = config.fields[name]
+                        if field.exclude_from_layout:
                             continue
-                        raw_label = descriptor.label
-                        if isinstance(raw_label, Translatable):
-                            label = raw_label.resolve()
-                            label_translatable = raw_label
-                        else:
-                            label = raw_label
-                        grid = descriptor.grid  # type: ignore[assignment]
-                    elif fld is not None:
-                        # Regular QWidget field
-                        if fld.exclude_from_layout:
-                            continue
-                        if isinstance(fld.label, Translatable):
-                            label = fld.label.resolve()
-                            label_translatable = fld.label
-                        else:
-                            label = fld.label
-                        grid = fld.grid
 
-                    _validate_layout_params(name, config.layout, label, grid)
-                    _add_to_layout(qt_layout, widget_instance, config.layout, label, grid, label_translatable)
+                        # Skip nested layouts (already handled in first pass)
+                        if field.is_nested_layout:
+                            continue
+
+                        # Determine target layout
+                        target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                        if target is None:
+                            continue
+
+                        # Handle Stretch
+                        if field.is_stretch:
+                            _add_stretch_to_layout(target, field.stretch_factor)
+                            continue
+
+                        # Handle QSpacerItem
+                        if field.is_spacer_item:
+                            spacer = _create_spacer_item(field)
+                            setattr(self, name, spacer)
+                            _add_spacer_to_layout(target, spacer, field.grid)
+                            continue
+
+                        # Handle regular QWidget
+                        widget_instance = getattr(self, name, None)
+                        if widget_instance is not None and isinstance(widget_instance, QWidget) and not isinstance(widget_instance, QMenu):
+                            label: str | None = None
+                            label_translatable: Any = None
+                            grid: GridPosition | None = None
+
+                            if isinstance(field.label, Translatable):
+                                label = field.label.resolve()
+                                label_translatable = field.label
+                            else:
+                                label = field.label
+                            grid = field.grid
+
+                            # For default layout: validate and use decorator's layout type
+                            # For nested layout: detect actual layout type and use appropriate add method
+                            if field.target_layout is None:
+                                _validate_layout_params(name, config.layout, label, grid)
+                                _add_to_layout(target, widget_instance, config.layout, label, grid, label_translatable)
+                            else:
+                                _add_widget_to_nested_layout(target, widget_instance, label, grid, name)
+
+                    # Check if it's a Variable with a widget
+                    elif name in config.variable_names:
+                        var = getattr(self, name, None)
+                        if isinstance(var, Variable) and var.widget is not None:
+                            # Get label/grid/exclude_from_layout from the descriptor
+                            descriptor = getattr(cls, name, None)
+                            var_label: str | None = None
+                            var_label_translatable: Any = None
+                            grid: GridPosition | None = None
+                            target_layout_name: str | None = None
+                            if isinstance(descriptor, _VariableDescriptor):
+                                if descriptor.exclude_from_layout:
+                                    continue
+                                raw_label = descriptor.label
+                                if isinstance(raw_label, Translatable):
+                                    var_label = raw_label.resolve()
+                                    var_label_translatable = raw_label
+                                else:
+                                    var_label = raw_label
+                                grid = descriptor.grid  # type: ignore[assignment]
+
+                            # Determine target layout
+                            target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)
+                            if target is None:
+                                continue
+
+                            # Only validate for default layout
+                            if target_layout_name is None:
+                                _validate_layout_params(name, config.layout, var_label, grid)
+                            _add_to_layout(target, var.widget, config.layout if target_layout_name is None else "vertical", var_label, grid, var_label_translatable)
 
             self.setCentralWidget(central)
 

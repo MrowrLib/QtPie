@@ -26,11 +26,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
+    QSpacerItem,
     QSpinBox,
     QVBoxLayout,
 )
 
-from qtpie import AppBase, Variable, Window, new
+from qtpie import AppBase, Stretch, Variable, Window, new
 from qtpie.testing import QtDriver
 
 from .conftest import WIDGET_CLASS_TYPES, create_and_track
@@ -387,3 +389,424 @@ class TestMixedWidgetsInLayout:
         instance = create_and_track(qt, TestClass, base_class)
         layout = get_layout(instance, base_class)
         assert_that(layout.rowCount()).is_equal_to(2)
+
+
+# =============================================================================
+# Stretch
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestStretch:
+    """Stretch adds expandable space to layouts."""
+
+    def test_stretch_default_factor(self, base_class, decorator, qt: QtDriver) -> None:
+        """Stretch with no args uses factor=1."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _stretch: Stretch = new()
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: top label, stretch, bottom label
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_stretch_custom_factor(self, base_class, decorator, qt: QtDriver) -> None:
+        """Stretch with custom factor."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _stretch: Stretch = new(3)
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_stretch_in_horizontal(self, base_class, decorator, qt: QtDriver) -> None:
+        """Stretch works in horizontal layouts."""
+
+        @decorator(layout="horizontal")
+        class TestClass(base_class):
+            left: QLabel = new("Left")
+            _stretch: Stretch = new()
+            right: QLabel = new("Right")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout).is_instance_of(QHBoxLayout)
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_multiple_stretches(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple stretches in one layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _stretch1: Stretch = new()
+            middle: QLabel = new("Middle")
+            _stretch2: Stretch = new()
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: stretch, label, stretch
+        assert_that(layout.count()).is_equal_to(3)
+
+
+# =============================================================================
+# QSpacerItem
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestSpacerItem:
+    """QSpacerItem for custom spacing in layouts."""
+
+    def test_spacer_item_basic(self, base_class, decorator, qt: QtDriver) -> None:
+        """QSpacerItem with fixed size."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _spacer: QSpacerItem = new(20, 40)
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: top label, spacer, bottom label
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_spacer_item_with_policy(self, base_class, decorator, qt: QtDriver) -> None:
+        """QSpacerItem with size policy."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _spacer: QSpacerItem = new(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_spacer_item_accessible(self, base_class, decorator, qt: QtDriver) -> None:
+        """QSpacerItem is accessible as attribute."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _spacer: QSpacerItem = new(50, 50)
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # The spacer item is stored on the instance
+        assert_that(instance._spacer).is_instance_of(QSpacerItem)
+
+
+# =============================================================================
+# Nested Layouts
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestNestedLayouts:
+    """Nested layouts within a widget."""
+
+    def test_nested_layout_basic(self, base_class, decorator, qt: QtDriver) -> None:
+        """QHBoxLayout nested in default QVBoxLayout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _row: QHBoxLayout = new()
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: top label, nested layout, bottom label
+        assert_that(layout.count()).is_equal_to(3)
+        assert_that(instance._row).is_instance_of(QHBoxLayout)
+
+    def test_widget_in_nested_layout_by_string(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget added to nested layout via layout='_row'."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _row: QHBoxLayout = new()
+            nested_label: QLabel = new("Nested", layout="_row")
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout has: top, nested_layout, bottom (nested_label is in _row)
+        assert_that(layout.count()).is_equal_to(3)
+
+        # Nested layout has the label
+        assert_that(instance._row.count()).is_equal_to(1)
+        assert_that(instance._row.itemAt(0).widget().text()).is_equal_to("Nested")
+
+    def test_widget_in_nested_layout_by_reference(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget added to nested layout via layout=_row (direct reference)."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _row: QHBoxLayout = new()
+            nested_label: QLabel = new("Nested", layout="_row")
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Nested layout has the label
+        assert_that(instance._row.count()).is_equal_to(1)
+
+    def test_multiple_widgets_in_nested_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple widgets in nested layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            header: QLabel = new("Header")
+            _buttons: QHBoxLayout = new()
+            btn1: QLabel = new("OK", layout="_buttons")
+            btn2: QLabel = new("Cancel", layout="_buttons")
+            footer: QLabel = new("Footer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout: header, buttons_layout, footer
+        assert_that(layout.count()).is_equal_to(3)
+
+        # Nested layout: btn1, btn2
+        assert_that(instance._buttons.count()).is_equal_to(2)
+
+    def test_stretch_in_nested_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """Stretch can be added to nested layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _row: QHBoxLayout = new()
+            left: QLabel = new("Left", layout="_row")
+            _stretch: Stretch = new(layout="_row")
+            right: QLabel = new("Right", layout="_row")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Nested layout: left, stretch, right
+        assert_that(instance._row.count()).is_equal_to(3)
+
+    def test_spacer_in_nested_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """QSpacerItem can be added to nested layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _row: QHBoxLayout = new()
+            left: QLabel = new("Left", layout="_row")
+            _spacer: QSpacerItem = new(50, 0, layout="_row")
+            right: QLabel = new("Right", layout="_row")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Nested layout: left, spacer, right
+        assert_that(instance._row.count()).is_equal_to(3)
+
+    def test_nested_layout_in_nested_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """Layout nested within another nested layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _outer: QHBoxLayout = new()
+            _inner: QVBoxLayout = new(layout="_outer")
+            inner_label: QLabel = new("Inner", layout="_inner")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout has outer
+        assert_that(layout.count()).is_equal_to(1)
+
+        # Outer has inner
+        assert_that(instance._outer.count()).is_equal_to(1)
+
+        # Inner has label
+        assert_that(instance._inner.count()).is_equal_to(1)
+
+    def test_nested_layout_excluded_from_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Nested layout with layout=False is not added to default layout."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            label: QLabel = new("Label")
+            _hidden_row: QHBoxLayout = new(layout=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Only the label is in the main layout
+        assert_that(layout.count()).is_equal_to(1)
+        # But the layout still exists
+        assert_that(instance._hidden_row).is_instance_of(QHBoxLayout)
+
+    def test_deeply_nested_layouts(self, base_class, decorator, qt: QtDriver) -> None:
+        """Three levels of nested layouts: main > level1 > level2 > level3."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            main_label: QLabel = new("Main")
+            _level1: QHBoxLayout = new()
+            level1_label: QLabel = new("L1", layout="_level1")
+            _level2: QVBoxLayout = new(layout="_level1")
+            level2_label: QLabel = new("L2", layout="_level2")
+            _level3: QHBoxLayout = new(layout="_level2")
+            level3_label: QLabel = new("L3", layout="_level3")
+            _level3_stretch: Stretch = new(layout="_level3")
+            level3_end: QLabel = new("L3 End", layout="_level3")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout: main_label, _level1
+        assert_that(layout.count()).is_equal_to(2)
+
+        # Level 1: level1_label, _level2
+        assert_that(instance._level1.count()).is_equal_to(2)
+
+        # Level 2: level2_label, _level3
+        assert_that(instance._level2.count()).is_equal_to(2)
+
+        # Level 3: level3_label, stretch, level3_end
+        assert_that(instance._level3.count()).is_equal_to(3)
+
+        # Verify the widgets are in the right place
+        assert_that(instance._level3.itemAt(0).widget().text()).is_equal_to("L3")
+        assert_that(instance._level3.itemAt(2).widget().text()).is_equal_to("L3 End")
+
+    def test_nested_grid_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """QGridLayout nested in main layout with widgets at grid positions."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            header: QLabel = new("Header")
+            _grid: QGridLayout = new()
+            grid_00: QLabel = new("(0,0)", layout="_grid", grid=(0, 0))
+            grid_01: QLabel = new("(0,1)", layout="_grid", grid=(0, 1))
+            grid_10: QLabel = new("(1,0)", layout="_grid", grid=(1, 0))
+            grid_11: QLabel = new("(1,1)", layout="_grid", grid=(1, 1))
+            footer: QLabel = new("Footer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout: header, _grid, footer
+        assert_that(layout.count()).is_equal_to(3)
+
+        # Grid layout has 4 widgets
+        assert_that(instance._grid.count()).is_equal_to(4)
+
+        # Verify grid positions
+        assert_that(instance._grid.itemAtPosition(0, 0).widget().text()).is_equal_to("(0,0)")
+        assert_that(instance._grid.itemAtPosition(0, 1).widget().text()).is_equal_to("(0,1)")
+        assert_that(instance._grid.itemAtPosition(1, 0).widget().text()).is_equal_to("(1,0)")
+        assert_that(instance._grid.itemAtPosition(1, 1).widget().text()).is_equal_to("(1,1)")
+
+    def test_nested_grid_with_span(self, base_class, decorator, qt: QtDriver) -> None:
+        """Nested grid layout with rowspan/colspan."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _grid: QGridLayout = new()
+            header: QLabel = new("Header spans 2 cols", layout="_grid", grid=(0, 0, 1, 2))
+            left: QLabel = new("Left", layout="_grid", grid=(1, 0))
+            right: QLabel = new("Right", layout="_grid", grid=(1, 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Grid has 3 widgets
+        assert_that(instance._grid.count()).is_equal_to(3)
+
+        # Header at (0,0)
+        assert_that(instance._grid.itemAtPosition(0, 0).widget().text()).is_equal_to("Header spans 2 cols")
+
+    def test_nested_form_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """QFormLayout nested in main layout with label= parameter."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            header: QLabel = new("Header")
+            _form: QFormLayout = new()
+            name: QLineEdit = new(layout="_form", label="Name:")
+            email: QLineEdit = new(layout="_form", label="Email:")
+            footer: QLabel = new("Footer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Main layout: header, _form, footer
+        assert_that(layout.count()).is_equal_to(3)
+
+        # Form layout has 2 rows
+        assert_that(instance._form.rowCount()).is_equal_to(2)
+
+        # Check labels
+        name_label = instance._form.itemAt(0, QFormLayout.ItemRole.LabelRole).widget()
+        assert_that(name_label.text()).is_equal_to("Name:")
+
+        email_label = instance._form.itemAt(1, QFormLayout.ItemRole.LabelRole).widget()
+        assert_that(email_label.text()).is_equal_to("Email:")
+
+    def test_nested_layout_inside_grid(self, base_class, decorator, qt: QtDriver) -> None:
+        """Nested layout inside a grid layout."""
+
+        @decorator(layout="grid")
+        class TestClass(base_class):
+            corner: QLabel = new("Corner", grid=(0, 0))
+            _row: QHBoxLayout = new(grid=(0, 1))
+            row_left: QLabel = new("Left", layout="_row")
+            row_right: QLabel = new("Right", layout="_row")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Grid has corner label and nested layout
+        assert_that(layout.itemAtPosition(0, 0).widget().text()).is_equal_to("Corner")
+
+        # Nested row has 2 widgets
+        assert_that(instance._row.count()).is_equal_to(2)
+
+    def test_nested_grid_requires_grid_for_widgets(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget in nested QGridLayout requires grid= parameter."""
+
+        @decorator
+        class TestClass(base_class):
+            _grid: QGridLayout = new()
+            _missing_grid: QLabel = new("Missing", layout="_grid")  # Missing grid=
+
+        with pytest.raises(TypeError, match="requires grid="):
+            create_and_track(qt, TestClass, base_class)
+
+    def test_nested_grid_requires_grid_for_nested_layouts(self, base_class, decorator, qt: QtDriver) -> None:
+        """Nested layout in nested QGridLayout requires grid= parameter."""
+
+        @decorator
+        class TestClass(base_class):
+            _grid: QGridLayout = new()
+            _row: QHBoxLayout = new(layout="_grid")  # Missing grid=
+
+        with pytest.raises(TypeError, match="requires grid="):
+            create_and_track(qt, TestClass, base_class)
+
+    def test_nested_form_requires_label_for_widgets(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget in nested QFormLayout requires label= parameter."""
+
+        @decorator
+        class TestClass(base_class):
+            _form: QFormLayout = new()
+            _missing_label: QLineEdit = new(layout="_form")  # Missing label=
+
+        with pytest.raises(TypeError, match="requires label="):
+            create_and_track(qt, TestClass, base_class)

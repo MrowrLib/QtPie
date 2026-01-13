@@ -100,6 +100,9 @@ def new_fields[T](cls: type[T]) -> type[T]:
                 # Skip Dock[T] fields - they're created by _create_dock_fields in window.py
                 if field.is_dock:
                     continue
+                # Skip layout items (Stretch, QSpacerItem, QLayout) - handled in _wrap_init_for_layout
+                if field.is_stretch or field.is_spacer_item or field.is_nested_layout:
+                    continue
                 if field.field_type is not None:
                     # Validate required bindings for QtPie Widget subclasses
                     _validate_required_bindings(field)

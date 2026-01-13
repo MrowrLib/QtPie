@@ -5,6 +5,7 @@ from .bindings import bind, register_binding
 from .dict_widget_repeater import DictWidgetRepeater
 from .dock import Dock
 from .entrypoint import entrypoint
+from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .new import new
 from .new_fields import new_fields
@@ -25,6 +26,7 @@ __all__ = [
     "AppConfig",
     "ColorScheme",
     "Dock",
+    "Stretch",
     "app",
     "DictWidgetRepeater",
     "Menu",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, get_args, get_origin, get_type_hints
 
-from .layout import GridPosition
+from .layout import GridPosition, Stretch
 from .utils.common import is_signal_on_type
 from .variable import Variable, create_variable_descriptor
 
@@ -92,6 +92,12 @@ class NewField:
         self.variable_bindings: dict[str, Any] = {}  # child_var_name -> binding_value
         # Ref bindings - deferred attribute references to resolve after field instantiation
         self.ref_bindings: dict[str, Any] = {}  # kwarg_name -> Ref instance
+        # Layout item support (Stretch, QSpacerItem, QLayout)
+        self.is_stretch: bool = False  # True if field type is Stretch
+        self.stretch_factor: int = 1  # Factor for addStretch()
+        self.is_spacer_item: bool = False  # True if field type is QSpacerItem
+        self.is_nested_layout: bool = False  # True if field type is QLayout subclass
+        self.target_layout: str | None = None  # Layout to add this item to (field name reference)
         # Dock[T] support
         self.is_dock: bool = False
         self.dock_content_type: type | None = None  # The widget type inside Dock[T]
@@ -362,6 +368,32 @@ class NewField:
             # Remaining dock_kwargs are ignored (they should all be consumed)
             return
 
+        # Handle Stretch - adds stretch space to layout
+        if self.field_type is Stretch:
+            self.is_stretch = True
+            # Extract stretch factor from first arg (default 1)
+            if self.args:
+                self.stretch_factor = int(self.args[0])
+            # Extract target layout reference (layout=nested_layout or layout="nested_layout")
+            self._extract_target_layout()
+            return
+
+        # Handle QSpacerItem - adds spacer item to layout
+        if self._is_qspaceritem_type():
+            self.is_spacer_item = True
+            # Extract target layout reference
+            self._extract_target_layout()
+            # Args/kwargs are passed directly to QSpacerItem constructor
+            return
+
+        # Handle QLayout subclasses - nested layouts
+        if self._is_qlayout_type():
+            self.is_nested_layout = True
+            # Extract target layout reference (for nesting layouts in layouts)
+            self._extract_target_layout()
+            # Args/kwargs are passed directly to layout constructor
+            return
+
         # Handle list[QWidget] - creates a WidgetRepeater bound to a list source
         if origin is list:
             type_args = get_args(self.field_type)
@@ -543,10 +575,19 @@ class NewField:
                 self.tab_selected_index = self.kwargs.pop("selectedIndex", None)
                 self.tab_selected_widget = self.kwargs.pop("selectedWidget", None)
 
-            # layout=False → exclude from layout
+            # Handle layout= parameter:
+            # - layout=False → exclude from layout
+            # - layout=nested_layout (NewField) → add to that nested layout
+            # - layout="nested_layout" (str) → add to that nested layout by name
             layout_kwarg = self.kwargs.pop("layout", None)
             if layout_kwarg is False:
                 self.exclude_from_layout = True
+            elif layout_kwarg is not None:
+                # NewField reference or string - store for target layout resolution
+                if isinstance(layout_kwarg, NewField):
+                    self.target_layout = layout_kwarg.name
+                elif isinstance(layout_kwarg, str):
+                    self.target_layout = layout_kwarg
 
             # Extract label= for form layouts
             self.label = self.kwargs.pop("label", None)
@@ -997,3 +1038,53 @@ class NewField:
 
         for key in to_remove:
             del self.kwargs[key]
+
+    def _is_qspaceritem_type(self) -> bool:
+        """Check if the field type is QSpacerItem."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QSpacerItem
+
+            return self.field_type is QSpacerItem
+        except (ImportError, TypeError):
+            return False
+
+    def _is_qlayout_type(self) -> bool:
+        """Check if the field type is a QLayout subclass."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QLayout
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QLayout)
+        except (ImportError, TypeError):
+            return False
+
+    def _extract_target_layout(self) -> None:
+        """Extract layout= parameter for targeting nested layouts.
+
+        Handles:
+        - layout=False → exclude from layout (sets exclude_from_layout)
+        - layout=nested_layout (NewField) → add to that nested layout
+        - layout="nested_layout" (str) → add to that nested layout by name
+
+        Also extracts grid= and label= for use when adding to the target layout.
+        """
+        layout_kwarg = self.kwargs.pop("layout", None)
+        if layout_kwarg is False:
+            self.exclude_from_layout = True
+        elif layout_kwarg is not None:
+            # NewField reference or string - store for target layout resolution
+            if isinstance(layout_kwarg, NewField):
+                self.target_layout = layout_kwarg.name
+            elif isinstance(layout_kwarg, str):
+                self.target_layout = layout_kwarg
+
+        # Extract grid= and label= for nested layout positioning
+        # These are used when adding this item to a nested grid/form layout
+        self.grid = self.kwargs.pop("grid", None)
+        self.label = self.kwargs.pop("label", None)
