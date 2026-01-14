@@ -56,6 +56,14 @@ class WindowConfig:
     corners: dict[str, str] | None = None  # {"top_left": "left", "bottom_right": "bottom", ...}
     dock_state_key: str | None = None  # Key for QSettings persistence
     docks_locked: str | None = None  # Variable binding for lock/unlock all docks
+    # Dock tab configuration
+    dock_nesting: bool = True  # Enable nested dock splitting
+    dock_tabs_position: str = "top"  # Tab bar position: "top", "bottom", "left", "right"
+    dock_tabs_closable: bool = False  # Show close buttons on dock tabs
+    dock_tabs_movable: bool = False  # Allow reordering tabs by dragging
+    dock_tabs_hide_title_bar: bool = False  # Auto-hide title bar when dock is tabified
+    dock_tabs_drag_to_undock: bool = False  # Drag tab outside tab bar to float dock
+    dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
     # Window icon (resolved at runtime)
     icon: IconType = None
     # Signal connections from decorator: {signal_name: handler_name}
@@ -404,6 +412,14 @@ def window[W: Window[Any]](
     corners: dict[str, str] | None = None,
     dockStateKey: str | None = None,
     docksLocked: str | None = None,
+    # Dock tab options
+    dockNesting: bool = True,
+    dockTabsPosition: str = "top",
+    dockTabsClosable: bool = False,
+    dockTabsMovable: bool = False,
+    dockTabsHideTitleBar: bool = False,
+    dockTabsDragToUndock: bool = False,
+    dockTabsDragMargin: int = 50,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
 
@@ -423,6 +439,14 @@ def window[W: Window[Any]](
     corners: dict[str, str] | None = None,
     dockStateKey: str | None = None,
     docksLocked: str | None = None,
+    # Dock tab options
+    dockNesting: bool = True,
+    dockTabsPosition: str = "top",
+    dockTabsClosable: bool = False,
+    dockTabsMovable: bool = False,
+    dockTabsHideTitleBar: bool = False,
+    dockTabsDragToUndock: bool = False,
+    dockTabsDragMargin: int = 50,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator for Window classes.
@@ -493,6 +517,13 @@ def window[W: Window[Any]](
         config.corners = corners
         config.dock_state_key = dockStateKey
         config.docks_locked = docksLocked
+        config.dock_nesting = dockNesting
+        config.dock_tabs_position = dockTabsPosition
+        config.dock_tabs_closable = dockTabsClosable
+        config.dock_tabs_movable = dockTabsMovable
+        config.dock_tabs_hide_title_bar = dockTabsHideTitleBar
+        config.dock_tabs_drag_to_undock = dockTabsDragToUndock
+        config.dock_tabs_drag_margin = dockTabsDragMargin
         config.icon = icon
         config.signal_connections = signal_connections
 
@@ -595,6 +626,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         if config.corners:
             _apply_corner_assignments(self, config.corners)
 
+        # Apply dock tab options (nesting, tab position) before creating docks
+        from .dock_tabs import setup_dock_tab_options
+
+        setup_dock_tab_options(self, config)
+
         # Create list widget fields (list[QWidget] = new(bind="..."))
         from .widget import _create_list_widget_fields
 
@@ -608,6 +644,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
         # Create list dock fields (list[Dock[W]] = new(bind="...", dock="right", ...))
         _create_list_dock_fields(self, config)
+
+        # Install dock tab features (closable, movable, hide title bar, drag-to-undock)
+        from .dock_tabs import install_dock_tab_features
+
+        dock_overrides = _collect_dock_overrides(self, config)
+        install_dock_tab_features(self, config, dock_overrides)
 
         # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
         # Skip reactive props (with {}) and Translatable - they'll be handled by apply_reactive_widget_props
@@ -1268,6 +1310,42 @@ def _apply_dock_features(
     # Set vertical title bar
     if vertical_title_bar is True:
         dock_widget.setFeatures(dock_widget.features() | QDockWidget.DockWidgetFeature.DockWidgetVerticalTitleBar)
+
+
+def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[QDockWidget, dict[str, Any]]:
+    """Collect per-dock overrides from NewField configurations.
+
+    Returns a dict mapping QDockWidget instances to their override settings.
+    Currently supports:
+    - hide_title_bar_when_tabbed: Override window's dockTabsHideTitleBar for this dock
+    """
+    from .dock import Dock
+
+    overrides: dict[QDockWidget, dict[str, Any]] = {}
+
+    # Collect from Dock[T] fields
+    for field_name in config.dock_fields:
+        dock_obj = getattr(window, field_name, None)
+        if isinstance(dock_obj, Dock):
+            field = config.fields.get(field_name)
+            if field is not None and field.dock_hide_title_bar_when_tabbed is not None:
+                overrides[dock_obj.dock_widget] = {
+                    "hide_title_bar_when_tabbed": field.dock_hide_title_bar_when_tabbed,
+                }
+
+    # Collect from Variable[T, Dock[W]] fields
+    for field_name in config.variable_dock_fields:
+        var = getattr(window, field_name, None)
+        if var is not None and hasattr(var, "dock"):
+            dock_attr = getattr(var, "dock", None)
+            if isinstance(dock_attr, Dock):
+                field = config.fields.get(field_name)
+                if field is not None and field.dock_hide_title_bar_when_tabbed is not None:
+                    overrides[dock_attr.dock_widget] = {
+                        "hide_title_bar_when_tabbed": field.dock_hide_title_bar_when_tabbed,
+                    }
+
+    return overrides
 
 
 def _apply_corner_assignments(window: Window[Any], corners: dict[str, str]) -> None:

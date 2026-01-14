@@ -8,20 +8,18 @@ from forc.domain.models import Workspace
 from forc.services import WorkspaceService
 from qtpie import App, Variable, app, new
 
-from .qrc_resources import qt_resource_data
-
-_qrc = qt_resource_data  # Prevent unused import from being removed
-
 
 @app(title="Forc - Free Open-source Rest Client", on_reload_window="_on_reload_window")
 class ForcApp(App):
+    ### Signals ###
     on_reload_window = Signal()
 
+    ### Services / Variables ###
     workspace_service: Variable[WorkspaceService] = new()
     workspace: Variable[Workspace | None] = new(None)
-
     main_window: ForcWindow = new()
 
+    ### Methods ###
     @override
     def on_run(self) -> None:
         self.main_window.show()

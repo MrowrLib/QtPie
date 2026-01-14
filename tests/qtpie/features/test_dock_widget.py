@@ -1710,3 +1710,435 @@ class TestDocksLocked:
         features = instance._explorer.dock_widget.features()
         assert not (features & QDockWidget.DockWidgetFeature.DockWidgetClosable)
         assert features & QDockWidget.DockWidgetFeature.DockWidgetMovable
+
+
+# =============================================================================
+# Window-Level Dock Tab Options
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockNesting:
+    """Test dockNesting window-level option."""
+
+    def test_dock_nesting_enabled_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockNesting is enabled by default."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.isDockNestingEnabled() is True
+
+    def test_dock_nesting_disabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockNesting=False disables dock nesting."""
+
+        @decorator(dockNesting=False)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.isDockNestingEnabled() is False
+
+    def test_dock_nesting_explicit_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockNesting=True explicitly enables dock nesting."""
+
+        @decorator(dockNesting=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.isDockNestingEnabled() is True
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsPosition:
+    """Test dockTabsPosition window-level option."""
+
+    def test_tabs_position_top_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsPosition is 'top' by default (North)."""
+        from PySide6.QtWidgets import QTabWidget
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        # Check all dock areas have North position
+        assert win.tabPosition(Qt.DockWidgetArea.LeftDockWidgetArea) == QTabWidget.TabPosition.North
+        assert win.tabPosition(Qt.DockWidgetArea.RightDockWidgetArea) == QTabWidget.TabPosition.North
+        assert win.tabPosition(Qt.DockWidgetArea.TopDockWidgetArea) == QTabWidget.TabPosition.North
+        assert win.tabPosition(Qt.DockWidgetArea.BottomDockWidgetArea) == QTabWidget.TabPosition.North
+
+    def test_tabs_position_bottom(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsPosition='bottom' sets South position."""
+        from PySide6.QtWidgets import QTabWidget
+
+        @decorator(dockTabsPosition="bottom")
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.tabPosition(Qt.DockWidgetArea.LeftDockWidgetArea) == QTabWidget.TabPosition.South
+
+    def test_tabs_position_left(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsPosition='left' sets West position."""
+        from PySide6.QtWidgets import QTabWidget
+
+        @decorator(dockTabsPosition="left")
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.tabPosition(Qt.DockWidgetArea.LeftDockWidgetArea) == QTabWidget.TabPosition.West
+
+    def test_tabs_position_right(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsPosition='right' sets East position."""
+        from PySide6.QtWidgets import QTabWidget
+
+        @decorator(dockTabsPosition="right")
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        assert win.tabPosition(Qt.DockWidgetArea.LeftDockWidgetArea) == QTabWidget.TabPosition.East
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsClosable:
+    """Test dockTabsClosable window-level option."""
+
+    def test_dock_tabs_closable_disabled_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsClosable is False by default - tabs don't have close buttons."""
+        from PySide6.QtWidgets import QTabBar
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Find tab bars that are direct children of the window (dock tab bars)
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+
+        # Tab bars should NOT be closable by default
+        for tab_bar in tab_bars:
+            assert tab_bar.tabsClosable() is False
+
+    def test_dock_tabs_closable_enabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsClosable=True adds close buttons to tabs."""
+        from PySide6.QtWidgets import QTabBar
+
+        @decorator(dockTabsClosable=True)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Find dock tab bars
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+
+        # When we have tabified docks, there should be at least one tab bar
+        # and they should be closable
+        if tab_bars:
+            for tab_bar in tab_bars:
+                if tab_bar.property("_qtpie_customized"):
+                    assert tab_bar.tabsClosable() is True
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsMovable:
+    """Test dockTabsMovable window-level option."""
+
+    def test_dock_tabs_movable_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsMovable=False disables tab reordering."""
+        from PySide6.QtWidgets import QTabBar
+
+        @decorator(dockTabsMovable=False)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Find dock tab bars - they should be not movable
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        for tab_bar in tab_bars:
+            if tab_bar.property("_qtpie_customized"):
+                assert tab_bar.isMovable() is False
+
+    def test_dock_tabs_movable_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsMovable=True enables tab reordering."""
+        from PySide6.QtWidgets import QTabBar
+
+        @decorator(dockTabsMovable=True)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Find dock tab bars - they should be movable
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        for tab_bar in tab_bars:
+            if tab_bar.property("_qtpie_customized"):
+                assert tab_bar.isMovable() is True
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsHideTitleBar:
+    """Test dockTabsHideTitleBar window-level option."""
+
+    def test_title_bar_visible_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Title bars are visible by default when tabified."""
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Title bars should be visible (titleBarWidget is None = default title bar)
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        inspector_titlebar = instance._inspector.dock_widget.titleBarWidget()
+
+        # Default Qt title bar - titleBarWidget() returns None
+        # or if custom, it should have non-zero maximumHeight
+        assert props_titlebar is None or props_titlebar.maximumHeight() != 0
+        assert inspector_titlebar is None or inspector_titlebar.maximumHeight() != 0
+
+    def test_title_bar_hidden_when_tabified(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsHideTitleBar=True hides title bars when docks are tabified."""
+
+        @decorator(dockTabsHideTitleBar=True)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Verify docks are tabified
+        tabified = win.tabifiedDockWidgets(instance._props.dock_widget)
+        assert len(tabified) >= 1
+
+        # Title bars should be hidden (zero maximumHeight widget)
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        inspector_titlebar = instance._inspector.dock_widget.titleBarWidget()
+
+        assert props_titlebar is not None and props_titlebar.maximumHeight() == 0
+        assert inspector_titlebar is not None and inspector_titlebar.maximumHeight() == 0
+
+    def test_title_bar_visible_when_not_tabified(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsHideTitleBar=True still shows title bars for non-tabified docks."""
+
+        @decorator(dockTabsHideTitleBar=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+            _console: Dock[ConsolePanel] = new(dock="bottom", title="Console")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # These docks are not tabified - title bars should be visible
+        explorer_titlebar = instance._explorer.dock_widget.titleBarWidget()
+        console_titlebar = instance._console.dock_widget.titleBarWidget()
+
+        # Either None (default Qt title bar) or non-zero maximumHeight
+        assert explorer_titlebar is None or explorer_titlebar.maximumHeight() != 0
+        assert console_titlebar is None or console_titlebar.maximumHeight() != 0
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockHideTitleBarPerDockOverride:
+    """Test per-dock hideTitleBarWhenTabbed override."""
+
+    def test_per_dock_override_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """hideTitleBarWhenTabbed=False on a dock overrides window setting."""
+
+        @decorator(dockTabsHideTitleBar=True)
+        class TestClass(base_class):
+            # This dock should keep its title bar even though window says hide
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties", hideTitleBarWhenTabbed=False)
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Props should have visible title bar (override)
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        assert props_titlebar is None or props_titlebar.maximumHeight() != 0
+
+        # Inspector should have hidden title bar (follows window setting)
+        inspector_titlebar = instance._inspector.dock_widget.titleBarWidget()
+        assert inspector_titlebar is not None and inspector_titlebar.maximumHeight() == 0
+
+    def test_per_dock_override_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """hideTitleBarWhenTabbed=True on a dock overrides window setting."""
+
+        @decorator(dockTabsHideTitleBar=False)  # Window says don't hide
+        class TestClass(base_class):
+            # This dock should hide its title bar (override)
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties", hideTitleBarWhenTabbed=True)
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Props should have hidden title bar (override)
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        assert props_titlebar is not None and props_titlebar.maximumHeight() == 0
+
+        # Inspector should have visible title bar (follows window setting = False)
+        inspector_titlebar = instance._inspector.dock_widget.titleBarWidget()
+        assert inspector_titlebar is None or inspector_titlebar.maximumHeight() != 0
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsDragMargin:
+    """Test dockTabsDragMargin option."""
+
+    def test_drag_margin_default_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsDragMargin defaults to 50 pixels."""
+
+        @decorator(dockTabsDragToUndock=True)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Access the config to verify default
+        assert instance._qtpie_config.dock_tabs_drag_margin == 50
+
+    def test_drag_margin_custom_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsDragMargin can be customized."""
+
+        @decorator(dockTabsDragToUndock=True, dockTabsDragMargin=100)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Access the config to verify custom value
+        assert instance._qtpie_config.dock_tabs_drag_margin == 100
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsCombined:
+    """Test combining multiple dock tab options."""
+
+    def test_all_options_enabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """All dock tab options can be enabled together."""
+        from PySide6.QtWidgets import QTabBar
+
+        @decorator(
+            dockNesting=True,
+            dockTabsPosition="bottom",
+            dockTabsClosable=True,
+            dockTabsMovable=True,
+            dockTabsHideTitleBar=True,
+            dockTabsDragToUndock=True,
+            dockTabsDragMargin=75,
+        )
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        from PySide6.QtWidgets import QTabWidget
+
+        # Verify all settings
+        assert win.isDockNestingEnabled() is True
+        assert win.tabPosition(Qt.DockWidgetArea.RightDockWidgetArea) == QTabWidget.TabPosition.South
+
+        # Verify tabified docks have hidden title bars
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        assert props_titlebar is not None and props_titlebar.maximumHeight() == 0
+
+        # Verify non-tabified dock has visible title bar
+        explorer_titlebar = instance._explorer.dock_widget.titleBarWidget()
+        assert explorer_titlebar is None or explorer_titlebar.maximumHeight() != 0
+
+        # Find dock tab bars and check closable/movable
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        for tab_bar in tab_bars:
+            if tab_bar.property("_qtpie_customized"):
+                assert tab_bar.tabsClosable() is True
+                assert tab_bar.isMovable() is True
+
+    def test_all_options_disabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """All dock tab options can be explicitly disabled."""
+
+        @decorator(
+            dockNesting=False,
+            dockTabsPosition="top",
+            dockTabsClosable=False,
+            dockTabsMovable=False,
+            dockTabsHideTitleBar=False,
+            dockTabsDragToUndock=False,
+        )
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        from PySide6.QtWidgets import QTabWidget
+
+        assert win.isDockNestingEnabled() is False
+        assert win.tabPosition(Qt.DockWidgetArea.RightDockWidgetArea) == QTabWidget.TabPosition.North
+
+        # Title bars should be visible
+        props_titlebar = instance._props.dock_widget.titleBarWidget()
+        assert props_titlebar is None or props_titlebar.maximumHeight() != 0

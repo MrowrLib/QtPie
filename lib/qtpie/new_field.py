@@ -121,6 +121,7 @@ class NewField:
         self.dock_movable: bool | None = None  # movable=False (can't drag)
         self.dock_allowed_areas: list[str] | None = None  # allowedAreas=["left", "right"]
         self.dock_vertical_title_bar: bool | None = None  # verticalTitleBar=True
+        self.dock_hide_title_bar_when_tabbed: bool | None = None  # hideTitleBarWhenTabbed=True/False
         # Variable[T, Dock[W]] support - Variable with a docked widget
         self.is_variable_dock: bool = False
         self.variable_dock_content_type: type | None = None  # The widget type W inside Variable[T, Dock[W]]
@@ -300,6 +301,7 @@ class NewField:
                         self.dock_movable = dock_kwargs.pop("movable", None)
                         self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
                         self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+                        self.dock_hide_title_bar_when_tabbed = dock_kwargs.pop("hideTitleBarWhenTabbed", None)
 
                         # Store widget args/kwargs for later widget creation
                         self.widget_args = widget_args
@@ -323,6 +325,7 @@ class NewField:
                             "dock_movable": self.dock_movable,
                             "dock_allowed_areas": self.dock_allowed_areas,
                             "dock_vertical_title_bar": self.dock_vertical_title_bar,
+                            "dock_hide_title_bar_when_tabbed": self.dock_hide_title_bar_when_tabbed,
                         }
                         # Use the content type as widget_type for the descriptor
                         widget_type = self.variable_dock_content_type
@@ -404,6 +407,7 @@ class NewField:
             self.dock_movable = dock_kwargs.pop("movable", None)
             self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
             self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
+            self.dock_hide_title_bar_when_tabbed = dock_kwargs.pop("hideTitleBarWhenTabbed", None)
 
             # Extract name= for objectName from dock_kwargs
             self.object_name = dock_kwargs.pop("name", None)
