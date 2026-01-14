@@ -57,6 +57,9 @@ class NewField:
         # Table columns for QTableView with bind= to list
         self.table_columns: list[str] | None = None  # Column names: ["name", "age"]
         self.table_headers: dict[str, str] | None = None  # Custom headers: {"name": "Dog Name"}
+        # Checkable columns for QTableView (bool fields auto-detected by default)
+        self.table_checkable: list[str] | bool | None = None  # Checkable columns or False to disable
+        self.table_checkable_text: str | dict[str, str] | None = None  # Text format for checkable columns
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
@@ -658,6 +661,16 @@ class NewField:
                     headers = self.kwargs.pop("headers", None)
                     if headers is not None:
                         self.table_headers = dict(headers)
+                    # checkable= specifies which columns have checkboxes
+                    # - None (default): auto-detect bool fields
+                    # - list[str]: only these columns are checkable
+                    # - False: no checkable columns
+                    self.table_checkable = self.kwargs.pop("checkable", None)
+                    # checkableText= specifies text to show next to checkboxes
+                    # - None (default): checkbox only, no text
+                    # - str: format expression for all checkable columns
+                    # - dict[str, str]: per-column format expressions
+                    self.table_checkable_text = self.kwargs.pop("checkableText", None)
                 # Extract QListView-specific kwargs only if this is a QListView
                 elif self._is_qlistview_type():
                     # QListView-specific selection bindings (multi)

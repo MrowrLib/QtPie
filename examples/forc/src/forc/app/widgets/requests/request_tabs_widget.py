@@ -11,7 +11,7 @@ class ParamsTabContent(Widget[Request]):
     # temp for previewing the data
     _label: QLabel = new(bind="{record.query_params}")
 
-    table: QTableView = new(bind="record.query_params", columns=["key", "value"])
+    table: QTableView = new(bind="record.query_params")  # , columns=["key", "value"])
 
     _label2: QLabel = new("hello?")
 

@@ -511,3 +511,242 @@ class TestTableViewRecordNestedListBinding:
         # Label should exist and have correct text
         assert_that(instance._label).is_not_none()
         assert_that(instance._label.text()).is_equal_to("I should render!")
+
+
+# Test dataclasses with bool fields for checkbox tests
+@dataclass
+class Task:
+    """Test dataclass with bool field for checkable tests."""
+
+    done: bool
+    title: str
+    archived: bool
+
+
+@dataclass
+class SimpleTask:
+    """Test dataclass with single bool field."""
+
+    completed: bool
+    name: str
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewCheckable:
+    """Test QTableView checkbox support for bool fields."""
+
+    def test_bool_field_auto_detected_as_checkbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bool fields are automatically detected as checkable columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Task 1", False)])
+            _table: QTableView = new(bind="_tasks")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check that bool columns have ItemIsUserCheckable flag
+        done_idx = model.index(0, 0)  # 'done' column
+        title_idx = model.index(0, 1)  # 'title' column
+        archived_idx = model.index(0, 2)  # 'archived' column
+
+        assert_that(model.flags(done_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+        assert_that(model.flags(title_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+        assert_that(model.flags(archived_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+
+    def test_checkbox_returns_check_state(self, base_class, decorator, qt: QtDriver) -> None:
+        """Checkable columns return CheckStateRole data."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Task 1", False)])
+            _table: QTableView = new(bind="_tasks")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check CheckStateRole returns correct values
+        done_idx = model.index(0, 0)
+        archived_idx = model.index(0, 2)
+
+        assert_that(model.data(done_idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(archived_idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+    def test_checkbox_click_updates_dataclass(self, base_class, decorator, qt: QtDriver) -> None:
+        """Clicking checkbox updates the underlying dataclass field (two-way binding)."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(False, "Task 1", True)])
+            _table: QTableView = new(bind="_tasks")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Get the actual task object
+        task = instance._tasks.value[0]
+        assert_that(task.done).is_false()
+        assert_that(task.archived).is_true()
+
+        # Simulate checkbox toggle via setData
+        done_idx = model.index(0, 0)
+        archived_idx = model.index(0, 2)
+
+        # Toggle done to True
+        result = model.setData(done_idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+        assert_that(result).is_true()
+        assert_that(task.done).is_true()
+
+        # Toggle archived to False
+        result = model.setData(archived_idx, Qt.CheckState.Unchecked.value, Qt.ItemDataRole.CheckStateRole)
+        assert_that(result).is_true()
+        assert_that(task.archived).is_false()
+
+    def test_checkable_explicit_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable=['done'] limits checkboxes to only specified columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Task 1", False)])
+            _table: QTableView = new(bind="_tasks", checkable=["done"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        done_idx = model.index(0, 0)  # 'done' - should be checkable
+        archived_idx = model.index(0, 2)  # 'archived' - should NOT be checkable
+
+        assert_that(model.flags(done_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+        assert_that(model.flags(archived_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+
+    def test_checkable_false_disables_all(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable=False disables all checkboxes even for bool fields."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Task 1", False)])
+            _table: QTableView = new(bind="_tasks", checkable=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        done_idx = model.index(0, 0)
+        archived_idx = model.index(0, 2)
+
+        # No columns should be checkable
+        assert_that(model.flags(done_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+        assert_that(model.flags(archived_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+
+    def test_checkbox_column_no_text_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Checkable columns show empty string for DisplayRole by default (checkbox only)."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Task 1", False)])
+            _table: QTableView = new(bind="_tasks")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        done_idx = model.index(0, 0)
+        title_idx = model.index(0, 1)
+
+        # Checkable column should return empty string
+        assert_that(model.data(done_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("")
+        # Non-checkable column should return normal value
+        assert_that(model.data(title_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Task 1")
+
+    def test_non_bool_field_not_checkable_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Non-bool fields (str, int) are not checkable by default."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        name_idx = model.index(0, 0)
+        age_idx = model.index(0, 1)
+
+        # String and int columns should not be checkable
+        assert_that(model.flags(name_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+        assert_that(model.flags(age_idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+
+    def test_checkable_text_string_all_columns(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkableText='{title}' applies format to all checkable columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Buy milk", False)])
+            _table: QTableView = new(bind="_tasks", checkableText="{title}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        done_idx = model.index(0, 0)
+        archived_idx = model.index(0, 2)
+
+        # Both checkable columns should show the task title
+        assert_that(model.data(done_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Buy milk")
+        assert_that(model.data(archived_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Buy milk")
+
+    def test_checkable_text_dict_per_column(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkableText={'done': '{title}'} applies format per column."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task(True, "Buy milk", False)])
+            _table: QTableView = new(
+                bind="_tasks",
+                checkableText={
+                    "done": "{title}",
+                    # 'archived' not specified, should show empty
+                },
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        done_idx = model.index(0, 0)
+        archived_idx = model.index(0, 2)
+
+        # 'done' should show title, 'archived' should be empty
+        assert_that(model.data(done_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Buy milk")
+        assert_that(model.data(archived_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("")
+
+    def test_checkable_text_with_index(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkableText='Row #{#index}' uses row index placeholder."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[SimpleTask]] = new([SimpleTask(True, "Task 1"), SimpleTask(False, "Task 2")])
+            _table: QTableView = new(bind="_tasks", checkableText="Row #{#index}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        row0_idx = model.index(0, 0)
+        row1_idx = model.index(1, 0)
+
+        assert_that(model.data(row0_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Row #0")
+        assert_that(model.data(row1_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("Row #1")
+
+    def test_checkable_text_with_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkableText='{#value}' shows the bool value."""
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[SimpleTask]] = new([SimpleTask(True, "Task 1"), SimpleTask(False, "Task 2")])
+            _table: QTableView = new(bind="_tasks", checkableText="{#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        row0_idx = model.index(0, 0)  # completed=True
+        row1_idx = model.index(1, 0)  # completed=False
+
+        assert_that(model.data(row0_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("True")
+        assert_that(model.data(row1_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("False")

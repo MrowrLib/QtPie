@@ -318,6 +318,8 @@ def _apply_model_binding(
             parent=widget_instance,
             columns=field_info.table_columns,
             headers=field_info.table_headers,
+            checkable=field_info.table_checkable,
+            checkable_text=field_info.table_checkable_text,
         )
     else:
         # Create ReactiveListModel for QComboBox, QListView, etc.

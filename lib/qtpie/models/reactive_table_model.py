@@ -28,6 +28,11 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
         # With custom formatters per column
         model = ReactiveTableModel(dogs, columns=["name", "age"], format_fns={"age": lambda x: f"{x} years"})
+
+        # With checkable bool columns (auto-detected or explicit)
+        model = ReactiveTableModel(dogs, checkable=["active"])  # Explicit
+        model = ReactiveTableModel(dogs, checkable=None)  # Auto-detect bool fields
+        model = ReactiveTableModel(dogs, checkable=False)  # Disable checkboxes
     """
 
     def __init__(
@@ -38,11 +43,15 @@ class ReactiveTableModel[T](QAbstractTableModel):
         columns: Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         format_fns: dict[str, Callable[[Any], str]] | None = None,
+        checkable: list[str] | bool | None = None,
+        checkable_text: str | dict[str, str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
         self._headers = headers or {}
         self._format_fns = format_fns or {}
+        self._checkable = checkable  # None=auto-detect, list=explicit, False=none
+        self._checkable_text = checkable_text  # None=no text, str=all columns, dict=per-column
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
@@ -50,6 +59,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
             self._columns = list(columns)
         else:
             self._columns = self._auto_detect_columns()
+
+        # Resolve checkable columns after columns are known
+        self._checkable_columns: set[str] = self._resolve_checkable_columns()
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -67,6 +79,39 @@ class ReactiveTableModel[T](QAbstractTableModel):
             # For regular objects, use public attributes that aren't methods
             return [attr for attr in dir(item) if not attr.startswith("_") and not callable(getattr(item, attr, None))]
         return []
+
+    def _resolve_checkable_columns(self) -> set[str]:
+        """Resolve which columns should be checkable (have checkboxes)."""
+        if self._checkable is False:
+            return set()
+        if isinstance(self._checkable, list):
+            return set(self._checkable)
+        # Auto-detect: find bool fields from first item
+        if len(self._obs_list) > 0:
+            item = self._obs_list[0]
+            if is_dataclass(item) and not isinstance(item, type):
+                return {f.name for f in fields(item) if f.type is bool or f.type == "bool"}
+        return set()
+
+    def _get_checkable_text_format(self, column_name: str) -> str | None:
+        """Get the text format for a checkable column."""
+        if self._checkable_text is None:
+            return None
+        if isinstance(self._checkable_text, str):
+            return self._checkable_text  # Same format for all
+        # At this point, it must be dict[str, str]
+        return self._checkable_text.get(column_name)
+
+    def _format_checkable_text(self, format_str: str, item: T, row: int, column_name: str) -> str:
+        """Format checkable text using expression evaluator."""
+        from qtpie.bindings.format_binding import create_item_formatter_with_context
+
+        # Get the bool value for this column
+        value = getattr(item, column_name, False)
+
+        # Create formatter with additional context for #index and #value
+        formatter = create_item_formatter_with_context(format_str)
+        return formatter(item, {"index": row, "value": value})
 
     @override
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
@@ -100,6 +145,13 @@ class ReactiveTableModel[T](QAbstractTableModel):
         column_name = self._columns[col]
 
         if role == Qt.ItemDataRole.DisplayRole:
+            # Handle checkable columns
+            if column_name in self._checkable_columns:
+                text_format = self._get_checkable_text_format(column_name)
+                if text_format is None:
+                    return ""  # Checkbox only, no text
+                return self._format_checkable_text(text_format, item, row, column_name)
+
             # Get the attribute value
             value = getattr(item, column_name, None)
 
@@ -109,11 +161,67 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
             return str(value) if value is not None else ""
 
+        elif role == Qt.ItemDataRole.CheckStateRole:
+            # Return check state for checkable columns
+            if column_name in self._checkable_columns:
+                value = getattr(item, column_name, False)
+                return Qt.CheckState.Checked if value else Qt.CheckState.Unchecked
+            return None
+
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access
             return item
 
         return None
+
+    @override
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value: Any,
+        role: int = Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        """Set data for the given index (handles checkbox state changes)."""
+        if not index.isValid():
+            return False
+
+        if role == Qt.ItemDataRole.CheckStateRole:
+            row = index.row()
+            col = index.column()
+
+            if row < 0 or row >= len(self._obs_list):
+                return False
+            if col < 0 or col >= len(self._columns):
+                return False
+
+            column_name = self._columns[col]
+            if column_name not in self._checkable_columns:
+                return False
+
+            item = self._obs_list[row]
+            # Qt.CheckState.Checked.value is 2, Unchecked.value is 0
+            new_value = value == Qt.CheckState.Checked.value
+            setattr(item, column_name, new_value)
+            self.dataChanged.emit(index, index, [role])
+            return True
+
+        return False
+
+    @override
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        """Return flags for the given index."""
+        base_flags = super().flags(index)
+        if not index.isValid():
+            return base_flags
+
+        col = index.column()
+        if col < 0 or col >= len(self._columns):
+            return base_flags
+
+        column_name = self._columns[col]
+        if column_name in self._checkable_columns:
+            return base_flags | Qt.ItemFlag.ItemIsUserCheckable
+        return base_flags
 
     @override
     def headerData(

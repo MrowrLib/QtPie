@@ -1085,3 +1085,101 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
         return "".join(result_parts)
 
     return format_item
+
+
+def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str, Any]], str]:
+    """Create a function that formats an item using a template string with additional context.
+
+    Like create_item_formatter, but accepts extra context variables like #index, #value, etc.
+
+    Supports:
+    - Simple fields: {name}, {age}
+    - Special placeholders: {#index}, {#value}, {#self}
+    - Method calls: {name.upper()}
+    - Function calls: {len(name)}
+    - Format specs: {price:.2f}
+
+    Args:
+        template: Format string like "{title} (#{#index})"
+
+    Returns:
+        A callable that takes (item, context_dict) and returns the formatted string.
+
+    Example:
+        formatter = create_item_formatter_with_context("{title} - Row #{#index}")
+        result = formatter(task, {"index": 0, "value": True})  # "Buy milk - Row #0"
+    """
+    # Parse the template once
+    parsed = _parse_format_template(template)
+    fields = _parse_format_fields(template)
+
+    # Get all variable names used in the template
+    var_names = _get_variable_names(fields)
+
+    # Check for special placeholder usage
+    uses_self = any("#self" in f.expression for f in fields)
+    uses_index = any("#index" in f.expression for f in fields)
+    uses_value = any("#value" in f.expression for f in fields)
+
+    def format_item_with_context(item: Any, extra_context: dict[str, Any]) -> str:
+        """Format a single item using the template with extra context."""
+        context: dict[str, Any] = {}
+
+        # Add special placeholders from extra_context
+        if uses_self:
+            context["self"] = item
+        if uses_index and "index" in extra_context:
+            context["index"] = extra_context["index"]
+        if uses_value and "value" in extra_context:
+            context["value"] = extra_context["value"]
+
+        # Add any other extra context
+        for key, val in extra_context.items():
+            if key not in context:
+                context[key] = val
+
+        # Add item attributes to context
+        for name in var_names:
+            root = name.split(".")[0]
+            if hasattr(item, root):
+                context[root] = getattr(item, root)
+
+        # Process each field and build the result
+        result_parts: list[str] = []
+
+        for literal_text, field in parsed:
+            result_parts.append(literal_text)
+
+            if field is not None:
+                # Handle special placeholders
+                eval_expr = field.expression
+                eval_expr = eval_expr.replace("#self", "self")
+                eval_expr = eval_expr.replace("#index", "index")
+                eval_expr = eval_expr.replace("#value", "value")
+
+                # Evaluate the expression
+                try:
+                    value: Any = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    # Unwrap Observable results if any
+                    if isinstance(value, Observable):
+                        value = value.get()  # pyright: ignore[reportUnknownVariableType]
+                    # If value is callable (method without parens), call it
+                    if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
+                        value = value()
+                except Exception:
+                    value = None
+
+                # Apply format spec if present
+                if field.format_spec:
+                    try:
+                        value = format(value, field.format_spec)  # pyright: ignore[reportUnknownArgumentType]
+                    except Exception:
+                        value = str(value)  # pyright: ignore[reportUnknownArgumentType]
+                else:
+                    value = str(value)  # pyright: ignore[reportUnknownArgumentType]
+
+                result_parts.append(value)
+
+        return "".join(result_parts)
+
+    return format_item_with_context
