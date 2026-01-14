@@ -66,6 +66,8 @@ class WindowConfig:
     dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
     # Window icon (resolved at runtime)
     icon: IconType = None
+    # Window size
+    size: tuple[int, int] | None = None  # Initial size (width, height)
     # Signal connections from decorator: {signal_name: handler_name}
     signal_connections: dict[str, str] = field(default_factory=lambda: {})
 
@@ -408,6 +410,7 @@ def window[W: Window[Any]](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    size: tuple[int, int] | None = None,
     record: Any | None = None,
     corners: dict[str, str] | None = None,
     dockStateKey: str | None = None,
@@ -434,6 +437,7 @@ def window[W: Window[Any]](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    size: tuple[int, int] | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
     corners: dict[str, str] | None = None,
@@ -525,6 +529,7 @@ def window[W: Window[Any]](
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
         config.icon = icon
+        config.size = size
         config.signal_connections = signal_connections
 
         # Auto-wrap async methods (e.g., async def on_close)
@@ -671,6 +676,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
             resolved_icon = resolve_icon(config.icon)
             if resolved_icon is not None:
                 self.setWindowIcon(resolved_icon)
+
+        # Apply initial size
+        if config.size is not None:
+            self.resize(*config.size)
 
         # Apply objectName and CSS classes
         apply_object_name_and_classes(

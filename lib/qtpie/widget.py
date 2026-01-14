@@ -440,6 +440,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    size: tuple[int, int] | None = None,
     record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
@@ -455,6 +456,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    size: tuple[int, int] | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
@@ -531,6 +533,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
         target._qtpie_config.icon = icon
+        target._qtpie_config.size = size
         target._qtpie_config.signal_connections = signal_connections
 
         # Auto-wrap async methods (e.g., async def closeEvent)
@@ -918,6 +921,10 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
         resolved_icon = resolve_icon(config.icon)
         if resolved_icon is not None:
             widget.setWindowIcon(resolved_icon)
+
+    # Apply initial size
+    if config.size is not None:
+        widget.resize(*config.size)
 
     # Apply widget properties, skipping reactive ones
     def skip_reactive(prop_name: str, value: Any) -> bool:

@@ -86,6 +86,9 @@ class AppConfig:
     # Signal connections from decorator: {signal_name: handler_name}
     signal_connections: dict[str, str] = field(default_factory=lambda: {})
 
+    # Window size
+    size: tuple[int, int] | None = None  # Initial size (width, height)
+
     # For AppBase: track if we're in a real QApplication context
     is_qapplication: bool = False
 
@@ -709,6 +712,7 @@ def app[A: AppBase[Any]](
     title: str | None = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
+    size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -745,6 +749,7 @@ def app[A: AppBase[Any]](
     title: str | None = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
+    size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -851,6 +856,7 @@ def app[A: AppBase[Any]](
         config.dock_tabs_hide_title_bar = dockTabsHideTitleBar
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
+        config.size = size
         config.signal_connections = signal_connections
 
         # Wrap __init__
@@ -1082,6 +1088,10 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     resolved_icon = resolve_icon(config.window_icon) or resolve_icon(config.icon)
     if resolved_icon:
         window.setWindowIcon(resolved_icon)
+
+    # Apply initial size
+    if config.size is not None:
+        window.resize(*config.size)
 
     # Add menus to menu bar
     for _name, menu in menu_fields:
