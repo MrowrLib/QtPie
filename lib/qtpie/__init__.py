@@ -6,6 +6,7 @@ from .create import create_instance
 from .dict_widget_repeater import DictWidgetRepeater
 from .dock import Dock
 from .dock_widget_repeater import DockWidgetRepeater
+from .embed import EmbedConfig, embed
 from .entrypoint import entrypoint
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
@@ -28,11 +29,13 @@ __all__ = [
     "AppConfig",
     "ColorScheme",
     "Dock",
+    "EmbedConfig",
     "Stretch",
     "app",
     "create_instance",
     "DictWidgetRepeater",
     "DockWidgetRepeater",
+    "embed",
     "Menu",
     "MenuConfig",
     "RecordVariable",

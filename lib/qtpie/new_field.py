@@ -89,6 +89,13 @@ class NewField:
         self.model_filter: str | None = None  # Filter expression evaluated per item
         # Sort key for model widgets: "{age}", "method_name", or callable
         self.model_sort: str | Callable[[Any], Any] | None = None
+        # Embedded widget for model views (QListView, QTreeView, QTableView)
+        # widget= specifies a Widget class to embed in each item (QListView/QTreeView)
+        # For QTableView, widget classes can appear in columns= list
+        self.embed_widget: type | None = None  # Widget class for QListView/QTreeView
+        self.embed_config: Any | None = None  # EmbedConfig if embed() was used
+        # For QTableView: list of (column_index, widget_class, embed_config) for widget columns
+        self.table_widget_columns: list[tuple[int, type, Any | None]] | None = None
         # QTabWidget support
         self.is_tab_widget: bool = False
         # tabs= can be:
@@ -661,10 +668,11 @@ class NewField:
                     self.selected_items = self.kwargs.pop("selectedItems", None)
                     # Extract columns/headers for QTableView with bind=
                     # columns= specifies which fields to show: ["name", "age"]
+                    # Can also include Widget classes or embed() configs for widget columns
                     # headers= provides custom headers: {"name": "Dog Name"}
                     columns = self.kwargs.pop("columns", None)
                     if columns is not None:
-                        self.table_columns = list(columns)
+                        self._extract_table_columns(columns)
                     headers = self.kwargs.pop("headers", None)
                     if headers is not None:
                         self.table_headers = dict(headers)
@@ -680,6 +688,8 @@ class NewField:
                     self.table_checkable_text = self.kwargs.pop("checkableText", None)
                 # Extract QListView-specific kwargs only if this is a QListView
                 elif self._is_qlistview_type():
+                    # widget= specifies a Widget class to embed in each list item
+                    self._extract_embed_widget()
                     # checkable= specifies checkbox for list items
                     # - None/False (default): no checkboxes
                     # - str without braces: two-way binding to bool field name
@@ -690,6 +700,8 @@ class NewField:
                     self.selected_items_list = self.kwargs.pop("selectedItems", None)
                 # Extract QTreeView-specific kwargs only if this is a QTreeView
                 elif self._is_qtreeview_type():
+                    # widget= specifies a Widget class to embed in each tree node
+                    self._extract_embed_widget()
                     # children= specifies attribute for child items
                     self.tree_children = self.kwargs.pop("children", None)
                     # expand= calls expandAll() on init and when root observable changes
@@ -1263,3 +1275,57 @@ class NewField:
                 self.target_splitter = splitter_kwarg.name
             elif isinstance(splitter_kwarg, str):
                 self.target_splitter = splitter_kwarg
+
+    def _extract_embed_widget(self) -> None:
+        """Extract widget= parameter for embedding widgets in QListView/QTreeView.
+
+        Handles:
+        - widget=MyWidget (Widget class) → embed widget for each item
+        - widget=embed(MyWidget, kwargs) (EmbedConfig) → embed with config
+        """
+        from qtpie.embed import EmbedConfig
+
+        widget_kwarg = self.kwargs.pop("widget", None)
+        if widget_kwarg is None:
+            return
+
+        if isinstance(widget_kwarg, EmbedConfig):
+            self.embed_widget = widget_kwarg.widget_class
+            self.embed_config = widget_kwarg
+        elif isinstance(widget_kwarg, type):
+            self.embed_widget = widget_kwarg
+            self.embed_config = None
+
+    def _extract_table_columns(self, columns: list[Any]) -> None:
+        """Extract columns= for QTableView, detecting widget columns.
+
+        Columns can be:
+        - str: field name ("name", "age")
+        - Widget class: embed widget in that column
+        - EmbedConfig: embed widget with config in that column
+
+        Sets:
+        - self.table_columns: list of str field names (with placeholder for widgets)
+        - self.table_widget_columns: list of (index, widget_class, embed_config|None)
+        """
+        from qtpie.embed import EmbedConfig
+
+        str_columns: list[str] = []
+        widget_columns: list[tuple[int, type, EmbedConfig | None]] = []
+
+        for i, col in enumerate(columns):
+            if isinstance(col, str):
+                str_columns.append(col)
+            elif isinstance(col, EmbedConfig):
+                # Use a placeholder name for this column
+                placeholder = f"__widget_col_{i}__"
+                str_columns.append(placeholder)
+                widget_columns.append((i, col.widget_class, col))
+            elif isinstance(col, type):
+                # Widget class directly
+                placeholder = f"__widget_col_{i}__"
+                str_columns.append(placeholder)
+                widget_columns.append((i, col, None))
+
+        self.table_columns = str_columns if str_columns else None
+        self.table_widget_columns = widget_columns if widget_columns else None

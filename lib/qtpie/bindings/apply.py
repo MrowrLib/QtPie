@@ -41,6 +41,182 @@ def _is_tree_view(widget: QWidget) -> bool:
     return isinstance(widget, QTreeView)
 
 
+def _is_list_view(widget: QWidget) -> bool:
+    """Check if widget is a QListView (but not QTableView or QTreeView)."""
+    from qtpy.QtWidgets import QListView, QTableView, QTreeView
+
+    return isinstance(widget, QListView) and not isinstance(widget, (QTableView, QTreeView))
+
+
+def _setup_embedded_widget(
+    host: QWidget,
+    view: QWidget,
+    model: Any,
+    obs_list: ObservableList[Any],
+    widget_class: type,
+    embed_config: Any | None,
+    is_tree: bool = False,
+) -> None:
+    """Set up embedded widgets in QListView or QTreeView using persistent editors.
+
+    Args:
+        host: The Widget/Window instance containing the view
+        view: The QListView or QTreeView widget
+        model: The ReactiveListModel or ReactiveTreeModel
+        obs_list: The ObservableList backing the model
+        widget_class: The Widget class to embed for each item
+        embed_config: Optional EmbedConfig with kwargs (or None for simple case)
+        is_tree: Whether this is a QTreeView (enables recursive editor opening)
+    """
+    from qtpie.delegates import QtPieWidgetDelegate
+    from qtpie.embed import EmbedConfig
+
+    # Create the delegate
+    config = embed_config if isinstance(embed_config, EmbedConfig) else None
+    delegate = QtPieWidgetDelegate(
+        widget_class=widget_class,
+        parent_widget=host,
+        embed_config=config,
+        parent=view,
+    )
+
+    # Set the delegate on the view
+    view.setItemDelegate(delegate)  # type: ignore[attr-defined]
+
+    # Open persistent editors for all existing rows
+    def open_editors_for_all() -> None:
+        _open_all_persistent_editors(view, model, is_tree=is_tree)
+
+    # Open editors immediately (deferred to let model populate)
+    from qtpy.QtCore import QTimer
+
+    QTimer.singleShot(0, open_editors_for_all)
+
+    # Subscribe to list changes to manage persistent editors
+    def on_insert(index: int, _item: Any) -> None:
+        # Open persistent editor for the new row
+        model_index = model.index(index, 0)
+        view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+    def on_remove(_index: int, _item: Any) -> None:
+        # Qt automatically closes the editor when the row is removed
+        pass
+
+    def on_replace(index: int, _old: Any, _new: Any) -> None:
+        # Close and reopen editor for replaced item
+        model_index = model.index(index, 0)
+        view.closePersistentEditor(model_index)  # type: ignore[attr-defined]
+        view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+    def on_clear(_items: list[Any]) -> None:
+        # All editors automatically closed when model is cleared
+        pass
+
+    obs_list.on_insert(on_insert)
+    obs_list.on_remove(on_remove)
+    obs_list.on_replace(on_replace)
+    obs_list.on_clear(on_clear)
+
+
+def _setup_table_widget_columns(
+    host: QWidget,
+    view: QWidget,
+    model: Any,
+    obs_list: ObservableList[Any],
+    widget_columns: list[tuple[int, type, Any | None]],
+) -> None:
+    """Set up embedded widgets in specific QTableView columns using persistent editors.
+
+    Args:
+        host: The Widget/Window instance containing the view
+        view: The QTableView widget
+        model: The ReactiveTableModel
+        obs_list: The ObservableList backing the model
+        widget_columns: List of (column_index, widget_class, embed_config) tuples
+    """
+    from qtpie.delegates import QtPieWidgetDelegate
+    from qtpie.embed import EmbedConfig
+
+    # Create a delegate for each widget column
+    for col_index, widget_class, embed_config in widget_columns:
+        config = embed_config if isinstance(embed_config, EmbedConfig) else None
+        delegate = QtPieWidgetDelegate(
+            widget_class=widget_class,
+            parent_widget=host,
+            embed_config=config,
+            parent=view,
+        )
+
+        # Set delegate for this specific column
+        view.setItemDelegateForColumn(col_index, delegate)  # type: ignore[attr-defined]
+
+    # Open persistent editors for all existing rows in widget columns
+    def open_editors_for_all() -> None:
+        for row in range(model.rowCount()):
+            for col_index, _widget_class, _embed_config in widget_columns:
+                model_index = model.index(row, col_index)
+                view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+    # Open editors immediately (deferred to let model populate)
+    from qtpy.QtCore import QTimer
+
+    QTimer.singleShot(0, open_editors_for_all)
+
+    # Subscribe to list changes to manage persistent editors
+    def on_insert(index: int, _item: Any) -> None:
+        # Open persistent editors for all widget columns in the new row
+        for col_index, _widget_class, _embed_config in widget_columns:
+            model_index = model.index(index, col_index)
+            view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+    def on_remove(_index: int, _item: Any) -> None:
+        # Qt automatically closes editors when the row is removed
+        pass
+
+    def on_replace(index: int, _old: Any, _new: Any) -> None:
+        # Close and reopen editors for replaced item
+        for col_index, _widget_class, _embed_config in widget_columns:
+            model_index = model.index(index, col_index)
+            view.closePersistentEditor(model_index)  # type: ignore[attr-defined]
+            view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+    def on_clear(_items: list[Any]) -> None:
+        # All editors automatically closed when model is cleared
+        pass
+
+    obs_list.on_insert(on_insert)
+    obs_list.on_remove(on_remove)
+    obs_list.on_replace(on_replace)
+    obs_list.on_clear(on_clear)
+
+
+def _open_all_persistent_editors(view: QWidget, model: Any, parent_index: Any = None, is_tree: bool = False) -> None:
+    """Recursively open persistent editors for all rows in a view.
+
+    For QTreeView, this traverses the entire tree structure.
+    For QListView/QTableView, this opens editors for all rows.
+
+    Args:
+        view: The view widget
+        model: The model
+        parent_index: The parent index for tree models (None for root)
+        is_tree: Whether this is a tree model (enables recursion)
+    """
+    from qtpy.QtCore import QModelIndex
+
+    if parent_index is None:
+        parent_index = QModelIndex()
+
+    row_count = model.rowCount(parent_index)
+    for row in range(row_count):
+        index = model.index(row, 0, parent_index)
+        view.openPersistentEditor(index)  # type: ignore[attr-defined]
+
+        # For tree models, recurse into children
+        if is_tree and model.rowCount(index) > 0:
+            _open_all_persistent_editors(view, model, index, is_tree=True)
+
+
 def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None:
     """Pre-create Variables for selection bindings that reference bare Variable[T] annotations.
 
@@ -434,6 +610,9 @@ def _apply_model_binding(
             field_info.selected_cells,
             field_info.selected_items,
         )
+        # Set up embedded widgets for QTableView columns
+        if field_info.table_widget_columns:
+            _setup_table_widget_columns(host, widget_instance, model, obs_list, field_info.table_widget_columns)
     else:
         # QComboBox/QListView selection bindings
         _setup_selection_bindings(
@@ -445,6 +624,13 @@ def _apply_model_binding(
             field_info.selected_indexes,
             field_info.selected_items_list,
         )
+        # Set up embedded widget for QListView (not QComboBox)
+        if field_info.embed_widget is not None and _is_list_view(widget_instance):
+            _setup_embedded_widget(host, widget_instance, model, obs_list, field_info.embed_widget, field_info.embed_config)
+
+    # Set up embedded widget for QTreeView
+    if use_tree_model and field_info.embed_widget is not None:
+        _setup_embedded_widget(host, widget_instance, model, obs_list, field_info.embed_widget, field_info.embed_config, is_tree=True)
 
     return True
 
