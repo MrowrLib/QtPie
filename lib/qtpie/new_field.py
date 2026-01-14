@@ -83,6 +83,8 @@ class NewField:
         # - str without braces: two-way binding to bool field name
         # - str with braces "{expr}": one-way expression (read-only checkbox)
         self.tree_checkable: str | bool | None = None
+        # QListView checkable: checkbox support for list items (same semantics as tree)
+        self.list_checkable: str | bool | None = None
         # Filter expression for model widgets: "{_search} in {name}"
         self.model_filter: str | None = None  # Filter expression evaluated per item
         # Sort key for model widgets: "{age}", "method_name", or callable
@@ -678,6 +680,11 @@ class NewField:
                     self.table_checkable_text = self.kwargs.pop("checkableText", None)
                 # Extract QListView-specific kwargs only if this is a QListView
                 elif self._is_qlistview_type():
+                    # checkable= specifies checkbox for list items
+                    # - None/False (default): no checkboxes
+                    # - str without braces: two-way binding to bool field name
+                    # - str with braces "{expr}": one-way expression (read-only)
+                    self.list_checkable = self.kwargs.pop("checkable", None)
                     # QListView-specific selection bindings (multi)
                     self.selected_indexes = self.kwargs.pop("selectedIndexes", None)
                     self.selected_items_list = self.kwargs.pop("selectedItems", None)

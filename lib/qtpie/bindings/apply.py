@@ -332,7 +332,12 @@ def _apply_model_binding(
         if field_info.model_format is not None:
             format_fn = create_item_formatter(field_info.model_format)
 
-        model = ReactiveListModel(obs_list, parent=widget_instance, format_fn=format_fn)
+        model = ReactiveListModel(
+            obs_list,
+            parent=widget_instance,
+            format_fn=format_fn,
+            checkable=field_info.list_checkable,
+        )
 
     # Wrap in filter/sort proxy if filter= or sort= is specified
     if field_info.model_filter is not None or field_info.model_sort is not None:

@@ -1,6 +1,7 @@
 """ReactiveListModel - QAbstractListModel backed by ObservableList."""
 
 from collections.abc import Callable
+from dataclasses import fields, is_dataclass
 from typing import Any, override
 
 from observant import ObservableList
@@ -28,6 +29,10 @@ class ReactiveListModel[T](QAbstractListModel):
         # With custom formatting for complex objects:
         dogs = ObservableList([Dog("Fido", 3), Dog("Rex", 5)])
         model = ReactiveListModel(dogs, format_fn=lambda d: f"{d.name} ({d.age})")
+
+        # With checkboxes:
+        model = ReactiveListModel(tasks, checkable="done")  # Two-way binding
+        model = ReactiveListModel(tasks, checkable="{len(title) > 10}")  # Read-only expression
     """
 
     def __init__(
@@ -36,10 +41,13 @@ class ReactiveListModel[T](QAbstractListModel):
         parent: QObject | None = None,
         *,
         format_fn: Callable[[T], str] | None = None,
+        checkable: str | bool | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
         self._format_fn = format_fn
+        self._checkable = checkable
+        self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -53,6 +61,61 @@ class ReactiveListModel[T](QAbstractListModel):
         if parent is not None and parent.isValid():
             return 0
         return len(self._obs_list)
+
+    @override
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        """Return flags for the given index."""
+        base_flags = super().flags(index)
+        if not index.isValid():
+            return base_flags
+        if isinstance(self._checkable, str):
+            return base_flags | Qt.ItemFlag.ItemIsUserCheckable
+        return base_flags
+
+    @override
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value: Any,
+        role: int = Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        """Set data for the given index (handles checkbox state changes)."""
+        if not index.isValid():
+            return False
+
+        if role == Qt.ItemDataRole.CheckStateRole:
+            # Only allow editing for field names (not expressions)
+            if isinstance(self._checkable, str) and not self._checkable_is_expression:
+                row = index.row()
+                if row < 0 or row >= len(self._obs_list):
+                    return False
+                item = self._obs_list[row]
+                new_value = value == Qt.CheckState.Checked.value
+                setattr(item, self._checkable, new_value)
+                self.dataChanged.emit(index, index, [role])
+                return True
+        return False
+
+    def _evaluate_checkable(self, item: T) -> bool:
+        """Evaluate the checkable field/expression for an item."""
+        if not isinstance(self._checkable, str):
+            return False
+        if self._checkable_is_expression:
+            # Expression: evaluate with item context
+            expr = self._checkable[1:-1]  # Remove { }
+            # Build context from item attributes
+            if is_dataclass(item) and not isinstance(item, type):
+                context = {f.name: getattr(item, f.name, None) for f in fields(item)}
+            else:
+                context = {attr: getattr(item, attr, None) for attr in dir(item) if not attr.startswith("_")}
+            try:
+                safe_builtins = {"len": len, "str": str, "int": int, "bool": bool, "float": float}
+                return bool(eval(expr, {"__builtins__": safe_builtins}, context))  # noqa: S307
+            except Exception:
+                return False
+        else:
+            # Field name: get attribute
+            return bool(getattr(item, self._checkable, False))
 
     @override
     def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
@@ -70,6 +133,12 @@ class ReactiveListModel[T](QAbstractListModel):
             if self._format_fn is not None:
                 return self._format_fn(item)
             return str(item)
+        elif role == Qt.ItemDataRole.CheckStateRole:
+            # Return check state for checkable items
+            if isinstance(self._checkable, str):
+                checked = self._evaluate_checkable(item)
+                return Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+            return None
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access
             return item
