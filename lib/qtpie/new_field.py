@@ -78,6 +78,11 @@ class NewField:
         # QTreeView-specific: children attribute name and expand behavior
         self.tree_children: str | None = None  # Attribute name for child items: "children"
         self.tree_expand: bool = False  # If True, expandAll() on init and when root changes
+        # QTreeView checkable: checkbox support for tree nodes
+        # - None/False: no checkboxes (default)
+        # - str without braces: two-way binding to bool field name
+        # - str with braces "{expr}": one-way expression (read-only checkbox)
+        self.tree_checkable: str | bool | None = None
         # Filter expression for model widgets: "{_search} in {name}"
         self.model_filter: str | None = None  # Filter expression evaluated per item
         # Sort key for model widgets: "{age}", "method_name", or callable
@@ -682,6 +687,11 @@ class NewField:
                     self.tree_children = self.kwargs.pop("children", None)
                     # expand= calls expandAll() on init and when root observable changes
                     self.tree_expand = self.kwargs.pop("expand", False)
+                    # checkable= specifies checkbox for tree nodes
+                    # - None/False: no checkboxes (default)
+                    # - str without braces: two-way binding to bool field name
+                    # - str with braces "{expr}": one-way expression (read-only)
+                    self.tree_checkable = self.kwargs.pop("checkable", None)
                     # QTreeView selection bindings (multi)
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)

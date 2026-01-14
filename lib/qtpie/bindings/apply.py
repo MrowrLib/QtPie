@@ -308,6 +308,7 @@ def _apply_model_binding(
             parent=widget_instance,
             children_attr=children_attr,
             format_fn=format_fn,
+            checkable=field_info.tree_checkable,
         )
     elif use_table_model:
         # Create ReactiveTableModel for QTableView

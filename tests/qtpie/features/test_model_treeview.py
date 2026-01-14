@@ -656,3 +656,233 @@ class TestTreeViewSelectionParamsNotStolen:
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(instance._custom.my_children).is_equal_to("items")
         assert_that(instance._custom.my_format).is_equal_to("{name}")
+
+
+@dataclass
+class SelectableNode:
+    """Tree node with a bool field for checkbox testing."""
+
+    name: str
+    selected: bool = False
+    children: "list[SelectableNode]" = field(default_factory=list)  # noqa: UP037
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewCheckable:
+    """Test QTreeView with checkable= for checkbox support."""
+
+    def test_checkable_field_shows_checkbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='field_name' enables checkboxes on tree items."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("A", selected=True),
+                    SelectableNode("B", selected=False),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", checkable="selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Check that ItemIsUserCheckable flag is set
+        idx_a = model.index(0, 0)
+        idx_b = model.index(1, 0)
+        assert_that(model.flags(idx_a) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+        assert_that(model.flags(idx_b) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+
+        # Check states match the bool field
+        assert_that(model.data(idx_a, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(idx_b, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+    def test_checkable_field_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='field_name' provides two-way binding to bool field."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("A", selected=False),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", checkable="selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+        idx = model.index(0, 0)
+
+        # Initially unchecked
+        assert_that(instance._nodes.value[0].selected).is_false()
+        assert_that(model.data(idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+        # Set via model (simulating checkbox click)
+        model.setData(idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+
+        # Underlying data should be updated
+        assert_that(instance._nodes.value[0].selected).is_true()
+
+    def test_checkable_expression_read_only(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='{expr}' creates read-only checkbox from expression."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("Parent", children=[SelectableNode("Child")]),
+                    SelectableNode("Leaf"),  # No children
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", checkable="{len(children) > 0}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        idx_parent = model.index(0, 0)
+        idx_leaf = model.index(1, 0)
+
+        # Parent has children -> checked
+        assert_that(model.data(idx_parent, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        # Leaf has no children -> unchecked
+        assert_that(model.data(idx_leaf, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+        # Expression-based checkable should NOT allow setData
+        result = model.setData(idx_leaf, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+        assert_that(result).is_false()
+
+    def test_checkable_expression_evaluates(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='{expr}' correctly evaluates expression per node."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("Selected", selected=True),
+                    SelectableNode("Unselected", selected=False),
+                ]
+            )
+            # Expression that evaluates to the 'selected' field value
+            _tree: QTreeView = new(bind="_nodes", checkable="{selected}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        idx_selected = model.index(0, 0)
+        idx_unselected = model.index(1, 0)
+
+        assert_that(model.data(idx_selected, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(idx_unselected, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+    def test_checkable_false_no_checkbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable=False explicitly disables checkboxes."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("A", selected=True),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", checkable=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        idx = model.index(0, 0)
+
+        # No checkbox flag
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+        # No check state
+        assert_that(model.data(idx, Qt.ItemDataRole.CheckStateRole)).is_none()
+
+    def test_checkable_default_no_checkbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """No checkable= parameter means no checkboxes (default)."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("A", selected=True),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes")  # No checkable=
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        idx = model.index(0, 0)
+
+        # No checkbox flag
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsUserCheckable).is_false()
+        # No check state
+        assert_that(model.data(idx, Qt.ItemDataRole.CheckStateRole)).is_none()
+
+    def test_checkable_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable= and format= work together independently."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode("Node A", selected=True),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", format="[{name}]", checkable="selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        idx = model.index(0, 0)
+
+        # Format affects display
+        assert_that(model.data(idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("[Node A]")
+        # Checkable affects check state
+        assert_that(model.data(idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+
+    def test_checkable_nested_nodes(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable= works on nested child nodes."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[SelectableNode]] = new(
+                [
+                    SelectableNode(
+                        "Parent",
+                        selected=False,
+                        children=[
+                            SelectableNode("Child 1", selected=True),
+                            SelectableNode("Child 2", selected=False),
+                        ],
+                    ),
+                ]
+            )
+            _tree: QTreeView = new(bind="_nodes", checkable="selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        parent_idx = model.index(0, 0)
+        child1_idx = model.index(0, 0, parent_idx)
+        child2_idx = model.index(1, 0, parent_idx)
+
+        # Check parent
+        assert_that(model.data(parent_idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+        # Check children
+        assert_that(model.data(child1_idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(child2_idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+        # Two-way binding on nested node
+        model.setData(child2_idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+        assert_that(instance._nodes.value[0].children[1].selected).is_true()

@@ -1,6 +1,7 @@
 """ReactiveTreeModel - QAbstractItemModel backed by hierarchical ObservableList."""
 
 from collections.abc import Callable
+from dataclasses import fields, is_dataclass
 from typing import Any, override
 
 from observant import ObservableList
@@ -28,6 +29,10 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         observable_list: The root items.
         children_attr: Attribute name for accessing children (default: "children").
         format_fn: Optional function to format display text.
+        checkable: Checkbox support for tree nodes.
+            - None/False: no checkboxes (default)
+            - str without braces: two-way binding to bool field name
+            - str with braces "{expr}": one-way expression (read-only checkbox)
     """
 
     def __init__(
@@ -37,11 +42,14 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         *,
         children_attr: str = "children",
         format_fn: Callable[[T], str] | None = None,
+        checkable: str | bool | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
         self._children_attr = children_attr
         self._format_fn = format_fn
+        self._checkable = checkable
+        self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
 
         # Subscribe to root list changes
         observable_list.on_insert(self._on_root_insert)
@@ -175,6 +183,12 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             if self._format_fn is not None:
                 return self._format_fn(item)
             return str(item)
+        elif role == Qt.ItemDataRole.CheckStateRole:
+            # Return check state for checkable nodes
+            if isinstance(self._checkable, str):
+                checked = self._evaluate_checkable(item)
+                return Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+            return None
         elif role == Qt.ItemDataRole.UserRole:
             return item
 
@@ -189,6 +203,63 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             return len(self._obs_list) > 0
         parent_item = parent.internalPointer()
         return len(self._get_children(parent_item)) > 0
+
+    @override
+    def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
+        """Return flags for the given index."""
+        base_flags = super().flags(index)
+        if not index.isValid():
+            return base_flags
+
+        if isinstance(self._checkable, str):
+            return base_flags | Qt.ItemFlag.ItemIsUserCheckable
+        return base_flags
+
+    @override
+    def setData(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        value: Any,
+        role: int = Qt.ItemDataRole.EditRole,
+    ) -> bool:
+        """Set data for the given index (handles checkbox state changes)."""
+        if not index.isValid():
+            return False
+
+        if role == Qt.ItemDataRole.CheckStateRole:
+            # Only allow editing for field names (not expressions)
+            if isinstance(self._checkable, str) and not self._checkable_is_expression:
+                item = index.internalPointer()
+                if item is None:
+                    return False
+                new_value = value == Qt.CheckState.Checked.value
+                setattr(item, self._checkable, new_value)
+                self.dataChanged.emit(index, index, [role])
+                return True
+        return False
+
+    def _evaluate_checkable(self, item: T) -> bool:
+        """Evaluate the checkable field/expression for an item."""
+        if not isinstance(self._checkable, str):
+            return False
+        if self._checkable_is_expression:
+            # Expression: evaluate with item context
+            # Strip braces and evaluate
+            expr = self._checkable[1:-1]  # Remove { }
+            # Build context from item attributes
+            if is_dataclass(item) and not isinstance(item, type):
+                context = {f.name: getattr(item, f.name, None) for f in fields(item)}
+            else:
+                context = {attr: getattr(item, attr, None) for attr in dir(item) if not attr.startswith("_")}
+            try:
+                # Limited builtins for safe evaluation
+                safe_builtins = {"len": len, "str": str, "int": int, "bool": bool, "float": float}
+                return bool(eval(expr, {"__builtins__": safe_builtins}, context))  # noqa: S307
+            except Exception:
+                return False
+        else:
+            # Field name: get attribute
+            return bool(getattr(item, self._checkable, False))
 
     # Root list change handlers
 
