@@ -606,7 +606,12 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                 # Track nested layouts by field name for later reference
                 nested_layouts: dict[str, QLayout] = {}
 
-                # First pass: Create and add nested layouts (so they exist before items reference them)
+                # Track splitters by field name for later reference
+                from qtpy.QtWidgets import QSplitter
+
+                splitters: dict[str, QSplitter] = {}
+
+                # First pass: Create and add nested layouts and splitters (so they exist before items reference them)
                 for name in getattr(cls, "__annotations__", {}):
                     if name in config.fields:
                         field = config.fields[name]
@@ -621,6 +626,12 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             if target is not None and not field.exclude_from_layout:
                                 _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
 
+                        elif field.is_splitter:
+                            # Create the splitter instance (but don't add to layout yet - preserve order)
+                            splitter_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            setattr(self, name, splitter_instance)
+                            splitters[name] = splitter_instance
+
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 # Use __annotations__ to preserve order across all field types
                 for name in getattr(cls, "__annotations__", {}):
@@ -631,6 +642,24 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                         # Skip nested layouts (already handled in first pass)
                         if field.is_nested_layout:
+                            continue
+
+                        # Handle QSplitter - add to layout in order
+                        if field.is_splitter:
+                            splitter_instance = splitters.get(name)
+                            if splitter_instance is not None:
+                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                if target is not None:
+                                    _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
+                            continue
+
+                        # Check if widget should go to a splitter instead of layout
+                        target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                        if target_splitter is not None:
+                            # Add to splitter, not layout
+                            widget_instance = getattr(self, name, None)
+                            if widget_instance is not None and isinstance(widget_instance, QWidget):
+                                target_splitter.addWidget(widget_instance)
                             continue
 
                         # Determine target layout
@@ -794,6 +823,24 @@ def _get_target_layout(
     if target_name is None:
         return default_layout
     return nested_layouts.get(target_name)
+
+
+def _get_target_splitter(
+    splitters: dict[str, Any],
+    target_name: str | None,
+) -> Any | None:
+    """Get the target splitter for adding widgets.
+
+    Args:
+        splitters: Dictionary of splitters by field name.
+        target_name: Name of the target splitter (or None for no splitter).
+
+    Returns:
+        The target QSplitter, or None if no splitter target.
+    """
+    if target_name is None:
+        return None
+    return splitters.get(target_name)
 
 
 def _add_stretch_to_layout(layout: QLayout, factor: int = 1) -> None:

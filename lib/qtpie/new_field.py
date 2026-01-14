@@ -102,6 +102,9 @@ class NewField:
         self.is_spacer_item: bool = False  # True if field type is QSpacerItem
         self.is_nested_layout: bool = False  # True if field type is QLayout subclass
         self.target_layout: str | None = None  # Layout to add this item to (field name reference)
+        # QSplitter support
+        self.is_splitter: bool = False  # True if field type is QSplitter
+        self.target_splitter: str | None = None  # Splitter to add this widget to (field name reference)
         # Dock[T] support
         self.is_dock: bool = False
         self.dock_content_type: type | None = None  # The widget type inside Dock[T]
@@ -454,6 +457,14 @@ class NewField:
             # Args/kwargs are passed directly to layout constructor
             return
 
+        # Handle QSplitter - widget container with resizable dividers
+        if self._is_qsplitter_type():
+            self.is_splitter = True
+            # Extract target layout reference (splitter can be in a layout)
+            self._extract_target_layout()
+            # Args/kwargs are passed directly to QSplitter constructor
+            return
+
         # Handle list[Dock[W]] - creates a DockWidgetRepeater bound to a list source
         if origin is list:
             type_args = get_args(self.field_type)
@@ -685,6 +696,11 @@ class NewField:
                     self.target_layout = layout_kwarg.name
                 elif isinstance(layout_kwarg, str):
                     self.target_layout = layout_kwarg
+
+            # Handle splitter= parameter:
+            # - splitter=_splitter (NewField) → add to that splitter
+            # - splitter="_splitter" (str) → add to that splitter by name
+            self._extract_target_splitter()
 
             # Extract label= for form layouts
             self.label = self.kwargs.pop("label", None)
@@ -1164,6 +1180,20 @@ class NewField:
         except (ImportError, TypeError):
             return False
 
+    def _is_qsplitter_type(self) -> bool:
+        """Check if the field type is QSplitter."""
+        if self.field_type is None:
+            return False
+        try:
+            from qtpy.QtWidgets import QSplitter
+
+            # field_type could be a generic alias, so check it's a proper type
+            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
+                return False
+            return issubclass(self.field_type, QSplitter)
+        except (ImportError, TypeError):
+            return False
+
     def _extract_target_layout(self) -> None:
         """Extract layout= parameter for targeting nested layouts.
 
@@ -1188,3 +1218,18 @@ class NewField:
         # These are used when adding this item to a nested grid/form layout
         self.grid = self.kwargs.pop("grid", None)
         self.label = self.kwargs.pop("label", None)
+
+    def _extract_target_splitter(self) -> None:
+        """Extract splitter= parameter for adding widgets to a QSplitter.
+
+        Handles:
+        - splitter=_splitter (NewField) → add to that splitter
+        - splitter="_splitter" (str) → add to that splitter by name
+        """
+        splitter_kwarg = self.kwargs.pop("splitter", None)
+        if splitter_kwarg is not None:
+            # NewField reference or string - store for target splitter resolution
+            if isinstance(splitter_kwarg, NewField):
+                self.target_splitter = splitter_kwarg.name
+            elif isinstance(splitter_kwarg, str):
+                self.target_splitter = splitter_kwarg
