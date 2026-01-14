@@ -2,7 +2,7 @@ from qtpy.QtCore import Signal
 
 from forc.app.menus import FileMenu, ViewMenu
 from forc.app.widgets.layout import SidebarWidget
-from forc.app.widgets.requests import RequestEditorWidget
+from forc.app.widgets.requests import RequestWidget
 from forc.domain.models import Collection, Request
 from qtpie import Dock, Window, new, window
 from qtpie.variable import Variable
@@ -28,7 +28,7 @@ class ForcWindow(Window):
 
     ### Docks / Widgets ###
     _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")
-    _editors: Variable[list[Request], Dock[RequestEditorWidget]] = new(group="requests", dock="right", title="{name}")
+    _editors: Variable[list[Request], Dock[RequestWidget]] = new(group="requests", dock="right", title="{name}")
 
     ### Methods ###
     def on_collection_item_clicked(self, item: Request | Collection) -> None:

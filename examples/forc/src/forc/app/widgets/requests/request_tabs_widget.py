@@ -1,45 +1,52 @@
-from qtpy.QtWidgets import QLabel, QTabWidget
+from qtpy.QtWidgets import QLabel, QTableView, QTabWidget
 
+from forc.domain.models import Request
 from qtpie import Widget, new, widget
 
 
 @widget(title="Params")
-class ParamsTabContent(Widget):
-    """Params tab content. Placeholder for KeyValueEditor."""
+class ParamsTabContent(Widget[Request]):
+    """Params tab content showing query parameters."""
 
-    _placeholder: QLabel = new("Params editor placeholder")
+    # temp for previewing the data
+    _label: QLabel = new(bind="{record.query_params}")
+
+    table: QTableView = new(bind="record.query_params", columns=["key", "value"])
+
+    _label2: QLabel = new("hello?")
 
 
 @widget(title="Headers")
-class HeadersTabContent(Widget):
-    """Headers tab content. Placeholder for KeyValueEditor."""
+class HeadersTabContent(Widget[Request]):
+    """Headers tab content showing request headers."""
 
-    _placeholder: QLabel = new("Headers editor placeholder")
+    _label: QLabel = new(bind="{record.headers}")
 
 
 @widget(title="Auth")
-class AuthTabContent(Widget):
-    """Auth tab content. Placeholder for auth type selector + fields."""
+class AuthTabContent(Widget[Request]):
+    """Auth tab content showing authentication settings."""
 
-    _placeholder: QLabel = new("Auth editor placeholder")
+    _label: QLabel = new(bind="{record.auth}")
 
 
 @widget(title="Body")
-class BodyTabContent(Widget):
-    """Body tab content. Placeholder for body type selector + editor."""
+class BodyTabContent(Widget[Request]):
+    """Body tab content showing request body."""
 
-    _placeholder: QLabel = new("Body editor placeholder")
+    _label: QLabel = new(bind="{record.body}")
 
 
 @widget
-class RequestTabsWidget(Widget):
-    """Tabs for request params, headers, auth, and body."""
+class RequestTabsWidget(Widget[Request]):
+    _params: ParamsTabContent = new(bind="record")
 
     _tabs: QTabWidget = new(
         tabs=[
-            ParamsTabContent,
-            HeadersTabContent,
-            AuthTabContent,
-            BodyTabContent,
-        ]
+            _params
+            # ParamsTabContent,
+            # BodyTabContent,
+            # AuthTabContent,
+            # HeadersTabContent,
+        ],
     )

@@ -10,6 +10,7 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportUnnecessaryIsInstance=false
 """Tests for QTableView model binding with bind=.
 
 Tests that QTableView bound to Variable[list] uses ReactiveTableModel
@@ -427,3 +428,86 @@ class TestTableViewSelectionParamsNotStolen:
         assert_that(instance._custom.my_cells).is_equal_to([(0, 0), (1, 1)])
         assert_that(instance._custom.my_items).is_equal_to(["a", "b"])
         assert_that(instance._custom.my_format).is_equal_to("{name}")
+
+
+# =============================================================================
+# RecordVariable isinstance check and record.nested_list binding
+# =============================================================================
+
+
+@dataclass
+class Item:
+    """Test item for nested list."""
+
+    key: str
+    value: str
+
+
+@dataclass
+class Container:
+    """Test container with nested list."""
+
+    name: str = ""
+    items: list[Item] | None = None
+
+    def __post_init__(self) -> None:
+        if self.items is None:
+            self.items = []
+
+
+class TestRecordVariableIsVariable:
+    """RecordVariable should be an instance of Variable."""
+
+    def test_record_variable_isinstance_variable(self) -> None:
+        """RecordVariable is a subclass of Variable, so isinstance should work."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable, Variable
+
+        proxy = ObservableProxy(Container("test", [Item("a", "1")]))
+        record_var: object = RecordVariable(proxy)  # Cast to object for isinstance test
+
+        # This test verifies the fix: RecordVariable must be a subclass of Variable
+        # for binding code to recognize it (isinstance checks in ~50 places)
+        assert_that(isinstance(record_var, Variable)).is_true()
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewRecordNestedListBinding:
+    """QTableView with bind= to record.nested_list (nested path on Widget[T])."""
+
+    def test_table_binds_to_record_nested_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind='record.items' shows nested list from Widget[T].record."""
+
+        @decorator(record=Container("test", [Item("key1", "val1"), Item("key2", "val2")]))
+        class TestClass(base_class[Container]):  # type: ignore[misc]
+            _table: QTableView = new(bind="record.items", columns=["key", "value"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have 2 rows
+        assert_that(model.rowCount()).is_equal_to(2)
+        # Should have 2 columns (key, value)
+        assert_that(model.columnCount()).is_equal_to(2)
+
+        # Check data
+        assert_that(model.data(model.index(0, 0))).is_equal_to("key1")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("val1")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("key2")
+        assert_that(model.data(model.index(1, 1))).is_equal_to("val2")
+
+    def test_widgets_after_table_render(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets declared after QTableView with record binding still render."""
+        from PySide6.QtWidgets import QLabel
+
+        @decorator(record=Container("test", [Item("a", "1")]))
+        class TestClass(base_class[Container]):  # type: ignore[misc]
+            _table: QTableView = new(bind="record.items", columns=["key", "value"])
+            _label: QLabel = new("I should render!")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Label should exist and have correct text
+        assert_that(instance._label).is_not_none()
+        assert_that(instance._label.text()).is_equal_to("I should render!")

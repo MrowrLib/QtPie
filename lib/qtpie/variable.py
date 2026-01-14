@@ -563,121 +563,28 @@ class Variable[T, W = None]:
             self._wrapper.update(other)
 
 
-class RecordVariable[T]:
+class RecordVariable[T](Variable[T, None]):
     """Variable specifically for Widget[T] records.
 
+    Inherits from Variable so isinstance(x, Variable) checks work.
     Has properly typed `observable` that returns `ObservableProxy[T]`
     instead of the union type, so pyright understands field access.
 
     Supports direct field access: self.record.name = "x" forwards to the proxy.
-
-    Same interface as Variable[T] but specialized for records.
     """
 
-    __slots__ = ("_wrapper",)
-
     def __init__(self, wrapper: ObservableProxy[T]) -> None:
-        object.__setattr__(self, "_wrapper", wrapper)
+        super().__init__(wrapper, widget_type=None)
 
-    def __getattr__(self, name: str) -> Any:
-        """Forward attribute access to the underlying proxy.
-
-        Returns the actual value (not Observable) for field access.
-        Use .observable.field for the Observable itself.
-        """
-        result = getattr(self._wrapper, name)
-        # Unwrap Observable to return actual value
-        if isinstance(result, Observable):
-            return cast(Any, result.get())
-        return result
-
+    @property
     @override
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Forward attribute setting to the underlying proxy."""
-        if name == "_wrapper":
-            object.__setattr__(self, name, value)
-        else:
-            setattr(self._wrapper, name, value)
-
-    @property
-    def value(self) -> T:
-        """Get the current value."""
-        return cast(T, self._wrapper.unwrap())
-
-    @value.setter
-    def value(self, val: T) -> None:
-        """Set the value by replacing proxy target."""
-        self._wrapper._target = val  # type: ignore[attr-defined]
-        self._wrapper._notify_change()  # type: ignore[attr-defined]
-
-    @property
     def observable(self) -> ObservableProxy[T]:
-        """Get the underlying ObservableProxy."""
-        return self._wrapper
-
-    @property
-    def is_dirty(self) -> Observable[bool]:
-        """Dirty state - usable as bool or Observable."""
-        return cast(Observable[bool], self._wrapper.is_dirty)
-
-    @property
-    def dirty_fields(self) -> list[str]:
-        """Get list of dirty field names."""
-        return cast(list[str], self._wrapper.dirty_fields)
-
-    def reset_dirty(self) -> None:
-        """Mark current value as clean."""
-        self._wrapper.reset_dirty()
-
-    def on_change(self, callback: Any) -> None:
-        """Register a change callback on the underlying wrapper."""
-        self._wrapper.on_change(callback)
-
-    # -------------------------------------------------------------------------
-    # Validation
-    # -------------------------------------------------------------------------
-
-    def add_validator(self, name: str, validator: ValidatorFn[T]) -> None:
-        """Add a named validator. Validator returns None (valid) or str/list[str] (errors)."""
-        self._wrapper.add_validator(name, validator)
-
-    def remove_validator(self, name: str) -> None:
-        """Remove a named validator."""
-        self._wrapper.remove_validator(name)
-
-    @property
-    def is_valid(self) -> Observable[bool]:
-        """Validity state. Bindable."""
-        return cast(Observable[bool], self._wrapper.is_valid)
-
-    @property
-    def validation_errors(self) -> Observable[dict[str, list[str]]]:
-        """Errors by validator name. Bindable."""
-        return cast(Observable[dict[str, list[str]]], self._wrapper.validation_errors)
-
-    @property
-    def validation_error_messages(self) -> Observable[list[str]]:
-        """Flat list of all error messages. Bindable."""
-        return cast(Observable[list[str]], self._wrapper.validation_error_messages)
+        """Get the underlying ObservableProxy (typed specifically for records)."""
+        return cast(ObservableProxy[T], self._wrapper)
 
     def __call__(self) -> RecordVariable[T]:
         """Call syntax: self.record().is_dirty returns RecordVariable for state access."""
         return self
-
-    # Descriptor protocol for pyright - assignment accepts T or RecordVariable[T]
-    if TYPE_CHECKING:
-
-        @overload
-        def __get__(self, obj: None, owner: type) -> RecordVariable[T]: ...
-        @overload
-        def __get__(self, obj: object, owner: type) -> RecordVariable[T]: ...
-        def __get__(self, obj: object | None, owner: type) -> RecordVariable[T]: ...
-
-        @overload
-        def __set__(self, obj: object, value: T) -> None: ...
-        @overload
-        def __set__(self, obj: object, value: RecordVariable[T]) -> None: ...
-        def __set__(self, obj: object, value: T | RecordVariable[T]) -> None: ...
 
 
 def _try_get_variable(obj: Any, name: str) -> Variable[Any, Any] | None:

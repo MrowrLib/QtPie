@@ -900,18 +900,17 @@ def _create_menu_expression_binding(
 
             # Special handling for RecordVariable - get the underlying proxy
             if isinstance(obj, RecordVariable):
-                # Get the ObservableProxy from RecordVariable
-                proxy: ObservableProxy[Any] = obj._wrapper  # pyright: ignore[reportPrivateUsage]
+                # Get the ObservableProxy from RecordVariable (use observable property for typing)
+                proxy = obj.observable
                 # Get the remaining path after "record"
                 remaining_path = ".".join(parts[i:])
                 nested_obs = proxy.observable_for_path(remaining_path)
-                if nested_obs is not None:
-                    if isinstance(nested_obs, Observable):
-                        if nested_obs not in observables:
-                            observables.append(cast(Observable[Any], nested_obs))
-                    elif isinstance(nested_obs, (ObservableList, ObservableDict, ObservableProxy)):
-                        if nested_obs not in reactive_collections:
-                            reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], nested_obs))
+                if isinstance(nested_obs, Observable):
+                    if nested_obs not in observables:
+                        observables.append(cast(Observable[Any], nested_obs))
+                elif isinstance(nested_obs, (ObservableList, ObservableDict, ObservableProxy)):
+                    if nested_obs not in reactive_collections:
+                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], nested_obs))
                 break
 
             obj = getattr(obj, part)

@@ -4,3 +4,6 @@ url: ${BASE_URL}/users/1
 headers:
   - key: Accept
     value: application/json
+auth:
+  type: bearer
+  token: ${API_KEY}
