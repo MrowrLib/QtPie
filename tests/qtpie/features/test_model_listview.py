@@ -570,3 +570,64 @@ class TestListViewCheckable:
         assert_that(model.data(idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("[Task A]")
         # Checkable affects check state
         assert_that(model.data(idx, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+
+
+@dataclass
+class Response:
+    """Test dataclass with dict property for dict binding tests."""
+
+    status_code: int
+    headers: dict[str, str]
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewDictBinding:
+    """QListView with bind= to Variable[dict]."""
+
+    def test_list_binds_to_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QListView with bind=Variable[dict] shows dict items."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json", "Accept": "text/html"})
+            _list: QListView = new(bind="_headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_list_dict_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """QListView with bind=dict and format='{#key}: {#value}' formats properly."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _list: QListView = new(bind="_headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Should show formatted key: value
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Content-Type: application/json")
+
+    def test_list_dict_optional_chaining(self, base_class, decorator, qt: QtDriver) -> None:
+        """QListView with bind='response?.headers' where response is Variable[Response | None]."""
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _list: QListView = new(bind="_response?.headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Initially response is None, list should be empty
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Set response - list should update
+        instance._response.value = Response(200, {"X-Custom": "test-value"})
+
+        assert_that(model.rowCount()).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("X-Custom: test-value")

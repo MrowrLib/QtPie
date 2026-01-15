@@ -1075,6 +1075,9 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
 
     # Check for #self usage
     uses_self = any("#self" in f.expression for f in fields)
+    # Check for #key/#value usage (for dict-to-list tuple items)
+    uses_key = any("#key" in f.expression for f in fields)
+    uses_value = any("#value" in f.expression for f in fields)
 
     def format_item(item: Any) -> str:
         """Format a single item using the template."""
@@ -1085,11 +1088,16 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
         if uses_self:
             context["self"] = item
 
+        # Add #key and #value for tuple items (from dict-to-list conversion)
+        if (uses_key or uses_value) and isinstance(item, tuple) and len(cast(tuple[Any, ...], item)) >= 2:
+            context["key"] = item[0]
+            context["value"] = item[1]
+
         # Add item attributes to context
         for name in var_names:
             root = name.split(".")[0]
-            if hasattr(item, root):
-                context[root] = getattr(item, root)
+            if hasattr(cast(Any, item), root):
+                context[root] = getattr(cast(Any, item), root)
 
         # Process each field and build the result
         result_parts: list[str] = []
@@ -1098,9 +1106,11 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
             result_parts.append(literal_text)
 
             if field is not None:
-                # Handle #self placeholder
+                # Handle #self, #key, #value placeholders
                 eval_expr = field.expression
                 eval_expr = eval_expr.replace("#self", "self")
+                eval_expr = eval_expr.replace("#key", "key")
+                eval_expr = eval_expr.replace("#value", "value")
 
                 # Evaluate the expression
                 try:

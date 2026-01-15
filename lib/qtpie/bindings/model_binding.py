@@ -252,6 +252,10 @@ def apply_model_binding(
         wrapper = source.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if isinstance(wrapper, ObservableList):
             obs_list = wrapper  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(wrapper, ObservableDict):
+            # Variable[dict] wraps ObservableDict - convert to list of tuples
+            obs_list = ObservableList(list(cast(ObservableDict[Any, Any], wrapper).items()))
+            is_dict_binding = True
         elif isinstance(wrapper, (Observable, ObservableProxy)):
             # Source might be Observable[list] or ObservableProxy with nested list
             # Create a synced ObservableList that updates when source changes

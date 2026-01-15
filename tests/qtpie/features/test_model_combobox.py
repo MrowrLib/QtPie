@@ -1053,3 +1053,61 @@ class TestComboBoxEnumBindingWithRecord:
 
         # Should reflect auth.type (HIGH = index 2)
         assert_that(instance2._combo.currentIndex()).is_equal_to(2)
+
+
+@dataclass
+class Response:
+    """Test dataclass with dict property for dict binding tests."""
+
+    status_code: int
+    headers: dict[str, str]
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxDictBinding:
+    """QComboBox with bind= to Variable[dict]."""
+
+    def test_combo_binds_to_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox with bind=Variable[dict] shows dict items as tuples."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json", "Accept": "text/html"})
+            _combo: QComboBox = new(bind="_headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Should have 2 items (one per dict entry)
+        assert_that(instance._combo.count()).is_equal_to(2)
+
+    def test_combo_dict_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox with bind=dict and format='{#key}: {#value}' formats properly."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _combo: QComboBox = new(bind="_headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Should show formatted key: value
+        assert_that(instance._combo.itemText(0)).is_equal_to("Content-Type: application/json")
+
+    def test_combo_dict_optional_chaining(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox with bind='response?.headers' where response is Variable[Response | None]."""
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _combo: QComboBox = new(bind="_response?.headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially response is None, combo should be empty
+        assert_that(instance._combo.count()).is_equal_to(0)
+
+        # Set response - combo should update
+        instance._response.value = Response(200, {"X-Custom": "test-value"})
+
+        assert_that(instance._combo.count()).is_equal_to(1)
+        assert_that(instance._combo.itemText(0)).is_equal_to("X-Custom: test-value")
