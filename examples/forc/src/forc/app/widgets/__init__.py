@@ -1,7 +1,7 @@
 from .collections import CollectionsTreeWidget
 from .environments import EnvironmentSelectorWidget
 from .layout import SidebarWidget
-from .requests import RequestAddressBarWidget, RequestEditorWidget, RequestTabsWidget
+from .requests import RequestAddressBarWidget, RequestEditorWidget
 from .response import ResponseStatusBarWidget, ResponseTabsWidget, ResponseViewerWidget
 
 __all__ = [
@@ -14,7 +14,6 @@ __all__ = [
     # Requests
     "RequestAddressBarWidget",
     "RequestEditorWidget",
-    "RequestTabsWidget",
     # Response
     "ResponseStatusBarWidget",
     "ResponseTabsWidget",
