@@ -352,7 +352,7 @@ class TestDefaultObjectName:
         assert w.objectName() == "MyDefaultWidget"
 
     def test_qwidget_field_defaults_to_field_name(self, app):
-        """Test that QWidget fields without name= default objectName to field name."""
+        """Test that QWidget fields without name= default objectName to field name (stripped)."""
 
         @widget
         class MyWidget(Widget):
@@ -360,11 +360,12 @@ class TestDefaultObjectName:
             _label: QLabel = new("Hello")
 
         w = MyWidget()
-        assert w._button.objectName() == "_button"
-        assert w._label.objectName() == "_label"
+        # Leading underscore is stripped from field name
+        assert w._button.objectName() == "button"
+        assert w._label.objectName() == "label"
 
     def test_variable_widget_defaults_to_field_name(self, app):
-        """Test that Variable[T, W] widgets without name= default objectName to field name."""
+        """Test that Variable[T, W] widgets without name= default objectName to field name (stripped)."""
         from qtpie import Variable
 
         @widget
@@ -372,10 +373,11 @@ class TestDefaultObjectName:
             _name: Variable[str, QLineEdit] = new("initial")
 
         w = MyWidget()
-        assert w._name.widget.objectName() == "_name"
+        # Leading underscore is stripped from field name
+        assert w._name.widget.objectName() == "name"
 
     def test_list_widget_defaults_to_field_name(self, app):
-        """Test that list[QWidget] items without name= default objectName to field name."""
+        """Test that list[QWidget] items without name= default objectName to field name (stripped)."""
         from qtpie import Variable
 
         @widget
@@ -385,10 +387,11 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for label in w._labels:
-            assert label.objectName() == "_labels"
+            # Leading underscore is stripped from field name
+            assert label.objectName() == "labels"
 
     def test_variable_list_widget_defaults_to_field_name(self, app):
-        """Test that Variable[list[T], W] items default objectName to field name."""
+        """Test that Variable[list[T], W] items default objectName to field name (stripped)."""
         from qtpie import Variable
 
         @widget
@@ -397,10 +400,11 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for widget_item in w._items.widget:
-            assert widget_item.objectName() == "_items"
+            # Leading underscore is stripped from field name
+            assert widget_item.objectName() == "items"
 
     def test_variable_dict_widget_defaults_to_field_name(self, app):
-        """Test that Variable[dict[K, V], W] items default objectName to field name."""
+        """Test that Variable[dict[K, V], W] items default objectName to field name (stripped)."""
         from qtpie import Variable
 
         @widget
@@ -409,7 +413,8 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for widget_item in w._entries.widget:
-            assert widget_item.objectName() == "_entries"
+            # Leading underscore is stripped from field name
+            assert widget_item.objectName() == "entries"
 
     def test_explicit_name_overrides_default(self, app):
         """Test that explicit name= overrides default field name."""
@@ -423,14 +428,14 @@ class TestDefaultObjectName:
         assert w._button.objectName() == "custom-button"
 
     def test_qss_selector_works_with_defaults(self, app):
-        """Test that QSS selectors work with default objectNames."""
+        """Test that QSS selectors work with default objectNames (stripped)."""
 
         @widget(
             stylesheet="""
 #TestQssWidget {
     background-color: red;
 }
-#_my_label {
+#my_label {
     color: blue;
 }
 """
@@ -440,4 +445,5 @@ class TestDefaultObjectName:
 
         w = TestQssWidget()
         assert w.objectName() == "TestQssWidget"
-        assert w._my_label.objectName() == "_my_label"
+        # Leading underscore is stripped from field name
+        assert w._my_label.objectName() == "my_label"

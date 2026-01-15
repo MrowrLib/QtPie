@@ -94,6 +94,15 @@ def create_instance[T](context: Any, cls: type[T], /, *args: Any, **kwargs: Any)
         self.name_field = self.build(QLineEdit, layout="_form", label="Name:")
     """
     instance, runtime_data = _create_instance_internal(cls, *args, **kwargs)
+
+    # If no explicit name= was given, fall back to parent's @widget(name=...)
+    from qtpy.QtWidgets import QWidget
+
+    if isinstance(instance, QWidget) and not instance.objectName():
+        parent_config = getattr(type(context), "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType] - context is Any
+        if parent_config is not None and parent_config.object_name is not None:
+            instance.setObjectName(parent_config.object_name)
+
     _apply_context_bindings(context, instance, runtime_data, cls.__name__)
     return instance
 

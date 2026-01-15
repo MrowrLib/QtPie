@@ -163,6 +163,6 @@ class TestCombinedStyling:
         assert_that(a.header.objectName()).is_equal_to("main-header")
         assert_that(get_classes(a.header)).is_equal_to(["large"])
 
-        # Content widget
-        assert_that(a.content.objectName()).is_equal_to("content")
+        # Content widget - inherits name from @app(name=) since no explicit name=
+        assert_that(a.content.objectName()).is_equal_to("styled-app")
         assert_that(get_classes(a.content)).is_equal_to(["body-text"])

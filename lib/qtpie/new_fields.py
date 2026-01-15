@@ -134,14 +134,20 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     # Variables weren't set up during child's __init__)
                     _apply_pending_bindings(instance)
 
-                    # Apply objectName: use explicit name if set, otherwise default to field name for QWidgets
+                    # Apply objectName with priority: new(name=) > @widget(name=) > field name (stripped)
                     from qtpy.QtWidgets import QWidget
 
                     if isinstance(instance, QWidget):
                         if field.object_name is not None:
+                            # Explicit name= on new() takes top priority
                             instance.setObjectName(field.object_name)
+                        elif config is not None and config.object_name is not None:
+                            # @widget(name=...) on parent class is next priority
+                            instance.setObjectName(config.object_name)
                         else:
-                            instance.setObjectName(fname)
+                            # Default to field name with leading underscore stripped
+                            object_name = fname[1:] if fname.startswith("_") else fname
+                            instance.setObjectName(object_name)
 
                         # Apply CSS classes if specified
                         if field.css_classes:

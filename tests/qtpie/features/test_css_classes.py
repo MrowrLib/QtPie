@@ -225,7 +225,10 @@ class TestMixedStyledAndUnstyled:
     """
 
     def test_mixed_styled_and_unstyled(self, base_class, decorator, qt: QtDriver) -> None:
-        """Mix of styled and unstyled widgets."""
+        """Mix of styled and unstyled widgets.
+
+        When @decorator(name=...) is set, it propagates to children without explicit name=.
+        """
 
         @decorator(name="my-form")
         class TestClass(base_class):
@@ -234,9 +237,11 @@ class TestMixedStyledAndUnstyled:
 
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(instance.objectName()).is_equal_to("my-form")
+        # Explicit name= overrides decorator name
         assert_that(instance.styled.objectName()).is_equal_to("custom")
         assert_that(get_classes(instance.styled)).is_equal_to(["styled"])
-        assert_that(instance.unstyled.objectName()).is_equal_to("unstyled")
+        # No explicit name=, so inherits decorator name
+        assert_that(instance.unstyled.objectName()).is_equal_to("my-form")
         assert_that(get_classes(instance.unstyled)).is_equal_to([])
 
 
@@ -309,3 +314,118 @@ class TestSingleClassOnField:
 
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(get_classes(instance.button)).is_equal_to(["primary"])
+
+
+# =============================================================================
+# Leading Underscore Stripping
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestLeadingUnderscoreStripping:
+    """Leading underscore is stripped from field names for objectName."""
+
+    def test_underscore_stripped_from_field_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """_button gets objectName 'button' (not '_button')."""
+
+        @decorator
+        class TestClass(base_class):
+            _button: QPushButton = new("Click")
+            _label: QLabel = new("Text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._button.objectName()).is_equal_to("button")
+        assert_that(instance._label.objectName()).is_equal_to("label")
+
+    def test_no_underscore_unchanged(self, base_class, decorator, qt: QtDriver) -> None:
+        """Fields without underscore keep their name as-is."""
+
+        @decorator
+        class TestClass(base_class):
+            button: QPushButton = new("Click")
+            myLabel: QLabel = new("Text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.button.objectName()).is_equal_to("button")
+        assert_that(instance.myLabel.objectName()).is_equal_to("myLabel")
+
+    def test_variable_widget_underscore_stripped(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] with underscore prefix gets stripped objectName."""
+
+        @decorator
+        class TestClass(base_class):
+            _name: Variable[str, QLineEdit] = new("initial")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._name.widget.objectName()).is_equal_to("name")
+
+
+# =============================================================================
+# Decorator Name Inheritance Priority
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestDecoratorNameInheritance:
+    """@decorator(name=...) propagates to children as fallback."""
+
+    def test_decorator_name_inherited_by_children(self, base_class, decorator, qt: QtDriver) -> None:
+        """Children without explicit name= inherit @decorator(name=...)."""
+
+        @decorator(name="form-container")
+        class TestClass(base_class):
+            _button: QPushButton = new("Click")
+            _label: QLabel = new("Text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # All children inherit decorator name
+        assert_that(instance._button.objectName()).is_equal_to("form-container")
+        assert_that(instance._label.objectName()).is_equal_to("form-container")
+
+    def test_explicit_name_overrides_decorator(self, base_class, decorator, qt: QtDriver) -> None:
+        """new(name=...) overrides @decorator(name=...)."""
+
+        @decorator(name="form-container")
+        class TestClass(base_class):
+            explicit: QPushButton = new("Click", name="custom-button")
+            inherited: QLabel = new("Text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Explicit name wins
+        assert_that(instance.explicit.objectName()).is_equal_to("custom-button")
+        # No explicit name, inherits decorator
+        assert_that(instance.inherited.objectName()).is_equal_to("form-container")
+
+    def test_variable_widget_inherits_decorator_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] without name= inherits @decorator(name=...)."""
+
+        @decorator(name="form-container")
+        class TestClass(base_class):
+            _input: Variable[str, QLineEdit] = new("initial")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._input.widget.objectName()).is_equal_to("form-container")
+
+    def test_variable_widget_explicit_overrides_decorator(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] with explicit name= overrides @decorator(name=...)."""
+
+        @decorator(name="form-container")
+        class TestClass(base_class):
+            _input: Variable[str, QLineEdit] = new("initial")(name="custom-input")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._input.widget.objectName()).is_equal_to("custom-input")
+
+    def test_no_decorator_name_uses_field_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without @decorator(name=...), field name (stripped) is used."""
+
+        @decorator
+        class TestClass(base_class):
+            _button: QPushButton = new("Click")
+            label: QLabel = new("Text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Underscore stripped
+        assert_that(instance._button.objectName()).is_equal_to("button")
+        # No underscore
+        assert_that(instance.label.objectName()).is_equal_to("label")

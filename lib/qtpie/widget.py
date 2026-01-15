@@ -861,6 +861,14 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if not field.is_list_widget:
             continue
 
+        # Compute objectName with priority: new(name=) > @widget(name=) > field name (stripped)
+        if field.object_name is not None:
+            computed_object_name = field.object_name
+        elif config.object_name is not None:
+            computed_object_name = config.object_name
+        else:
+            computed_object_name = name[1:] if name.startswith("_") else name
+
         # list_widget_type is always set when is_list_widget is True
         assert field.list_widget_type is not None
 
@@ -899,7 +907,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_props=field.widget_props,
                     bind_expr=plain_bind_expr,
                     sort=field.sort,
-                    object_name=field.object_name or name,
+                    object_name=computed_object_name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
@@ -922,7 +930,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_props=field.widget_props,
                     bind_expr=bind_expr_dict,
                     sort=field.sort,
-                    object_name=field.object_name or name,
+                    object_name=computed_object_name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
@@ -947,7 +955,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             root_name = bind_path_normalized.split(".")[0]
             root_attr: Any = getattr(widget, root_name, None)
             if root_attr is not None and isinstance(root_attr, Variable):
-                root_variable = root_attr
+                root_variable = cast(Variable[Any], root_attr)
 
         # Handle ObservableDict -> DictWidgetRepeater
         if isinstance(wrapper, ObservableDict):
@@ -966,7 +974,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 widget_props=field.widget_props,
                 bind_expr=bind_expr_dict,
                 sort=field.sort,
-                object_name=field.object_name or name,
+                object_name=computed_object_name,
                 css_classes=field.css_classes,
                 signal_connections=field.signal_connections,
                 parent_widget=widget,
@@ -1087,7 +1095,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             widget_props=field.widget_props,
             bind_expr=bind_expr,
             sort=field.sort,
-            object_name=field.object_name or name,
+            object_name=computed_object_name,
             css_classes=field.css_classes,
             signal_connections=field.signal_connections,
             parent_widget=widget,
@@ -1100,6 +1108,14 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
     for name, field in config.fields.items():
         if not field.is_set_widget:
             continue
+
+        # Compute objectName with priority: new(name=) > @widget(name=) > field name (stripped)
+        if field.object_name is not None:
+            computed_object_name = field.object_name
+        elif config.object_name is not None:
+            computed_object_name = config.object_name
+        else:
+            computed_object_name = name[1:] if name.startswith("_") else name
 
         # set_widget_type is always set when is_set_widget is True
         assert field.set_widget_type is not None
@@ -1139,7 +1155,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_props=field.widget_props,
                     bind_expr=plain_bind_expr,
                     sort=field.sort,
-                    object_name=field.object_name or name,
+                    object_name=computed_object_name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
@@ -1170,7 +1186,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 widget_props=field.widget_props,
                 bind_expr=set_bind_expr,
                 sort=field.sort,
-                object_name=field.object_name or name,
+                object_name=computed_object_name,
                 css_classes=field.css_classes,
                 signal_connections=field.signal_connections,
                 parent_widget=widget,
@@ -1207,7 +1223,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     widget_props=field.widget_props,
                     bind_expr=set_bind_expr,
                     sort=field.sort,
-                    object_name=field.object_name or name,
+                    object_name=computed_object_name,
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,

@@ -836,6 +836,17 @@ class _VariableDescriptor[T]:
             if self._widget_type is not None:
                 from .bindings import bind
 
+                # Compute objectName with priority: new()(name=) > @widget(name=) > field name (stripped)
+                parent_config = getattr(type(obj), "_qtpie_config", None)
+                parent_decorator_name = parent_config.object_name if parent_config else None
+                if self._object_name is not None:
+                    computed_object_name = self._object_name
+                elif parent_decorator_name is not None:
+                    computed_object_name = parent_decorator_name
+                else:
+                    # Strip leading underscore from field name
+                    computed_object_name = self._name[1:] if self._name.startswith("_") else self._name
+
                 # Check if inner_type is list[X] or dict[K, V] - create repeater
                 inner_origin = get_origin(self._inner_type)
                 if inner_origin is list:
@@ -861,7 +872,7 @@ class _VariableDescriptor[T]:
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
                         sort=sort_key,
-                        object_name=self._object_name or self._name,
+                        object_name=computed_object_name,
                         css_classes=self._css_classes,
                     )
                 elif inner_origin is dict:
@@ -889,7 +900,7 @@ class _VariableDescriptor[T]:
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
                         sort=sort_key,
-                        object_name=self._object_name or self._name,
+                        object_name=computed_object_name,
                         css_classes=self._css_classes,
                     )
                 elif inner_origin is set:
@@ -915,7 +926,7 @@ class _VariableDescriptor[T]:
                         widget_kwargs=widget_kwargs_copy,
                         bind_expr=bind_expr,
                         sort=sort_key,
-                        object_name=self._object_name or self._name,
+                        object_name=computed_object_name,
                         css_classes=self._css_classes,
                     )
                 else:
@@ -940,11 +951,8 @@ class _VariableDescriptor[T]:
                     except (TypeError, AttributeError) as e:
                         raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={widget_kwargs_copy}") from e
 
-                    # Apply objectName: use explicit name if set, otherwise default to field name
-                    if self._object_name is not None:
-                        widget_instance.setObjectName(self._object_name)
-                    else:
-                        widget_instance.setObjectName(self._name)
+                    # Apply objectName (computed earlier with priority logic)
+                    widget_instance.setObjectName(computed_object_name)
 
                     # Apply CSS classes if specified
                     if self._css_classes:

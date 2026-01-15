@@ -38,7 +38,6 @@ class ParamsTabContent(Widget[Request]):
     ### Methods ###
     def _on_delete(self, param: KeyValue):
         self.record.query_params.remove(param)
-        print(f"My objectname is {self.objectName()}")
 
     def _on_add(self):
         self.record.query_params.append(KeyValue(key="x", value="y"))
@@ -55,7 +54,8 @@ class HeadersTabContent(Widget[Request]):
 class AuthTabContent(Widget[Request]):
     """Auth tab content showing authentication settings."""
 
-    _label: QLabel = new(bind="{record.auth}")
+    _label: QLabel = new(bind="{record.auth}")  # <--- this works!
+    _label2: QLabel = new(bind="{auth}")  # <--- this does not work! wtf, it shows 'None'
 
 
 @widget(title="Body")
@@ -63,7 +63,7 @@ class BodyTabContent(Widget[Request]):
     """Body tab content showing request body."""
 
     ### Widgets ###
-    _body_type_xxx: QComboBox = new(
+    _body_type: QComboBox = new(
         bind=BodyType,
         selectedItem="body_type",
     )
@@ -88,6 +88,10 @@ class BodyTabContent(Widget[Request]):
 
 @widget
 class RequestTabsWidget(Widget[Request]):
-    params: ParamsTabContent = new(bind="record", layout=False)
-    body: BodyTabContent = new(bind="record", layout=False)
-    tabs: QTabWidget = new(tabs=[params, body])
+    ### Tabs ###
+    _params_tab: ParamsTabContent = new(bind="record", layout=False)
+    _body_tab: BodyTabContent = new(bind="record", layout=False)
+    _auth_tab: AuthTabContent = new(bind="record", layout=False)
+
+    ### Widgets ###
+    _tabs: QTabWidget = new(tabs=[_params_tab, _body_tab, _auth_tab])

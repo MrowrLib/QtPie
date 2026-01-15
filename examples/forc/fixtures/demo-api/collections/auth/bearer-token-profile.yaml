@@ -1,0 +1,9 @@
+name: Get Profile (Bearer)
+method: GET
+url: ${BASE_URL}/auth/profile
+headers:
+  - key: Accept
+    value: application/json
+auth:
+  type: bearer
+  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.Gfx6VO9tcxwk6xqx9yYzSfebfeakZp5JYIgP_edcw_A
