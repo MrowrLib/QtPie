@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QWidget
+from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QWidget
 
 from qtpie import Dock, Variable, new
 from qtpie.testing import QtDriver
@@ -2142,3 +2142,300 @@ class TestDockTabsCombined:
         # Title bars should be visible
         props_titlebar = instance._props.dock_widget.titleBarWidget()
         assert props_titlebar is None or props_titlebar.maximumHeight() != 0
+
+
+# =============================================================================
+# Variable[list[T], Dock[W]] - Dynamic Dock Repeater
+# =============================================================================
+
+
+@dataclass
+class EditorItem:
+    """Simple item type for testing dock repeaters."""
+
+    name: str = "Untitled"
+    content: str = ""
+
+
+class EditorWidget(QWidget):
+    """Simple widget for testing dock repeaters."""
+
+    pass
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDock:
+    """Test Variable[list[T], Dock[W]] for dynamic dock creation."""
+
+    def test_creates_dock_repeater(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[list[T], Dock[W]] creates a DockWidgetRepeater."""
+        from qtpie.dock_widget_repeater import DockWidgetRepeater
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        assert isinstance(instance._editors.widget, DockWidgetRepeater)
+
+    def test_initial_empty_list_creates_no_docks(self, base_class, decorator, qt: QtDriver) -> None:
+        """Empty initial list creates no docks."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        assert len(instance._editors) == 0
+        assert len(instance._editors.widget) == 0
+
+    def test_append_creates_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Appending an item creates a new dock."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        assert len(instance._editors) == 1
+        assert len(instance._editors.widget) == 1
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "File1"
+
+    def test_multiple_appends_create_tabified_docks(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple appends create tabified docks in the same group."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        instance._editors.append(EditorItem(name="File3"))
+        qt.process_events()
+
+        assert len(instance._editors.widget) == 3
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "File1"
+        assert instance._editors.widget[1].dock_widget.windowTitle() == "File2"
+        assert instance._editors.widget[2].dock_widget.windowTitle() == "File3"
+
+        # Should be tabified - check for tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            if tb.count() >= 3:
+                editor_tab_bar = tb
+                break
+        assert editor_tab_bar is not None, "Should have a tab bar with 3+ tabs"
+
+    def test_remove_destroys_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing an item destroys its dock."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        assert len(instance._editors.widget) == 2
+
+        del instance._editors[0]
+        qt.process_events()
+
+        assert len(instance._editors.widget) == 1
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "File2"
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDockGroupSelectedIndex:
+    """Test groupSelectedIndex= binding for Variable[list[T], Dock[W]]."""
+
+    def test_bare_variable_auto_created(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Variable[int] for groupSelectedIndex is auto-created."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]  # No = new(), should be auto-created
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                groupSelectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Variable should exist and be accessible
+        assert hasattr(instance, "_selected_index")
+        # Should be able to get/set value
+        instance._selected_index.value = 0
+        assert instance._selected_index.value == 0
+
+    def test_new_dock_becomes_selected(self, base_class, decorator, qt: QtDriver) -> None:
+        """Newly added dock becomes the selected tab (regression test for timing bug)."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                groupSelectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add first item
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # Add second item - this creates the tab bar
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # The newly added dock should be visible/raised
+        # Find the tab bar and check current index
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) in ("File1", "File2"):
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+
+        assert editor_tab_bar is not None, "Should have tab bar with editor tabs"
+        # The last added tab (File2) should be current
+        current_text = editor_tab_bar.tabText(editor_tab_bar.currentIndex())
+        assert current_text == "File2", f"Expected 'File2' to be selected, got '{current_text}'"
+
+    def test_setting_index_switches_tab(self, base_class, decorator, qt: QtDriver) -> None:
+        """Setting the index Variable switches the visible tab."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                groupSelectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add multiple items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File3"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find the tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Set index to first item
+        instance._selected_index.value = 0
+        qt.process_events()
+        qt.process_events()
+
+        current_text = editor_tab_bar.tabText(editor_tab_bar.currentIndex())
+        assert current_text == "File1", f"Expected 'File1', got '{current_text}'"
+
+        # Set index to second item
+        instance._selected_index.value = 1
+        qt.process_events()
+        qt.process_events()
+
+        current_text = editor_tab_bar.tabText(editor_tab_bar.currentIndex())
+        assert current_text == "File2", f"Expected 'File2', got '{current_text}'"
+
+    def test_explicit_variable_works(self, base_class, decorator, qt: QtDriver) -> None:
+        """Explicit Variable[int] = new(0) also works with groupSelectedIndex."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int] = new(0)  # Explicit initialization
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                groupSelectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()
+
+        # Setting index should work
+        instance._selected_index.value = 0
+        qt.process_events()
+        qt.process_events()
+
+        assert instance._selected_index.value == 0

@@ -2268,10 +2268,13 @@ def _create_variable_list_dock_field_for_app(
     title_expr = dock_info.get("dock_title") or "{#self}"
 
     # Resolve selection bindings
+    # For list dock repeaters, groupSelectedIndex and selectedIndex work the same way
+    # (both bind to the tab bar index, which corresponds to list index)
     selected_index_obs = None
     selected_item_obs = None
-    if dock_info.get("selected_index"):
-        selected_index_obs = _get_variable_observable(app, dock_info["selected_index"])
+    index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
+    if index_binding:
+        selected_index_obs = _get_variable_observable(app, index_binding)
     if dock_info.get("selected_item"):
         selected_item_obs = _get_variable_observable(app, dock_info["selected_item"])
 

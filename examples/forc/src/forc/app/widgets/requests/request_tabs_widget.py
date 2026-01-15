@@ -3,6 +3,7 @@ from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QTableView,
     QTabWidget,
@@ -66,13 +67,17 @@ class BodyTabContent(Widget[Request]):
         bind=BodyType,
         selectedItem="body_type",
     )
+    body_content: QPlainTextEdit = new(
+        bind="body",
+        visible="{body_type.value in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+    )
+    body_fields: QTableView = new(
+        bind="body_fields",
+        visible="{body_type.value in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+    )
 
-    # These have some kinda recursion fail sadness
-    # body_content: QTextEdit = new(bind="body")
-    # body_content: QPlainTextEdit = new(bind="body")
 
-    # OK
-    body_fields: QTableView = new(bind="body_fields")
+# YAY IT WORKS YAY THANK YOU. are there any places we should add test(s) for covering that for future regressions?
 
 
 @widget

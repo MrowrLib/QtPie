@@ -46,21 +46,6 @@ class ForcWindow(Window):
                 if editor is item:
                     self._selected_request_index.value = index
                     return
+            # Otherwise, add a new tab:
             self._editors.append(item)
             self._selected_request_index.value = len(self._editors) - 1
-
-    def _select_last_editor(self) -> None:
-        ...
-        # self._selected_request_index.value = len(self._editors) - 1
-        # repeater = self._editors.widget
-        # print(f"Repeater: {repeater}")
-        # print(f"Items: {len(repeater._items) if repeater else 'N/A'}")
-        # print(f"Obs: {repeater._selected_index_obs if repeater else 'N/A'}")
-        # print(
-        #     f"Callbacks: {
-        #         len(repeater._selected_index_obs._callbacks) if repeater and repeater._selected_index_obs else 'N/A'
-        #     }"
-        # )
-        # print(f"Setting to: {len(self._editors) - 1}")
-        # self._selected_request_index.value = len(self._editors) - 1
-        # print(f"Value after set: {self._selected_request_index.value}")

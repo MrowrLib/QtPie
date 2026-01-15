@@ -215,7 +215,8 @@ class DockWidgetRepeater[T, W: QWidget]:
             def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:  # pyright: ignore[reportImplicitOverride]
                 if event is not None and event.type() == QEvent.Type.Close:
                     # Dock is being closed - remove from list
-                    if self._idx[0] < len(self._repeater._obs_list):
+                    # Check for -1 which indicates this was already removed via _on_remove
+                    if self._idx[0] >= 0 and self._idx[0] < len(self._repeater._obs_list):
                         del self._repeater._obs_list[self._idx[0]]
                     return False  # Don't block the close
                 return False
@@ -246,7 +247,11 @@ class DockWidgetRepeater[T, W: QWidget]:
     def _on_remove(self, index: int, item: T) -> None:
         """Handle item removal."""
         if index < len(self._items):
-            dock, _, _ = self._items.pop(index)
+            dock, _, index_holder = self._items.pop(index)
+
+            # Invalidate the index holder so the CloseFilter won't try to
+            # delete from the list again (which would cause a cascade delete)
+            index_holder[0] = -1
 
             # Disconnect visibility signal to prevent recursive removal
             try:

@@ -2169,33 +2169,48 @@ def apply_auto_bindings(
             default_prop = registry.get_default_prop(widget_instance)
             adapter = registry.get(widget_instance, default_prop)
             if adapter is not None and adapter.setter is not None:
+                # Flag to prevent circular updates (Observable → Widget → Observable)
+                updating: dict[str, bool] = {"flag": False}
+
                 # Set initial value
                 adapter.setter(widget_instance, source.get())
 
                 # Subscribe to Observable changes
                 setter = adapter.setter
 
-                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget) -> Callable[[Any], None]:
+                def make_obs_to_widget(s: Callable[[Any, Any], None], w: QWidget, upd: dict[str, bool]) -> Callable[[Any], None]:
                     def on_observable_change(v: Any) -> None:
-                        s(w, v)
+                        if upd["flag"]:
+                            return
+                        upd["flag"] = True
+                        try:
+                            s(w, v)
+                        finally:
+                            upd["flag"] = False
 
                     return on_observable_change
 
-                source.on_change(make_obs_to_widget(setter, widget_instance))
+                source.on_change(make_obs_to_widget(setter, widget_instance, updating))
 
                 # Two-way binding: Widget → Observable
                 if adapter.signal_name is not None and adapter.getter is not None:
                     signal = getattr(widget_instance, adapter.signal_name, None)
                     getter = adapter.getter
 
-                    def make_widget_to_obs(obs: Observable[Any], g: Callable[[Any], Any], w: QWidget) -> Callable[[], None]:
+                    def make_widget_to_obs(obs: Observable[Any], g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
                         def on_widget_change() -> None:
-                            obs.set(g(w))
+                            if upd["flag"]:
+                                return
+                            upd["flag"] = True
+                            try:
+                                obs.set(g(w))
+                            finally:
+                                upd["flag"] = False
 
                         return on_widget_change
 
                     if signal is not None:
-                        signal.connect(make_widget_to_obs(source, getter, widget_instance))
+                        signal.connect(make_widget_to_obs(source, getter, widget_instance, updating))
 
 
 def apply_property_bindings(
