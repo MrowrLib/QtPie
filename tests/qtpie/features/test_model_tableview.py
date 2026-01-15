@@ -512,6 +512,22 @@ class TestTableViewRecordNestedListBinding:
         assert_that(instance._label).is_not_none()
         assert_that(instance._label.text()).is_equal_to("I should render!")
 
+    def test_remove_from_nested_list_no_recursion(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing from record.nested_list should not cause infinite recursion."""
+
+        @decorator(record=Container("test", [Item("a", "1"), Item("b", "2"), Item("c", "3")]))
+        class TestClass(base_class[Container]):  # type: ignore[misc]
+            _table: QTableView = new(bind="record.items", columns=["key", "value"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Remove an item - this should NOT cause RecursionError
+        instance.record.items.remove(Item("b", "2"))
+
+        assert_that(model.rowCount()).is_equal_to(2)
+
 
 # Test dataclasses with bool fields for checkbox tests
 @dataclass

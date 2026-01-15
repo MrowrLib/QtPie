@@ -158,6 +158,10 @@ class WorkspaceService:
             KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled)
             for kv in request.query_params
         ]
+        resolved_body_fields = [
+            KeyValue(key=kv.key, value=self.resolve_variables(kv.value), enabled=kv.enabled)
+            for kv in request.body_fields
+        ]
 
         return Request(
             name=request.name,
@@ -166,6 +170,7 @@ class WorkspaceService:
             headers=resolved_headers,
             query_params=resolved_params,
             body=self.resolve_variables(request.body),
+            body_fields=resolved_body_fields,
             body_type=request.body_type,
             auth=request.auth,
         )

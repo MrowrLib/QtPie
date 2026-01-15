@@ -1,0 +1,14 @@
+name: Create User (Form)
+method: POST
+url: ${BASE_URL}/users
+headers:
+  - key: Accept
+    value: application/json
+body_type: form_urlencoded
+body_fields:
+  - key: name
+    value: John Doe
+  - key: username
+    value: johndoe
+  - key: email
+    value: john@example.com

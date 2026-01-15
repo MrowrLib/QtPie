@@ -1,4 +1,7 @@
 # pyright: reportPrivateUsage=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownArgumentType=false
+# pyright: reportAttributeAccessIssue=false
 """Tests for Variable[T] with new() and @new_fields."""
 
 from dataclasses import dataclass
@@ -526,3 +529,86 @@ class TestVariableWithProxy:
 
         assert_that(a._person.value.name).is_equal_to("Alice")
         assert_that(b._person.value.name).is_equal_to("Bob")
+
+
+class TestRecordVariableFieldShadowing:
+    """Test that RecordVariable doesn't shadow record fields with Variable methods."""
+
+    def test_record_field_named_items(self) -> None:
+        """Record field named 'items' should not be shadowed by Variable.items()."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable
+
+        @dataclass
+        class Container:
+            items: list[str]
+
+        proxy = ObservableProxy(Container(["a", "b", "c"]))
+        rv = RecordVariable(proxy)
+
+        # Should return ObservableList, not a method
+        assert_that(callable(rv.items)).is_false()
+        assert_that(rv.items[0]).is_equal_to("a")
+
+    def test_record_field_named_keys(self) -> None:
+        """Record field named 'keys' should not be shadowed by Variable.keys()."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable
+
+        @dataclass
+        class Container:
+            keys: list[str]
+
+        proxy = ObservableProxy(Container(["x", "y"]))
+        rv = RecordVariable(proxy)
+
+        assert_that(callable(rv.keys)).is_false()
+        assert_that(rv.keys[0]).is_equal_to("x")
+
+    def test_record_field_named_values(self) -> None:
+        """Record field named 'values' should not be shadowed by Variable.values()."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable
+
+        @dataclass
+        class Container:
+            values: list[int]
+
+        proxy = ObservableProxy(Container([1, 2, 3]))
+        rv = RecordVariable(proxy)
+
+        assert_that(callable(rv.values)).is_false()
+        assert_that(rv.values[0]).is_equal_to(1)
+
+    def test_record_field_named_get(self) -> None:
+        """Record field named 'get' should not be shadowed by Variable.get()."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable
+
+        @dataclass
+        class Container:
+            get: str
+
+        proxy = ObservableProxy(Container("my_value"))
+        rv = RecordVariable(proxy)
+
+        assert_that(rv.get).is_equal_to("my_value")
+
+    def test_record_field_named_update(self) -> None:
+        """Record field named 'update' should not be shadowed by Variable.update()."""
+        from observant import ObservableProxy
+
+        from qtpie.variable import RecordVariable
+
+        @dataclass
+        class Container:
+            update: str
+
+        proxy = ObservableProxy(Container("pending"))
+        rv = RecordVariable(proxy)
+
+        assert_that(rv.update).is_equal_to("pending")

@@ -1,0 +1,12 @@
+name: Upload Avatar
+method: POST
+url: ${BASE_URL}/users/1/avatar
+headers:
+  - key: Accept
+    value: application/json
+body_type: form_data
+body_fields:
+  - key: description
+    value: My profile picture
+  - key: tags
+    value: avatar,profile

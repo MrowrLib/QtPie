@@ -1,3 +1,7 @@
+import os
+
+os.environ["QTPIE_DEBUG"] = "1"  # Must be set before importing qtpie
+
 from forc.app.application import ForcApp
 from forc.app.qrc_resources import qt_resource_data
 from qtpie import entrypoint

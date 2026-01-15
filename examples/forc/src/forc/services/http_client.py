@@ -65,19 +65,29 @@ class HttpClientService:
 
         # Build body
         content: str | bytes | None = None
-        if request.body and request.body_type != BodyType.NONE:
-            content = request.body
-            # Set content-type if not already set
-            if "Content-Type" not in headers and "content-type" not in headers:
-                match request.body_type:
-                    case BodyType.JSON:
-                        headers["Content-Type"] = "application/json"
-                    case BodyType.FORM:
-                        headers["Content-Type"] = "application/x-www-form-urlencoded"
-                    case BodyType.XML:
-                        headers["Content-Type"] = "application/xml"
-                    case BodyType.TEXT:
-                        headers["Content-Type"] = "text/plain"
+        data: dict[str, str] | None = None  # For form data
+        files: list[tuple[str, tuple[str, str]]] | None = None  # For multipart
+
+        match request.body_type:
+            case BodyType.NONE:
+                pass
+            case BodyType.JSON:
+                content = request.body
+                if "Content-Type" not in headers and "content-type" not in headers:
+                    headers["Content-Type"] = "application/json"
+            case BodyType.XML:
+                content = request.body
+                if "Content-Type" not in headers and "content-type" not in headers:
+                    headers["Content-Type"] = "application/xml"
+            case BodyType.TEXT:
+                content = request.body
+                if "Content-Type" not in headers and "content-type" not in headers:
+                    headers["Content-Type"] = "text/plain"
+            case BodyType.FORM_URLENCODED:
+                data = {kv.key: kv.value for kv in request.body_fields if kv.enabled}
+            case BodyType.FORM_DATA:
+                # Multipart form data - use files param for proper multipart encoding
+                files = [(kv.key, ("", kv.value)) for kv in request.body_fields if kv.enabled]
 
         # Handle auth
         auth: httpx.BasicAuth | None = None
@@ -100,6 +110,8 @@ class HttpClientService:
             headers=headers,
             params=params,
             content=content,
+            data=data,
+            files=files,
             auth=auth,
         )
         elapsed_ms = (time.perf_counter() - start) * 1000

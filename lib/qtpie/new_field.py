@@ -53,7 +53,8 @@ class NewField:
         # Property bindings (visible="_is_visible", enabled="{_count > 0}")
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
         # Model format for QComboBox/QListView/etc. with bind= to list
-        self.model_format: str | None = None  # Format for model items: "{name} ({age})"
+        # Can be string template "{name}" or callable (lambda, dict.get, etc.)
+        self.model_format: str | Callable[[Any], str] | None = None  # Format for model items
         # Table columns for QTableView with bind= to list
         self.table_columns: list[str] | None = None  # Column names: ["name", "age"]
         self.table_headers: dict[str, str] | None = None  # Custom headers: {"name": "Dog Name"}

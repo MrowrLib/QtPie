@@ -15,3 +15,6 @@ class RequestWidget(Widget[Request]):
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
     _editor: RequestEditorWidget = new(bind="record", splitter="_splitter")
     _response: ResponseViewerWidget = new(splitter="_splitter")
+
+    def __setup__(self) -> None:
+        self._splitter.setSizes([200, 100])

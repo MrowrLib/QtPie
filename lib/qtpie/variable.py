@@ -573,8 +573,50 @@ class RecordVariable[T](Variable[T, None]):
     Supports direct field access: self.record.name = "x" forwards to the proxy.
     """
 
+    # Attributes that should be looked up on RecordVariable/Variable, not forwarded to proxy
+    _RECORD_VARIABLE_ATTRS: set[str] = {
+        "_wrapper",
+        "_widget",
+        "value",
+        "observable",
+        "is_dirty",
+        "reset_dirty",
+        "dirty_fields",
+        "on_change",
+        "add_validator",
+        "remove_validator",
+        "is_valid",
+        "validation_errors",
+        "validation_error_messages",
+    }
+
     def __init__(self, wrapper: ObservableProxy[T]) -> None:
         super().__init__(wrapper, widget_type=None)
+
+    @override
+    def __getattribute__(self, name: str) -> Any:
+        """Forward attribute access to proxy, prioritizing record fields over Variable methods.
+
+        This ensures record fields like 'items', 'keys', 'values', 'get', 'update'
+        are not shadowed by Variable's dict/list convenience methods.
+        """
+        # Always use parent for private attrs and known RecordVariable attrs
+        if name.startswith("_") or name in RecordVariable._RECORD_VARIABLE_ATTRS:
+            return object.__getattribute__(self, name)
+
+        # Check if the proxy's target has this attribute (record field)
+        wrapper: ObservableProxy[T] = object.__getattribute__(self, "_wrapper")
+        target = wrapper.unwrap()
+        if target is not None and hasattr(target, name):
+            # Forward to proxy - it will return Observable/ObservableList/etc
+            result = getattr(wrapper, name)
+            # Unwrap Observable to return actual value (consistent with Variable.__getattr__)
+            if isinstance(result, Observable):
+                return cast(Any, result.get())
+            return result
+
+        # Fall back to parent class (Variable methods like append, extend for list operations)
+        return object.__getattribute__(self, name)
 
     @property
     @override

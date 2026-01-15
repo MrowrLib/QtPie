@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import logging
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
+logger = logging.getLogger("qtpie.bindings")
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from qtpie.new_field import NewField
+
+
+def _is_enum_class(value: Any) -> bool:
+    """Check if value is an Enum class (not an instance)."""
+    try:
+        return isinstance(value, type) and issubclass(value, Enum)
+    except TypeError:
+        return False
 
 
 class BindingConfig(Protocol):
@@ -459,6 +471,14 @@ def _apply_model_binding(
     if obs_list is None:
         return False
 
+    logger.debug(
+        "Model binding: widget=%s, bind_path=%s, list_size=%d, is_source_obs_list=%s",
+        type(widget_instance).__name__,
+        bind_path,
+        len(obs_list),
+        isinstance(source, ObservableList),
+    )
+
     # Decide which model type to use
     # QTableView (or explicit columns=) uses ReactiveTableModel
     # QTreeView (or explicit children=) uses ReactiveTreeModel
@@ -472,9 +492,13 @@ def _apply_model_binding(
         from qtpie.models import ReactiveTreeModel
 
         # Check for format= to customize item display
-        format_fn = None
+        # Can be string template "{name}" or callable (lambda, dict.get)
+        format_fn: Callable[[Any], str] | None = None
         if field_info.model_format is not None:
-            format_fn = create_item_formatter(field_info.model_format)
+            if callable(field_info.model_format):
+                format_fn = cast("Callable[[Any], str]", field_info.model_format)
+            else:
+                format_fn = create_item_formatter(field_info.model_format)
 
         # Default children attribute to "children" if not specified
         children_attr = field_info.tree_children or "children"
@@ -504,9 +528,13 @@ def _apply_model_binding(
         from qtpie.models import ReactiveListModel
 
         # Check for format= to customize item display
+        # Can be string template "{name}" or callable (lambda, dict.get)
         format_fn = None
         if field_info.model_format is not None:
-            format_fn = create_item_formatter(field_info.model_format)
+            if callable(field_info.model_format):
+                format_fn = cast("Callable[[Any], str]", field_info.model_format)
+            else:
+                format_fn = create_item_formatter(field_info.model_format)
 
         model = ReactiveListModel(
             obs_list,
@@ -534,7 +562,10 @@ def _apply_model_binding(
     # Also handle expand=True for QTreeView
     should_expand = use_tree_model and getattr(field_info, "tree_expand", False)
 
-    if root_variable is not None:
+    # Only set up root sync if we COPIED the list (obs_list is not the source).
+    # If source is already an ObservableList, the model uses it directly - no sync needed.
+    needs_root_sync = root_variable is not None and not isinstance(source, ObservableList)
+    if needs_root_sync:
         nested_path = ".".join(bind_path_normalized.split(".")[1:])
 
         def make_root_sync_for_model(
@@ -544,31 +575,82 @@ def _apply_model_binding(
             tree_widget: QWidget | None,
             expand_on_change: bool,
         ) -> None:
+            # Track the last nested list identity to detect when the root object changes
+            # vs when the same list is just mutated. We only want to re-sync when the
+            # actual list object changes (e.g., record replaced), not on every mutation.
+            # Use a list for mutable closure capture.
+            last_nested_list_id: list[int] = [-1]  # -1 = not initialized yet
+            syncing = False  # Re-entrancy guard
+
             def on_root_change(*_: Any) -> None:
+                nonlocal syncing
+                if syncing:
+                    logger.debug("on_root_change: skipped (syncing=True) for path=%s", path)
+                    return
+
+                logger.debug("on_root_change: triggered for path=%s", path)
                 root_val: Any = root_var.value
                 if root_val is None:
-                    target.clear()
+                    if last_nested_list_id[0] != 0:
+                        syncing = True
+                        try:
+                            target.clear()
+                        finally:
+                            syncing = False
+                        last_nested_list_id[0] = 0
                     return
+
                 # Traverse nested path
                 nested_val: Any = root_val
                 for part in path.split("."):
                     if nested_val is None:
                         break
                     nested_val = getattr(nested_val, part, None)
-                if isinstance(nested_val, list):
-                    target.clear()
-                    target.extend(cast(list[Any], nested_val))
-                    # Expand all if requested (QTreeView with expand=True)
-                    if expand_on_change and tree_widget is not None:
-                        from qtpy.QtCore import QTimer
 
-                        # Defer expandAll to after model updates
-                        QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
-                elif nested_val is None:
-                    target.clear()
+                # Only re-sync if the nested list object itself changed (identity change)
+                # Skip if it's the same list just being mutated - this prevents expensive
+                # clear()+extend() on every append/remove to the nested list
+                if isinstance(nested_val, list):
+                    nested_id = id(cast(list[Any], nested_val))
+                    if nested_id != last_nested_list_id[0]:
+                        logger.debug(
+                            "on_root_change: list identity changed for path=%s (old_id=%d, new_id=%d), syncing %d items",
+                            path,
+                            last_nested_list_id[0],
+                            nested_id,
+                            len(cast(list[Any], nested_val)),
+                        )
+                        last_nested_list_id[0] = nested_id
+                        syncing = True
+                        try:
+                            target.clear()
+                            target.extend(cast(list[Any], nested_val))
+                        finally:
+                            syncing = False
+                    else:
+                        logger.debug(
+                            "on_root_change: same list identity for path=%s (id=%d), skipping sync",
+                            path,
+                            nested_id,
+                        )
+                        # Expand all if requested (QTreeView with expand=True)
+                        if expand_on_change and tree_widget is not None:
+                            from qtpy.QtCore import QTimer
+
+                            # Defer expandAll to after model updates
+                            QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
+                elif nested_val is None and last_nested_list_id[0] != 0:
+                    syncing = True
+                    try:
+                        target.clear()
+                    finally:
+                        syncing = False
+                    last_nested_list_id[0] = 0
 
             root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
+            logger.debug("Registered root sync callback for path=%s", path)
 
+        assert root_variable is not None  # Checked in needs_root_sync condition
         make_root_sync_for_model(
             root_variable,
             obs_list,
@@ -1894,9 +1976,24 @@ def apply_auto_bindings(
             _apply_tab_widget_bindings(host, widget_instance, field_info)
             continue
 
-        # Determine bind path - may be string or Translatable
+        # Determine bind path - may be string, Translatable, or Enum class
         bind_value = field_info.bind
         translatable: Translatable | None = None
+
+        # Handle Enum class binding: bind=Priority creates list from enum members
+        if _is_enum_class(bind_value) and _is_model_widget(widget_instance):
+            # Create ObservableList from enum members
+            enum_class = cast("type[Enum]", bind_value)
+            enum_members = list(enum_class)
+            obs_list: ObservableList[Any] = ObservableList(enum_members)
+
+            # Set default format to {name} if not provided (shows enum name like "LOW", "HIGH")
+            if field_info.model_format is None:
+                field_info.model_format = "{name}"
+
+            # Apply model binding with the enum list as source
+            _apply_model_binding(host, widget_instance, obs_list, f"__enum__{enum_class.__name__}", field_info)
+            continue
 
         if isinstance(bind_value, Translatable):
             # Resolve translatable to get format string

@@ -19,9 +19,10 @@ class HttpMethod(Enum):
 class BodyType(Enum):
     NONE = "none"
     JSON = "json"
-    FORM = "form"
-    TEXT = "text"
     XML = "xml"
+    TEXT = "text"
+    FORM_URLENCODED = "form_urlencoded"
+    FORM_DATA = "form_data"
 
 
 @dataclass
@@ -39,7 +40,8 @@ class Request:
     url: str = ""
     headers: list[KeyValue] = field(default_factory=lambda: [])
     query_params: list[KeyValue] = field(default_factory=lambda: [])
-    body: str = ""
+    body: str = ""  # For text-based bodies (JSON, XML, TEXT)
+    body_fields: list[KeyValue] = field(default_factory=lambda: [])  # For form bodies
     body_type: BodyType = BodyType.NONE
     auth: Auth | None = None
 

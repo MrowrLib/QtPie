@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from typing import overload, override
 
 from .observable import Observable, ValidatorFn
+
+logger = logging.getLogger("qtpie.observant.list")
 
 
 class ObservableList[T]:
@@ -43,6 +46,9 @@ class ObservableList[T]:
 
         self._validate()
 
+        callback_count = len(self._callbacks)
+        if callback_count > 0:
+            logger.debug("ObservableList._notify: firing %d on_change callbacks", callback_count)
         for callback in self._callbacks:
             callback()
 
@@ -50,6 +56,7 @@ class ObservableList[T]:
         """Register a callback to be called when the list changes."""
         if callback not in self._callbacks:
             self._callbacks.append(callback)
+            logger.debug("ObservableList.on_change: registered callback (total=%d)", len(self._callbacks))
 
     def on_insert(self, callback: Callable[[int, T], None]) -> None:
         """Register callback for item insertion: callback(index, item)."""
@@ -73,21 +80,29 @@ class ObservableList[T]:
 
     def _notify_insert(self, index: int, item: T) -> None:
         """Fire insert callbacks."""
+        if self._insert_callbacks:
+            logger.debug("ObservableList._notify_insert: index=%d, callbacks=%d", index, len(self._insert_callbacks))
         for cb in self._insert_callbacks:
             cb(index, item)
 
     def _notify_remove(self, index: int, item: T) -> None:
         """Fire remove callbacks."""
+        if self._remove_callbacks:
+            logger.debug("ObservableList._notify_remove: index=%d, callbacks=%d", index, len(self._remove_callbacks))
         for cb in self._remove_callbacks:
             cb(index, item)
 
     def _notify_replace(self, index: int, old_item: T, new_item: T) -> None:
         """Fire replace callbacks."""
+        if self._replace_callbacks:
+            logger.debug("ObservableList._notify_replace: index=%d, callbacks=%d", index, len(self._replace_callbacks))
         for cb in self._replace_callbacks:
             cb(index, old_item, new_item)
 
     def _notify_clear(self, removed_items: list[T]) -> None:
         """Fire clear callbacks."""
+        if self._clear_callbacks:
+            logger.debug("ObservableList._notify_clear: removed=%d items, callbacks=%d", len(removed_items), len(self._clear_callbacks))
         for cb in self._clear_callbacks:
             cb(removed_items)
 

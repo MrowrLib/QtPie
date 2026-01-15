@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any, cast, override
 
 from .observable import Observable, ValidatorFn
 from .observable_dict import ObservableDict
 from .observable_list import ObservableList
+
+logger = logging.getLogger("qtpie.observant.proxy")
 
 
 def _is_primitive(value: Any) -> bool:
@@ -174,6 +177,13 @@ class ObservableProxy[T]:
     def _notify_change(self) -> None:
         """Notify all change listeners."""
         callbacks: list[Callable[[], None]] = object.__getattribute__(self, "_callbacks")
+        if callbacks:
+            target = object.__getattribute__(self, "_target")
+            logger.debug(
+                "ObservableProxy._notify_change: target=%s, callbacks=%d",
+                type(target).__name__ if target else "None",
+                len(callbacks),
+            )
         for callback in callbacks:
             callback()
 
@@ -276,6 +286,12 @@ class ObservableProxy[T]:
         callbacks: list[Callable[[], None]] = object.__getattribute__(self, "_callbacks")
         if callback not in callbacks:
             callbacks.append(callback)
+            target = object.__getattribute__(self, "_target")
+            logger.debug(
+                "ObservableProxy.on_change: registered callback for target=%s (total=%d)",
+                type(target).__name__ if target else "None",
+                len(callbacks),
+            )
 
     @property
     def is_dirty(self) -> Observable[bool]:

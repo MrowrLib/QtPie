@@ -10,6 +10,7 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportUnknownLambdaType=false
 """Tests for QComboBox model binding with bind=.
 
 Tests that QComboBox bound to Variable[list] uses ReactiveListModel
@@ -17,6 +18,7 @@ and updates reactively when the list changes.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 
 import pytest
 from assertpy import assert_that
@@ -725,3 +727,167 @@ class TestBareVariableSelectionBinding:
         instance._dog.value = Dog("C", 3)
         assert_that(instance._combo.currentIndex()).is_equal_to(2)
         assert_that(instance._idx.value).is_equal_to(2)
+
+
+# Test enums for enum binding tests
+
+
+class Priority(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class Status(Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
+# Display name mapping for format tests
+PRIORITY_LABELS: dict[Priority, str] = {
+    Priority.LOW: "Low Priority",
+    Priority.MEDIUM: "Medium Priority",
+    Priority.HIGH: "High Priority",
+}
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxEnumBinding:
+    """QComboBox with bind= to an Enum class directly."""
+
+    def test_enum_binding_shows_all_values(self, base_class, decorator, qt: QtDriver) -> None:
+        """bind=EnumClass populates QComboBox with all enum values."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=Priority)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.count()).is_equal_to(3)
+
+    def test_enum_binding_default_format_uses_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Default format shows enum .name (e.g., 'LOW', 'MEDIUM')."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=Priority)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.itemText(0)).is_equal_to("LOW")
+        assert_that(instance._combo.itemText(1)).is_equal_to("MEDIUM")
+        assert_that(instance._combo.itemText(2)).is_equal_to("HIGH")
+
+    def test_enum_binding_format_with_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """format='{value}' shows enum .value."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=Priority, format="{value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.itemText(0)).is_equal_to("low")
+        assert_that(instance._combo.itemText(1)).is_equal_to("medium")
+        assert_that(instance._combo.itemText(2)).is_equal_to("high")
+
+    def test_enum_binding_format_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """format= accepts a callable (lambda) for custom formatting."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=Priority, format=lambda e: f"Priority: {e.name.title()}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.itemText(0)).is_equal_to("Priority: Low")
+        assert_that(instance._combo.itemText(1)).is_equal_to("Priority: Medium")
+        assert_that(instance._combo.itemText(2)).is_equal_to("Priority: High")
+
+    def test_enum_binding_format_with_dict_get(self, base_class, decorator, qt: QtDriver) -> None:
+        """format= accepts dict.get for label lookups."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=Priority, format=PRIORITY_LABELS.get)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.itemText(0)).is_equal_to("Low Priority")
+        assert_that(instance._combo.itemText(1)).is_equal_to("Medium Priority")
+        assert_that(instance._combo.itemText(2)).is_equal_to("High Priority")
+
+    def test_enum_binding_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItem= binds to Variable[EnumType]."""
+
+        @decorator
+        class TestClass(base_class):
+            _priority: Variable[Priority] = new(Priority.MEDIUM)
+            _combo: QComboBox = new(bind=Priority, selectedItem="_priority")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initial selection from Variable
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)  # MEDIUM is index 1
+
+    def test_enum_binding_selected_item_two_way(self, base_class, decorator, qt: QtDriver) -> None:
+        """Two-way binding between QComboBox and Variable[EnumType]."""
+
+        @decorator
+        class TestClass(base_class):
+            _priority: Variable[Priority] = new(Priority.LOW)
+            _combo: QComboBox = new(bind=Priority, selectedItem="_priority")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._priority.value).is_equal_to(Priority.LOW)
+
+        # Widget -> Variable
+        instance._combo.setCurrentIndex(2)  # HIGH
+        assert_that(instance._priority.value).is_equal_to(Priority.HIGH)
+
+        # Variable -> Widget
+        instance._priority.value = Priority.MEDIUM
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+
+    def test_enum_binding_with_selected_index(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedIndex= works with enum binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _idx: Variable[int] = new(2)
+            _combo: QComboBox = new(bind=Priority, selectedIndex="_idx")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._combo.currentText()).is_equal_to("HIGH")
+
+    def test_enum_binding_bare_variable_syncs(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Variable[EnumType] syncs from widget on init."""
+
+        @decorator
+        class TestClass(base_class):
+            _status: Variable[Status]  # Bare - no new()!
+            _combo: QComboBox = new(bind=Status, selectedItem="_status")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Should sync to first enum value
+        assert_that(instance._status.value).is_equal_to(Status.PENDING)
+
+    def test_enum_binding_with_format_and_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """format= and selectedItem= work together."""
+
+        @decorator
+        class TestClass(base_class):
+            _priority: Variable[Priority] = new(Priority.HIGH)
+            _combo: QComboBox = new(
+                bind=Priority,
+                format=PRIORITY_LABELS.get,
+                selectedItem="_priority",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Check display uses format
+        assert_that(instance._combo.itemText(0)).is_equal_to("Low Priority")
+        # Check selection is correct
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)  # HIGH
+        assert_that(instance._combo.currentText()).is_equal_to("High Priority")
+
+        # Two-way still works
+        instance._combo.setCurrentIndex(0)
+        assert_that(instance._priority.value).is_equal_to(Priority.LOW)

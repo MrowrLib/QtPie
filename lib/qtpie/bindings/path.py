@@ -125,20 +125,25 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
         if config.record_type is not None:
             record = widget.record
             proxy = record.observable
-            try:
-                # Try original path first (e.g., "dogs" or "_dogs")
-                result = proxy.observable_for_path(original_path)
-                return result
-            except AttributeError:
-                # Field not found on record, continue to fallback
-                pass
-            # If original path had underscore, also try stripped path on record
-            if has_leading_underscore:
+            # Only try record binding if the record target is not None
+            # Otherwise observable_for_path returns Observable(None) for any path
+            # which would incorrectly bind and clear widget values
+            target = object.__getattribute__(proxy, "_target")
+            if target is not None:
                 try:
-                    result = proxy.observable_for_path(lookup_path)
+                    # Try original path first (e.g., "dogs" or "_dogs")
+                    result = proxy.observable_for_path(original_path)
                     return result
                 except AttributeError:
+                    # Field not found on record, continue to fallback
                     pass
+                # If original path had underscore, also try stripped path on record
+                if has_leading_underscore:
+                    try:
+                        result = proxy.observable_for_path(lookup_path)
+                        return result
+                    except AttributeError:
+                        pass
 
     # Underscore fallback on widget itself (e.g., 'name' -> widget._name)
     # This comes AFTER record check to prioritize record fields

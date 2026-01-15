@@ -16,7 +16,7 @@ from qtpie.variable import Variable
     dockTabsHideTitleBar=True,
     dockTabsMovable=True,
     dockTabsDragToUndock=True,
-    size=(1280, 768),
+    size=(1600, 900),
 )
 class ForcWindow(Window):
     ### Signals ###
@@ -27,7 +27,7 @@ class ForcWindow(Window):
     _view_menu: ViewMenu = new()
 
     ### Docks / Widgets ###
-    _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")
+    _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)
     _editors: Variable[list[Request], Dock[RequestWidget]] = new(group="requests", dock="right", title="{name}")
 
     ### Methods ###
