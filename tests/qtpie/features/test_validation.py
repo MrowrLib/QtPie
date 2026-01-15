@@ -18,20 +18,16 @@ import pytest
 from assertpy import assert_that
 from observant import Observable
 
-from qtpie import AppBase, Variable, new
+from qtpie import Variable, new
 from qtpie.testing import QtDriver
 
 from .conftest import ALL_CLASS_TYPES, create_and_track
 
 
 def get_validation_error_messages(instance: object, base_class: type) -> list[str]:
-    """Helper to get validation_error_messages regardless of Observable or direct."""
-    if base_class is AppBase:
-        # AppBase returns list[str] directly
-        return instance.validation_error_messages  # type: ignore[return-value]
-    else:
-        # Widget/Window/Menu return Observable[list[str]]
-        return instance.validation_error_messages.get()  # type: ignore[union-attr, return-value]
+    """Helper to get validation_error_messages (all types return Observable[list[str]])."""
+    # All types (Widget/Window/App/Menu) return Observable[list[str]]
+    return instance.validation_error_messages.get()  # type: ignore[union-attr, return-value]
 
 
 # =============================================================================

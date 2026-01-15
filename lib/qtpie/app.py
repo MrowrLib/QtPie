@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NoReturn, overload
 
 import qasync  # type: ignore[import-untyped]
-from observant import Observable
 from qtpy.QtCore import QTimer
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
@@ -25,6 +24,7 @@ from qtpy.QtWidgets import (
 )
 
 from qtpie.layout import GridPosition, LayoutType
+from qtpie.mixins import QtPieComponentBase
 from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
@@ -167,7 +167,7 @@ def _detect_required_bindings_for_app(cls: type) -> None:
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
 
 
-class AppBase[T = None]:
+class AppBase[T = None](QtPieComponentBase):
     """
     Base class with declarative features for App.
 
@@ -269,177 +269,8 @@ class AppBase[T = None]:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     # -------------------------------------------------------------------------
-    # Dirty tracking properties
-    # -------------------------------------------------------------------------
-
-    @property
-    def is_dirty(self) -> Observable[bool]:
-        """Check if any Variable has changed from its clean state."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            return state.is_dirty
-        # No state yet - return empty observable
-        return Observable[bool](False, dirty_tracking=False, validation=False)
-
-    @property
-    def dirty_fields(self) -> set[str]:
-        """Return set of field names that have changed."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            return state.dirty_fields
-        return set()
-
-    def reset_dirty(self) -> None:
-        """Mark all Variables as clean."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            state.reset_dirty()
-        # Also reset record dirty state (record is in _qtpie, not _qtpie_state)
-        qtpie = getattr(self, "_qtpie", None)
-        if qtpie is not None and qtpie._record is not None:
-            qtpie._record.reset_dirty()
-
-    # -------------------------------------------------------------------------
-    # Validation properties
-    # -------------------------------------------------------------------------
-
-    @property
-    def is_valid(self) -> Observable[bool]:
-        """Check if all validators pass."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            return state.is_valid
-        return Observable[bool](True, dirty_tracking=False, validation=False)
-
-    @property
-    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
-        """Return structured validation errors: {field: {validator: [errors]}}."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            return state.validation_errors
-        return {}
-
-    @property
-    def validation_error_messages(self) -> list[str]:
-        """Return flat list of all error messages."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            return state.validation_error_messages.get()
-        return []
-
-    def add_validator(
-        self,
-        field_name: str,
-        validator_name: str,
-        validator: Callable[[Any], str | None],
-    ) -> None:
-        """Add a named validator to a field."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            state.add_validator(field_name, validator_name, validator)
-
-    def remove_validator(self, field_name: str, validator_name: str) -> None:
-        """Remove a validator by name."""
-        state = getattr(self, "_qtpie_state", None)
-        if state is not None:
-            state.remove_validator(field_name, validator_name)
-
-    # -------------------------------------------------------------------------
-    # Signal Resolution
-    # -------------------------------------------------------------------------
-
-    def signal(self, name: str) -> Any:
-        """Get a signal by name.
-
-        For App/AppBase, only checks this instance (no parent hierarchy).
-
-        Args:
-            name: The signal name (e.g., "on_reload_window")
-
-        Returns:
-            The signal if found
-
-        Raises:
-            AttributeError: If signal not found
-
-        Example:
-            self.signal("on_reload_window").emit()
-        """
-        from .utils.common import is_signal
-
-        target = getattr(self, name, None)
-        if target is not None and is_signal(target):
-            return target
-
-        raise AttributeError(f"Signal '{name}' not found on {type(self).__name__}")
-
-    def emit_signal(self, name: str, *args: Any, **kwargs: Any) -> None:
-        """Emit a signal by name.
-
-        Convenience method that combines signal() lookup with emit().
-
-        Args:
-            name: The signal name (e.g., "on_reload_window")
-            *args: Arguments to pass to signal.emit()
-            **kwargs: Keyword arguments to pass to signal.emit()
-
-        Raises:
-            AttributeError: If signal not found
-
-        Example:
-            self.emit_signal("on_reload_window")
-        """
-        sig = self.signal(name)
-        sig.emit(*args, **kwargs)
-
-    def var(self, name: str) -> Any:
-        """Resolve a variable by name from the app.
-
-        Searches on this app instance (with and without underscore prefix).
-
-        Args:
-            name: The variable name to resolve (e.g., "count" or "_count").
-
-        Returns:
-            The resolved value (unwrapped from Variable if applicable).
-
-        Raises:
-            AttributeError: If variable not found.
-
-        Example:
-            theme = self.var("theme")  # Gets current value of _theme Variable
-        """
-        from qtpie.bindings.expression import resolve_var
-
-        return resolve_var(self, name)
-
-    # -------------------------------------------------------------------------
     # Lifecycle hooks (override in subclass)
     # -------------------------------------------------------------------------
-
-    def on_dirty_changed(self, is_dirty: bool) -> None:
-        """Called when dirty state changes.
-
-        Override this method to react to dirty state transitions.
-        Only fires on actual state changes (True→False or False→True).
-
-        Example::
-
-            def on_dirty_changed(self, is_dirty: bool) -> None:
-                self._save_btn.setEnabled(is_dirty)
-        """
-
-    def on_valid_changed(self, is_valid: bool) -> None:
-        """Called when validation state changes.
-
-        Override this method to react to validation state transitions.
-        Only fires on actual state changes (True→False or False→True).
-
-        Example::
-
-            def on_valid_changed(self, is_valid: bool) -> None:
-                self._submit_btn.setEnabled(is_valid)
-        """
 
     def on_system_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """Called when system tray icon is activated.
@@ -502,40 +333,6 @@ class AppBase[T = None]:
     def tray_icon(self) -> QSystemTrayIcon | None:
         """Access the system tray icon, if any."""
         return getattr(self, "_tray_icon", None)
-
-    def build[W](self, cls: type[W], /, *args: Any, **kwargs: Any) -> W:
-        """Build an instance at runtime with new()-like signal and property wiring.
-
-        This is the runtime equivalent of new(). Use it when you need to create
-        widget instances dynamically (not at class definition time).
-
-        Args:
-            cls: The class to instantiate.
-            *args: Positional arguments passed to the constructor.
-            **kwargs: Keyword arguments. Signal names (e.g., clicked="handler")
-                      are extracted and connected to methods on this App.
-
-        Returns:
-            The created instance with signals connected and properties applied.
-
-        Supported (see create_instance for full details):
-            - Signal connections: clicked="method_name" or clicked=lambda: ...
-            - Widget props: enabled=False, toolTip="...", etc.
-            - name=, classes=, bind=, visible=, enabled=, ref(), t()
-            - Variable bindings for child widgets with required bindings (bare Variable[T])
-
-        NOT supported (only work with new() at class definition time):
-            - list/dict repeaters, label=, grid=, stretch=, layout hints
-
-        Example:
-            def on_reload_window(self) -> None:
-                self.main_window.close()
-                self.main_window = self.build(ForcWindow, on_reload="on_reload")
-                self.main_window.show()
-        """
-        from qtpie.create import create_instance
-
-        return create_instance(self, cls, *args, **kwargs)
 
     def __init__(self) -> None:
         """Initialize AppBase with declarative features.
@@ -883,10 +680,12 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         original_init(self, *args, **kwargs)
 
         # Initialize state for dirty tracking and validation
-        from qtpie.state import QtPieStateBase
+        # _qtpie may already exist if _RecordDescriptor created it during new_fields
+        from qtpie.state import QtPieState
 
-        state = QtPieStateBase(self)
-        self._qtpie_state = state  # type: ignore[attr-defined]
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)  # type: ignore[attr-defined]
+        state = self._qtpie  # type: ignore[attr-defined]
 
         # Register Variables in state
         for var_name in config.variable_names:
@@ -1581,7 +1380,7 @@ def _setup_state_hooks(app: AppBase[Any], state: Any) -> None:
                 app.on_valid_changed(is_valid)
 
     # Subscribe to state changes (if there are Variables or record)
-    # For App, record is in _qtpie (via _RecordDescriptor) not _qtpie_state
+    # For App, record is in _qtpie._record (via _RecordDescriptor)
     qtpie = getattr(app, "_qtpie", None)
     record = qtpie._record if qtpie is not None else None
 

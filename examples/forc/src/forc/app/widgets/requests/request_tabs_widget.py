@@ -80,6 +80,7 @@ class BodyTabContent(Widget[Request]):
 
     def _print_body_type(self) -> None:
         print(f"Current body type is: {self.record.body_type}")
+        print(self.var("record"))
 
 
 @widget

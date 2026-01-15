@@ -239,7 +239,7 @@ class TestAppBaseValidation:
         instance = MyApp()
         instance.add_validator("_name", "required", lambda v: None if v else "Required")
         assert_that(instance.is_valid.get()).is_false()
-        assert_that(instance.validation_error_messages).contains("Required")
+        assert_that(instance.validation_error_messages.get()).contains("Required")
 
     def test_validation_updates_on_change(self, qt: QtDriver) -> None:
         """Validation updates when field changes."""
