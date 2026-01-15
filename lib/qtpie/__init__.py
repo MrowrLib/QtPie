@@ -11,7 +11,7 @@ from .embed import EmbedConfig, embed
 from .entrypoint import entrypoint
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
-from .new import new
+from .new import new, none
 from .new_fields import new_fields
 from .ref import Ref, ref
 from .set_widget_repeater import SetWidgetRepeater
@@ -56,6 +56,7 @@ __all__ = [
     "menu",
     "new",
     "new_fields",
+    "none",
     "ref",
     "register_binding",
     "run_app",

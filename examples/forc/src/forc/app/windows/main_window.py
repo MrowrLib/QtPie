@@ -26,8 +26,8 @@ class ForcWindow(Window):
     _selected_request_index: Variable[int]
 
     ### Menus ###
-    _file_menu: FileMenu = new()
-    _view_menu: ViewMenu = new()
+    _file_menu: FileMenu
+    _view_menu: ViewMenu
 
     ### Docks / Widgets ###
     _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)

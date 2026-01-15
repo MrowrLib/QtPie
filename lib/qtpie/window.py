@@ -124,6 +124,11 @@ class Window[T = None](QMainWindow, QtPieComponentBase):
         # These are required bindings - must be provided by parent
         _detect_required_bindings_for_window(cls)
 
+        # Auto-new bare annotations (non-Variable types)
+        from .widget_base import _auto_new_bare_annotations
+
+        _auto_new_bare_annotations(cls)
+
         # Apply new_fields to handle Variable and QWidget instantiation
         new_fields(cls)
 

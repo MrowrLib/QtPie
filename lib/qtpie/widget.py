@@ -149,6 +149,11 @@ class Widget[T = None](QWidget, QtPieComponentBase):
         # These are required bindings - must be provided by parent
         _detect_required_bindings(cls)
 
+        # Auto-new bare annotations (non-Variable types)
+        from .widget_base import _auto_new_bare_annotations
+
+        _auto_new_bare_annotations(cls)
+
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
 

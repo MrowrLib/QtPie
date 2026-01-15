@@ -230,6 +230,11 @@ class AppBase[T = None](QtPieComponentBase):
         # Collect NewField instances before they're processed
         _collect_fields_for_app(cls)
 
+        # Auto-new bare annotations (non-Variable types)
+        from qtpie.widget_base import _auto_new_bare_annotations
+
+        _auto_new_bare_annotations(cls)
+
         # Apply new_fields to handle Variable and QWidget instantiation
         from qtpie.new_fields import new_fields
 

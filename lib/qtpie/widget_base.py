@@ -136,6 +136,9 @@ class WidgetBase[T = None]:
         # Detect bare Variable[T] annotations (required bindings)
         _detect_required_bindings(cls)
 
+        # Auto-new bare annotations (non-Variable types)
+        _auto_new_bare_annotations(cls)
+
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
 
@@ -364,3 +367,83 @@ def _detect_required_bindings(cls: type) -> None:
     from .utils.common import detect_required_bindings
 
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
+
+
+def _auto_new_bare_annotations(cls: type) -> None:
+    """Convert bare type annotations to NewField instances.
+
+    This enables the shorthand syntax:
+        _label: QLabel           # Auto: creates QLabel()
+        _label: QLabel = new()   # Explicit: also creates QLabel()
+        _label: QLabel = none()  # Opt-out: no instance created
+
+    Skip:
+    - Variable types (have special bare handling as required bindings)
+    - Already has = new() (in config.fields)
+    - Has = none() (opt-out sentinel)
+    - list[T], dict[K,V], set[T] (handled by repeaters)
+    """
+    from .menu import Section, Separator
+    from .new import _NONE_SENTINEL
+    from .variable import Variable
+
+    config = cls._qtpie_config  # type: ignore[attr-defined]
+    annotations = getattr(cls, "__annotations__", {})
+
+    # First pass: remove none() sentinels from the class
+    # Track which names had sentinels so we skip them in second pass
+    sentinel_names: set[str] = set()
+    for name in list(annotations.keys()):
+        class_value = cls.__dict__.get(name)
+        if class_value is _NONE_SENTINEL:
+            delattr(cls, name)
+            sentinel_names.add(name)
+
+    # Second pass: auto-new bare annotations
+    for name, annotation in annotations.items():
+        # Skip if had none() sentinel (opt-out)
+        if name in sentinel_names:
+            continue
+
+        # Skip if already processed (has = new())
+        if name in config.fields:
+            continue
+
+        # Skip if already a variable name (bare Variable[T])
+        if name in config.variable_names:
+            continue
+
+        # Skip if it's in required_bindings (bare Variable[T])
+        if name in config.required_bindings:
+            continue
+
+        # Get the raw annotation to check for generics
+        origin = get_origin(annotation)
+
+        # Skip Variables - have their own bare handling
+        if origin is Variable or annotation is Variable:
+            continue
+
+        # Skip list/dict/set - handled by repeaters
+        if origin in (list, dict, set):
+            continue
+
+        # Skip menu marker types (Separator, Section) - handled by @menu
+        if annotation is Separator or annotation is Section:
+            continue
+
+        # Skip if there's any value assigned (not bare)
+        if name in cls.__dict__:
+            continue
+
+        # Skip special names that shouldn't be auto-instantiated
+        if name in ("record", "_qtpie", "_qtpie_config"):
+            continue
+
+        # Create auto NewField (no args) and let __set_name__ handle type detection
+        new_field = NewField()
+        # Set on class FIRST so __set_name__ can find it in __dict__
+        setattr(cls, name, new_field)
+        # Now call __set_name__ to do type detection
+        new_field.__set_name__(cls, name)
+        config.fields[name] = new_field

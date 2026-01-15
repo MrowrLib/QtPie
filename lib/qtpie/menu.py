@@ -176,6 +176,11 @@ class Menu[T = None](QMenu):
         # Detect bare Variable[T] annotations as required bindings
         _detect_required_bindings_for_menu(cls)
 
+        # Auto-new bare annotations (non-Variable types)
+        from .widget_base import _auto_new_bare_annotations
+
+        _auto_new_bare_annotations(cls)
+
         # Apply new_fields to handle Variable and QAction instantiation
         new_fields(cls)
 
