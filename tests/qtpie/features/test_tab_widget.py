@@ -713,3 +713,159 @@ class TestTabWidgetFieldReferences:
         # Change selection via Variable
         instance._selected.value = 0
         assert instance._tabs.currentWidget() is instance._tab_a
+
+
+# =============================================================================
+# Record Propagation Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTabWidgetRecordPropagation:
+    """Test that Widget[T] tabs inherit parent's record when types match."""
+
+    def test_tabs_inherit_record_from_parent(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[T] tabs inherit parent's record when T matches."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+            age: int = 0
+
+        @widget(title="Name Tab")
+        class NameTab(Widget[Person]):
+            _label: QLabel = new(bind="Name: {name}")
+
+        @widget(title="Age Tab")
+        class AgeTab(Widget[Person]):
+            _label: QLabel = new(bind="Age: {age}")
+
+        @decorator(record=Person("Alice", 30))
+        class TestClass(base_class[Person]):
+            _tabs: QTabWidget = new(tabs=[NameTab, AgeTab])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Tab widgets should have inherited the record
+        name_tab = instance._tabs.widget(0)
+        age_tab = instance._tabs.widget(1)
+
+        assert_that(name_tab._label.text()).is_equal_to("Name: Alice")
+        assert_that(age_tab._label.text()).is_equal_to("Age: 30")
+
+    def test_tabs_update_when_parent_record_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child tabs update when parent's record is modified."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Person:
+            name: str = ""
+
+        @widget(title="Details")
+        class DetailsTab(Widget[Person]):
+            _label: QLabel = new(bind="Hello, {name}!")
+
+        @decorator(record=Person("Bob"))
+        class TestClass(base_class[Person]):
+            _tabs: QTabWidget = new(tabs=[DetailsTab])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        details_tab = instance._tabs.widget(0)
+
+        assert_that(details_tab._label.text()).is_equal_to("Hello, Bob!")
+
+        # Change parent's record field
+        instance.record.name = "Charlie"
+        assert_that(details_tab._label.text()).is_equal_to("Hello, Charlie!")
+
+    def test_tabs_receive_record_set_later_via_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child tabs receive record when parent's record is set via Variable binding."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Response:
+            status: int = 0
+            body: str = ""
+
+        @widget(title="Status")
+        class StatusTab(Widget[Response]):
+            _label: QLabel = new(bind="Status: {status}")
+
+        @widget(title="Body")
+        class BodyTab(Widget[Response]):
+            _label: QLabel = new(bind="Body: {body}")
+
+        @widget
+        class ResponseViewer(Widget[Response]):
+            _tabs: QTabWidget = new(tabs=[StatusTab, BodyTab])
+
+        @decorator
+        class TestClass(base_class):
+            response: Variable[Response | None] = new(None)
+            _viewer: ResponseViewer = new(bind="response")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially no response
+        status_tab = instance._viewer._tabs.widget(0)
+        body_tab = instance._viewer._tabs.widget(1)
+
+        # Set the response - this should propagate to child tabs
+        instance.response = Response(status=200, body="OK")
+
+        assert_that(status_tab._label.text()).is_equal_to("Status: 200")
+        assert_that(body_tab._label.text()).is_equal_to("Body: OK")
+
+    def test_tabs_do_not_inherit_mismatched_record_types(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[T] tabs don't inherit parent's Widget[U] record when T != U."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Request:
+            url: str = ""
+
+        @dataclass
+        class Response:
+            status: int = 0
+
+        @widget(title="Response Tab")
+        class ResponseTab(Widget[Response]):
+            _label: QLabel = new("Response placeholder")
+
+        # Parent has Request, child expects Response - should NOT propagate
+        @decorator(record=Request("http://example.com"))
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[ResponseTab])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        response_tab = instance._tabs.widget(0)
+
+        # Child's record should NOT be set (types don't match)
+        # Access to record.status would fail if record isn't a Response
+        # The label should show the static text since binding couldn't resolve
+        assert_that(response_tab._label.text()).is_equal_to("Response placeholder")
+
+    def test_tabs_list_widget_binds_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """list[QWidget] in child tab binds to record's dict property after propagation."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Response:
+            status_code: int = 200
+            headers: dict[str, str] | None = None
+
+        @widget(title="Headers")
+        class HeadersTab(Widget[Response]):
+            # list[QLabel] bound to record's dict property
+            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
+
+        @decorator(record=Response(200, {"Content-Type": "application/json", "X-Custom": "value"}))
+        class TestClass(base_class[Response]):
+            _tabs: QTabWidget = new(tabs=[HeadersTab])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        headers_tab = instance._tabs.widget(0)
+
+        # The list widget should have been created with items from headers dict
+        assert_that(headers_tab._headers.widget_count()).is_equal_to(2)

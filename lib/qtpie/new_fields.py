@@ -155,7 +155,7 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                             set_classes(instance, field.css_classes)
 
-                    # Apply widget props (windowTitle="X" → setWindowTitle("X"))
+                    # Apply widget props (windowTitle="X" → setWindowTitle("X")
                     # Also resolve Translatable markers in widget_props
                     for prop_name, value in field.widget_props.items():
                         # Resolve if it's a Translatable

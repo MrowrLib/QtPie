@@ -1,0 +1,6 @@
+name: Custom Headers
+method: GET
+url: ${BASE_URL}/demo/headers
+headers:
+  - key: Accept
+    value: application/json

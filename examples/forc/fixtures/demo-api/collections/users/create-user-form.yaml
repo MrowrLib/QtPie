@@ -1,6 +1,6 @@
 name: Create User (Form)
 method: POST
-url: ${BASE_URL}/users
+url: ${BASE_URL}/users/form
 headers:
   - key: Accept
     value: application/json

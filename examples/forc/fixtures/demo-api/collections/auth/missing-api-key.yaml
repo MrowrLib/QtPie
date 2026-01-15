@@ -1,0 +1,6 @@
+name: Missing API Key (401)
+method: GET
+url: ${BASE_URL}/data/secure
+headers:
+  - key: Accept
+    value: application/json

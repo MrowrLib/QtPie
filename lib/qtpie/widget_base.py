@@ -59,13 +59,20 @@ class _RecordDescriptor[T]:
             obj._qtpie._record = value
             obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
         else:
-            # Setting a value - always create a new ObservableProxy with the value
+            # Setting a value - reuse existing proxy to preserve subscriptions
             from observant import ObservableProxy
 
-            wrapper = ObservableProxy(value)
-            record_var = RecordVariable(wrapper)
-            obj._qtpie._record = record_var
-            obj._qtpie.register_variable("record", record_var)
+            existing_record = obj._qtpie._record
+            if existing_record is not None:
+                # Use replace_target to update the existing proxy in-place.
+                # This preserves all subscriptions set up by bindings.
+                existing_record.observable.replace_target(value)  # pyright: ignore[reportAttributeAccessIssue]
+            else:
+                # First time - create new proxy
+                wrapper = ObservableProxy(value)
+                record_var = RecordVariable(wrapper)
+                obj._qtpie._record = record_var
+                obj._qtpie.register_variable("record", record_var)
 
         # Subscribe record to widget-level aggregation if active
         obj._qtpie._subscribe_record_to_widget_dirty()

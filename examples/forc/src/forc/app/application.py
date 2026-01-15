@@ -5,7 +5,7 @@ from qtpy.QtCore import Signal
 
 from forc.app.windows import ForcWindow
 from forc.domain.models import Workspace
-from forc.services import WorkspaceService
+from forc.services import HttpClientService, WorkspaceService
 from qtpie import App, Variable, app, new
 
 
@@ -17,6 +17,9 @@ class ForcApp(App):
     ### Services / Variables ###
     workspace_service: Variable[WorkspaceService] = new()
     workspace: Variable[Workspace | None] = new(None)
+    http_client_service: Variable[HttpClientService] = new(workspace_service=workspace_service)
+
+    ### Window ###
     main_window: ForcWindow = new()
 
     ### Methods ###

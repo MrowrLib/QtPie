@@ -73,15 +73,20 @@ class _RecordDescriptor[T]:
             obj._qtpie._record = value
             obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
         else:
-            # Setting a value - always create a new ObservableProxy with the value
-            # We can't just set state._record.value because that doesn't update
-            # the field-level observables that ObservableProxy caches
+            # Setting a value - reuse existing proxy to preserve subscriptions
             from observant import ObservableProxy
 
-            wrapper = ObservableProxy(value)
-            record_var = RecordVariable(wrapper)
-            obj._qtpie._record = record_var
-            obj._qtpie.register_variable("record", record_var)
+            existing_record = obj._qtpie._record
+            if existing_record is not None:
+                # Use replace_target to update the existing proxy in-place.
+                # This preserves all subscriptions set up by bindings.
+                existing_record.observable.replace_target(value)  # pyright: ignore[reportAttributeAccessIssue]
+            else:
+                # First time - create new proxy
+                wrapper = ObservableProxy(value)
+                record_var = RecordVariable(wrapper)
+                obj._qtpie._record = record_var
+                obj._qtpie.register_variable("record", record_var)
 
         # Subscribe record to widget-level aggregation if active
         obj._qtpie._subscribe_record_to_widget_dirty()
@@ -879,6 +884,11 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if not field.is_list_widget:
             continue
 
+        # Skip if already processed (repeater already set)
+        existing = getattr(widget, name, None)
+        if existing is not None and hasattr(existing, "widget_count"):
+            continue
+
         # Compute objectName with priority: new(name=) > @widget(name=) > field name (stripped)
         if field.object_name is not None:
             computed_object_name = field.object_name
@@ -909,6 +919,24 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 raw_attr = getattr(widget, bind_path)
             elif hasattr(widget, f"_{bind_path}"):
                 raw_attr = getattr(widget, f"_{bind_path}")
+
+            # If still not found and widget has a record, check the record
+            if raw_attr is None and config.record_type is not None:
+                try:
+                    record_proxy = widget.record
+                    # Get the underlying target object from the proxy
+                    target = object.__getattribute__(record_proxy.observable, "_target")
+                    if target is not None and hasattr(target, bind_path):
+                        raw_attr = getattr(target, bind_path)
+                    elif target is None:
+                        # Record not yet available (e.g., tab content before propagation)
+                        # Mark as pending - will be processed when record is set
+                        if not hasattr(widget, "_qtpie_pending_list_fields"):
+                            widget._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
+                        widget._qtpie_pending_list_fields.append(name)  # type: ignore[attr-defined]
+                        continue
+                except (AttributeError, TypeError):
+                    pass
 
             if isinstance(raw_attr, list):
                 # Wrap plain list in ObservableList

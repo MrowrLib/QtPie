@@ -1,12 +1,37 @@
+from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTabWidget
+
+from forc.domain.models import Response
 from qtpie import Widget, new, widget
 
-from .response_status_bar_widget import ResponseStatusBarWidget
-from .response_tabs_widget import ResponseTabsWidget
+
+@widget(layout="horizontal")
+class ResponseStatusBarWidget(Widget[Response]):
+    _status: QLabel = new(bind="Status: {status_code} {status_text}")
+    _time: QLabel = new(bind="Time: {time_ms:.2f} ms")
+    _size: QLabel = new(bind="Size: {size_bytes} bytes")
+
+
+@widget(title="Body")
+class ResponseBodyTabContent(Widget[Response]):
+    _body: QPlainTextEdit = new(
+        bind="{body.decode('utf-8', errors='ignore')}",
+        content_type="{headers['content-type']}",
+        readOnly=True,
+    )
+
+
+@widget(title="Headers")
+class ResponseHeadersTabContent(Widget[Response]):
+    # _headers_txt: QLabel = new(bind="{headers}")
+    _headers: list[QLabel] = new(bind="headers", format="{key}: {value}")
+
+
+@widget(title="Cookies")
+class ResponseCookiesTabContent(Widget[Response]):
+    _placeholder: QLabel = new("Response cookies placeholder")
 
 
 @widget
-class ResponseViewerWidget(Widget):
-    """Response display widget. Contains status bar and tabs."""
-
-    _status_bar: ResponseStatusBarWidget = new()
-    _tabs: ResponseTabsWidget = new()
+class ResponseViewerWidget(Widget[Response]):
+    _status_bar: ResponseStatusBarWidget
+    _tabs: QTabWidget = new(tabs=[ResponseBodyTabContent, ResponseHeadersTabContent, ResponseCookiesTabContent])

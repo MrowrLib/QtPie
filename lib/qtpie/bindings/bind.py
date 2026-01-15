@@ -114,6 +114,7 @@ class Binding[T]:
         # For Widget[T], we need to share our ObservableProxy with the widget's record
         if isinstance(observable, ObservableProxy):
             # Import here to avoid circular imports
+            from ..repeaters.utils import rebind_child_widgets
             from ..state import QtPieState
             from ..variable import RecordVariable
             from .apply import apply_auto_bindings
@@ -135,6 +136,10 @@ class Binding[T]:
             # This is needed because the widget's __init__ ran before we set up the record
             config = type(widget)._qtpie_config  # type: ignore[attr-defined]
             apply_auto_bindings(widget, config)  # type: ignore[arg-type]
+
+            # Also rebind child Widget[T] widgets (e.g., tabs created via tabs=)
+            # These children may have been created before the parent's record was set
+            rebind_child_widgets(widget)  # type: ignore[arg-type]
         else:
             # For primitives or other types, just set the value directly
             # The widget will create its own proxy when accessed

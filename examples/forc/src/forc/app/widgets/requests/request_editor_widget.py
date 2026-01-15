@@ -15,18 +15,18 @@ from forc.domain.models import AUTH_TYPE_LABELS, BODY_TYPE_LABELS, AuthType, Bod
 from qtpie import Stretch, Widget, new, widget
 
 
-@widget(layout="horizontal")
-class RequestAddressBarWidget(Widget[Request]):
-    _method: QLabel = new(bind="method?.name")
-    _url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
-    _send: QPushButton = new("Send")
-
-
 @widget(title="Actions")
 class DeleteWidget(Widget[KeyValue]):
     delete: QPushButton = new(
         "🗑️", clicked="{on_delete(record)}", styleSheet="background: none; border: none; padding: 0;"
     )
+
+
+@widget(layout="horizontal")
+class RequestAddressBarWidget(Widget[Request]):
+    _method: QLabel = new(bind="method?.name")
+    _url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
+    _send: QPushButton = new("Send", clicked="{on_send_request(record)}")
 
 
 @widget(title="Params", on_delete="_on_delete")
@@ -103,10 +103,11 @@ class BodyTabContent(Widget[Request]):
 @widget
 class RequestEditorWidget(Widget[Request]):
     ### Tab Content Widgets ###
-    _params_tab: ParamsTabContent = new(layout=False)
-    _body_tab: BodyTabContent = new(layout=False)
-    _auth_tab: AuthTabContent = new(layout=False)
+    # _params_tab: ParamsTabContent = new(layout=False)
+    # _body_tab: BodyTabContent = new(layout=False)
+    # _auth_tab: AuthTabContent = new(layout=False)
 
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
-    _tabs: QTabWidget = new(tabs=[_params_tab, _body_tab, _auth_tab])
+    # _tabs: QTabWidget = new(tabs=[_params_tab, _body_tab, _auth_tab])
+    _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent])

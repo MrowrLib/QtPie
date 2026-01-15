@@ -547,6 +547,31 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
     if source is not None:
         add_source(source)
 
+    # For Widget[T], also subscribe to the record proxy when name could be a record field.
+    # This is critical because resolve_binding_source skips record fields when target is None,
+    # but we still need to subscribe so the binding updates when the record IS set later.
+    # The compute() function will re-resolve the value when the proxy changes.
+    config: Any = getattr(widget, "_qtpie_config", None)
+    if config is not None:
+        record_type = getattr(config, "record_type", None)
+        if record_type is not None:
+            # Get root name to check against record fields
+            normalized = name.replace("?.", ".")
+            root_name = normalized.split(".")[0]
+            # Check if root_name could be a field on the record type
+            # Use __annotations__ to check for dataclass/typed fields
+            record_annotations = getattr(record_type, "__annotations__", {})
+            if root_name in record_annotations or root_name.lstrip("_") in record_annotations:
+                # This name is a record field - subscribe to the record proxy
+                try:
+                    record = widget.record
+                    proxy = record.observable
+                    # Add proxy if not already in result (avoid duplicates)
+                    if proxy not in result:
+                        result.append(proxy)
+                except Exception:
+                    pass
+
     # Get root name for parent hierarchy lookup
     normalized = name.replace("?.", ".")
     root_name = normalized.split(".")[0]
@@ -772,13 +797,19 @@ def create_format_binding(
                         # Check target is not None first (record might not be bound yet)
                         target: Any = object.__getattribute__(proxy, "_target")
                         if target is not None and hasattr(target, root_name):
-                            # Access field on proxy - returns Observable or ObservableProxy
+                            # Access field on proxy - returns Observable, ObservableProxy, ObservableDict, or ObservableList
                             field_obs = getattr(proxy, root_name)
                             if isinstance(field_obs, Observable):
                                 context[root_name] = field_obs.get()
                                 continue
                             elif isinstance(field_obs, ObservableProxy):
                                 context[root_name] = field_obs.unwrap()
+                                continue
+                            elif isinstance(field_obs, ObservableDict):
+                                context[root_name] = field_obs.to_dict()
+                                continue
+                            elif isinstance(field_obs, ObservableList):
+                                context[root_name] = field_obs.to_list()
                                 continue
                     except (TypeError, AttributeError):
                         pass
@@ -851,11 +882,15 @@ def create_format_binding(
                         value = _eval_with_optional_chaining(eval_expr, context)
                     else:
                         value = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-                    # Unwrap Observable/ObservableProxy results (from nested property access)
+                    # Unwrap Observable/ObservableProxy/ObservableDict/ObservableList results
                     if isinstance(value, Observable):
                         value = value.get()  # pyright: ignore[reportUnknownVariableType]
                     elif isinstance(value, ObservableProxy):
                         value = value.unwrap()  # pyright: ignore[reportUnknownVariableType]
+                    elif isinstance(value, ObservableDict):
+                        value = value.to_dict()  # pyright: ignore[reportUnknownVariableType]
+                    elif isinstance(value, ObservableList):
+                        value = value.to_list()  # pyright: ignore[reportUnknownVariableType]
                     # If value is callable (method without parens), call it
                     if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()

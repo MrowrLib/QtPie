@@ -7,5 +7,5 @@ headers:
 auth:
   type: api_key
   key: api_key
-  value: pk_test_xyz789
+  value: ${API_KEY_PUBLIC}
   location: query

@@ -19,6 +19,7 @@ from .utils.type_checks import (
     is_qsplitter,
     is_qtableview,
     is_qtabwidget,
+    is_qtext_editor,
     is_qtreeview,
     is_qwidget,
 )
@@ -165,6 +166,16 @@ class NewField:
         self.is_variable_list_dock: bool = False
         self.variable_list_dock_item_type: type | None = None  # The item type T inside Variable[list[T], Dock[W]]
         self.variable_list_dock_widget_type: type | None = None  # The widget type W inside Variable[list[T], Dock[W]]
+        # QPlainTextEdit/QTextEdit syntax highlighter support
+        # highlighter= can be:
+        # - type: Static highlighter class to instantiate
+        # - str: Variable name binding (e.g., "highlighter" or "_highlighter")
+        # - NewField: Direct Variable reference
+        self.highlighter: type | str | None = None
+        # content_type= binds to a Variable[str | None] for MIME type-based highlighter selection
+        # - str: Variable name binding (e.g., "content_type" or "_content_type")
+        # - NewField: Direct Variable reference
+        self.editor_content_type: str | None = None
         # Chaining support: track all chained () calls for multi-level patterns
         # e.g., new(var_default)(dock_kwargs)(widget_kwargs)
         self._chain_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -373,6 +384,17 @@ class NewField:
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
 
+            # Remaining self.kwargs are constructor kwargs for the inner type T
+            # (only used when no widget_type, i.e., Variable[T] not Variable[T, W])
+            # Convert any NewField references to string names for deferred resolution
+            inner_kwargs: dict[str, Any] = {}
+            if widget_type is None and self.kwargs:
+                for k, v in self.kwargs.items():
+                    if isinstance(v, NewField):
+                        inner_kwargs[k] = v.name  # Will be resolved at instantiation time
+                    else:
+                        inner_kwargs[k] = v
+
             descriptor = create_variable_descriptor(
                 default,
                 name,
@@ -388,6 +410,7 @@ class NewField:
                 css_classes,
                 dock_info,
                 target_layout,
+                inner_kwargs if inner_kwargs else None,
             )
             setattr(owner, name, descriptor)
             return
@@ -696,6 +719,25 @@ class NewField:
                 self.tab_selected_index = self.kwargs.pop("selectedIndex", None)
                 self.tab_selected_widget = self.kwargs.pop("selectedWidget", None)
 
+            # Extract QPlainTextEdit/QTextEdit-specific kwargs
+            if self._is_qtext_editor_type():
+                # highlighter= specifies a SyntaxHighlighter class or Variable binding
+                highlighter_val = self.kwargs.pop("highlighter", None)
+                if highlighter_val is not None:
+                    if isinstance(highlighter_val, NewField):
+                        # Direct Variable reference: new(highlighter=_my_highlighter)
+                        self.highlighter = highlighter_val.name
+                    else:
+                        # Either a class or a string variable name
+                        self.highlighter = highlighter_val
+                # content_type= binds to a Variable[str] for MIME type-based highlighter
+                content_type_val = self.kwargs.pop("content_type", None)
+                if content_type_val is not None:
+                    if isinstance(content_type_val, NewField):
+                        self.editor_content_type = content_type_val.name
+                    elif isinstance(content_type_val, str):
+                        self.editor_content_type = content_type_val
+
             # Handle layout= parameter:
             # - layout=False → exclude from layout
             # - layout=nested_layout (NewField) → add to that nested layout
@@ -814,6 +856,10 @@ class NewField:
     def _is_qtabwidget_type(self) -> bool:
         """Check if the field type is a QTabWidget subclass."""
         return is_qtabwidget(self.field_type)
+
+    def _is_qtext_editor_type(self) -> bool:
+        """Check if the field type is a QPlainTextEdit or QTextEdit subclass."""
+        return is_qtext_editor(self.field_type)
 
     def _normalize_tabs(self, tabs: dict[str, Any] | list[Any] | str | None) -> list[dict[str, Any]] | str | None:
         """Normalize tabs= to a consistent format.
@@ -1047,7 +1093,13 @@ class NewField:
         to_remove: list[str] = []
         for key, value in self.kwargs.items():
             if key in variable_names:
-                self.variable_bindings[key] = value
+                # If value is a NewField, convert to string reference (its field name)
+                # This allows: new(workspace_service=workspace_service) where workspace_service
+                # is another field defined on the same widget
+                if isinstance(value, NewField):
+                    self.variable_bindings[key] = value.name
+                else:
+                    self.variable_bindings[key] = value
                 to_remove.append(key)
 
         for key in to_remove:

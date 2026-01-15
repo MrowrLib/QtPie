@@ -425,6 +425,18 @@ def rebind_child_widgets(parent: QWidget) -> None:
                 needs_rebind = True
                 break
 
+        # Only rebind if types match (same T in Widget[T])
+        # Even if needs_rebind is True (child has fields with bind="record"),
+        # we must still verify types match - otherwise we'd bind Widget[Response]
+        # to a Request record just because it has children that use bind="record"
+        parent_config = getattr(type(parent), "_qtpie_config", None)
+        parent_record_type = getattr(parent_config, "record_type", None) if parent_config else None
+
+        # Skip if types don't match
+        if parent_record_type is None or parent_record_type != child_record_type:
+            continue
+
+        # Types match - rebind if needed (has bind="record" fields or is Widget[T])
         if needs_rebind or is_widget_with_record(child):
             # The child Widget[T] should inherit parent's record
             parent_record = getattr(parent, "record", None)

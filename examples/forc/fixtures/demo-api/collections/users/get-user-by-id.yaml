@@ -6,4 +6,4 @@ headers:
     value: application/json
 auth:
   type: bearer
-  token: ${API_KEY}
+  token: ${BEARER_TOKEN}

@@ -1,6 +1,14 @@
 [project]
-dependencies = []
+dependencies = [
+    "fastapi>=0.128.0",
+    "python-multipart>=0.0.9",
+]
 description = "Example APIs for Forc local development"
 name = "fork-test-apis"
 requires-python = ">=3.13"
 version = "0.1.0"
+
+[dependency-groups]
+dev = [
+    "uvicorn>=0.40.0",
+]

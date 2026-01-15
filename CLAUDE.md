@@ -835,3 +835,13 @@ Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for a
 - `bd sync` - Sync with git (run at session end)
 
 For full workflow details: `bd prime`
+
+# Further Reading for QtPie
+
+Please read docs\index.md and docs\why-qtpie.md
+
+## Forc (Free Open-source Rest Client)
+
+examples\forc has a sample application intended to demonstrate QtPie.
+
+It is a rest client GUI similar to apps such as Insomnia, Postman, Bruno, etc.

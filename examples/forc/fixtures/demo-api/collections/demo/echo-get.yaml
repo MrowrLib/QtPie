@@ -1,0 +1,13 @@
+name: Echo (GET)
+method: GET
+url: ${BASE_URL}/demo/echo
+query_params:
+  - key: foo
+    value: bar
+  - key: test
+    value: "123"
+headers:
+  - key: Accept
+    value: application/json
+  - key: X-Custom-Header
+    value: custom-value

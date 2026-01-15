@@ -112,6 +112,13 @@ def is_model_widget(cls: type | None) -> bool:
     return _is_subclass_of(cls, QComboBox, QListView, QTableView, QTreeView)
 
 
+def is_qtext_editor(cls: type | None) -> bool:
+    """Check if cls is a QPlainTextEdit or QTextEdit subclass."""
+    from qtpy.QtWidgets import QPlainTextEdit, QTextEdit
+
+    return _is_subclass_of(cls, QPlainTextEdit, QTextEdit)
+
+
 def is_dock_generic(type_to_check: Any) -> bool:
     """Check if type_to_check is a Dock[T] generic alias."""
     if type_to_check is None:

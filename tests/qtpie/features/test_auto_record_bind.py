@@ -122,6 +122,49 @@ class TestDifferentTypeNoAutoBind:
         # It should have its own empty Cat record
         assert_that(parent.cat_child.record.name).is_equal_to("")
 
+    def test_different_type_not_overwritten_by_rebind(self, qt: QtDriver) -> None:
+        """REGRESSION: Widget[B] child must not be overwritten when parent Widget[A] record changes.
+
+        Bug: rebind_child_widgets() was blindly rebinding ALL Widget[T] children
+        to the parent's record without checking if T matches. This caused
+        Widget[Response] inside Widget[Request] to have its record overwritten
+        with the Request object.
+        """
+
+        @dataclass
+        class Request:
+            url: str = ""
+
+        @dataclass
+        class Response:
+            status: int = 0
+
+        @widget(layout="vertical")
+        class ResponseViewer(Widget[Response]):
+            label: QLabel = new(bind="Status: {status}")
+
+        @widget(layout="vertical", record=Request("https://example.com"))
+        class RequestWidget(Widget[Request]):
+            # ResponseViewer[Response] should NOT inherit Request record
+            response_viewer: ResponseViewer = new()
+
+        parent = qt.track(RequestWidget())
+        qt.process_events()
+
+        # ResponseViewer should have its own Response record, not Request
+        assert_that(parent.response_viewer.record.status).is_equal_to(0)
+
+        # Verify it's actually a Response, not a Request (check via hasattr)
+        assert_that(hasattr(parent.response_viewer.record, "status")).is_true()
+        assert_that(hasattr(parent.response_viewer.record, "url")).is_false()
+
+        # Changing parent's record should NOT affect ResponseViewer
+        parent.record.url = "https://changed.com"
+        qt.process_events()
+
+        # ResponseViewer's record should still be Response with status=0
+        assert_that(parent.response_viewer.record.status).is_equal_to(0)
+
     def test_child_without_record_type_no_auto_bind(self, qt: QtDriver) -> None:
         """Child Widget (no T) does NOT auto-bind to parent Widget[T]."""
 
@@ -219,3 +262,112 @@ class TestMixedPatterns:
 
         # Plain child has no record
         assert_that(hasattr(parent.plain, "record")).is_false()
+
+
+class TestRecordFieldBindingSubscriptions:
+    """Test that record field bindings update when record changes."""
+
+    def test_bare_field_binding_updates_when_field_initially_none(self, qt: QtDriver) -> None:
+        """REGRESSION: {field_name} must update when field starts as None.
+
+        Bug: When record had fields defaulting to None, resolve_binding_source
+        found the record field initially, but when the field was updated, the
+        binding didn't re-evaluate because it wasn't subscribed to the record proxy.
+
+        The fix: Subscribe to the record proxy when name matches a record field,
+        so we catch both field changes and record replacement.
+        """
+
+        @dataclass
+        class Response:
+            # Fields default to None (common pattern for HTTP responses)
+            status_code: int | None = None
+            status_text: str | None = None
+
+        @widget(layout="vertical")
+        class ResponseWidget(Widget[Response]):
+            # Use bare field binding (not record?.status_code)
+            status: QLabel = new(bind="Status: {status_code} {status_text}")
+
+        w = qt.track(ResponseWidget())
+        qt.process_events()
+
+        # Initially shows None values
+        assert_that(w.status.text()).is_equal_to("Status: None None")
+
+        # Update the fields
+        w.record.status_code = 200
+        w.record.status_text = "OK"
+        qt.process_events()
+
+        # Binding should update!
+        assert_that(w.status.text()).is_equal_to("Status: 200 OK")
+
+    def test_bare_field_binding_updates_on_field_change(self, qt: QtDriver) -> None:
+        """Bare field binding updates when individual field changes."""
+
+        @dataclass
+        class Response:
+            status_code: int = 0
+
+        @widget(layout="vertical", record=Response(200))
+        class ResponseWidget(Widget[Response]):
+            status: QLabel = new(bind="Code: {status_code}")
+
+        w = qt.track(ResponseWidget())
+        qt.process_events()
+
+        assert_that(w.status.text()).is_equal_to("Code: 200")
+
+        # Change field value
+        w.record.status_code = 404
+        qt.process_events()
+
+        assert_that(w.status.text()).is_equal_to("Code: 404")
+
+    def test_bare_field_binding_with_format_spec(self, qt: QtDriver) -> None:
+        """Bare field binding with format spec updates correctly."""
+
+        @dataclass
+        class Response:
+            time_ms: float | None = None
+
+        @widget(layout="vertical")
+        class ResponseWidget(Widget[Response]):
+            time: QLabel = new(bind="Time: {time_ms:.2f} ms")
+
+        w = qt.track(ResponseWidget())
+        qt.process_events()
+
+        # Initially None - format spec with None fails gracefully
+        # Actually let's start with 0.0 for cleaner test
+        assert_that(w.time.text()).contains("None")
+
+        # Update field with value
+        w.record.time_ms = 123.456
+        qt.process_events()
+
+        # Should update with formatted value
+        assert_that(w.time.text()).is_equal_to("Time: 123.46 ms")
+
+    def test_bare_field_binding_updates_on_record_replacement(self, qt: QtDriver) -> None:
+        """Bare field binding updates when entire record is replaced."""
+
+        @dataclass
+        class Response:
+            status_code: int = 0
+
+        @widget(layout="vertical")
+        class ResponseWidget(Widget[Response]):
+            status: QLabel = new(bind="Code: {status_code}")
+
+        w = qt.track(ResponseWidget())
+        qt.process_events()
+
+        assert_that(w.status.text()).is_equal_to("Code: 0")
+
+        # Replace entire record
+        w.record = Response(500)
+        qt.process_events()
+
+        assert_that(w.status.text()).is_equal_to("Code: 500")

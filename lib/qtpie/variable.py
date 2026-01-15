@@ -35,7 +35,11 @@ _ValT = TypeVar("_ValT")
 _SetItemT = TypeVar("_SetItemT")
 
 
-def _create_observable_for_type(inner_type: type | types.UnionType | None, default: Any) -> AnyObservable[Any]:
+def _create_observable_for_type(
+    inner_type: type | types.UnionType | None,
+    default: Any,
+    inner_kwargs: dict[str, Any] | None = None,
+) -> AnyObservable[Any]:
     """Create the appropriate observable wrapper based on type.
 
     Note: Mutable defaults (list, dict, complex objects) are deep-copied
@@ -44,6 +48,7 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
     Args:
         inner_type: The type inside Variable[T], e.g., str, list[int], MyClass, etc.
         default: The default value, or NO_DEFAULT if no default was provided.
+        inner_kwargs: Constructor kwargs for inner_type (for complex types).
     """
     # Check if no default was provided (distinct from None which is a valid default)
     no_default_provided = isinstance(default, NoDefault)
@@ -106,9 +111,12 @@ def _create_observable_for_type(inner_type: type | types.UnionType | None, defau
         # UnionType can't be instantiated
         if isinstance(inner_type, types.UnionType):
             raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default=...) or provide constructor args.")
-        # Try to instantiate with no args
+        # Try to instantiate with inner_kwargs (or no args if none provided)
         try:
-            default = inner_type()
+            if inner_kwargs:
+                default = inner_type(**inner_kwargs)
+            else:
+                default = inner_type()
         except TypeError as e:
             raise ValueError(f"Cannot create Variable[{inner_type.__name__}] without a default value. Use new(default=YourClass(...)) or provide constructor args.") from e
     else:
@@ -789,6 +797,8 @@ class _VariableDescriptor[T]:
         dock_info: dict[str, Any] | None = None,
         # Nested layout support
         target_layout: str | None = None,
+        # Constructor kwargs for inner type T (for Variable[T] without widget)
+        inner_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -809,6 +819,8 @@ class _VariableDescriptor[T]:
         self._css_classes = css_classes or []
         # Dock info for Variable[T, Dock[W]] - contains dock_area, dock_title, etc.
         self.dock_info = dock_info
+        # Constructor kwargs for inner type T (may contain string refs to other fields)
+        self._inner_kwargs = inner_kwargs or {}
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -828,7 +840,24 @@ class _VariableDescriptor[T]:
         qtpie_state = cast(QtPieState, obj._qtpie)  # type: ignore[attr-defined]
 
         if self._name not in qtpie_state.variables:
-            wrapper = _create_observable_for_type(self._inner_type, self._default)
+            # Resolve string references in inner_kwargs to actual values from the widget
+            resolved_kwargs: dict[str, Any] = {}
+            for k, v in self._inner_kwargs.items():
+                if isinstance(v, str):
+                    # String reference - resolve to the actual value on obj
+                    ref_attr = getattr(obj, v, None)
+                    if ref_attr is not None:
+                        # If it's a Variable, get its .value
+                        if isinstance(ref_attr, Variable):
+                            resolved_kwargs[k] = ref_attr.value  # pyright: ignore[reportUnknownMemberType]
+                        else:
+                            resolved_kwargs[k] = ref_attr
+                    else:
+                        resolved_kwargs[k] = v  # Keep as-is if not found
+                else:
+                    resolved_kwargs[k] = v
+
+            wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs)
             var: Variable[T] = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
 
@@ -1047,9 +1076,12 @@ def create_variable_descriptor(
     css_classes: list[str] | None = None,
     dock_info: dict[str, Any] | None = None,
     target_layout: str | None = None,
+    inner_kwargs: dict[str, Any] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
-    return _VariableDescriptor(default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout)
+    return _VariableDescriptor(
+        default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout, inner_kwargs
+    )
 
 
 def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | None:  # pyright: ignore[reportUnusedFunction] - used in window.py

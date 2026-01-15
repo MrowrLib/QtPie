@@ -1,0 +1,14 @@
+name: Echo (POST)
+method: POST
+url: ${BASE_URL}/demo/echo
+headers:
+  - key: Accept
+    value: application/json
+  - key: Content-Type
+    value: application/json
+body: |
+  {
+    "message": "Hello, World!",
+    "data": [1, 2, 3]
+  }
+body_type: json

@@ -1,0 +1,9 @@
+name: Slow Response (2s)
+method: GET
+url: ${BASE_URL}/demo/slow
+query_params:
+  - key: delay
+    value: "2"
+headers:
+  - key: Accept
+    value: application/json

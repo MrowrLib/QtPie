@@ -7,5 +7,5 @@ headers:
 auth:
   type: api_key
   key: X-API-Key
-  value: sk_live_abc123def456
+  value: ${API_KEY}
   location: header

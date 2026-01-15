@@ -23,19 +23,24 @@ qtpie = {workspace = true}
 [dependency-groups]
 dev = [
   "assertpy>=1.1",
+  "fastapi>=0.128.0",
   "mkdocs-material>=9.7.1",
+  "pydantic>=2.12.5",
   "pyright>=1.1.407",
   "pyside6>=6.10.1",
   "pytest>=9.0.2",
   "pytest-cov>=7.0.0",
   "pytest-qt>=4.5.0",
   "pytest-sugar>=1.1.1",
+  "python-multipart>=0.0.21",
   "qtpie[test]",
   "ruff>=0.14.10",
+  "uvicorn>=0.40.0",
 ]
 
 [tool.pyright]
-exclude = ["v1/", ".venv/", "samples/.venv/", "examples/forc/.venv/", "examples/forc/tests/.venv/"]
+exclude = ["v1/", "**/.venv/"]
+extraPaths = ["examples/forc/test-apis"]
 pythonPlatform = "All"
 pythonVersion = "3.13"
 reportPrivateImportUsage = false

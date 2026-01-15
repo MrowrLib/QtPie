@@ -11,6 +11,54 @@ if TYPE_CHECKING:
     pass
 
 
+def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
+    """Propagate host's record to a child Widget[T] if types match.
+
+    When a Widget[T] contains child Widget[T] widgets (same T), the children
+    should share the parent's record. This handles widgets created dynamically
+    via tabs= which don't go through the normal NewField auto-record-bind flow.
+    """
+    from qtpie.bindings.apply import apply_auto_bindings
+    from qtpie.variable import RecordVariable
+
+    # Check if host has a record type
+    host_config = getattr(type(host), "_qtpie_config", None)
+    if host_config is None:
+        return
+    host_record_type = getattr(host_config, "record_type", None)
+    if host_record_type is None:
+        return
+
+    # Check if child has a matching record type
+    child_config = getattr(type(child), "_qtpie_config", None)
+    if child_config is None:
+        return
+    child_record_type = getattr(child_config, "record_type", None)
+    if child_record_type is None:
+        return
+
+    # Types must match
+    if host_record_type != child_record_type:
+        return
+
+    # Share host's record with child
+    host_record = getattr(host, "record", None)
+    if host_record is not None and isinstance(host_record, RecordVariable):
+        child_record_var: RecordVariable[Any] = RecordVariable(host_record.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        child.record = child_record_var  # type: ignore[union-attr]
+        # Re-apply bindings on child now that record is set
+        apply_auto_bindings(child, child_config)  # type: ignore[arg-type]
+
+        # Process any pending list widget fields that were deferred during __init__
+        pending_fields: list[str] | None = getattr(child, "_qtpie_pending_list_fields", None)
+        if pending_fields:
+            from qtpie.widget import _create_list_widget_fields  # type: ignore[reportPrivateUsage]
+
+            _create_list_widget_fields(child, child_config)  # type: ignore[arg-type]
+            # Clear pending list
+            child._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
+
+
 def _set_tabs_from_dict(
     tab_widget: Any,  # QTabWidget
     tabs: dict[str, type[QWidget]],
@@ -91,6 +139,8 @@ def _set_tabs_from_normalized(
             # Create new widget instance
             widget_cls = tab_def["cls"]
             widget = widget_cls(parent=tab_widget)
+            # Propagate host's record to child Widget[T] if types match
+            _propagate_record_to_child(host, widget)
             # Name: explicit > windowTitle > class name
             name = explicit_name or widget.windowTitle() or widget_cls.__name__
 

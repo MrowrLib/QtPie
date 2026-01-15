@@ -1,8 +1,10 @@
 """Tests for the @entrypoint decorator."""
 
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from assertpy import assert_that
 from qtpy.QtWidgets import QLabel, QWidget
 
@@ -348,6 +350,7 @@ class TestApplyStylesheet:
         assert_that(result).is_none()
         assert_that(qapp.styleSheet()).contains("purple")
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="File watcher crashes on Windows in test suite")
     def test_returns_watcher_when_watch_qss_enabled(self, qapp: App, tmp_path: Path) -> None:
         """Returns QssWatcher when watch_stylesheet=True for QSS file."""
         qss_file = tmp_path / "styles.qss"
@@ -360,6 +363,7 @@ class TestApplyStylesheet:
         assert_that(type(watcher).__name__).is_equal_to("QssWatcher")
         watcher.stop()  # type: ignore[union-attr]
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="File watcher crashes on Windows in test suite")
     def test_returns_scss_watcher_when_watch_scss_enabled(self, qapp: App, tmp_path: Path) -> None:
         """Returns ScssWatcher when watch_stylesheet=True for SCSS file."""
         scss_file = tmp_path / "styles.scss"

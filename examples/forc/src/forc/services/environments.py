@@ -117,14 +117,22 @@ class EnvironmentsService:
 
     # Variable resolution
 
-    def resolve(self, text: str) -> str:
+    def resolve(self, text: str, *, strict: bool = True) -> str:
         """Resolve ${VAR} placeholders using active environment.
 
         Resolution order:
         1. Active environment variables
         2. System environment variables (fallback)
+
+        Args:
+            text: Text containing ${VAR} placeholders
+            strict: If True, raise error for unresolved placeholders
+
+        Raises:
+            RuntimeError: If strict=True and placeholders cannot be resolved
         """
         env = self.active
+        unresolved_vars: list[str] = []
 
         pattern = r"\$\{([^}]+)\}"
 
@@ -142,10 +150,19 @@ class EnvironmentsService:
             if sys_val is not None:
                 return sys_val
 
-            # Leave unresolved
+            # Track unresolved
+            unresolved_vars.append(key)
             return match.group(0)
 
-        return re.sub(pattern, replace, text)
+        result = re.sub(pattern, replace, text)
+
+        if strict and unresolved_vars:
+            env_name = self._active_name or "(no active environment)"
+            raise RuntimeError(
+                f"Cannot resolve variables: {unresolved_vars}. Active environment: {env_name}. Original text: {text}"
+            )
+
+        return result
 
     def find_placeholders(self, text: str) -> list[str]:
         """Find all ${VAR} placeholders in text."""

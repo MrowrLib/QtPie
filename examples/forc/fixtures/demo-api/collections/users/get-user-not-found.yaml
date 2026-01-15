@@ -1,0 +1,9 @@
+name: Get User Not Found (404)
+method: GET
+url: ${BASE_URL}/users/999
+headers:
+  - key: Accept
+    value: application/json
+auth:
+  type: bearer
+  token: ${BEARER_TOKEN}

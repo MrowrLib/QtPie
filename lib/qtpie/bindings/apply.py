@@ -279,6 +279,16 @@ def apply_auto_bindings(
             apply_tab_widget_bindings(host, widget_instance, field_info)
             continue
 
+        # Handle QPlainTextEdit/QTextEdit with highlighter= or content_type= binding
+        if field_info.highlighter is not None or field_info.editor_content_type is not None:
+            from qtpy.QtWidgets import QPlainTextEdit, QTextEdit
+
+            if isinstance(widget_instance, (QPlainTextEdit, QTextEdit)):
+                from qtpie.bindings.text_editor_binding import apply_text_editor_bindings
+
+                apply_text_editor_bindings(host, widget_instance, field_info, _resolve_or_create_variable)
+                # Don't continue - text editors can also have bind= for text content
+
         # Determine bind path - may be string, Translatable, or Enum class
         bind_value = field_info.bind
         translatable: Translatable | None = None
