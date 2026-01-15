@@ -2,7 +2,7 @@ from qtpy.QtCore import Signal
 from qtpy.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QTableView, QTabWidget
 
 from forc.domain.models import BodyType, KeyValue, Request
-from qtpie import Stretch, Widget, new, widget
+from qtpie import Stretch, Variable, Widget, new, widget
 
 
 @widget
@@ -53,17 +53,22 @@ class AuthTabContent(Widget[Request]):
 class BodyTabContent(Widget[Request]):
     """Body tab content showing request body."""
 
-    # _body_types: Variable[list[BodyType]] = new(list(BodyType))
-    # _body_type: Variable[BodyType]
+    ### Variables ###
+    _body_type: Variable[BodyType]
 
-    body_type_chooser: QComboBox = new(bind=BodyType)  # , selectedItem="_body_type", toolTip="Select Body Type")
+    ### Widgets ###
+    body_type_chooser: QComboBox = new(
+        bind=BodyType, selectedItem="_body_type", currentIndexChanged="_on_body_type_changed"
+    )
+    test_button: QPushButton = new("Print Body Type", clicked="_on_print_stuff")
 
-    _label: QLabel = new(bind="{record.body}")
+    ### Methods ###
+    def _on_print_stuff(self) -> None:
+        print(f"Current body type is: {self._body_type.value}")
 
-    # _btn_print_stuff: QPushButton = new("Print Body Type", clicked="_on_print_stuff")
-
-    # def _on_print_stuff(self) -> None:
-    #     print(f"Current body type is: {self._body_type.value}")
+    def _on_body_type_changed(self, index: int) -> None:
+        print(f"Body type changed to index: {index}")
+        # traceback.print_stack(limit=10)
 
 
 @widget

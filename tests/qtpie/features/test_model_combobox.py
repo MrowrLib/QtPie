@@ -891,3 +891,70 @@ class TestComboBoxEnumBinding:
         # Two-way still works
         instance._combo.setCurrentIndex(0)
         assert_that(instance._priority.value).is_equal_to(Priority.LOW)
+
+
+@dataclass
+class MockRequest:
+    """Mock request for Widget[T] enum binding tests."""
+
+    body_type: Priority = Priority.LOW
+
+
+class TestComboBoxEnumBindingWithRecord:
+    """QComboBox enum binding with Widget[T] record type."""
+
+    def test_enum_binding_with_record_type_two_way(self, qt: QtDriver) -> None:
+        """Enum binding works with Widget[T] - selection persists."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget[MockRequest]):
+            _selected: Variable[Priority]
+            _combo: QComboBox = new(bind=Priority, selectedItem="_selected")
+
+        instance = TestWidget()
+        instance.record = MockRequest()
+        qt.track(instance)
+        instance.show()
+
+        # Initial sync - bare Variable should sync from widget (index 0)
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+        assert_that(instance._selected.value).is_equal_to(Priority.LOW)
+
+        # User selects HIGH (index 2)
+        instance._combo.setCurrentIndex(2)
+
+        # Selection should persist, NOT reset to 0
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._selected.value).is_equal_to(Priority.HIGH)
+
+        # Variable -> Widget also works
+        instance._selected.value = Priority.MEDIUM
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+
+    def test_enum_binding_multiple_selection_changes(self, qt: QtDriver) -> None:
+        """Multiple selection changes don't cause reset (stale callback bug)."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget[MockRequest]):
+            _selected: Variable[Priority]
+            _combo: QComboBox = new(bind=Priority, selectedItem="_selected")
+
+        instance = TestWidget()
+        instance.record = MockRequest()
+        qt.track(instance)
+        instance.show()
+
+        # Change multiple times - each should persist
+        instance._combo.setCurrentIndex(2)  # HIGH
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._selected.value).is_equal_to(Priority.HIGH)
+
+        instance._combo.setCurrentIndex(1)  # MEDIUM
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._selected.value).is_equal_to(Priority.MEDIUM)
+
+        instance._combo.setCurrentIndex(0)  # LOW
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+        assert_that(instance._selected.value).is_equal_to(Priority.LOW)

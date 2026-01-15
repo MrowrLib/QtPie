@@ -827,19 +827,41 @@ def _setup_selection_bindings_impl(
     # Flag to prevent circular updates
     updating = {"flag": False}
 
+    # Helper to check if model is still valid AND still the current model on the widget
+    def is_model_valid() -> bool:
+        try:
+            model.rowCount()  # Will raise RuntimeError if deleted
+            # Also check if this model is still the widget's current model
+            # (handles case where binding was set up multiple times with different models)
+            get_model = getattr(widget, "model", None)
+            if get_model is not None:
+                current_model: Any = get_model()
+                return current_model is model
+            return True  # Widget doesn't have model() method, assume valid
+        except RuntimeError:
+            return False
+
     # Helper to get item at index via model's UserRole
     def get_item_at_index(idx: int) -> Any:
-        if idx < 0 or idx >= model.rowCount():
+        try:
+            if idx < 0 or idx >= model.rowCount():
+                return None
+            model_index = model.index(idx, 0)
+            return model.data(model_index, Qt.ItemDataRole.UserRole)
+        except RuntimeError:
+            # Model was deleted
             return None
-        model_index = model.index(idx, 0)
-        return model.data(model_index, Qt.ItemDataRole.UserRole)
 
     # Helper to find index of item
     def find_index_of_item(item: Any) -> int:
-        for i in range(model.rowCount()):
-            if get_item_at_index(i) == item:
-                return i
-        return -1
+        try:
+            for i in range(model.rowCount()):
+                if get_item_at_index(i) == item:
+                    return i
+            return -1
+        except RuntimeError:
+            # Model was deleted
+            return -1
 
     # Detect widget type and set up appropriate bindings
     # QComboBox: currentIndex() returns int, setCurrentIndex(int), currentIndexChanged signal
@@ -881,6 +903,8 @@ def _setup_selection_bindings_impl(
         if index_var is not None and set_current_index_fn is not None:
 
             def on_index_var_change_combo(new_idx: int) -> None:
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -898,6 +922,8 @@ def _setup_selection_bindings_impl(
 
             def on_item_var_change_combo(*_args: Any) -> None:
                 # Note: Observable passes value, ObservableProxy passes nothing
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -918,6 +944,9 @@ def _setup_selection_bindings_impl(
         if current_index_changed is not None and (index_var is not None or item_var is not None):
 
             def on_widget_selection_changed_combo(new_idx: int) -> None:
+                # Guard: check if model is still valid (not deleted when widget was recreated)
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -941,6 +970,8 @@ def _setup_selection_bindings_impl(
 
         # Helper to set index via selection model
         def set_row_index(row: int) -> None:
+            if not is_model_valid():
+                return
             if row < 0 or row >= model.rowCount():
                 return
             model_idx = model.index(row, 0)
@@ -986,6 +1017,8 @@ def _setup_selection_bindings_impl(
         if index_var is not None:
 
             def on_index_var_change_view(new_idx: int) -> None:
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -1002,6 +1035,8 @@ def _setup_selection_bindings_impl(
         if item_var is not None:
 
             def on_item_var_change_view(*_args: Any) -> None:
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -1021,6 +1056,8 @@ def _setup_selection_bindings_impl(
         if index_var is not None or item_var is not None:
 
             def on_view_selection_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
@@ -1066,6 +1103,8 @@ def _setup_selection_bindings_impl(
 
             # Widget → Variable binding via selectionChanged signal (for multi-selection)
             def on_view_multi_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
+                if not is_model_valid():
+                    return
                 if updating["flag"]:
                     return
                 updating["flag"] = True
