@@ -457,6 +457,72 @@ class TestStretch:
 
 
 # =============================================================================
+# Bare Stretch Annotation
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestBareStretchAnnotation:
+    """Bare Stretch annotation (without = new()) is a shorthand for Stretch = new()."""
+
+    def test_bare_stretch_annotation(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare `_stretch: Stretch` works without = new()."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _stretch: Stretch
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: top label, stretch, bottom label
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_multiple_bare_stretch_annotations(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple bare Stretch annotations work."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _stretch1: Stretch
+            middle: QLabel = new("Middle")
+            _stretch2: Stretch
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: stretch, label, stretch
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_bare_stretch_in_horizontal(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Stretch works in horizontal layouts."""
+
+        @decorator(layout="horizontal")
+        class TestClass(base_class):
+            left: QLabel = new("Left")
+            _stretch: Stretch
+            right: QLabel = new("Right")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout).is_instance_of(QHBoxLayout)
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_mix_bare_and_new_stretch(self, base_class, decorator, qt: QtDriver) -> None:
+        """Mix of bare Stretch and Stretch = new(factor) works."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _stretch1: Stretch  # Bare - default factor 1
+            middle: QLabel = new("Middle")
+            _stretch2: Stretch = new(3)  # With custom factor
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: stretch, label, stretch
+        assert_that(layout.count()).is_equal_to(3)
+
+
+# =============================================================================
 # QSpacerItem
 # =============================================================================
 
@@ -879,3 +945,58 @@ class TestNestedLayouts:
 
         with pytest.raises(TypeError, match="requires label="):
             create_and_track(qt, TestClass, base_class)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestNestedLayoutOrdering:
+    """Test that nested layouts respect field declaration order."""
+
+    def test_nested_layout_after_widget_preserves_order(self, base_class, decorator, qt: QtDriver) -> None:
+        """Nested layout should appear after widgets declared before it."""
+
+        @decorator
+        class TestClass(base_class):
+            _first: QLabel = new("First")
+            _form: QFormLayout = new()
+            _last: QLabel = new("Last")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Get items from layout
+        items = [layout.itemAt(i).widget() or layout.itemAt(i).layout() for i in range(layout.count())]
+
+        # First label should come before form layout
+        first_idx = next(i for i, item in enumerate(items) if isinstance(item, QLabel) and item.text() == "First")
+        form_idx = next(i for i, item in enumerate(items) if isinstance(item, QFormLayout))
+        last_idx = next(i for i, item in enumerate(items) if isinstance(item, QLabel) and item.text() == "Last")
+
+        assert first_idx < form_idx, "First label should be before form layout"
+        assert form_idx < last_idx, "Form layout should be before last label"
+
+    def test_widget_targeting_nested_layout_order(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget targeting nested layout shouldn't affect main layout order."""
+
+        @decorator
+        class TestClass(base_class):
+            _header: QLabel = new("Header")
+            _form: QFormLayout = new()
+            _name: QLineEdit = new(layout="_form", label="Name:")
+            _footer: QLabel = new("Footer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+
+        # Get items from main layout (form has the name field inside)
+        items = [layout.itemAt(i).widget() or layout.itemAt(i).layout() for i in range(layout.count())]
+
+        # Find indexes
+        header_idx = next(i for i, item in enumerate(items) if isinstance(item, QLabel) and item.text() == "Header")
+        form_idx = next(i for i, item in enumerate(items) if isinstance(item, QFormLayout))
+        footer_idx = next(i for i, item in enumerate(items) if isinstance(item, QLabel) and item.text() == "Footer")
+
+        assert header_idx < form_idx < footer_idx, "Order should be: Header, Form, Footer"
+
+        # Verify name field is inside form layout
+        form = items[form_idx]
+        assert form.count() > 0, "Form should have items"

@@ -400,20 +400,16 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 splitters: dict[str, QSplitter] = {}
 
-                # First pass: Create and add nested layouts and splitters (so they exist before items reference them)
+                # First pass: Create nested layouts and splitters (so they exist before items reference them)
+                # Don't ADD them yet - that happens in second pass to preserve field order
                 for name in getattr(cls, "__annotations__", {}):
                     if name in config.fields:
                         field = config.fields[name]
                         if field.is_nested_layout:
-                            # Create the nested layout instance
+                            # Create the nested layout instance (but don't add to layout yet - preserve order)
                             layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             setattr(self, name, layout_instance)
                             nested_layouts[name] = layout_instance
-
-                            # Add to target layout (default or another nested layout)
-                            target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
-                            if target is not None and not field.exclude_from_layout:
-                                _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
 
                         elif field.is_splitter:
                             # Create the splitter instance (but don't add to layout yet - preserve order)
@@ -423,14 +419,28 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 # Use __annotations__ to preserve order across all field types
+                from qtpie.layout import Stretch
+
                 for name in getattr(cls, "__annotations__", {}):
+                    annotation = getattr(cls, "__annotations__", {}).get(name)
+
+                    # Handle bare Stretch annotation (without = new())
+                    if annotation is Stretch and name not in config.fields:
+                        _add_stretch_to_layout(qt_layout, 1)  # Default factor
+                        continue
+
                     if name in config.fields:
                         field = config.fields[name]
                         if field.exclude_from_layout:
                             continue
 
-                        # Skip nested layouts (already handled in first pass)
+                        # Handle nested layouts - add to layout in order
                         if field.is_nested_layout:
+                            layout_instance = nested_layouts.get(name)
+                            if layout_instance is not None:
+                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                if target is not None:
+                                    _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
                             continue
 
                         # Handle QSplitter - add to layout in order
@@ -696,10 +706,6 @@ def _add_widget_to_nested_layout(
         if label is None:
             raise TypeError(f"Field '{field_name}' requires label= for form layout. Use: new(..., label=\"Field Label\")")
         layout.addRow(label, widget)
-        # Sync row visibility with widget visibility (for visible= bindings applied before layout)
-        # Use isHidden() - isVisible() is False for widgets not yet in a shown window
-        if widget.isHidden():
-            layout.setRowVisible(widget, False)
     elif isinstance(layout, QBoxLayout):
         layout.addWidget(widget)
     else:

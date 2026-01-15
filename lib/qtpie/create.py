@@ -416,10 +416,6 @@ def _apply_layout(context: Any, instance: Any, runtime_data: _RuntimeData) -> No
             layout.addRow(runtime_data.label, instance)
         else:
             layout.addRow(instance)
-        # Sync row visibility with widget visibility (for visible= bindings applied before layout)
-        # Use isHidden() - isVisible() is False for widgets not yet in a shown window
-        if instance.isHidden():
-            layout.setRowVisible(instance, False)
     elif isinstance(layout, QGridLayout):
         if runtime_data.grid is not None:
             row, col = runtime_data.grid[0], runtime_data.grid[1]

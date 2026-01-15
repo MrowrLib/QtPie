@@ -58,13 +58,11 @@ class AuthTabContent(Widget[Request]):
     ### Widgets ###
     _auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth?.type")
     _auth_fields_layout: QFormLayout = new()
+    _stretch: Stretch
 
     ### Auth Fields ###
     _basic_username: QLineEdit = new(
-        bind="auth?.username",
-        layout="_auth_fields_layout",
-        label="Username:",
-        visible="{auth?.type == AuthType.BASIC}",
+        bind="auth?.username", layout="_auth_fields_layout", label="Username:", visible="{auth?.type == AuthType.BASIC}"
     )
 
 

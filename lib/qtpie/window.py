@@ -559,22 +559,18 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
                 splitters: dict[str, QSplitter] = {}
 
-                # First pass: Create nested layouts and splitters
+                # First pass: Create nested layouts and splitters (so they exist before items reference them)
+                # Don't ADD them yet - that happens in second pass to preserve field order
                 for name in getattr(cls, "__annotations__", {}):
                     if name in dock_field_names or name in variable_dock_field_names:
                         continue
                     if name in config.fields:
                         field = config.fields[name]
                         if field.is_nested_layout:
-                            # Create the nested layout instance
+                            # Create the nested layout instance (but don't add to layout yet - preserve order)
                             layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             setattr(self, name, layout_instance)
                             nested_layouts[name] = layout_instance
-
-                            # Add to target layout (default or another nested layout)
-                            target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
-                            if target is not None and not field.exclude_from_layout:
-                                _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
 
                         elif field.is_splitter:
                             # Create the splitter instance (but don't add to layout yet - preserve order)
@@ -583,10 +579,19 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                             splitters[name] = splitter_instance
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
+                from qtpie.layout import Stretch
+
                 for name in getattr(cls, "__annotations__", {}):
                     if name in dock_field_names or name in variable_dock_field_names:
                         continue
                     if name in ("central_widget", "_central_widget"):
+                        continue
+
+                    annotation = getattr(cls, "__annotations__", {}).get(name)
+
+                    # Handle bare Stretch annotation (without = new())
+                    if annotation is Stretch and name not in config.fields:
+                        _add_stretch_to_layout(qt_layout, 1)  # Default factor
                         continue
 
                     if name in config.fields:
@@ -594,8 +599,13 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                         if field.exclude_from_layout:
                             continue
 
-                        # Skip nested layouts (already handled in first pass)
+                        # Handle nested layouts - add to layout in order
                         if field.is_nested_layout:
+                            layout_instance = nested_layouts.get(name)
+                            if layout_instance is not None:
+                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                if target is not None:
+                                    _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
                             continue
 
                         # Handle QSplitter - add to layout in order
