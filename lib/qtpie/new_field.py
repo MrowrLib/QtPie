@@ -281,13 +281,7 @@ class NewField:
 
                         # Extract dock kwargs directly from self.kwargs (no chaining for this pattern)
                         # Pattern: new(group="requests", dock="right", title="{name}")
-                        self.dock_area = self.kwargs.pop("dock", None)
-                        self.dock_title = self.kwargs.pop("windowTitle", None) or self.kwargs.pop("title", None)
-                        self.dock_group = self.kwargs.pop("group", None)
-                        self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
-                        self.dock_closable = self.kwargs.pop("closable", None)
-                        self.dock_floatable = self.kwargs.pop("floatable", None)
-                        self.dock_movable = self.kwargs.pop("movable", None)
+                        self._extract_dock_kwargs(self.kwargs)
 
                         # Extract selection bindings
                         self.selected_index = self.kwargs.pop("selectedIndex", None)
@@ -318,28 +312,8 @@ class NewField:
                         # Use triple-chaining pattern: new(var_default)(dock_kwargs)(widget_kwargs)
                         dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_variable_dock()
 
-                        # Normalize title -> windowTitle in dock_kwargs
-                        if "title" in dock_kwargs:
-                            dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
-
                         # Extract dock-specific kwargs from dock_kwargs
-                        self.dock_area = dock_kwargs.pop("dock", None)
-                        self.dock_title = dock_kwargs.pop("windowTitle", None)
-                        self.dock_below = dock_kwargs.pop("below", None)
-                        self.dock_right_of = dock_kwargs.pop("rightOf", None)
-                        self.dock_left_of = dock_kwargs.pop("leftOf", None)
-                        self.dock_above = dock_kwargs.pop("above", None)
-                        self.dock_group = dock_kwargs.pop("group", None)
-                        self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
-                        self.dock_icon = dock_kwargs.pop("icon", None)
-                        self.dock_visible = dock_kwargs.pop("visible", None)
-                        self.dock_floating = dock_kwargs.pop("floating", None)
-                        self.dock_closable = dock_kwargs.pop("closable", None)
-                        self.dock_floatable = dock_kwargs.pop("floatable", None)
-                        self.dock_movable = dock_kwargs.pop("movable", None)
-                        self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
-                        self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
-                        self.dock_hide_title_bar_when_tabbed = dock_kwargs.pop("hideTitleBarWhenTabbed", None)
+                        self._extract_dock_kwargs(dock_kwargs, full=True)
 
                         # Store widget args/kwargs for later widget creation
                         self.widget_args = widget_args
@@ -424,28 +398,8 @@ class NewField:
             # Use double-chaining pattern: new(dock_kwargs)(widget_kwargs)
             dock_kwargs, widget_args, widget_kwargs = self._interpret_chain_for_dock()
 
-            # Normalize title -> windowTitle in dock_kwargs
-            if "title" in dock_kwargs:
-                dock_kwargs["windowTitle"] = dock_kwargs.pop("title")
-
             # Extract dock-specific kwargs from dock_kwargs
-            self.dock_area = dock_kwargs.pop("dock", None)
-            self.dock_title = dock_kwargs.pop("windowTitle", None)
-            self.dock_below = dock_kwargs.pop("below", None)
-            self.dock_right_of = dock_kwargs.pop("rightOf", None)
-            self.dock_left_of = dock_kwargs.pop("leftOf", None)
-            self.dock_above = dock_kwargs.pop("above", None)
-            self.dock_group = dock_kwargs.pop("group", None)
-            self.dock_group_selected_index = dock_kwargs.pop("groupSelectedIndex", None)
-            self.dock_icon = dock_kwargs.pop("icon", None)
-            self.dock_visible = dock_kwargs.pop("visible", None)
-            self.dock_floating = dock_kwargs.pop("floating", None)
-            self.dock_closable = dock_kwargs.pop("closable", None)
-            self.dock_floatable = dock_kwargs.pop("floatable", None)
-            self.dock_movable = dock_kwargs.pop("movable", None)
-            self.dock_allowed_areas = dock_kwargs.pop("allowedAreas", None)
-            self.dock_vertical_title_bar = dock_kwargs.pop("verticalTitleBar", None)
-            self.dock_hide_title_bar_when_tabbed = dock_kwargs.pop("hideTitleBarWhenTabbed", None)
+            self._extract_dock_kwargs(dock_kwargs, full=True)
 
             # Extract name= for objectName from dock_kwargs
             self.object_name = dock_kwargs.pop("name", None)
@@ -517,13 +471,7 @@ class NewField:
                 self.list_format = self.kwargs.pop("format", None)
 
                 # Extract dock-specific kwargs
-                # Note: title may have been normalized to windowTitle by _normalize_kwargs_aliases
-                self.dock_area = self.kwargs.pop("dock", None)
-                self.dock_title = self.kwargs.pop("windowTitle", None) or self.kwargs.pop("title", None)
-                self.dock_group = self.kwargs.pop("group", None)
-                self.dock_closable = self.kwargs.pop("closable", None)
-                self.dock_floatable = self.kwargs.pop("floatable", None)
-                self.dock_movable = self.kwargs.pop("movable", None)
+                self._extract_dock_kwargs(self.kwargs)
 
                 # Extract selection bindings for list[Dock[W]]
                 self.selected_index = self.kwargs.pop("selectedIndex", None)
@@ -1177,6 +1125,34 @@ class NewField:
                 self.target_splitter = splitter_kwarg.name
             elif isinstance(splitter_kwarg, str):
                 self.target_splitter = splitter_kwarg
+
+    def _extract_dock_kwargs(self, source: dict[str, Any], *, full: bool = False) -> None:
+        """Extract dock-specific kwargs from source dict into self.dock_* fields.
+
+        Args:
+            source: Dict to pop kwargs from (modifies in place).
+            full: If True, extract all dock properties including positioning
+                  (below, rightOf, etc.). If False, only extract basic properties.
+        """
+        self.dock_area = source.pop("dock", None)
+        self.dock_title = source.pop("windowTitle", None) or source.pop("title", None)
+        self.dock_group = source.pop("group", None)
+        self.dock_group_selected_index = source.pop("groupSelectedIndex", None)
+        self.dock_closable = source.pop("closable", None)
+        self.dock_floatable = source.pop("floatable", None)
+        self.dock_movable = source.pop("movable", None)
+
+        if full:
+            self.dock_below = source.pop("below", None)
+            self.dock_right_of = source.pop("rightOf", None)
+            self.dock_left_of = source.pop("leftOf", None)
+            self.dock_above = source.pop("above", None)
+            self.dock_icon = source.pop("icon", None)
+            self.dock_visible = source.pop("visible", None)
+            self.dock_floating = source.pop("floating", None)
+            self.dock_allowed_areas = source.pop("allowedAreas", None)
+            self.dock_vertical_title_bar = source.pop("verticalTitleBar", None)
+            self.dock_hide_title_bar_when_tabbed = source.pop("hideTitleBarWhenTabbed", None)
 
     def _extract_embed_widget(self) -> None:
         """Extract widget= parameter for embedding widgets in QListView/QTreeView.

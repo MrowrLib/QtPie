@@ -696,6 +696,10 @@ def _add_widget_to_nested_layout(
         if label is None:
             raise TypeError(f"Field '{field_name}' requires label= for form layout. Use: new(..., label=\"Field Label\")")
         layout.addRow(label, widget)
+        # Sync row visibility with widget visibility (for visible= bindings applied before layout)
+        # Use isHidden() - isVisible() is False for widgets not yet in a shown window
+        if widget.isHidden():
+            layout.setRowVisible(widget, False)
     elif isinstance(layout, QBoxLayout):
         layout.addWidget(widget)
     else:

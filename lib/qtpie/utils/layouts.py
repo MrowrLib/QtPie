@@ -102,6 +102,10 @@ def add_to_layout(
                     )
         else:
             form_layout.addRow(widget_instance)
+        # Sync row visibility with widget visibility (for visible= bindings applied before layout)
+        # Use isHidden() - isVisible() is False for widgets not yet in a shown window
+        if widget_instance.isHidden():
+            form_layout.setRowVisible(widget_instance, False)
     elif layout_type == "grid":
         grid_layout = cast(QGridLayout, layout)
         if grid is not None:

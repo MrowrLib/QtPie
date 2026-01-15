@@ -256,3 +256,106 @@ class TestVerticalHorizontalLayout:
 
         w = qt.track(TestWidget())
         assert w.layout().count() == 1
+
+
+class TestFormLayoutRowVisibility:
+    """Test that visible= on a widget in QFormLayout also hides the label row."""
+
+    def test_visible_false_hides_row(self, qt: QtDriver) -> None:
+        """Setting visible=False on widget in form layout hides entire row."""
+
+        @widget(layout="form")
+        class TestForm(Widget):
+            _show: Variable[bool] = new(True)
+            _name: QLineEdit = new(label="Name", visible="_show")
+
+        w = qt.track(TestForm())
+        layout = w.layout()
+        assert isinstance(layout, QFormLayout)
+
+        # Initially visible (use isHidden() - isVisible() needs visible parent)
+        assert not w._name.isHidden()
+        # Check row is visible
+        assert layout.isRowVisible(w._name)
+
+        # Hide via variable
+        w._show.value = False
+        qt.process_events()
+
+        # Widget hidden
+        assert w._name.isHidden()
+        # Row should also be hidden
+        assert not layout.isRowVisible(w._name)
+
+    def test_visible_nested_layout_hides_row(self, qt: QtDriver) -> None:
+        """Setting visible=False hides row when using layout= to target nested layout."""
+
+        @widget
+        class TestForm(Widget):
+            _show: Variable[bool] = new(False)  # Start hidden!
+            _form_layout: QFormLayout = new()
+            _name: QLineEdit = new(label="Name", layout="_form_layout", visible="_show")
+
+        w = qt.track(TestForm())
+        # The widget's layout is vertical by default, but _form_layout is the QFormLayout
+        layout = w._form_layout
+        assert isinstance(layout, QFormLayout)
+
+        # Initially hidden (use isHidden() - isVisible() needs visible parent)
+        assert w._name.isHidden()
+        # Check row is also hidden
+        assert not layout.isRowVisible(w._name)
+
+        # Show via variable
+        w._show.value = True
+        qt.process_events()
+
+        # Widget visible
+        assert not w._name.isHidden()
+        # Row should also be visible
+        assert layout.isRowVisible(w._name)
+
+        # Initially visible (use isHidden() - isVisible() needs visible parent)
+        assert not w._name.isHidden()
+        # Check row is visible
+        assert layout.isRowVisible(w._name)
+
+        # Hide via variable
+        w._show.value = False
+        qt.process_events()
+
+        # Widget hidden
+        assert w._name.isHidden()
+        # Row should also be hidden
+        assert not layout.isRowVisible(w._name)
+
+    def test_visible_expression_hides_row(self, qt: QtDriver) -> None:
+        """Expression binding visible= hides entire form row."""
+
+        @widget(layout="form")
+        class TestForm(Widget):
+            _count: Variable[int] = new(5)
+            _name: QLineEdit = new(label="Name", visible="{_count > 3}")
+
+        w = qt.track(TestForm())
+        layout = w.layout()
+        assert isinstance(layout, QFormLayout)
+
+        # Initially visible (5 > 3) - use isHidden() instead of isVisible()
+        assert not w._name.isHidden()
+        assert layout.isRowVisible(w._name)
+
+        # Change to make expression false
+        w._count.value = 2
+        qt.process_events()
+
+        # Row should be hidden
+        assert w._name.isHidden()
+        assert not layout.isRowVisible(w._name)
+
+        # Change back to make visible
+        w._count.value = 10
+        qt.process_events()
+
+        assert not w._name.isHidden()
+        assert layout.isRowVisible(w._name)

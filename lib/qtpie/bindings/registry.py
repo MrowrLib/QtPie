@@ -9,6 +9,7 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
@@ -250,12 +251,33 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
     # Common QWidget properties (inherited by all widgets)
     # ============================================================
 
+    def _set_visible(w: QWidget, v: object) -> None:
+        """Set widget visibility, also handling QFormLayout row visibility."""
+        visible = bool(v) if v is not None else True
+
+        # Find if widget is in a QFormLayout and use setRowVisible instead
+        parent = w.parentWidget()
+        if parent is not None:
+            # Search all form layouts (including nested ones) for this widget
+            for form_layout in parent.findChildren(QFormLayout):
+                if form_layout.indexOf(w) != -1:
+                    form_layout.setRowVisible(w, visible)
+                    return
+            # Also check the parent's default layout
+            layout = parent.layout()
+            if isinstance(layout, QFormLayout) and layout.indexOf(w) != -1:
+                layout.setRowVisible(w, visible)
+                return
+
+        # Not in a form layout, just set widget visibility directly
+        w.setVisible(visible)
+
     # QWidget - visible (one-way, no signal for visibility changes)
     registry.add(
         BindingKey(QWidget, "visible"),
         BindingAdapter(
             getter=lambda w: w.isVisible(),
-            setter=lambda w, v: w.setVisible(bool(v) if v is not None else True),
+            setter=_set_visible,
             signal_name=None,
         ),
     )
