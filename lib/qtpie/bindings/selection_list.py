@@ -1,0 +1,433 @@
+"""Selection bindings for QComboBox and QListView."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from qtpy.QtWidgets import QWidget
+
+
+def setup_selection_bindings(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveListModel
+    selected_index_path: str | None,
+    selected_item_path: str | None,
+    selected_indexes_path: str | None = None,
+    selected_items_list_path: str | None = None,
+    resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
+) -> None:
+    """Set up two-way selection bindings for model widgets.
+
+    Args:
+        host: The Widget/Window instance containing the Variables
+        widget: The model widget (QComboBox, QListView, etc.)
+        model: The ReactiveListModel backing the widget
+        selected_index_path: Variable path for index binding (e.g., "_selected_idx")
+        selected_item_path: Variable path for item binding (e.g., "_selected_item")
+        selected_indexes_path: Variable path for multi-index binding (QListView only)
+        selected_items_list_path: Variable path for multi-item binding (QListView only)
+        resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
+    """
+    has_single = selected_index_path is not None or selected_item_path is not None
+    has_multi = selected_indexes_path is not None or selected_items_list_path is not None
+    if not has_single and not has_multi:
+        return
+
+    from observant import Observable, ObservableProxy
+    from qtpy.QtCore import QTimer
+
+    from qtpie.variable import Variable as VarType
+
+    # Resolve the Variables (creating them if they're bare annotations)
+    index_var: VarType[int] | None = None
+    item_var: VarType[Any] | None = None
+    indexes_var: VarType[list[int]] | None = None
+    items_list_var: VarType[list[Any]] | None = None
+
+    if selected_index_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_index_path, int)
+        if isinstance(source, VarType):
+            index_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, (Observable, ObservableProxy)):
+            index_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
+
+    if selected_item_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_item_path, None)
+        if isinstance(source, VarType):
+            item_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, (Observable, ObservableProxy)):
+            item_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
+
+    if selected_indexes_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_indexes_path, None)
+        if isinstance(source, VarType):
+            indexes_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    if selected_items_list_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_items_list_path, None)
+        if isinstance(source, VarType):
+            items_list_var = source  # pyright: ignore[reportUnknownVariableType]
+
+    # Check if we couldn't resolve any Variables that were requested
+    # If so, the widget might not be parented yet - schedule deferred retry
+    missing_single = (selected_index_path is not None and index_var is None) or (selected_item_path is not None and item_var is None)
+    missing_multi = (selected_indexes_path is not None and indexes_var is None) or (selected_items_list_path is not None and items_list_var is None)
+
+    if missing_single or missing_multi:
+
+        def retry_binding() -> None:
+            # Re-resolve Variables after parenting
+            nonlocal index_var, item_var, indexes_var, items_list_var
+            if selected_index_path is not None and index_var is None:
+                source = resolve_or_create_variable_fn(host, selected_index_path, int)
+                if isinstance(source, VarType):
+                    index_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_item_path is not None and item_var is None:
+                source = resolve_or_create_variable_fn(host, selected_item_path, None)
+                if isinstance(source, VarType):
+                    item_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_indexes_path is not None and indexes_var is None:
+                source = resolve_or_create_variable_fn(host, selected_indexes_path, None)
+                if isinstance(source, VarType):
+                    indexes_var = source  # pyright: ignore[reportUnknownVariableType]
+            if selected_items_list_path is not None and items_list_var is None:
+                source = resolve_or_create_variable_fn(host, selected_items_list_path, None)
+                if isinstance(source, VarType):
+                    items_list_var = source  # pyright: ignore[reportUnknownVariableType]
+
+            # If we found them now, set up the actual bindings
+            has_vars = index_var is not None or item_var is not None or indexes_var is not None or items_list_var is not None
+            if has_vars:
+                _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
+
+        QTimer.singleShot(0, retry_binding)
+        return
+
+    # Set up bindings immediately if Variables were found
+    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
+
+
+def _setup_selection_bindings_impl(
+    host: QWidget,
+    widget: QWidget,
+    model: Any,  # ReactiveListModel
+    index_var: Any | None,  # Variable[int] | None
+    item_var: Any | None,  # Variable[Any] | None
+    indexes_var: Any | None,  # Variable[list[int]] | None
+    items_list_var: Any | None,  # Variable[list[Any]] | None
+) -> None:
+    """Implementation of selection bindings (called after Variables are resolved)."""
+    from observant import Observable
+    from qtpy.QtCore import QModelIndex, Qt
+    from qtpy.QtWidgets import QComboBox
+
+    # Flag to prevent circular updates
+    updating = {"flag": False}
+
+    # Helper to check if model is still valid AND still the current model on the widget
+    def is_model_valid() -> bool:
+        try:
+            model.rowCount()  # Will raise RuntimeError if deleted
+            # Also check if this model is still the widget's current model
+            # (handles case where binding was set up multiple times with different models)
+            get_model = getattr(widget, "model", None)
+            if get_model is not None:
+                current_model: Any = get_model()
+                return current_model is model
+            return True  # Widget doesn't have model() method, assume valid
+        except RuntimeError:
+            return False
+
+    # Helper to get item at index via model's UserRole
+    def get_item_at_index(idx: int) -> Any:
+        try:
+            if idx < 0 or idx >= model.rowCount():
+                return None
+            model_index = model.index(idx, 0)
+            return model.data(model_index, Qt.ItemDataRole.UserRole)
+        except RuntimeError:
+            # Model was deleted
+            return None
+
+    # Helper to find index of item
+    def find_index_of_item(item: Any) -> int:
+        try:
+            for i in range(model.rowCount()):
+                if get_item_at_index(i) == item:
+                    return i
+            return -1
+        except RuntimeError:
+            # Model was deleted
+            return -1
+
+    # Detect widget type and set up appropriate bindings
+    # QComboBox: currentIndex() returns int, setCurrentIndex(int), currentIndexChanged signal
+    # QListView/QTableView: use selectionModel, currentIndex() returns QModelIndex
+    is_combobox = isinstance(widget, QComboBox)
+
+    if is_combobox:
+        # QComboBox-specific setup
+        set_current_index_fn = getattr(widget, "setCurrentIndex", None)
+        current_index_changed = getattr(widget, "currentIndexChanged", None)
+        current_widget_index_fn = getattr(widget, "currentIndex", None)
+
+        # Get the current widget index (will sync Variables from this if they're None)
+        current_widget_idx: int = current_widget_index_fn() if current_widget_index_fn else 0
+
+        if index_var is not None and set_current_index_fn is not None:
+            initial_idx = index_var.value
+            # Variable[int] can have None value if no default provided
+            if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                set_current_index_fn(initial_idx)
+                current_widget_idx = initial_idx  # Update for item_var sync below
+            else:
+                # Sync Variable to widget's current state
+                index_var.value = current_widget_idx
+
+        # Helper to detect if item_var is Observable (uses .get()/.set()) vs Variable (uses .value)
+        item_var_is_observable = isinstance(item_var, Observable) if item_var is not None else False
+
+        def get_item_var_value() -> Any:
+            if item_var is None:
+                return None
+            return item_var.get() if item_var_is_observable else item_var.value
+
+        def set_item_var_value(val: Any) -> None:
+            if item_var is None:
+                return
+            if item_var_is_observable:
+                item_var.set(val)
+            else:
+                item_var.value = val
+
+        if item_var is not None:
+            initial_item = get_item_var_value()
+            if initial_item is not None:
+                # Set widget to match item if index didn't already set it
+                if index_var is None and set_current_index_fn is not None:
+                    idx = find_index_of_item(initial_item)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+            else:
+                # Sync Variable/Observable to widget's current selection
+                new_val = get_item_at_index(current_widget_idx)
+                set_item_var_value(new_val)
+
+        # Variable → Widget binding (and cross-update between index/item vars)
+        if index_var is not None and set_current_index_fn is not None:
+
+            def on_index_var_change_combo(new_idx: int) -> None:
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    set_current_index_fn(new_idx)
+                    # Also update item_var if both bindings are present
+                    set_item_var_value(get_item_at_index(new_idx))
+                finally:
+                    updating["flag"] = False
+
+            index_var.on_change(on_index_var_change_combo)
+
+        if item_var is not None and set_current_index_fn is not None:
+
+            def on_item_var_change_combo(*_args: Any) -> None:
+                # Note: Observable passes value, ObservableProxy passes nothing
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    new_item = get_item_var_value()
+                    idx = find_index_of_item(new_item)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+                        # Also update index_var if both bindings are present
+                        if index_var is not None:
+                            index_var.value = idx
+                finally:
+                    updating["flag"] = False
+
+            item_var.on_change(on_item_var_change_combo)
+
+        # Widget → Variable binding
+        if current_index_changed is not None and (index_var is not None or item_var is not None):
+
+            def on_widget_selection_changed_combo(new_idx: int) -> None:
+                # Guard: check if model is still valid (not deleted when widget was recreated)
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    if index_var is not None:
+                        index_var.value = new_idx
+                    set_item_var_value(get_item_at_index(new_idx))
+                finally:
+                    updating["flag"] = False
+
+            current_index_changed.connect(on_widget_selection_changed_combo)
+
+    else:
+        # QListView/QTableView - use selectionModel
+        from qtpy.QtCore import QItemSelectionModel
+
+        selection_model = widget.selectionModel()  # type: ignore[attr-defined]
+        if selection_model is None:
+            return
+
+        # Helper to set index via selection model
+        def set_row_index(row: int) -> None:
+            if not is_model_valid():
+                return
+            if row < 0 or row >= model.rowCount():
+                return
+            model_idx = model.index(row, 0)
+            selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+                model_idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
+            )
+
+        # Get current row from selection model
+        def get_current_row() -> int:
+            current_idx = selection_model.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            if current_idx.isValid():  # pyright: ignore[reportUnknownMemberType]
+                return int(current_idx.row())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+            return -1
+
+        # Initialize from current state
+        current_row = get_current_row()
+
+        if index_var is not None:
+            initial_idx = index_var.value
+            # Variable[int] can have None value if no default provided
+            if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
+                set_row_index(initial_idx)
+                current_row = initial_idx
+            else:
+                # Sync Variable to widget's current state
+                index_var.value = current_row if current_row >= 0 else 0
+
+        if item_var is not None:
+            initial_item = item_var.value
+            if initial_item is not None:
+                # Set widget to match item if index didn't already set it
+                if index_var is None:
+                    idx = find_index_of_item(initial_item)
+                    if idx >= 0:
+                        set_row_index(idx)
+                        current_row = idx
+            else:
+                # Sync item Variable to widget's current selection
+                effective_row = current_row if current_row >= 0 else 0
+                item_var.value = get_item_at_index(effective_row)
+
+        # Variable → Widget binding
+        if index_var is not None:
+
+            def on_index_var_change_view(new_idx: int) -> None:
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    set_row_index(new_idx)
+                    # Also update item_var if both bindings are present
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(new_idx)
+                finally:
+                    updating["flag"] = False
+
+            index_var.on_change(on_index_var_change_view)
+
+        if item_var is not None:
+
+            def on_item_var_change_view(*_args: Any) -> None:
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    new_item = item_var.value  # type: ignore[union-attr]
+                    idx = find_index_of_item(new_item)
+                    if idx >= 0:
+                        set_row_index(idx)
+                        if index_var is not None:
+                            index_var.value = idx
+                finally:
+                    updating["flag"] = False
+
+            item_var.on_change(on_item_var_change_view)
+
+        # Widget → Variable binding via selection model's currentChanged signal
+        if index_var is not None or item_var is not None:
+
+            def on_view_selection_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    row = current.row() if current.isValid() else -1
+                    if index_var is not None:
+                        index_var.value = row
+                    if item_var is not None:
+                        item_var.value = get_item_at_index(row) if row >= 0 else None
+                finally:
+                    updating["flag"] = False
+
+            selection_model.currentChanged.connect(on_view_selection_changed)  # pyright: ignore[reportUnknownMemberType]
+
+        # QListView multi-selection bindings (selectedIndexes, selectedItems)
+        # indexes_var and items_list_var are already resolved and passed in
+        if indexes_var is not None or items_list_var is not None:
+            from qtpy.QtCore import QItemSelection
+
+            # Helper to get selected rows from selection model
+            def get_selected_rows() -> list[int]:
+                selected_indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                rows: set[int] = set()
+                for idx in selected_indexes:  # pyright: ignore[reportUnknownVariableType]
+                    rows.add(idx.row())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+                return sorted(rows)
+
+            # Helper to get items at selected rows
+            def get_selected_items() -> list[Any]:
+                rows = get_selected_rows()
+                return [get_item_at_index(row) for row in rows if get_item_at_index(row) is not None]
+
+            # Initialize multi-selection Variables
+            if indexes_var is not None:
+                initial_indexes = indexes_var.value
+                if initial_indexes is None or not initial_indexes:  # pyright: ignore[reportUnnecessaryComparison]
+                    indexes_var.value = get_selected_rows()
+
+            if items_list_var is not None:
+                initial_items = items_list_var.value
+                if initial_items is None or not initial_items:  # pyright: ignore[reportUnnecessaryComparison]
+                    items_list_var.value = get_selected_items()
+
+            # Widget → Variable binding via selectionChanged signal (for multi-selection)
+            def on_view_multi_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
+                if not is_model_valid():
+                    return
+                if updating["flag"]:
+                    return
+                updating["flag"] = True
+                try:
+                    if indexes_var is not None:
+                        indexes_var.value = get_selected_rows()
+                    if items_list_var is not None:
+                        items_list_var.value = get_selected_items()
+                finally:
+                    updating["flag"] = False
+
+            selection_model.selectionChanged.connect(on_view_multi_selection_changed)  # pyright: ignore[reportUnknownMemberType]
