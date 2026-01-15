@@ -307,6 +307,10 @@ def apply_auto_bindings(
             )
             continue
 
+        # bind=False is explicit opt-out - skip binding entirely
+        if bind_value is False:
+            continue
+
         if isinstance(bind_value, Translatable):
             # Resolve translatable to get format string
             translatable = bind_value

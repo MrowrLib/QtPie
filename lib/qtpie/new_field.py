@@ -168,6 +168,8 @@ class NewField:
         # Chaining support: track all chained () calls for multi-level patterns
         # e.g., new(var_default)(dock_kwargs)(widget_kwargs)
         self._chain_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+        # Owner class config (set in __set_name__) for auto-record-bind detection
+        self._owner_class_config: Any | None = None
 
     def __call__(self, *call_args: Any, **call_kwargs: Any) -> NewField:
         """Store chained call args: new(...)(...)(...).
@@ -243,6 +245,9 @@ class NewField:
 
     def __set_name__(self, owner: type, name: str) -> None:
         self.name = name
+
+        # Store owner's config for auto-record-bind detection
+        self._owner_class_config = getattr(owner, "_qtpie_config", None)
 
         # Normalize aliases (title -> windowTitle, stylesheet -> styleSheet)
         self._normalize_kwargs_aliases()
@@ -1003,8 +1008,13 @@ class NewField:
         When the field type is a QtPie Widget with required/optional Variable bindings,
         extract matching kwargs as variable_bindings instead of passing to constructor.
 
+        Also handles auto-record-binding: when a parent Widget[T] contains a child Widget[T]
+        (same T), automatically bind child's record to parent's record unless opted out.
+
         Example:
             child: Child = new(count="_my_count")  # count is extracted as a binding
+            child: ChildWidget = new()  # Auto: record="record" if T matches parent
+            child: ChildWidget = new(bind=False)  # Opt-out: no auto-record-bind
         """
         if self.field_type is None:
             return
@@ -1014,12 +1024,12 @@ class NewField:
             return
 
         # Get the child's required bindings and all Variable annotations
-        config = getattr(self.field_type, "_qtpie_config", None)
-        if config is None:
+        child_config = getattr(self.field_type, "_qtpie_config", None)
+        if child_config is None:
             return
 
         # Collect all Variable names from the child (required and optional)
-        variable_names: set[str] = set(config.required_bindings)
+        variable_names: set[str] = set(child_config.required_bindings)
 
         # Also check annotations for Variable types (including optional ones with defaults)
         child_annotations = getattr(self.field_type, "__annotations__", {})
@@ -1027,6 +1037,11 @@ class NewField:
             origin = get_origin(annotation)
             if origin is Variable or annotation is Variable:
                 variable_names.add(name)
+
+        # Add "record" to variable names if child is Widget[T] (has record_type)
+        child_record_type = getattr(child_config, "record_type", None)
+        if child_record_type is not None:
+            variable_names.add("record")
 
         # Extract kwargs that match Variable names
         to_remove: list[str] = []
@@ -1037,6 +1052,10 @@ class NewField:
 
         for key in to_remove:
             del self.kwargs[key]
+
+        # Note: Auto-record-bind is handled in _auto_record_bind_children() which runs
+        # in __init_subclass__ AFTER the config is set up. We can't do it here because
+        # __set_name__ runs during class body execution, before _qtpie_config exists.
 
     def _is_qtpie_widget(self) -> bool:
         """Check if the field type is a QtPie Widget subclass (has _qtpie_config)."""

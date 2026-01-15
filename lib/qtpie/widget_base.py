@@ -369,6 +369,54 @@ def _detect_required_bindings(cls: type) -> None:
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
 
 
+def _auto_record_bind_children(cls: type) -> None:  # pyright: ignore[reportUnusedFunction] - imported in widget.py
+    """Auto-bind record for child Widget[T] fields where T matches parent's T.
+
+    When a parent Widget[T] contains a child Widget[T] field (same T),
+    automatically set field.bind = "record" so the child inherits the parent's record.
+
+    This must be called AFTER __init_subclass__ has set up _qtpie_config
+    because NewField.__set_name__ runs before the config exists.
+
+    Opt-out: Use bind=False on the child field to skip auto-binding.
+    """
+    from .new_field import NewField
+
+    config = getattr(cls, "_qtpie_config", None)
+    if config is None:
+        return
+
+    parent_record_type = getattr(config, "record_type", None)
+    if parent_record_type is None:
+        return  # Parent doesn't have a record type
+
+    # Check each field for matching record types
+    for _name, field in config.fields.items():
+        if not isinstance(field, NewField):
+            continue
+
+        # Skip if already has explicit bind (including bind=False opt-out)
+        if field.bind is not None:
+            continue
+
+        # Get child's record type
+        child_cls = field.field_type
+        if child_cls is None:
+            continue
+
+        child_config = getattr(child_cls, "_qtpie_config", None)
+        if child_config is None:
+            continue
+
+        child_record_type = getattr(child_config, "record_type", None)
+        if child_record_type is None:
+            continue
+
+        # If types match, auto-bind record
+        if parent_record_type == child_record_type:
+            field.bind = "record"
+
+
 def _auto_new_bare_annotations(cls: type) -> None:
     """Convert bare type annotations to NewField instances.
 

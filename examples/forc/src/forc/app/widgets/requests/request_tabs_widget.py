@@ -94,9 +94,9 @@ class BodyTabContent(Widget[Request]):
 @widget
 class RequestTabsWidget(Widget[Request]):
     ### Tabs ###
-    _params_tab: ParamsTabContent = new(bind="record", layout=False)
-    _body_tab: BodyTabContent = new(bind="record", layout=False)
-    _auth_tab: AuthTabContent = new(bind="record", layout=False)
+    _params_tab: ParamsTabContent = new(layout=False)
+    _body_tab: BodyTabContent = new(layout=False)
+    _auth_tab: AuthTabContent = new(layout=False)
 
     ### Widgets ###
     _tabs: QTabWidget = new(tabs=[_params_tab, _body_tab, _auth_tab])

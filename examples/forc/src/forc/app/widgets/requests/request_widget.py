@@ -13,7 +13,7 @@ class RequestWidget(Widget[Request]):
     """Contains both request editor and response viewer for a single request."""
 
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
-    _editor: RequestEditorWidget = new(bind="record", splitter="_splitter")
+    _editor: RequestEditorWidget = new(splitter="_splitter")
     _response: ResponseViewerWidget = new(splitter="_splitter")
 
     def __setup__(self) -> None:

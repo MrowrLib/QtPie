@@ -150,12 +150,15 @@ class Widget[T = None](QWidget, QtPieComponentBase):
         _detect_required_bindings(cls)
 
         # Auto-new bare annotations (non-Variable types)
-        from .widget_base import _auto_new_bare_annotations
+        from .widget_base import _auto_new_bare_annotations, _auto_record_bind_children
 
         _auto_new_bare_annotations(cls)
 
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
+
+        # Auto-record-bind: for child Widget[T] fields where T matches parent's T
+        _auto_record_bind_children(cls)
 
         # Auto-create record descriptor if Widget[T] but no explicit record
         if cls._qtpie_config.record_type is not None and not has_explicit_record:
