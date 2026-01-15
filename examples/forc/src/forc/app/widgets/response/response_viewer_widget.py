@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTabWidget
+from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTableView
 
 from forc.domain.models import Response
 from qtpie import Widget, new, widget
@@ -22,8 +22,13 @@ class ResponseBodyTabContent(Widget[Response]):
 
 @widget(title="Headers")
 class ResponseHeadersTabContent(Widget[Response]):
-    # _headers_txt: QLabel = new(bind="{headers}")
-    _headers: list[QLabel] = new(bind="headers", format="{key}: {value}")
+    _headers_label: QLabel = new(bind="{headers}")  # binds to the headers successfully
+
+    _label_above: QLabel = new("ABOVE")
+    _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")  # THIS WORKS NOW
+    _label_below: QLabel = new("BELOW")
+
+    _headers_table: QTableView = new(bind="headers")  # DOES NOT WORK
 
 
 @widget(title="Cookies")
@@ -33,5 +38,9 @@ class ResponseCookiesTabContent(Widget[Response]):
 
 @widget
 class ResponseViewerWidget(Widget[Response]):
-    _status_bar: ResponseStatusBarWidget
-    _tabs: QTabWidget = new(tabs=[ResponseBodyTabContent, ResponseHeadersTabContent, ResponseCookiesTabContent])
+    # _lbl1: QLabel = new("OUTSIDE OF TABS")
+    _headers_outside_of_tab: ResponseHeadersTabContent
+    # _lbl2: QLabel = new("INSIDE OF TABS")
+    _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")  # nothing shows up!
+    # _status_bar: ResponseStatusBarWidget
+    # _tabs: QTabWidget = new(tabs=[ResponseBodyTabContent, ResponseHeadersTabContent, ResponseCookiesTabContent])

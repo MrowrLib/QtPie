@@ -65,13 +65,82 @@ class _RecordDescriptor[T]:
 
         return state._record  # type: ignore[return-value]
 
-    def __set__(self, obj: Widget[T], value: T | RecordVariable[T]) -> None:
+    def __set__(self, obj: Widget[T], value: T | RecordVariable[T] | Variable[T]) -> None:
         if not hasattr(obj, "_qtpie"):
             obj._qtpie = QtPieState(obj)
 
         if isinstance(value, RecordVariable):
             obj._qtpie._record = value
             obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
+        elif isinstance(value, Variable):
+            # Variable binding (from parent's Variable via bind=)
+            # The child shares the parent's Observable, so wrap it in a RecordVariable
+            # No need to subscribe - changes to the parent's Observable are automatically
+            # reflected because we share the same Observable instance.
+            from observant import ObservableProxy
+
+            # Get the parent's Observable (which may be Observable or ObservableProxy)
+            parent_obs = value.observable  # pyright: ignore[reportUnknownVariableType]
+
+            # If it's an ObservableProxy, wrap it in RecordVariable directly
+            # If it's a plain Observable, we need to get/wrap its value
+            if isinstance(parent_obs, ObservableProxy):
+                record_var: RecordVariable[T] = RecordVariable(parent_obs)  # type: ignore[arg-type]
+                obj._qtpie._record = record_var
+                obj._qtpie.register_variable("record", record_var)
+                # Apply model bindings now that record is set (the target may have data already)
+                target = object.__getattribute__(parent_obs, "_target")  # pyright: ignore[reportUnknownArgumentType]
+                if target is not None:
+                    config = getattr(type(obj), "_qtpie_config", None)
+                    if config is not None:
+                        _create_list_widget_fields(obj, config)
+                        _apply_model_bindings_for_record(obj, config)
+                else:
+                    # Target is None - subscribe to changes so we can apply bindings later
+                    def on_proxy_target_set(_: Any = None, child_obj: Widget[T] = obj, proxy: ObservableProxy[T] = parent_obs) -> None:  # type: ignore[assignment]
+                        target = object.__getattribute__(proxy, "_target")
+                        if target is not None:
+                            config = getattr(type(child_obj), "_qtpie_config", None)
+                            if config is not None:
+                                _create_list_widget_fields(child_obj, config)
+                                _apply_model_bindings_for_record(child_obj, config)
+                                _propagate_record_to_tab_children(child_obj, config)
+                                _propagate_model_bindings_to_children(child_obj, config)
+
+                    parent_obs.on_change(on_proxy_target_set)
+            else:
+                # Plain Observable[T | None] - wrap current value in ObservableProxy
+                current_value = value.value  # pyright: ignore[reportUnknownVariableType]
+                if current_value is not None:
+                    wrapper = ObservableProxy(current_value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+                    record_var = RecordVariable(wrapper)  # pyright: ignore[reportUnknownArgumentType]
+                    obj._qtpie._record = record_var
+                    obj._qtpie.register_variable("record", record_var)
+                    # Apply model bindings now that record is set with data
+                    config = getattr(type(obj), "_qtpie_config", None)
+                    if config is not None:
+                        _create_list_widget_fields(obj, config)
+                        _apply_model_bindings_for_record(obj, config)
+                else:
+                    # Value is None - create empty proxy, subscribe for future updates
+                    wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
+                    record_var = RecordVariable(wrapper)
+                    obj._qtpie._record = record_var
+                    obj._qtpie.register_variable("record", record_var)
+
+                    # Subscribe to parent for when value becomes non-None
+                    def on_parent_value_set(_: Any = None) -> None:
+                        new_val = value.value  # pyright: ignore[reportUnknownVariableType]
+                        if new_val is not None:
+                            obj._qtpie._record.observable.replace_target(new_val)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+                            # Recreate list widget fields and model bindings now that record has data
+                            config = getattr(type(obj), "_qtpie_config", None)
+                            if config is not None:
+                                _create_list_widget_fields(obj, config)
+                                _apply_model_bindings_for_record(obj, config)
+                                _propagate_record_to_tab_children(obj, config)
+
+                    parent_obs.on_change(on_parent_value_set)
         else:
             # Setting a value - reuse existing proxy to preserve subscriptions
             from observant import ObservableProxy
@@ -88,9 +157,20 @@ class _RecordDescriptor[T]:
                 obj._qtpie._record = record_var
                 obj._qtpie.register_variable("record", record_var)
 
+            # Create list widget fields now that record has data
+            config = getattr(type(obj), "_qtpie_config", None)
+            if config is not None:
+                _create_list_widget_fields(obj, config)
+                _apply_model_bindings_for_record(obj, config)
+
         # Subscribe record to widget-level aggregation if active
         obj._qtpie._subscribe_record_to_widget_dirty()
         obj._qtpie._subscribe_record_to_widget_valid()
+
+        # Propagate record to any child tab widgets
+        config = getattr(type(obj), "_qtpie_config", None)
+        if config is not None:
+            _propagate_record_to_tab_children(obj, config)
 
 
 class Widget[T = None](QWidget, QtPieComponentBase):
@@ -556,6 +636,9 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
         if config.record_default is not None and hasattr(self, "record"):
             self.record = config.record_default
 
+            # Propagate record to any child tab widgets that were created before record was set
+            _propagate_record_to_tab_children(self, config)
+
         # Call __setup__ hook if defined (required bindings are now available)
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -861,6 +944,64 @@ def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # 
             var.add_validator(validator_name, validator_fn)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _propagate_record_to_tab_children(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Propagate record to child tab widgets after record is set.
+
+    When a Widget[T] contains a QTabWidget with tabs=[], the tab content widgets
+    are created before the parent's record is set. This function re-propagates
+    the record to child tab widgets that have matching record types.
+    """
+    from qtpy.QtWidgets import QTabWidget
+
+    from .bindings.tab_binding import _propagate_record_to_child
+
+    for name in config.fields:
+        field_value = getattr(widget, name, None)
+        if isinstance(field_value, QTabWidget):
+            # Iterate over all tabs and propagate record
+            for i in range(field_value.count()):
+                child_widget = field_value.widget(i)
+                _propagate_record_to_child(widget, child_widget)
+
+
+def _propagate_model_bindings_to_children(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply model bindings to child Widget[T] instances after parent's record is set.
+
+    When a Widget[T] contains bare annotation Widget[T] children (same T), those children
+    share the parent's ObservableProxy. When the parent's record target changes, we need
+    to apply model bindings on children because they couldn't resolve bind sources at init time.
+    """
+    from qtpy.QtWidgets import QWidget
+
+    # Get parent's record type
+    parent_record_type = getattr(config, "record_type", None)
+    if parent_record_type is None:
+        return
+
+    for name, field in config.fields.items():
+        # Check if this is a Widget[T] field (same T as parent)
+        child_cls = field.field_type
+        if child_cls is None:
+            continue
+
+        child_config = getattr(child_cls, "_qtpie_config", None)
+        if child_config is None:
+            continue
+
+        child_record_type = getattr(child_config, "record_type", None)
+        if child_record_type is None or child_record_type != parent_record_type:
+            continue
+
+        # Get the child instance
+        child_widget = getattr(widget, name, None)
+        if child_widget is None or not isinstance(child_widget, QWidget):
+            continue
+
+        # Apply model bindings on the child (and recurse into its children)
+        _apply_model_bindings_for_record(child_widget, child_config)  # type: ignore[arg-type]
+        _propagate_model_bindings_to_children(child_widget, child_config)  # type: ignore[arg-type]
+
+
 def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Create WidgetRepeater/SetWidgetRepeater instances for list[QWidget]/set[QWidget] fields.
 
@@ -915,12 +1056,24 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             # Try to get raw attribute (handles plain list/dict fields)
             bind_path = field.bind.lstrip("_")
             raw_attr = None
+
+            # Helper to check if value is a real data value (not a descriptor/NewField)
+            def is_real_value(val: Any) -> bool:
+                from .new_field import NewField
+
+                return val is not None and not isinstance(val, NewField)
+
             if hasattr(widget, bind_path):
-                raw_attr = getattr(widget, bind_path)
-            elif hasattr(widget, f"_{bind_path}"):
-                raw_attr = getattr(widget, f"_{bind_path}")
+                val = getattr(widget, bind_path)
+                if is_real_value(val):
+                    raw_attr = val
+            if raw_attr is None and hasattr(widget, f"_{bind_path}"):
+                val = getattr(widget, f"_{bind_path}")
+                if is_real_value(val):
+                    raw_attr = val
 
             # If still not found and widget has a record, check the record
+            got_from_record = False
             if raw_attr is None and config.record_type is not None:
                 try:
                     record_proxy = widget.record
@@ -928,15 +1081,39 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     target = object.__getattribute__(record_proxy.observable, "_target")
                     if target is not None and hasattr(target, bind_path):
                         raw_attr = getattr(target, bind_path)
+                        got_from_record = True
                     elif target is None:
                         # Record not yet available (e.g., tab content before propagation)
                         # Mark as pending - will be processed when record is set
                         if not hasattr(widget, "_qtpie_pending_list_fields"):
                             widget._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
                         widget._qtpie_pending_list_fields.append(name)  # type: ignore[attr-defined]
+
+                        # Subscribe to record changes so we process pending fields when record is set
+                        def make_record_subscription(
+                            w: Widget[Any],
+                            field_name: str,
+                            cfg: _QtPieConfig,
+                            proxy: Any,
+                        ) -> None:
+                            def on_record_change() -> None:
+                                pending = getattr(w, "_qtpie_pending_list_fields", [])
+                                if field_name in pending:
+                                    _create_list_widget_fields(w, cfg)
+
+                            proxy.on_change(on_record_change)
+
+                        make_record_subscription(widget, name, config, record_proxy.observable)
                         continue
                 except (AttributeError, TypeError):
                     pass
+
+            # If we got the attr from record but it's None, defer until it has a value
+            if got_from_record and raw_attr is None:
+                if not hasattr(widget, "_qtpie_pending_list_fields"):
+                    widget._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
+                widget._qtpie_pending_list_fields.append(name)  # type: ignore[attr-defined]
+                continue
 
             if isinstance(raw_attr, list):
                 # Wrap plain list in ObservableList
@@ -959,6 +1136,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     parent_widget=widget,
                 )
                 setattr(widget, name, repeater)
+                _add_repeater_to_layout(widget, repeater, name, field)
                 continue
             elif isinstance(raw_attr, dict):
                 from .dict_widget_repeater import DictWidgetRepeater
@@ -982,6 +1160,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     parent_widget=widget,
                 )
                 setattr(widget, name, dict_repeater)
+                _add_repeater_to_layout(widget, dict_repeater, name, field)
                 continue
             else:
                 raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
@@ -1026,6 +1205,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 parent_widget=widget,
             )
             setattr(widget, name, dict_repeater)
+            _add_repeater_to_layout(widget, dict_repeater, name, field)
             continue
 
         # Handle ObservableList -> WidgetRepeater
@@ -1033,13 +1213,79 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if isinstance(wrapper, ObservableList):
             obs_list = wrapper  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(wrapper, Observable):
-            # Observable containing a list - create synced ObservableList
+            # Observable containing a list or dict - create synced repeater
             val: Any = wrapper.get()  # pyright: ignore[reportUnknownVariableType]
             if isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
+            elif isinstance(val, dict):
+                # Observable wrapping a dict - create DictWidgetRepeater
+                from .dict_widget_repeater import DictWidgetRepeater
+
+                obs_dict: ObservableDict[Any, Any] = ObservableDict(cast(dict[Any, Any], val))
+                bind_expr_dict: Any = field.list_format if field.list_format is not None else "{#key} = {#value}"
+                dict_repeater: DictWidgetRepeater[Any, Any] = DictWidgetRepeater(
+                    observable_dict=obs_dict,
+                    key_type=None,
+                    value_type=None,
+                    widget_type=field.list_widget_type,
+                    widget_args=field.args,
+                    widget_kwargs=field.kwargs,
+                    widget_props=field.widget_props,
+                    bind_expr=bind_expr_dict,
+                    sort=field.sort,
+                    object_name=computed_object_name,
+                    css_classes=field.css_classes,
+                    signal_connections=field.signal_connections,
+                    parent_widget=widget,
+                )
+                setattr(widget, name, dict_repeater)
+                _add_repeater_to_layout(widget, dict_repeater, name, field)
+
+                # Sync: when Observable changes, update ObservableDict
+                def make_dict_sync(obs: Observable[Any], target_dict: ObservableDict[Any, Any]) -> None:
+                    def on_source_change(new_val: Any) -> None:
+                        if isinstance(new_val, dict):
+                            target_dict.clear()
+                            target_dict.update(cast(dict[Any, Any], new_val))
+                        elif new_val is None:
+                            target_dict.clear()
+
+                    obs.on_change(on_source_change)
+
+                make_dict_sync(wrapper, obs_dict)  # pyright: ignore[reportUnknownArgumentType]
+                continue
             elif val is None:
-                # Initial value is None - start with empty list, populate when value arrives
-                obs_list = ObservableList[Any]()
+                # Initial value is None - defer until value becomes available
+                # Mark as pending - will be processed when value is set
+                if not hasattr(widget, "_qtpie_pending_list_fields"):
+                    widget._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
+                widget._qtpie_pending_list_fields.append(name)  # type: ignore[attr-defined]
+
+                # Subscribe to be notified when value changes
+                def make_deferred_setup(
+                    obs: Observable[Any],
+                    w: Widget[Any],
+                    field_name: str,
+                    cfg: _QtPieConfig,
+                ) -> None:
+                    def on_value_available(new_val: Any) -> None:
+                        if new_val is not None:
+                            # Value is now available, process the field
+                            pending = getattr(w, "_qtpie_pending_list_fields", [])
+                            if field_name in pending:
+                                _create_list_widget_fields(w, cfg)
+                                # Remove from pending
+                                if hasattr(w, "_qtpie_pending_list_fields"):
+                                    w._qtpie_pending_list_fields = [  # type: ignore[attr-defined]
+                                        f
+                                        for f in w._qtpie_pending_list_fields  # pyright: ignore[reportUnknownVariableType, reportAttributeAccessIssue]
+                                        if f != field_name  # type: ignore[attr-defined]
+                                    ]
+
+                    obs.on_change(on_value_available)
+
+                make_deferred_setup(wrapper, widget, name, config)  # pyright: ignore[reportUnknownArgumentType]
+                continue
             else:
                 raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected list or dict")  # pyright: ignore[reportUnknownArgumentType]
 
@@ -1149,6 +1395,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
 
         # Store the repeater on the widget
         setattr(widget, name, repeater)
+        _add_repeater_to_layout(widget, repeater, name, field)
 
     # Handle set[QWidget] fields
     for name, field in config.fields.items():
@@ -1207,6 +1454,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     parent_widget=widget,
                 )
                 setattr(widget, name, set_repeater)
+                _add_repeater_to_layout(widget, set_repeater, name, field)
                 continue
             else:
                 raise ValueError(f"Could not resolve bind path '{field.bind}' for field '{name}'")
@@ -1238,6 +1486,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 parent_widget=widget,
             )
             setattr(widget, name, set_repeater)
+            _add_repeater_to_layout(widget, set_repeater, name, field)
             continue
 
         # Handle Observable containing a set - create synced ObservableSet
@@ -1275,6 +1524,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     parent_widget=widget,
                 )
                 setattr(widget, name, set_repeater)
+                _add_repeater_to_layout(widget, set_repeater, name, field)
                 continue
             else:
                 raise TypeError(f"bind='{field.bind}' resolved to Observable[{type(val).__name__}], expected set")  # pyright: ignore[reportUnknownArgumentType]
@@ -1320,3 +1570,125 @@ def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> C
 def _detect_required_bindings(cls: type[Widget[Any]]) -> None:
     """Detect bare Variable[T] annotations as required bindings."""
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
+
+
+def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) -> None:
+    """Apply model bindings for QTableView/QListView/etc when record is set.
+
+    Called when the record is set after initial widget creation. Model bindings
+    may have failed during init because record was None - retry them now.
+    """
+    from qtpy.QtWidgets import QComboBox, QListView, QTableView, QTreeView
+
+    from .bindings.model_binding import apply_model_binding
+    from .bindings.path import resolve_binding_source
+
+    def is_table_view(w: QWidget) -> bool:
+        return isinstance(w, QTableView)
+
+    def is_tree_view(w: QWidget) -> bool:
+        return isinstance(w, QTreeView)
+
+    def resolve_or_create_variable(host: QWidget, name: str, item_type: type | None) -> Variable[Any]:
+        # Check if variable already exists on host
+        existing = getattr(host, name, None)
+        if isinstance(existing, Variable):
+            return existing  # pyright: ignore[reportReturnType, reportUnknownVariableType]
+        # Create new variable
+        from observant import Observable
+
+        var: Variable[Any] = Variable(Observable(None))  # pyright: ignore[reportArgumentType]
+        setattr(host, name, var)
+        return var
+
+    for name, field in config.fields.items():
+        if field.bind is None:
+            continue
+
+        widget_instance = getattr(widget, name, None)
+        if widget_instance is None:
+            continue
+
+        # Check if this is a model widget that needs binding
+        if not isinstance(widget_instance, (QComboBox, QListView, QTableView, QTreeView)):
+            continue
+
+        # Check if model is already set
+        existing_model = widget_instance.model() if hasattr(widget_instance, "model") else None
+        if existing_model is not None:
+            continue
+
+        # Try to resolve the binding source
+        source = resolve_binding_source(widget, field.bind)
+        if source is None:
+            continue
+
+        # Apply the model binding
+        apply_model_binding(
+            widget,
+            widget_instance,
+            source,
+            field.bind,
+            field,
+            is_table_view_fn=is_table_view,
+            is_tree_view_fn=is_tree_view,
+            resolve_or_create_variable_fn=resolve_or_create_variable,
+        )
+
+
+def _add_repeater_to_layout(widget: Widget[Any], repeater: QWidget, field_name: str, field: NewField) -> None:
+    """Add a repeater widget to the parent widget's layout.
+
+    Called when creating list/dict/set widget repeaters after the layout is already built.
+    Adds the repeater at the correct position based on field order in class annotations.
+    """
+    # App doesn't have a layout - it's a QApplication, not a QWidget
+    if not hasattr(widget, "layout") or not callable(getattr(widget, "layout", None)):
+        return
+
+    layout = widget.layout()
+    if layout is None:
+        return
+
+    # Find the correct insertion position based on field order
+    # Get the class annotations to determine where this field should appear
+    cls = type(widget)
+    annotations = list(getattr(cls, "__annotations__", {}).keys())
+
+    if field_name not in annotations:
+        # Field not in annotations, just append
+        layout.addWidget(repeater)
+        return
+
+    field_index = annotations.index(field_name)
+
+    # Find the widget that should come AFTER this field in the layout
+    # by looking at fields that come after this one in annotations
+    insert_before_widget: QWidget | None = None
+    for i in range(field_index + 1, len(annotations)):
+        next_field_name = annotations[i]
+        next_widget = getattr(widget, next_field_name, None)
+        if isinstance(next_widget, QWidget) and next_widget.parent() is widget:
+            # Found a widget that should come after our repeater
+            # Find its position in the layout
+            for j in range(layout.count()):
+                item = layout.itemAt(j)
+                if item is not None and item.widget() is next_widget:
+                    insert_before_widget = next_widget
+                    break
+            if insert_before_widget is not None:
+                break
+
+    if insert_before_widget is not None:
+        # Insert before the next widget
+        from qtpy.QtWidgets import QBoxLayout
+
+        if isinstance(layout, QBoxLayout):
+            for j in range(layout.count()):
+                item = layout.itemAt(j)
+                if item.widget() is insert_before_widget:
+                    layout.insertWidget(j, repeater)
+                    return
+
+    # Fallback: just add at end
+    layout.addWidget(repeater)

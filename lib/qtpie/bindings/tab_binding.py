@@ -2,13 +2,112 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from observant import ObservableDict, ObservableList
 from qtpy.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     pass
+
+
+def _recreate_list_widget_fields_for_record(
+    child: Any,  # Widget[T]
+    child_config: Any,  # _QtPieConfig
+    host_record: Any,  # RecordVariable
+) -> None:
+    """Recreate list widget fields that were bound to stale record data.
+
+    When a child Widget[T] is created as a tab, it may create list widget fields
+    (list[QLabel] = new(bind="headers")) using its own default record, which may
+    have empty values. After the parent's record is propagated, we need to recreate
+    these fields with the actual data.
+    """
+    from observant import ObservableDict, ObservableList
+
+    from qtpie.dict_widget_repeater import DictWidgetRepeater
+    from qtpie.widget_repeater import WidgetRepeater
+
+    # Get the actual record target
+    target = object.__getattribute__(host_record.observable, "_target")
+    if target is None:
+        return
+
+    for name, field in child_config.fields.items():
+        if not field.is_list_widget:
+            continue
+
+        # Check if this field is bound to a record property
+        if field.bind is None:
+            continue
+
+        bind_path = field.bind.lstrip("_")
+
+        # Check if the bind path exists on the record
+        if not hasattr(target, bind_path):
+            continue
+
+        # Get the existing field (may be NewField or existing repeater)
+        existing = getattr(child, name, None)
+        if existing is None:
+            continue
+
+        # Get the new data from the record
+        new_data = getattr(target, bind_path)
+        if new_data is None:
+            continue
+
+        # Get computed object name
+        if field.object_name is not None:
+            computed_object_name = field.object_name
+        elif child_config.object_name is not None:
+            computed_object_name = child_config.object_name
+        else:
+            computed_object_name = name[1:] if name.startswith("_") else name
+
+        # Recreate the repeater with new data
+        if isinstance(new_data, dict):
+            obs_dict: ObservableDict[Any, Any] = ObservableDict(cast(dict[Any, Any], new_data))
+            setattr(child, field.bind, obs_dict)
+            bind_expr = field.list_format if field.list_format is not None else "{#key} = {#value}"
+
+            dict_repeater: DictWidgetRepeater[Any, Any] = DictWidgetRepeater(
+                observable_dict=obs_dict,
+                key_type=None,
+                value_type=None,
+                widget_type=field.list_widget_type,
+                widget_args=field.args,
+                widget_kwargs=field.kwargs,
+                widget_props=field.widget_props,
+                bind_expr=bind_expr,
+                sort=field.sort,
+                object_name=computed_object_name,
+                css_classes=field.css_classes,
+                signal_connections=field.signal_connections,
+                parent_widget=child,
+            )
+            setattr(child, name, dict_repeater)
+
+        elif isinstance(new_data, list):
+            obs_list: ObservableList[Any] = ObservableList(cast(list[Any], new_data))
+            setattr(child, field.bind, obs_list)
+            bind_expr = field.list_format if field.list_format is not None else "{#self}"
+
+            list_repeater: WidgetRepeater[Any] = WidgetRepeater(
+                observable_list=obs_list,
+                item_type=None,
+                widget_type=field.list_widget_type,
+                widget_args=field.args,
+                widget_kwargs=field.kwargs,
+                widget_props=field.widget_props,
+                bind_expr=bind_expr,
+                sort=field.sort,
+                object_name=computed_object_name,
+                css_classes=field.css_classes,
+                signal_connections=field.signal_connections,
+                parent_widget=child,
+            )
+            setattr(child, name, list_repeater)
 
 
 def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
@@ -49,6 +148,11 @@ def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
         # Re-apply bindings on child now that record is set
         apply_auto_bindings(child, child_config)  # type: ignore[arg-type]
 
+        # Recreate list widget fields that may have been created with stale record data
+        # When child was first created, it may have used a default record with empty values.
+        # Now that we've propagated the actual record, we need to recreate the list widgets.
+        _recreate_list_widget_fields_for_record(child, child_config, host_record)  # type: ignore[arg-type]
+
         # Process any pending list widget fields that were deferred during __init__
         pending_fields: list[str] | None = getattr(child, "_qtpie_pending_list_fields", None)
         if pending_fields:
@@ -57,6 +161,11 @@ def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
             _create_list_widget_fields(child, child_config)  # type: ignore[arg-type]
             # Clear pending list
             child._qtpie_pending_list_fields = []  # type: ignore[attr-defined]
+
+        # Apply model bindings (QTableView, QListView, etc.) now that record is set
+        from qtpie.widget import _apply_model_bindings_for_record  # type: ignore[reportPrivateUsage]
+
+        _apply_model_bindings_for_record(child, child_config)  # type: ignore[arg-type]
 
 
 def _set_tabs_from_dict(

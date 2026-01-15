@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from observant import Observable, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 logger = logging.getLogger("qtpie.bindings")
@@ -219,7 +219,10 @@ def apply_model_binding(
     if "." in bind_path_normalized:
         root_name = bind_path_normalized.split(".")[0]
         # Try to find root variable on host or in parent hierarchy
+        # Check both root_name and _root_name (underscore prefix variant)
         root_attr: Any = getattr(host, root_name, None)
+        if root_attr is None:
+            root_attr = getattr(host, f"_{root_name}", None)
         if root_attr is None:
             # Walk up parent hierarchy
             from qtpy.QtWidgets import QApplication
@@ -242,6 +245,9 @@ def apply_model_binding(
             root_variable = cast(VarType[Any], root_attr)
 
     # Extract ObservableList from Variable or use directly
+    # Also handle dict -> list[KeyValuePair] conversion for QTableView
+    is_dict_binding = False
+
     if isinstance(source, VarType):
         wrapper = source.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if isinstance(wrapper, ObservableList):
@@ -252,15 +258,26 @@ def apply_model_binding(
             val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()  # pyright: ignore[reportUnknownVariableType]
             if isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
+            elif isinstance(val, dict):
+                # Convert dict to list of (key, value) tuples for table display
+                obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
+                is_dict_binding = True
             elif val is None:
                 # Initially None - create empty list, will populate later
                 obs_list = ObservableList[Any]()
     elif isinstance(source, ObservableList):
         obs_list = source  # pyright: ignore[reportUnknownVariableType]
+    elif isinstance(source, ObservableDict):
+        # ObservableDict directly - convert to list of tuples
+        obs_list = ObservableList(list(cast(ObservableDict[Any, Any], source).items()))
+        is_dict_binding = True
     elif isinstance(source, Observable):
         val = source.get()  # pyright: ignore[reportUnknownVariableType]
         if isinstance(val, list):
             obs_list = ObservableList(cast(list[Any], val))
+        elif isinstance(val, dict):
+            obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
+            is_dict_binding = True
         elif val is None:
             obs_list = ObservableList[Any]()
 
@@ -310,11 +327,20 @@ def apply_model_binding(
         # Create ReactiveTableModel for QTableView
         from qtpie.models import ReactiveTableModel
 
+        # For dict bindings, use tuple index columns if not specified
+        columns = field_info.table_columns
+        headers = field_info.table_headers
+        if is_dict_binding and columns is None:
+            # Dict items are (key, value) tuples - use index access
+            columns = [0, 1]
+            if headers is None:
+                headers = cast(dict[str | int, str], {0: "Key", 1: "Value"})
+
         model = ReactiveTableModel(
             obs_list,
             parent=widget_instance,
-            columns=field_info.table_columns,
-            headers=field_info.table_headers,
+            columns=columns,
+            headers=headers,
             checkable=field_info.table_checkable,
             checkable_text=field_info.table_checkable_text,
         )
@@ -403,8 +429,8 @@ def apply_model_binding(
                         break
                     nested_val = getattr(nested_val, part, None)
 
-                # Only re-sync if the nested list object itself changed (identity change)
-                # Skip if it's the same list just being mutated - this prevents expensive
+                # Only re-sync if the nested list/dict object itself changed (identity change)
+                # Skip if it's the same collection just being mutated - this prevents expensive
                 # clear()+extend() on every append/remove to the nested list
                 if isinstance(nested_val, list):
                     nested_id = id(cast(list[Any], nested_val))
@@ -435,6 +461,25 @@ def apply_model_binding(
 
                             # Defer expandAll to after model updates
                             QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
+                elif isinstance(nested_val, dict):
+                    # Handle dict -> list[(key, value)] conversion for QTableView
+                    nested_id = id(cast(dict[Any, Any], nested_val))
+                    if nested_id != last_nested_list_id[0]:
+                        logger.debug(
+                            "on_root_change: dict identity changed for path=%s (old_id=%d, new_id=%d), syncing %d items",
+                            path,
+                            last_nested_list_id[0],
+                            nested_id,
+                            len(cast(dict[Any, Any], nested_val)),
+                        )
+                        last_nested_list_id[0] = nested_id
+                        syncing = True
+                        try:
+                            target.clear()
+                            # Convert dict to list of (key, value) tuples
+                            target.extend(list(cast(dict[Any, Any], nested_val).items()))
+                        finally:
+                            syncing = False
                 elif nested_val is None and last_nested_list_id[0] != 0:
                     syncing = True
                     try:

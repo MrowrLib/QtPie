@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Sequence
 from dataclasses import fields, is_dataclass
-from typing import Any, override
+from typing import Any, cast, override
 
 from observant import ObservableList
 from qtpy.QtCore import QAbstractTableModel, QModelIndex, QObject, QPersistentModelIndex, Qt
@@ -40,21 +40,22 @@ class ReactiveTableModel[T](QAbstractTableModel):
         observable_list: ObservableList[T],
         parent: QObject | None = None,
         *,
-        columns: Sequence[str] | None = None,
-        headers: dict[str, str] | None = None,
-        format_fns: dict[str, Callable[[Any], str]] | None = None,
+        columns: Sequence[str | int] | None = None,
+        headers: dict[str | int, str] | None = None,
+        format_fns: dict[str | int, Callable[[Any], str]] | None = None,
         checkable: list[str] | bool | None = None,
         checkable_text: str | dict[str, str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
-        self._headers = headers or {}
+        self._headers: dict[str | int, str] = headers or {}
         self._format_fns = format_fns or {}
         self._checkable = checkable  # None=auto-detect, list=explicit, False=none
         self._checkable_text = checkable_text  # None=no text, str=all columns, dict=per-column
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
+        self._columns: list[str | int]
         if columns is not None:
             self._columns = list(columns)
         else:
@@ -69,13 +70,16 @@ class ReactiveTableModel[T](QAbstractTableModel):
         observable_list.on_replace(self._on_replace)
         observable_list.on_clear(self._on_clear)
 
-    def _auto_detect_columns(self) -> list[str]:
+    def _auto_detect_columns(self) -> list[str | int]:
         """Auto-detect columns from dataclass type or first item."""
         # Try to get from first item
         if len(self._obs_list) > 0:
             item = self._obs_list[0]
             if is_dataclass(item) and not isinstance(item, type):
                 return [f.name for f in fields(item)]
+            # Handle tuples/sequences (e.g., dict items converted to (key, value) tuples)
+            if isinstance(item, tuple):
+                return list(range(len(cast(tuple[Any, ...], item))))  # [0, 1] for 2-tuple, etc.
             # For regular objects, use public attributes that aren't methods
             return [attr for attr in dir(item) if not attr.startswith("_") and not callable(getattr(item, attr, None))]
         return []
@@ -153,13 +157,23 @@ class ReactiveTableModel[T](QAbstractTableModel):
                 return self._format_checkable_text(text_format, item, row, column_name)
 
             # Get the attribute value
-            value = getattr(item, column_name, None)
+            # Handle both string attributes (getattr) and integer indices (item[i])
+            value: Any
+            if isinstance(column_name, int):
+                # Integer column = index access (for tuples/lists)
+                try:
+                    value = item[column_name]  # type: ignore[index]
+                except (IndexError, KeyError, TypeError):
+                    value = None
+            else:
+                # String column = attribute access
+                value = getattr(item, column_name, None)
 
             # Apply format function if available
             if column_name in self._format_fns:
                 return self._format_fns[column_name](value)
 
-            return str(value) if value is not None else ""
+            return str(cast(Any, value)) if value is not None else ""
 
         elif role == Qt.ItemDataRole.CheckStateRole:
             # Return check state for checkable columns
@@ -237,8 +251,14 @@ class ReactiveTableModel[T](QAbstractTableModel):
         if orientation == Qt.Orientation.Horizontal:
             if 0 <= section < len(self._columns):
                 column_name = self._columns[section]
-                # Use custom header if provided, otherwise capitalize the field name
-                return self._headers.get(column_name, column_name.replace("_", " ").title())
+                # Use custom header if provided
+                if column_name in self._headers:
+                    return self._headers.get(column_name)
+                # Default: capitalize the field name (only for string columns)
+                if isinstance(column_name, str):
+                    return column_name.replace("_", " ").title()
+                # Integer columns with no header - use "Column N"
+                return f"Column {column_name}"
 
         elif orientation == Qt.Orientation.Vertical:
             return str(section + 1)
@@ -253,6 +273,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
             if new_columns:
                 self.beginResetModel()
                 self._columns = new_columns
+                # Set default headers for tuple columns (from dict bindings)
+                if isinstance(item, tuple) and len(cast(tuple[Any, ...], item)) == 2 and not self._headers:
+                    self._headers = {0: "Key", 1: "Value"}
                 self.endResetModel()
                 return  # Reset already handles the insert
         self.beginInsertRows(QModelIndex(), index, index)
@@ -290,6 +313,6 @@ class ReactiveTableModel[T](QAbstractTableModel):
             return -1
 
     @property
-    def columns(self) -> list[str]:
+    def columns(self) -> list[str | int]:
         """Get the list of column names."""
         return self._columns.copy()

@@ -118,8 +118,20 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                     # Pass variable bindings via special kwarg so child can apply them
                     # BEFORE __setup__ runs (for deterministic timing)
-                    if field.variable_bindings:
-                        resolved_kwargs["_qtpie_bindings"] = (self, field.variable_bindings)
+                    # Build bindings dict, including bind -> record for Widget[T] children
+                    bindings_dict = dict(field.variable_bindings)
+
+                    # If this is a Widget[T] child with bind="xxx", convert to record="xxx"
+                    # This handles both explicit bind="xxx" and auto-record-bind (bind="record")
+                    if field.bind is not None and field.bind is not False:
+                        child_config = getattr(field.field_type, "_qtpie_config", None)
+                        if child_config is not None:
+                            child_record_type = getattr(child_config, "record_type", None)
+                            if child_record_type is not None and "record" not in bindings_dict:
+                                bindings_dict["record"] = field.bind
+
+                    if bindings_dict:
+                        resolved_kwargs["_qtpie_bindings"] = (self, bindings_dict)
 
                     instance = field.field_type(*resolved_args, **resolved_kwargs)
 

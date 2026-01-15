@@ -540,3 +540,191 @@ class TestRepeaterWidgetKwargs:
 
         instance._items.append("new")
         assert_that(repeater.widget_at(0).maxLength()).is_equal_to(10)
+
+
+# =============================================================================
+# list[QWidget] Bound to Record Property (record set later)
+# =============================================================================
+
+
+@dataclass
+class Response:
+    """HTTP response for testing record binding."""
+
+    status_code: int
+    headers: dict[str, str]
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListWidgetRecordBinding:
+    """list[QWidget] = new(bind="record_property") when record is set later."""
+
+    def test_list_qlabel_bound_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """list[QLabel] bound to record's dict property updates when record is set."""
+
+        @decorator
+        class TestClass(base_class[Response]):
+            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Record not set yet - should have no widgets (or NewField)
+        # Now set the record
+        instance.record = Response(200, {"Content-Type": "application/json", "Accept": "text/html"})
+
+        # After setting record, list widget should have items
+        assert_that(instance._headers.widget_count()).is_equal_to(2)
+
+    def test_list_qlabel_in_child_widget_via_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """list[QLabel] in child Widget[T] works when parent binds via Variable."""
+        from qtpie import Widget, widget
+
+        # Child widget with list[QLabel] bound to record's dict property
+        @widget
+        class ChildWidget(Widget[Response]):
+            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
+
+        # Parent widget with Variable[Response | None] that binds to child's record
+        @widget
+        class ParentWidget(Widget):
+            response: Variable[Response | None] = new(None)
+            _child: ChildWidget = new(bind="response")
+
+        parent = create_and_track(qt, ParentWidget, Widget)
+
+        # Now set the response Variable
+        parent.response = Response(200, {"Content-Type": "application/json", "Accept": "text/html"})
+
+        # After setting the Variable's value, the list widget should be created with items
+        assert_that(parent._child._headers.widget_count()).is_equal_to(2)
+
+    def test_list_qlabel_in_grandchild_widget_via_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """list[QLabel] in grandchild Widget[T] works when grandparent binds via Variable.
+
+        This tests the exact scenario from the Forc sample app:
+        - Grandparent has: response: Variable[Response | None] = new(None)
+        - Parent is: ResponseViewerWidget(Widget[Response]) with bare child annotation
+        - Child is: ResponseHeadersTabContent(Widget[Response]) with list[QLabel]
+        """
+        from qtpie import Widget, widget
+
+        # Grandchild widget with list[QLabel] bound to record's dict property
+        @widget
+        class GrandchildWidget(Widget[Response]):
+            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
+
+        # Child widget (matches ResponseViewerWidget) with:
+        # 1. A bare annotation to grandchild (auto-record-bind to child.record)
+        # 2. Its own list[QLabel] bound to record
+        @widget
+        class ChildWidget(Widget[Response]):
+            _grandchild: GrandchildWidget  # Bare annotation - auto-binds to record
+            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
+
+        # Grandparent widget with Variable[Response | None] that binds to child's record
+        @widget
+        class GrandparentWidget(Widget):
+            response: Variable[Response | None] = new(None)
+            _child: ChildWidget = new(bind="response")
+
+        grandparent = create_and_track(qt, GrandparentWidget, Widget)
+
+        # Now set the response Variable
+        grandparent.response = Response(200, {"Content-Type": "application/json", "Accept": "text/html"})
+
+        # After setting the Variable's value, all levels should have list widgets with items
+        # Level 1: Child's own list widget
+        assert_that(grandparent._child._headers.widget_count()).is_equal_to(2)
+        # Level 2: Grandchild's list widget
+        assert_that(grandparent._child._grandchild._headers.widget_count()).is_equal_to(2)
+
+    def test_list_qlabel_forc_exact_structure(self, base_class, decorator, qt: QtDriver) -> None:
+        """Exact match of Forc app structure where list[QLabel] should work."""
+        from qtpy.QtCore import Qt
+        from qtpy.QtWidgets import QSplitter
+
+        from qtpie import Widget, widget
+
+        # ResponseHeadersTabContent equivalent
+        @widget(title="Headers")
+        class ResponseHeadersTabContent(Widget[Response]):
+            _headers_label: QLabel = new(bind="{headers}")  # Format string binding works
+            _label_above: QLabel = new("ABOVE")
+            _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")
+            _label_below: QLabel = new("BELOW")
+
+        # ResponseViewerWidget equivalent - Widget[Response] with nested Widget[Response]
+        @widget
+        class ResponseViewerWidget(Widget[Response]):
+            _headers_outside_of_tab: ResponseHeadersTabContent  # Bare annotation
+            _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")
+
+        # RequestWidget equivalent - Widget with Variable[Response | None] and splitter
+        @widget
+        class RequestWidget(Widget):
+            response: Variable[Response | None] = new(None)
+            _splitter: QSplitter = new(Qt.Orientation.Horizontal)
+            _response: ResponseViewerWidget = new(bind="response", splitter="_splitter")
+
+        request_widget = create_and_track(qt, RequestWidget, Widget)
+
+        # Set response
+        request_widget.response = Response(200, {"Content-Type": "application/json", "Accept": "text/html"})
+
+        # Verify all levels work
+        # Direct child's list widget
+        assert_that(request_widget._response._headers_xxx.widget_count()).is_equal_to(2)
+        # Nested child's list widget
+        assert_that(request_widget._response._headers_outside_of_tab._headers_xxx.widget_count()).is_equal_to(2)
+
+    def test_list_qlabel_forc_with_parent_record_type(self, base_class, decorator, qt: QtDriver) -> None:
+        """Exact match of Forc app where parent is Widget[Request] not Widget."""
+        from dataclasses import dataclass
+
+        from qtpy.QtCore import Qt
+        from qtpy.QtWidgets import QSplitter
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Request:
+            method: str = "GET"
+            url: str = ""
+
+        # ResponseHeadersTabContent equivalent - EXACT COPY from user's code
+        @widget(title="Headers")
+        class ResponseHeadersTabContent(Widget[Response]):
+            _headers_label: QLabel = new(bind="{headers}")  # binds to the headers successfully
+            _label_above: QLabel = new("ABOVE")
+            _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")  # nothing shows up!
+            _label_below: QLabel = new("BELOW")
+
+        # ResponseViewerWidget equivalent - EXACT COPY from user's code
+        @widget
+        class ResponseViewerWidget(Widget[Response]):
+            _headers_outside_of_tab: ResponseHeadersTabContent  # Bare annotation
+            _headers_xxx: list[QLabel] = new(bind="headers", format="HEADER: {#key}: {#value}")  # nothing shows up!
+
+        # RequestWidget equivalent - Widget[Request] with Variable[Response | None]
+        @widget
+        class RequestWidget(Widget[Request]):
+            response: Variable[Response | None] = new(None)
+            _splitter: QSplitter = new(Qt.Orientation.Horizontal)
+            _response: ResponseViewerWidget = new(bind="response", splitter="_splitter")
+
+        request_widget = create_and_track(qt, RequestWidget, Widget)
+
+        # Before setting response - should be NewField still
+        print(f"Before set: _response._headers_xxx = {type(request_widget._response._headers_xxx).__name__}")
+        print(f"Before set: _response._headers_outside_of_tab._headers_xxx = {type(request_widget._response._headers_outside_of_tab._headers_xxx).__name__}")
+
+        # Set response
+        request_widget.response = Response(200, {"Content-Type": "application/json", "Accept": "text/html"})
+
+        # After setting response - should be DictWidgetRepeater
+        print(f"After set: _response._headers_xxx = {type(request_widget._response._headers_xxx).__name__}")
+        print(f"After set: _response._headers_outside_of_tab._headers_xxx = {type(request_widget._response._headers_outside_of_tab._headers_xxx).__name__}")
+
+        # Verify all levels work
+        assert_that(request_widget._response._headers_xxx.widget_count()).is_equal_to(2)
+        assert_that(request_widget._response._headers_outside_of_tab._headers_xxx.widget_count()).is_equal_to(2)

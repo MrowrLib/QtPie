@@ -1105,9 +1105,9 @@ class NewField:
         for key in to_remove:
             del self.kwargs[key]
 
-        # Note: Auto-record-bind is handled in _auto_record_bind_children() which runs
-        # in __init_subclass__ AFTER the config is set up. We can't do it here because
-        # __set_name__ runs during class body execution, before _qtpie_config exists.
+        # Note: Auto-record-bind (bind="record" -> variable_bindings["record"]="record") is
+        # handled at instantiation time in new_fields.py because _auto_record_bind_children()
+        # runs in __init_subclass__ AFTER __set_name__, so bind= isn't set yet during this method.
 
     def _is_qtpie_widget(self) -> bool:
         """Check if the field type is a QtPie Widget subclass (has _qtpie_config)."""

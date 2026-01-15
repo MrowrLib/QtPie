@@ -885,3 +885,144 @@ class TestTableViewWidgetColumnHeaders:
 
         # Column 1 should be "Do Stuff" (from headers dict)
         assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Do Stuff")
+
+
+# Test dataclass for dict property binding tests
+@dataclass
+class Response:
+    """Test dataclass with dict property for header binding tests."""
+
+    status_code: int
+    headers: dict[str, str]
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewRecordDictBinding:
+    """QTableView with bind= to record.dict_property (dict on Widget[T])."""
+
+    def test_table_binds_to_record_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind='headers' shows dict from Widget[Response].record."""
+
+        @decorator(record=Response(200, {"Content-Type": "application/json", "Cache-Control": "no-cache"}))
+        class TestClass(base_class[Response]):  # type: ignore[misc]
+            _table: QTableView = new(bind="headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have a model (this was the bug - model was None before fix)
+        assert_that(model).is_not_none()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+        # Should have 2 columns (Key, Value)
+        assert_that(model.columnCount()).is_equal_to(2)
+
+        # Check headers
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+        # Check data - dict items as tuples (key, value)
+        # Note: dict order in Python 3.7+ is insertion order
+        row0_key = model.data(model.index(0, 0))
+        row0_val = model.data(model.index(0, 1))
+        row1_key = model.data(model.index(1, 0))
+        row1_val = model.data(model.index(1, 1))
+
+        # Check that both entries are present (order may vary in dict)
+        entries = {(row0_key, row0_val), (row1_key, row1_val)}
+        assert_that(entries).contains(("Content-Type", "application/json"))
+        assert_that(entries).contains(("Cache-Control", "no-cache"))
+
+    def test_table_binds_to_record_dict_via_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Response] with QTableView bind='headers' works when parent sets response later.
+
+        This is the REAL scenario:
+        1. Parent has response: Variable[Response | None] = new(None)
+        2. Child Widget[Response] is created with _table: QTableView = new(bind="headers")
+        3. Parent sets response = Response(...) LATER
+        4. Child's QTableView should get its model at that point
+        """
+        from qtpie import Widget, widget
+
+        @widget
+        class ResponseHeadersViewer(Widget[Response]):
+            """Child widget that displays headers in a table."""
+
+            _table: QTableView = new(bind="headers")
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _viewer: ResponseHeadersViewer = new(bind="_response")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Get the child widget's table
+        viewer = instance._viewer
+        assert_that(viewer).is_not_none()
+
+        # Initially response is None, so table may not have model yet
+        # (this is OK - model gets set when response is set)
+
+        # Now set the response - THIS should trigger model binding
+        instance._response.value = Response(200, {"X-Custom": "test-value"})
+
+        model = viewer._table.model()
+
+        # Model should be set NOW (after response was set)
+        assert_that(model).is_not_none()
+
+        # Should have 1 row (one dict entry)
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Check data
+        assert_that(model.data(model.index(0, 0))).is_equal_to("X-Custom")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("test-value")
+
+    def test_table_binds_to_optional_chaining_path(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind='response?.headers' where response is Variable[Response | None].
+
+        This is a DIFFERENT scenario from bind="headers" inside Widget[Response]:
+        - Parent has response: Variable[Response | None] = new(None)
+        - QTableView uses bind="response?.headers" (optional chaining)
+        - When response is set to Response(...), QTableView should display headers
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _table: QTableView = new(bind="_response?.headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially response is None, table may have no rows
+        model = instance._table.model()
+        # Model might exist but with 0 rows initially
+        if model is not None:
+            assert_that(model.rowCount()).is_equal_to(0)
+
+        # Now set the response - THIS should trigger model update
+        instance._response.value = Response(200, {"X-Header": "header-value", "Content-Type": "text/plain"})
+
+        model = instance._table.model()
+
+        # Model should be set NOW (after response was set)
+        assert_that(model).is_not_none()
+
+        # Should have 2 rows (two dict entries)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Check headers
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+        # Check data - get all entries and verify
+        row0_key = model.data(model.index(0, 0))
+        row0_val = model.data(model.index(0, 1))
+        row1_key = model.data(model.index(1, 0))
+        row1_val = model.data(model.index(1, 1))
+
+        entries = {(row0_key, row0_val), (row1_key, row1_val)}
+        assert_that(entries).contains(("X-Header", "header-value"))
+        assert_that(entries).contains(("Content-Type", "text/plain"))

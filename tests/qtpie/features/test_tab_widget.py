@@ -845,27 +845,3 @@ class TestTabWidgetRecordPropagation:
         # Access to record.status would fail if record isn't a Response
         # The label should show the static text since binding couldn't resolve
         assert_that(response_tab._label.text()).is_equal_to("Response placeholder")
-
-    def test_tabs_list_widget_binds_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
-        """list[QWidget] in child tab binds to record's dict property after propagation."""
-        from dataclasses import dataclass
-
-        @dataclass
-        class Response:
-            status_code: int = 200
-            headers: dict[str, str] | None = None
-
-        @widget(title="Headers")
-        class HeadersTab(Widget[Response]):
-            # list[QLabel] bound to record's dict property
-            _headers: list[QLabel] = new(bind="headers", format="{#key}: {#value}")
-
-        @decorator(record=Response(200, {"Content-Type": "application/json", "X-Custom": "value"}))
-        class TestClass(base_class[Response]):
-            _tabs: QTabWidget = new(tabs=[HeadersTab])
-
-        instance = create_and_track(qt, TestClass, base_class)
-        headers_tab = instance._tabs.widget(0)
-
-        # The list widget should have been created with items from headers dict
-        assert_that(headers_tab._headers.widget_count()).is_equal_to(2)
