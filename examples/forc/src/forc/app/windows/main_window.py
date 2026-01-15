@@ -1,4 +1,4 @@
-from qtpy.QtCore import QTimer, Signal
+from qtpy.QtCore import Signal
 
 from forc.app.menus import FileMenu, ViewMenu
 from forc.app.widgets.layout import SidebarWidget
@@ -41,8 +41,26 @@ class ForcWindow(Window):
     ### Methods ###
     def on_collection_item_clicked(self, item: Request | Collection) -> None:
         if isinstance(item, Request):
+            # If it's already added, then simply switch to that tab:
+            for index, editor in enumerate(self._editors.value):
+                if editor is item:
+                    self._selected_request_index.value = index
+                    return
             self._editors.append(item)
-            QTimer.singleShot(0, self._select_last_editor)
+            self._selected_request_index.value = len(self._editors) - 1
 
     def _select_last_editor(self) -> None:
-        self._selected_request_index.value = len(self._editors) - 1
+        ...
+        # self._selected_request_index.value = len(self._editors) - 1
+        # repeater = self._editors.widget
+        # print(f"Repeater: {repeater}")
+        # print(f"Items: {len(repeater._items) if repeater else 'N/A'}")
+        # print(f"Obs: {repeater._selected_index_obs if repeater else 'N/A'}")
+        # print(
+        #     f"Callbacks: {
+        #         len(repeater._selected_index_obs._callbacks) if repeater and repeater._selected_index_obs else 'N/A'
+        #     }"
+        # )
+        # print(f"Setting to: {len(self._editors) - 1}")
+        # self._selected_request_index.value = len(self._editors) - 1
+        # print(f"Value after set: {self._selected_request_index.value}")

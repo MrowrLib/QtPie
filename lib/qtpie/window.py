@@ -644,6 +644,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Create dock widget fields (Dock[T] = new(dock="left", ...))
         _create_dock_fields(self, config)
 
+        # Pre-create bare Variables for selection bindings on Variable dock fields
+        # Must happen BEFORE _create_variable_dock_fields so the observable exists
+        from .bindings.apply import pre_create_selection_variables
+
+        pre_create_selection_variables(self, config)
+
         # Create Variable dock fields (Variable[T, Dock[W]] = new(..., dock="right", ...))
         _create_variable_dock_fields(self, config)
 
@@ -1888,10 +1894,13 @@ def _create_variable_list_dock_field(
     title_expr = dock_info.get("dock_title") or "{#self}"
 
     # Resolve selection bindings
+    # For list dock repeaters, groupSelectedIndex and selectedIndex work the same way
+    # (both bind to the tab bar index, which corresponds to list index)
     selected_index_obs = None
     selected_item_obs = None
-    if dock_info.get("selected_index"):
-        selected_index_obs = _get_variable_observable(window, dock_info["selected_index"])
+    index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
+    if index_binding:
+        selected_index_obs = _get_variable_observable(window, index_binding)
     if dock_info.get("selected_item"):
         selected_item_obs = _get_variable_observable(window, dock_info["selected_item"])
 

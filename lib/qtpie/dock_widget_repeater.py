@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QWidget
 
 from .dock import Dock
@@ -230,12 +230,18 @@ class DockWidgetRepeater[T, W: QWidget]:
         for i in range(index + 1, len(self._items)):
             self._items[i][2][0] = i
 
-        # Raise the new tab to front
-        dock.raise_tab()
+        # Raise the new tab to front - defer to allow Qt to process tabification
+        QTimer.singleShot(0, dock.raise_tab)
 
     def _on_insert(self, index: int, item: T) -> None:
         """Handle item insertion."""
+        count_before = len(self._items)
         self._create_and_add_dock(index, item)
+        # Set up selection bindings when the second dock is added -
+        # that's when Qt creates the tab bar (tabification requires 2+ docks).
+        # Note: Use `is not None` because Observable(None) is falsy
+        if count_before == 1 and (self._selected_index_obs is not None or self._selected_item_obs is not None):
+            self._setup_selection_bindings()
 
     def _on_remove(self, index: int, item: T) -> None:
         """Handle item removal."""
@@ -323,7 +329,8 @@ class DockWidgetRepeater[T, W: QWidget]:
 
     def _setup_selection_bindings(self) -> None:
         """Set up two-way bindings for selectedIndex and selectedItem."""
-        if not self._selected_index_obs and not self._selected_item_obs:
+        # Note: Use `is None` because Observable(None) is falsy
+        if self._selected_index_obs is None and self._selected_item_obs is None:
             return
 
         if not self._items:
@@ -365,9 +372,10 @@ class DockWidgetRepeater[T, W: QWidget]:
                     tab_title = tab_bar.tabText(index)  # pyright: ignore[reportPossiblyUnbound]
                     for i, (dock, _, _) in enumerate(self._items):
                         if dock.dock_widget.windowTitle() == tab_title:
-                            if self._selected_index_obs:
+                            # Note: Use `is not None` because Observable(None) is falsy
+                            if self._selected_index_obs is not None:
                                 self._selected_index_obs.set(i)
-                            if self._selected_item_obs:
+                            if self._selected_item_obs is not None:
                                 self._selected_item_obs.set(self._obs_list[i])
                             break
                 finally:
@@ -376,7 +384,8 @@ class DockWidgetRepeater[T, W: QWidget]:
             tab_bar.currentChanged.connect(on_tab_changed)
 
             # Observable -> Tab bar (when code changes the selection)
-            if self._selected_index_obs:
+            # Note: Use `is not None` because Observable(None) is falsy
+            if self._selected_index_obs is not None:
 
                 def on_index_changed(index: int) -> None:
                     if self._updating_selection:
@@ -387,14 +396,14 @@ class DockWidgetRepeater[T, W: QWidget]:
                     try:
                         dock = self._items[index][0]
                         dock.raise_tab()
-                        if self._selected_item_obs:
+                        if self._selected_item_obs is not None:
                             self._selected_item_obs.set(self._obs_list[index])
                     finally:
                         self._updating_selection = False
 
                 self._selected_index_obs.on_change(on_index_changed)
 
-            if self._selected_item_obs:
+            if self._selected_item_obs is not None:
 
                 def on_item_changed(item: T | None) -> None:
                     if self._updating_selection:
@@ -408,7 +417,7 @@ class DockWidgetRepeater[T, W: QWidget]:
                             if list_item is item or list_item == item:
                                 dock = self._items[i][0]
                                 dock.raise_tab()
-                                if self._selected_index_obs:
+                                if self._selected_index_obs is not None:
                                     self._selected_index_obs.set(i)
                                 break
                     finally:
@@ -421,6 +430,4 @@ class DockWidgetRepeater[T, W: QWidget]:
                 on_tab_changed(tab_bar.currentIndex())
 
         # Defer binding setup to after Qt event loop processes the tabification
-        from qtpy.QtCore import QTimer
-
         QTimer.singleShot(0, find_and_bind_tab_bar)

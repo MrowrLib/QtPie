@@ -269,6 +269,7 @@ class NewField:
                         self.dock_area = self.kwargs.pop("dock", None)
                         self.dock_title = self.kwargs.pop("windowTitle", None) or self.kwargs.pop("title", None)
                         self.dock_group = self.kwargs.pop("group", None)
+                        self.dock_group_selected_index = self.kwargs.pop("groupSelectedIndex", None)
                         self.dock_closable = self.kwargs.pop("closable", None)
                         self.dock_floatable = self.kwargs.pop("floatable", None)
                         self.dock_movable = self.kwargs.pop("movable", None)
@@ -282,6 +283,7 @@ class NewField:
                             "dock_area": self.dock_area,
                             "dock_title": self.dock_title,
                             "dock_group": self.dock_group,
+                            "dock_group_selected_index": self.dock_group_selected_index,
                             "dock_closable": self.dock_closable,
                             "dock_floatable": self.dock_floatable,
                             "dock_movable": self.dock_movable,
