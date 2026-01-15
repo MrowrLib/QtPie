@@ -14,9 +14,10 @@ class EmbedConfig:
 
     widget_class: type[Any]
     kwargs: dict[str, Any] = field(default_factory=dict[str, Any])
+    column_name: str | None = None  # Override column header for QTableView widget columns
 
 
-def embed(widget_class: type[Any], **kwargs: Any) -> EmbedConfig:
+def embed(widget_class: type[Any], *, column_name: str | None = None, **kwargs: Any) -> EmbedConfig:
     """Configure a widget to be embedded in a model view.
 
     Use this to specify bindings, signal connections, and variable pass-through
@@ -44,15 +45,17 @@ def embed(widget_class: type[Any], **kwargs: Any) -> EmbedConfig:
             widget=embed(DogCard, show_details="_show_details"),
         )
 
-        # In QTableView columns
+        # In QTableView columns with custom column header
         _table: QTableView = new(
             bind="_dogs",
-            columns=["name", "age", embed(DogActions, on_delete="remove_dog")],
+            columns=["name", "age", embed(DogActions, column_name="Actions", on_delete="remove_dog")],
         )
 
     Args:
         widget_class: The Widget subclass to embed. Can be Widget[T] for record binding
                       or plain Widget with bare Variables for injection.
+        column_name: Override column header for QTableView widget columns. If not specified,
+                     uses the widget's @widget(title=...) or falls back to empty string.
         **kwargs: Same kwargs as new() - signal connections, variable bindings, etc.
                   Plus special kwargs for injection:
                   - selectedItem="var": Bind the row's item to a bare Variable
@@ -60,6 +63,6 @@ def embed(widget_class: type[Any], **kwargs: Any) -> EmbedConfig:
                   - selectedRow="var": Bind the row index to a bare Variable (QTableView)
 
     Returns:
-        EmbedConfig containing the widget class and kwargs.
+        EmbedConfig containing the widget class, kwargs, and column_name.
     """
-    return EmbedConfig(widget_class=widget_class, kwargs=kwargs)
+    return EmbedConfig(widget_class=widget_class, kwargs=kwargs, column_name=column_name)

@@ -766,3 +766,122 @@ class TestTableViewCheckable:
 
         assert_that(model.data(row0_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("True")
         assert_that(model.data(row1_idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("False")
+
+
+# =============================================================================
+# Widget column header tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewWidgetColumnHeaders:
+    """Test widget column headers from @widget(title=...) and embed(column_name=...)."""
+
+    def test_widget_column_header_from_widget_title(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget column uses @widget(title=...) as column header."""
+        from qtpie import Widget, widget
+
+        @widget(title="Actions")
+        class ActionWidget(Widget[Dog]):
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columns=["name", ActionWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Column 0 should be "Name" (title-cased field name)
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Name")
+        # Column 1 should be "Actions" (from @widget(title="Actions"))
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Actions")
+
+    def test_widget_column_header_from_embed_column_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """embed(column_name=...) overrides widget title for column header."""
+        from qtpie import Widget, widget
+        from qtpie.embed import embed
+
+        @widget(title="Actions")
+        class ActionWidget(Widget[Dog]):
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", embed(ActionWidget, column_name="Custom Header")],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Column 1 should be "Custom Header" (override from embed)
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Custom Header")
+
+    def test_widget_column_header_empty_when_no_title(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget column without title falls back to empty string header."""
+        from qtpie import Widget, widget
+
+        @widget  # No title specified
+        class PlainWidget(Widget[Dog]):
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columns=["name", PlainWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Column 1 should be empty string (no title)
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("")
+
+    def test_widget_column_header_embed_empty_overrides_title(self, base_class, decorator, qt: QtDriver) -> None:
+        """embed(column_name="") can override widget title to show empty header."""
+        from qtpie import Widget, widget
+        from qtpie.embed import embed
+
+        @widget(title="Actions")
+        class ActionWidget(Widget[Dog]):
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", embed(ActionWidget, column_name="")],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Column 1 should be empty (override from embed)
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("")
+
+    def test_widget_column_with_headers_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """headers= dict can customize widget column headers by column name."""
+        from qtpie import Widget, widget
+
+        @widget(title="Actions")
+        class ActionWidget(Widget[Dog]):
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", ActionWidget],
+                headers={"Actions": "Do Stuff"},  # Override "Actions" column header
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Column 1 should be "Do Stuff" (from headers dict)
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Do Stuff")

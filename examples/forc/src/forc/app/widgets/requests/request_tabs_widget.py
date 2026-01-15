@@ -14,7 +14,7 @@ from forc.domain.models.core import BodyType
 from qtpie import Stretch, Widget, new, widget
 
 
-@widget
+@widget(title="Actions")
 class DeleteParamWidget(Widget[KeyValue]):
     delete: QPushButton = new(
         "🗑️", clicked="{on_delete_param(record)}", styleSheet="background: none; border: none; padding: 0;"
@@ -71,16 +71,19 @@ class BodyTabContent(Widget[Request]):
         bind="body",
         visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
     )
+    _body_fields_add_button: QPushButton = new(
+        "+ Add Field",
+        clicked="_on_add_body_field",
+        visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+    )
     _body_fields: QTableView = new(
         bind="body_fields",
         visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
     )
 
-    print_current_body_type: QPushButton = new("Print Body Type", clicked="_print_body_type")
-
-    def _print_body_type(self) -> None:
-        print(f"Current body type is: {self.record.body_type}")
-        print(self.var("record"))
+    ### Methods ###
+    def _on_add_body_field(self) -> None:
+        self.record.body_fields.append(KeyValue(key="", value=""))
 
 
 @widget

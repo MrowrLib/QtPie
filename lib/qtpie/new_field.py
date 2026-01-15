@@ -1320,15 +1320,38 @@ class NewField:
             if isinstance(col, str):
                 str_columns.append(col)
             elif isinstance(col, EmbedConfig):
-                # Use a placeholder name for this column
-                placeholder = f"__widget_col_{i}__"
-                str_columns.append(placeholder)
+                # Get column name from embed config or widget's title
+                col_name = self._get_widget_column_name(col.widget_class, col.column_name)
+                str_columns.append(col_name)
                 widget_columns.append((i, col.widget_class, col))
             elif isinstance(col, type):
-                # Widget class directly
-                placeholder = f"__widget_col_{i}__"
-                str_columns.append(placeholder)
+                # Widget class directly - get title from widget config
+                col_name = self._get_widget_column_name(col, None)
+                str_columns.append(col_name)
                 widget_columns.append((i, col, None))
 
         self.table_columns = str_columns if str_columns else None
         self.table_widget_columns = widget_columns if widget_columns else None
+
+    def _get_widget_column_name(self, widget_class: type, override: str | None) -> str:
+        """Get column name for a widget column.
+
+        Priority:
+        1. override (from embed(column_name=...))
+        2. Widget's @widget(title=...) -> _qtpie_config.widget_props["windowTitle"]
+        3. Empty string (no header)
+        """
+        if override is not None:
+            return override
+
+        # Try to get title from widget's _qtpie_config
+        config = getattr(widget_class, "_qtpie_config", None)
+        if config is not None:
+            widget_props = getattr(config, "widget_props", None)
+            if widget_props is not None:
+                title = widget_props.get("windowTitle")
+                if title is not None:
+                    return str(title)
+
+        # Fallback to empty string
+        return ""
