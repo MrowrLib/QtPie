@@ -25,6 +25,16 @@ class BodyType(Enum):
     FORM_DATA = "form_data"
 
 
+BODY_TYPE_LABELS: dict[BodyType, str] = {
+    BodyType.NONE: "No Body",
+    BodyType.JSON: "JSON",
+    BodyType.XML: "XML",
+    BodyType.TEXT: "Plain Text",
+    BodyType.FORM_URLENCODED: "Form URL Encoded",
+    BodyType.FORM_DATA: "Multipart Form Data",
+}
+
+
 @dataclass
 class KeyValue:
     key: str

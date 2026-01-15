@@ -1,5 +1,6 @@
 from .auth import ApiKeyAuth, Auth, AuthType, BasicAuth, BearerAuth
 from .core import (
+    BODY_TYPE_LABELS,
     BodyType,
     Collection,
     Environment,
@@ -14,6 +15,7 @@ __all__ = [
     # Enums
     "AuthType",
     "BodyType",
+    "BODY_TYPE_LABELS",
     "HttpMethod",
     # Core models
     "KeyValue",

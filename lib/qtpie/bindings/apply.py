@@ -343,6 +343,9 @@ def _resolve_or_create_variable(
     source = resolve_binding_source(host, path)  # type: ignore[arg-type]
     if isinstance(source, VarType):
         return source
+    # Also return Observable/ObservableProxy sources (e.g., record enum fields)
+    if isinstance(source, (Observable, ObservableProxy)):
+        return source
 
     # Check for bare Variable[T] annotation (using _RequiredBindingDescriptor)
     # Strip leading underscores for lookup
@@ -742,6 +745,7 @@ def _setup_selection_bindings(
     if not has_single and not has_multi:
         return
 
+    from observant import Observable, ObservableProxy
     from qtpy.QtCore import QTimer
 
     from qtpie.variable import Variable as VarType
@@ -756,11 +760,15 @@ def _setup_selection_bindings(
         source = _resolve_or_create_variable(host, selected_index_path, int)
         if isinstance(source, VarType):
             index_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, (Observable, ObservableProxy)):
+            index_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
 
     if selected_item_path is not None:
         source = _resolve_or_create_variable(host, selected_item_path, None)
         if isinstance(source, VarType):
             item_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, (Observable, ObservableProxy)):
+            item_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
 
     if selected_indexes_path is not None:
         source = _resolve_or_create_variable(host, selected_indexes_path, None)
@@ -887,8 +895,24 @@ def _setup_selection_bindings_impl(
                 # Sync Variable to widget's current state
                 index_var.value = current_widget_idx
 
+        # Helper to detect if item_var is Observable (uses .get()/.set()) vs Variable (uses .value)
+        item_var_is_observable = isinstance(item_var, Observable) if item_var is not None else False
+
+        def get_item_var_value() -> Any:
+            if item_var is None:
+                return None
+            return item_var.get() if item_var_is_observable else item_var.value
+
+        def set_item_var_value(val: Any) -> None:
+            if item_var is None:
+                return
+            if item_var_is_observable:
+                item_var.set(val)
+            else:
+                item_var.value = val
+
         if item_var is not None:
-            initial_item = item_var.value
+            initial_item = get_item_var_value()
             if initial_item is not None:
                 # Set widget to match item if index didn't already set it
                 if index_var is None and set_current_index_fn is not None:
@@ -896,8 +920,9 @@ def _setup_selection_bindings_impl(
                     if idx >= 0:
                         set_current_index_fn(idx)
             else:
-                # Sync item Variable to widget's current selection
-                item_var.value = get_item_at_index(current_widget_idx)
+                # Sync Variable/Observable to widget's current selection
+                new_val = get_item_at_index(current_widget_idx)
+                set_item_var_value(new_val)
 
         # Variable → Widget binding (and cross-update between index/item vars)
         if index_var is not None and set_current_index_fn is not None:
@@ -911,8 +936,7 @@ def _setup_selection_bindings_impl(
                 try:
                     set_current_index_fn(new_idx)
                     # Also update item_var if both bindings are present
-                    if item_var is not None:
-                        item_var.value = get_item_at_index(new_idx)
+                    set_item_var_value(get_item_at_index(new_idx))
                 finally:
                     updating["flag"] = False
 
@@ -928,7 +952,7 @@ def _setup_selection_bindings_impl(
                     return
                 updating["flag"] = True
                 try:
-                    new_item = item_var.value  # type: ignore[union-attr]
+                    new_item = get_item_var_value()
                     idx = find_index_of_item(new_item)
                     if idx >= 0:
                         set_current_index_fn(idx)
@@ -953,8 +977,7 @@ def _setup_selection_bindings_impl(
                 try:
                     if index_var is not None:
                         index_var.value = new_idx
-                    if item_var is not None:
-                        item_var.value = get_item_at_index(new_idx)
+                    set_item_var_value(get_item_at_index(new_idx))
                 finally:
                     updating["flag"] = False
 

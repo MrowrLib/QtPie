@@ -1,4 +1,4 @@
-from qtpy.QtCore import Signal
+from qtpy.QtCore import QTimer, Signal
 
 from forc.app.menus import FileMenu, ViewMenu
 from forc.app.widgets.layout import SidebarWidget
@@ -22,19 +22,27 @@ class ForcWindow(Window):
     ### Signals ###
     collection_item_clicked = Signal(Request)
 
+    ### Variables ###
+    _selected_request_index: Variable[int]
+
     ### Menus ###
     _file_menu: FileMenu = new()
     _view_menu: ViewMenu = new()
 
     ### Docks / Widgets ###
     _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)
-    _editors: Variable[list[Request], Dock[RequestWidget]] = new(group="requests", dock="right", title="{name}")
+    _editors: Variable[list[Request], Dock[RequestWidget]] = new(
+        group="requests",
+        dock="right",
+        title="{name}",
+        groupSelectedIndex="_selected_request_index",
+    )
 
     ### Methods ###
     def on_collection_item_clicked(self, item: Request | Collection) -> None:
         if isinstance(item, Request):
-            for editor in self._editors:
-                if editor == item:
-                    self._editors.remove(editor)
-                    return
             self._editors.append(item)
+            QTimer.singleShot(0, self._select_last_editor)
+
+    def _select_last_editor(self) -> None:
+        self._selected_request_index.value = len(self._editors) - 1

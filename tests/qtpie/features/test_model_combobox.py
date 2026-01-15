@@ -958,3 +958,27 @@ class TestComboBoxEnumBindingWithRecord:
         instance._combo.setCurrentIndex(0)  # LOW
         assert_that(instance._combo.currentIndex()).is_equal_to(0)
         assert_that(instance._selected.value).is_equal_to(Priority.LOW)
+
+    def test_enum_binding_with_record_field_binding(self, qt: QtDriver) -> None:
+        """Enum binding with selectedItem='body_type' binds to record property."""
+        from qtpie import Widget, widget
+
+        @widget(record=MockRequest(body_type=Priority.HIGH))
+        class TestWidget(Widget[MockRequest]):
+            _combo: QComboBox = new(bind=Priority, selectedItem="body_type")
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Should reflect record's body_type (HIGH = index 2)
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+
+        # User changes selection -> should update record
+        # Note: record.body_type returns ObservableProxy for Enum fields, use .unwrap() to get value
+        instance._combo.setCurrentIndex(1)  # MEDIUM
+        assert_that(instance.record.body_type.unwrap()).is_equal_to(Priority.MEDIUM)
+
+        # Record change -> should update widget
+        instance.record.body_type = Priority.LOW
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)

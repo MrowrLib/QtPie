@@ -68,6 +68,11 @@ class ObservableProxy[T]:
             def on_field_change(new_value: Any, field_name: str = name) -> None:
                 target = object.__getattribute__(self, "_target")
                 setattr(target, field_name, new_value)
+                # Also update any cached nested proxy for this field (handles Enum fields)
+                nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+                if field_name in nested_proxies:
+                    # Replace the nested proxy's target with the new value
+                    object.__setattr__(nested_proxies[field_name], "_target", new_value)
                 self._update_dirty_state()
                 self._validate()  # Re-run own validators
                 self._update_valid_state()
@@ -616,6 +621,16 @@ class ObservableProxy[T]:
         # For complex types, return nested proxy
         return self._get_or_create_nested_proxy(name)
 
+    def _is_atomic_value(self, value: Any) -> bool:
+        """Check if value should be treated atomically (not wrapped in nested proxy).
+
+        Atomic values include primitives and Enum instances. These values go through
+        field Observables for proper change tracking and binding notifications.
+        """
+        from enum import Enum
+
+        return _is_primitive(value) or isinstance(value, Enum)
+
     @override
     def __setattr__(self, name: str, value: Any) -> None:
         """Set a field value."""
@@ -625,8 +640,9 @@ class ObservableProxy[T]:
 
         target = object.__getattribute__(self, "_target")
 
-        # For primitives, always go through an Observable to track dirty state properly
-        if _is_primitive(value):
+        # For primitives and Enum, go through an Observable to track dirty state properly
+        # and ensure bindings get notified of changes
+        if self._is_atomic_value(value):
             # This creates the Observable if it doesn't exist, ensuring dirty_fields works
             obs = self._get_or_create_field_observable(name)
             obs.set(value)
