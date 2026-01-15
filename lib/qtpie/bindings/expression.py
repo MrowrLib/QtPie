@@ -116,6 +116,16 @@ def create_expression_binding(
     # Track which variables we found on the context vs need to search parents for
     found_on_context: set[str] = set()
 
+    # For Widget[T], get record proxy early to subscribe to record field changes
+    # This is needed because widget fields might shadow record fields (e.g., body_type: QComboBox
+    # shadows record.body_type), but we want expressions to use record field values
+    record_proxy_for_subscriptions: ObservableProxy[Any] | None = None
+    if hasattr(context, "_qtpie_config"):
+        ctx_config: Any = context._qtpie_config
+        if hasattr(ctx_config, "record_type") and ctx_config.record_type is not None:
+            if hasattr(context, "record") and hasattr(context.record, "observable"):
+                record_proxy_for_subscriptions = context.record.observable
+
     for var_name in var_names:
         source = resolve_binding_source(context, var_name)  # type: ignore[arg-type]
         if source is not None:
@@ -152,6 +162,33 @@ def create_expression_binding(
                         found_on_context.add(var_name)
                         reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], raw_attr))
                         break
+
+    # For Widget[T], also subscribe to record proxy changes. This handles two cases:
+    # 1. When the record target is initially None and gets set later (timing issue)
+    # 2. When record fields change that might be shadowed by widget fields
+    if record_proxy_for_subscriptions is not None:
+        # Always subscribe to the proxy itself - this fires when target is set or any field changes
+        if record_proxy_for_subscriptions not in reactive_collections:
+            reactive_collections.append(record_proxy_for_subscriptions)
+
+        # Also subscribe to specific field Observables if target is already set
+        target = object.__getattribute__(record_proxy_for_subscriptions, "_target")
+        if target is not None:
+            for var_name in var_names:
+                if hasattr(target, var_name):
+                    # Get the Observable/ObservableProxy for this record field
+                    try:
+                        field_obs = record_proxy_for_subscriptions.observable_for_path(var_name)
+                        # Subscribe to the record field Observable
+                        if isinstance(field_obs, Observable):
+                            if field_obs not in observables:
+                                observables.append(field_obs)
+                        else:
+                            # ObservableList, ObservableDict, or ObservableProxy
+                            if field_obs not in reactive_collections:
+                                reactive_collections.append(field_obs)
+                    except AttributeError:
+                        pass  # Field doesn't exist on record, skip
 
     # Search parent widget hierarchy for variables not found on context
     # This allows expressions like isinstance(collection_item, Request) where
@@ -231,6 +268,14 @@ def create_expression_binding(
             module_globals = vars(module)
 
     def compute() -> Any:
+        # Re-resolve record proxy each time - bind="record" may have changed it after setup
+        record_proxy: ObservableProxy[Any] | None = None
+        if hasattr(context, "_qtpie_config"):
+            ctx_config: Any = context._qtpie_config
+            if hasattr(ctx_config, "record_type") and ctx_config.record_type is not None:
+                if hasattr(context, "record") and hasattr(context.record, "observable"):
+                    record_proxy = context.record.observable
+
         # Build context with current values
         eval_context: dict[str, Any] = {}
 
@@ -240,12 +285,26 @@ def create_expression_binding(
                 eval_context[var_name] = parent_var_sources[var_name].value  # pyright: ignore[reportUnknownMemberType]
                 continue
 
+            # For Widget[T], check if this is a record field first
+            # This allows expressions like "{body_type in [...]}" to reference record.body_type
+            # even when there's a widget field with the same name
+            if record_proxy is not None:
+                target: Any = object.__getattribute__(record_proxy, "_target")
+                if target is not None and hasattr(target, var_name):
+                    # Get the actual value from the record (not the proxy)
+                    field_value = getattr(target, var_name)
+                    eval_context[var_name] = field_value
+                    continue
+
             # Try with underscore prefix first, then without on the context
             for attr_name in [f"_{var_name}", var_name]:
                 if hasattr(context, attr_name):
                     raw_attr: Any = getattr(context, attr_name)
                     if isinstance(raw_attr, Variable):
                         eval_context[var_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                    elif isinstance(raw_attr, ObservableProxy):
+                        # Unwrap ObservableProxy to get the actual value
+                        eval_context[var_name] = raw_attr.unwrap()
                     else:
                         eval_context[var_name] = raw_attr
                     break
@@ -293,6 +352,47 @@ def create_expression_binding(
 
     # Set initial value
     setter(compute())
+
+    # Deferred record subscription: for Widget[T], the record may not be bound yet at setup time
+    # (e.g., child widget with bind="record" from parent). Schedule a check after bindings complete.
+    if record_proxy_for_subscriptions is not None and hasattr(context, "parent") and callable(context.parent):
+        from qtpy.QtCore import QObject, QTimer
+
+        def try_deferred_record_subscription() -> None:
+            """Check if record proxy changed after bindings and subscribe to the new one."""
+            # Re-resolve the record proxy
+            new_proxy: ObservableProxy[Any] | None = None
+            if hasattr(context, "_qtpie_config"):
+                ctx_config: Any = context._qtpie_config
+                if hasattr(ctx_config, "record_type") and ctx_config.record_type is not None:
+                    if hasattr(context, "record") and hasattr(context.record, "observable"):
+                        new_proxy = context.record.observable
+
+            # If it's a different proxy than we subscribed to, subscribe to the new one
+            if new_proxy is not None and id(new_proxy) != id(record_proxy_for_subscriptions):
+                # Subscribe to the new proxy
+                subscribe_to_collection(new_proxy)
+
+                # Also subscribe to specific field Observables
+                target = object.__getattribute__(new_proxy, "_target")
+                if target is not None:
+                    for var_name in var_names:
+                        if hasattr(target, var_name):
+                            try:
+                                field_obs = new_proxy.observable_for_path(var_name)
+                                if isinstance(field_obs, Observable):
+                                    subscribe_to_observable(field_obs)
+                                else:
+                                    subscribe_to_collection(field_obs)
+                            except AttributeError:
+                                pass
+
+                # Recompute with new data
+                setter(compute())
+
+        # Schedule check after current event loop completes
+        if isinstance(context, QObject):
+            QTimer.singleShot(0, try_deferred_record_subscription)
 
     # Deferred parent lookup: if we still have unresolved variables, try again after parenting
     # This handles cases where the variable is on a parent widget that isn't connected yet

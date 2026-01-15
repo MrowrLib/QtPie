@@ -63,21 +63,23 @@ class BodyTabContent(Widget[Request]):
     """Body tab content showing request body."""
 
     ### Widgets ###
-    body_type: QComboBox = new(
+    _body_type_xxx: QComboBox = new(
         bind=BodyType,
         selectedItem="body_type",
     )
-    body_content: QPlainTextEdit = new(
+    _body_content: QPlainTextEdit = new(
         bind="body",
-        visible="{body_type.value in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+        visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
     )
-    body_fields: QTableView = new(
+    _body_fields: QTableView = new(
         bind="body_fields",
-        visible="{body_type.value in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+        visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
     )
 
+    print_current_body_type: QPushButton = new("Print Body Type", clicked="_print_body_type")
 
-# YAY IT WORKS YAY THANK YOU. are there any places we should add test(s) for covering that for future regressions?
+    def _print_body_type(self) -> None:
+        print(f"Current body type is: {self.record.body_type}")
 
 
 @widget

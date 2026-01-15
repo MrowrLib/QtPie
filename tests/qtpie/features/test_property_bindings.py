@@ -11,14 +11,17 @@ Tests visible= and enabled= reactive bindings with Variables and expressions.
 Menu is excluded as it doesn't support QWidget children with these properties.
 """
 
+from dataclasses import dataclass, field
+from enum import Enum
+
 import pytest
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtWidgets import QComboBox, QLabel, QPushButton
 
-from qtpie import Variable, new
+from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver
 
-from .conftest import WIDGET_CLASS_TYPES, create_and_track
+from .conftest import RECORD_CLASS_TYPES, WIDGET_CLASS_TYPES, create_and_track
 
 
 # Helper: Qt's isVisible() returns False for hidden parent widgets
@@ -430,3 +433,212 @@ class TestPropertyBindingEdgeCases:
 
         instance._a.value = 0
         assert_that(is_widget_visible(instance.label)).is_false()
+
+
+# =============================================================================
+# visible= with Record Field (Widget[T]) - Enum expressions
+# =============================================================================
+
+
+class BodyType(Enum):
+    """Test enum for body type selection."""
+
+    NONE = "none"
+    TEXT = "text"
+    JSON = "json"
+    XML = "xml"
+    FORM_DATA = "form_data"
+    FORM_URLENCODED = "form_urlencoded"
+
+
+@dataclass
+class RequestRecord:
+    """Test record with enum field."""
+
+    name: str = ""
+    body_type: BodyType = BodyType.NONE
+    body: str = ""
+    body_fields: list[str] = field(default_factory=lambda: [])
+
+
+@pytest.mark.parametrize("base_class,decorator", RECORD_CLASS_TYPES)
+class TestVisibleWithRecordEnumField:
+    """visible= expressions referencing enum fields on Widget[T] records."""
+
+    def test_visible_enum_in_list_expression(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible= with enum field 'in' list expression."""
+
+        @decorator(record=RequestRecord(body_type=BodyType.JSON))
+        class TestClass(base_class[RequestRecord]):
+            label: QLabel = new(
+                "Text Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # JSON is in the list, should be visible
+        assert_that(is_widget_visible(instance.label)).is_true()
+
+    def test_visible_enum_not_in_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible= False when enum value not in list."""
+
+        @decorator(record=RequestRecord(body_type=BodyType.FORM_DATA))
+        class TestClass(base_class[RequestRecord]):
+            label: QLabel = new(
+                "Text Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # FORM_DATA is NOT in the list, should be hidden
+        assert_that(is_widget_visible(instance.label)).is_false()
+
+    def test_visible_enum_updates_reactively(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing record enum field updates visibility."""
+
+        @decorator(record=RequestRecord(body_type=BodyType.TEXT))
+        class TestClass(base_class[RequestRecord]):
+            text_label: QLabel = new(
+                "Text Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+            form_label: QLabel = new(
+                "Form Fields",
+                visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initially TEXT - text visible, form hidden
+        assert_that(is_widget_visible(instance.text_label)).is_true()
+        assert_that(is_widget_visible(instance.form_label)).is_false()
+
+        # Change to FORM_DATA - text hidden, form visible
+        instance.record.body_type = BodyType.FORM_DATA
+        assert_that(is_widget_visible(instance.text_label)).is_false()
+        assert_that(is_widget_visible(instance.form_label)).is_true()
+
+        # Change to NONE - both hidden
+        instance.record.body_type = BodyType.NONE
+        assert_that(is_widget_visible(instance.text_label)).is_false()
+        assert_that(is_widget_visible(instance.form_label)).is_false()
+
+
+class TestVisibleWithWidgetShadowingRecordField:
+    """visible= when widget field has same name as record field.
+
+    The expression should use the RECORD field value, not the widget.
+    This is a common pattern: QComboBox named 'body_type' binding to record.body_type,
+    with visibility expressions like {body_type in [...]}.
+    """
+
+    def test_widget_field_shadows_record_field(self, qt: QtDriver) -> None:
+        """Widget field with same name as record field uses record value in expression."""
+
+        @widget(record=RequestRecord(body_type=BodyType.JSON))
+        class TestWidget(Widget[RequestRecord]):
+            # Widget field with SAME NAME as record field
+            body_type: QComboBox = new(
+                bind=BodyType,
+                selectedItem="body_type",
+            )
+            # Expression uses record.body_type, not the QComboBox widget
+            text_editor: QLabel = new(
+                "Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+
+        instance = qt.track(TestWidget())
+        # Record has JSON, which is in the list - should be visible
+        assert_that(is_widget_visible(instance.text_editor)).is_true()
+
+        # Change record value - visibility should update
+        instance.record.body_type = BodyType.FORM_DATA
+        assert_that(is_widget_visible(instance.text_editor)).is_false()
+
+    def test_underscore_widget_field_shadows_record_field(self, qt: QtDriver) -> None:
+        """Widget field _body_type doesn't interfere with record.body_type expression."""
+
+        @widget(record=RequestRecord(body_type=BodyType.TEXT))
+        class TestWidget(Widget[RequestRecord]):
+            _body_type: QComboBox = new(
+                bind=BodyType,
+                selectedItem="body_type",
+            )
+            editor: QLabel = new(
+                "Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+
+        instance = qt.track(TestWidget())
+        assert_that(is_widget_visible(instance.editor)).is_true()
+
+        instance.record.body_type = BodyType.NONE
+        assert_that(is_widget_visible(instance.editor)).is_false()
+
+
+class TestVisibleWithDeferredRecordBinding:
+    """visible= when record is bound later via bind='record' from parent.
+
+    This tests the timing issue where child Widget[T] creates an empty record,
+    then the parent's bind='record' replaces it. The visibility expression
+    must re-evaluate after the binding completes.
+    """
+
+    def test_child_widget_with_deferred_record_binding(self, qt: QtDriver) -> None:
+        """Child widget's visible expression works after bind='record' from parent."""
+
+        @widget
+        class ChildWidget(Widget[RequestRecord]):
+            editor: QLabel = new(
+                "Editor",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+
+        @widget(record=RequestRecord(body_type=BodyType.JSON))
+        class ParentWidget(Widget[RequestRecord]):
+            child: ChildWidget = new(bind="record")
+
+        instance = qt.track(ParentWidget())
+        qt.process_events()  # Allow deferred bindings to complete
+
+        # Child should inherit parent's record with body_type=JSON
+        assert_that(is_widget_visible(instance.child.editor)).is_true()
+
+        # Changing parent's record should update child's visibility
+        instance.record.body_type = BodyType.FORM_DATA
+        assert_that(is_widget_visible(instance.child.editor)).is_false()
+
+    def test_nested_child_with_multiple_visible_expressions(self, qt: QtDriver) -> None:
+        """Multiple visibility expressions in child widget all work with deferred binding."""
+
+        @widget
+        class BodyEditor(Widget[RequestRecord]):
+            text_content: QLabel = new(
+                "Text",
+                visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+            )
+            form_fields: QLabel = new(
+                "Form",
+                visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+            )
+
+        @widget(record=RequestRecord(body_type=BodyType.TEXT))
+        class RequestEditor(Widget[RequestRecord]):
+            body: BodyEditor = new(bind="record")
+
+        instance = qt.track(RequestEditor())
+        qt.process_events()
+
+        # TEXT: text visible, form hidden
+        assert_that(is_widget_visible(instance.body.text_content)).is_true()
+        assert_that(is_widget_visible(instance.body.form_fields)).is_false()
+
+        # FORM_DATA: text hidden, form visible
+        instance.record.body_type = BodyType.FORM_DATA
+        assert_that(is_widget_visible(instance.body.text_content)).is_false()
+        assert_that(is_widget_visible(instance.body.form_fields)).is_true()
+
+        # XML: text visible, form hidden
+        instance.record.body_type = BodyType.XML
+        assert_that(is_widget_visible(instance.body.text_content)).is_true()
+        assert_that(is_widget_visible(instance.body.form_fields)).is_false()
