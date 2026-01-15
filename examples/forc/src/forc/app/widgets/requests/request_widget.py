@@ -12,9 +12,11 @@ from .request_editor_widget import RequestEditorWidget
 class RequestWidget(Widget[Request]):
     """Contains both request editor and response viewer for a single request."""
 
+    ### Widgets ###
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
     _editor: RequestEditorWidget = new(splitter="_splitter")
     _response: ResponseViewerWidget = new(splitter="_splitter")
 
+    ### Methods ###
     def __setup__(self) -> None:
         self._splitter.setSizes([200, 100])

@@ -37,8 +37,8 @@ BODY_TYPE_LABELS: dict[BodyType, str] = {
 
 @dataclass
 class KeyValue:
-    key: str
-    value: str
+    key: str = ""
+    value: str = ""
     enabled: bool = True
     secret: bool = False  # If True, value is sensitive (hidden in UI, excluded from git export)
 

@@ -29,7 +29,7 @@ class ParamsTabContent(Widget[Request]):
 
     ### Widgets ###
     header: QLabel = new("Query Parameters:")
-    buttons_layout: QHBoxLayout = new()
+    buttons_layout: QHBoxLayout
     table: QTableView = new(bind="record.query_params", columns=["key", "value", DeleteParamWidget])
 
     ### Buttons ###
@@ -57,7 +57,7 @@ class AuthTabContent(Widget[Request]):
 
     ### Widgets ###
     _auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth?.type")
-    _auth_fields_layout: QFormLayout = new()
+    _auth_fields_layout: QFormLayout
     _stretch: Stretch
 
     ### Auth Fields ###
@@ -85,10 +85,11 @@ class BodyTabContent(Widget[Request]):
         bind="body_fields",
         visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
     )
+    _stretch: Stretch
 
     ### Methods ###
     def _on_add_body_field(self) -> None:
-        self.record.body_fields.append(KeyValue(key="", value=""))
+        self.record.body_fields.append(KeyValue())
 
 
 @widget
