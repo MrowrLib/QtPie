@@ -18,6 +18,21 @@ from qtpie.utils.layouts import (
     resolve_icon,
 )
 from qtpie.utils.properties import resolve_nested_property
+from qtpie.utils.type_checks import (
+    is_dock_generic,
+    is_model_widget,
+    is_qaction,
+    is_qcombobox,
+    is_qlayout,
+    is_qlistview,
+    is_qobject,
+    is_qspaceritem,
+    is_qsplitter,
+    is_qtableview,
+    is_qtabwidget,
+    is_qtreeview,
+    is_qwidget,
+)
 
 __all__ = [
     "HANDLER_SPEC_RE",
@@ -29,7 +44,20 @@ __all__ = [
     "apply_widget_props",
     "create_layout",
     "detect_required_bindings",
+    "is_dock_generic",
+    "is_model_widget",
     "is_primitive_type",
+    "is_qaction",
+    "is_qcombobox",
+    "is_qlayout",
+    "is_qlistview",
+    "is_qobject",
+    "is_qspaceritem",
+    "is_qsplitter",
+    "is_qtabwidget",
+    "is_qtableview",
+    "is_qtreeview",
+    "is_qwidget",
     "is_signal",
     "is_signal_on_type",
     "resolve_icon",

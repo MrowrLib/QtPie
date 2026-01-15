@@ -642,3 +642,99 @@ class TestVisibleWithDeferredRecordBinding:
         instance.record.body_type = BodyType.XML
         assert_that(is_widget_visible(instance.body.text_content)).is_true()
         assert_that(is_widget_visible(instance.body.form_fields)).is_false()
+
+
+# Models for testing nested optional paths
+class AuthType(Enum):
+    """Auth type enum for testing."""
+
+    NONE = "none"
+    BASIC = "basic"
+    BEARER = "bearer"
+
+
+@dataclass
+class AuthSettings:
+    """Nested auth settings."""
+
+    type: AuthType = AuthType.NONE
+    username: str = ""
+
+
+@dataclass
+class RequestWithAuth:
+    """Request with optional nested auth."""
+
+    auth: AuthSettings | None = None
+
+
+class TestVisibleWithNestedOptionalPath:
+    """visible= expressions with nested optional paths like auth?.type.
+
+    Regression tests for the bug where visible="{auth?.type == AuthType.BASIC}"
+    didn't work because expression.py didn't handle ?. optional chaining.
+    """
+
+    def test_visible_nested_optional_path_with_value(self, qt: QtDriver) -> None:
+        """visible= with nested optional path when intermediate has value."""
+
+        @widget(record=RequestWithAuth(auth=AuthSettings(type=AuthType.BASIC)))
+        class TestWidget(Widget[RequestWithAuth]):
+            basic_label: QLabel = new("Basic", visible="{auth?.type == AuthType.BASIC}")
+            bearer_label: QLabel = new("Bearer", visible="{auth?.type == AuthType.BEARER}")
+
+        instance = qt.track(TestWidget())
+
+        # auth.type is BASIC - basic visible, bearer hidden
+        assert_that(is_widget_visible(instance.basic_label)).is_true()
+        assert_that(is_widget_visible(instance.bearer_label)).is_false()
+
+    def test_visible_nested_optional_path_none_intermediate(self, qt: QtDriver) -> None:
+        """visible= with nested optional path when intermediate is None."""
+
+        @widget(record=RequestWithAuth(auth=None))
+        class TestWidget(Widget[RequestWithAuth]):
+            basic_label: QLabel = new("Basic", visible="{auth?.type == AuthType.BASIC}")
+
+        instance = qt.track(TestWidget())
+
+        # auth is None - auth?.type is None, not equal to BASIC
+        assert_that(is_widget_visible(instance.basic_label)).is_false()
+
+    def test_visible_nested_optional_path_reactive(self, qt: QtDriver) -> None:
+        """visible= with nested optional path updates when value changes."""
+
+        @widget(record=RequestWithAuth(auth=AuthSettings(type=AuthType.BASIC)))
+        class TestWidget(Widget[RequestWithAuth]):
+            basic_label: QLabel = new("Basic", visible="{auth?.type == AuthType.BASIC}")
+            bearer_label: QLabel = new("Bearer", visible="{auth?.type == AuthType.BEARER}")
+
+        instance = qt.track(TestWidget())
+
+        # Initially BASIC
+        assert_that(is_widget_visible(instance.basic_label)).is_true()
+        assert_that(is_widget_visible(instance.bearer_label)).is_false()
+
+        # Change to BEARER
+        instance.record.auth.type = AuthType.BEARER  # type: ignore[union-attr]
+        assert_that(is_widget_visible(instance.basic_label)).is_false()
+        assert_that(is_widget_visible(instance.bearer_label)).is_true()
+
+    def test_visible_nested_optional_in_list(self, qt: QtDriver) -> None:
+        """visible= with nested optional path in list expression."""
+
+        @widget(record=RequestWithAuth(auth=AuthSettings(type=AuthType.BASIC)))
+        class TestWidget(Widget[RequestWithAuth]):
+            auth_fields: QLabel = new(
+                "Auth Fields",
+                visible="{auth?.type in [AuthType.BASIC, AuthType.BEARER]}",
+            )
+
+        instance = qt.track(TestWidget())
+
+        # BASIC is in list
+        assert_that(is_widget_visible(instance.auth_fields)).is_true()
+
+        # Change to NONE (not in list)
+        instance.record.auth.type = AuthType.NONE  # type: ignore[union-attr]
+        assert_that(is_widget_visible(instance.auth_fields)).is_false()

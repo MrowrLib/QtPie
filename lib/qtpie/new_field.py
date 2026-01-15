@@ -7,6 +7,21 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from .layout import GridPosition, Stretch
 from .utils.common import is_signal_on_type
+from .utils.type_checks import (
+    is_dock_generic,
+    is_model_widget,
+    is_qaction,
+    is_qcombobox,
+    is_qlayout,
+    is_qlistview,
+    is_qobject,
+    is_qspaceritem,
+    is_qsplitter,
+    is_qtableview,
+    is_qtabwidget,
+    is_qtreeview,
+    is_qwidget,
+)
 from .variable import NO_DEFAULT, Variable, create_variable_descriptor
 
 
@@ -809,121 +824,43 @@ class NewField:
 
     def _is_qwidget_type(self) -> bool:
         """Check if the field type is a QWidget subclass."""
-        return self._is_qwidget_class(self.field_type)
+        return is_qwidget(self.field_type)
 
     def _is_qobject_type(self) -> bool:
         """Check if the field type is a QObject subclass (but not QWidget)."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtCore import QObject
-            from qtpy.QtWidgets import QWidget
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            # Is a QObject but NOT a QWidget (QWidget handled separately above)
-            return issubclass(self.field_type, QObject) and not issubclass(self.field_type, QWidget)
-        except (ImportError, TypeError):
-            return False
+        return is_qobject(self.field_type, exclude_qwidget=True)
 
     def _is_qwidget_class(self, cls: type | None) -> bool:
         """Check if cls is a QWidget subclass."""
-        if cls is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QWidget
-
-            # cls could be a generic alias, so check it's a proper type
-            return isinstance(cls, type) and issubclass(cls, QWidget)  # pyright: ignore[reportUnnecessaryIsInstance]
-        except (ImportError, TypeError):
-            return False
+        return is_qwidget(cls)
 
     def _is_qaction_class(self, cls: type | None) -> bool:
         """Check if cls is QAction."""
-        if cls is None:
-            return False
-        try:
-            from qtpy.QtGui import QAction
-
-            return cls is QAction or (isinstance(cls, type) and issubclass(cls, QAction))  # pyright: ignore[reportUnnecessaryIsInstance]
-        except (ImportError, TypeError):
-            return False
+        return is_qaction(cls)
 
     def _is_qtableview_type(self) -> bool:
         """Check if the field type is a QTableView subclass."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QTableView
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QTableView)
-        except (ImportError, TypeError):
-            return False
+        return is_qtableview(self.field_type)
 
     def _is_qlistview_type(self) -> bool:
         """Check if the field type is a QListView subclass (but not QTableView or QTreeView)."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QListView, QTableView, QTreeView
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            # QListView but not QTableView or QTreeView
-            return issubclass(self.field_type, QListView) and not issubclass(self.field_type, QTableView) and not issubclass(self.field_type, QTreeView)
-        except (ImportError, TypeError):
-            return False
+        return is_qlistview(self.field_type, exclude_table_tree=True)
 
     def _is_qtreeview_type(self) -> bool:
         """Check if the field type is a QTreeView subclass."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QTreeView
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QTreeView)
-        except (ImportError, TypeError):
-            return False
+        return is_qtreeview(self.field_type)
 
     def _is_qcombobox_type(self) -> bool:
         """Check if the field type is a QComboBox subclass."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QComboBox
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QComboBox)
-        except (ImportError, TypeError):
-            return False
+        return is_qcombobox(self.field_type)
 
     def _is_model_widget_type(self) -> bool:
         """Check if the field type is a model widget (QComboBox, QListView, QTableView, QTreeView)."""
-        return self._is_qcombobox_type() or self._is_qlistview_type() or self._is_qtableview_type() or self._is_qtreeview_type()
+        return is_model_widget(self.field_type)
 
     def _is_qtabwidget_type(self) -> bool:
         """Check if the field type is a QTabWidget subclass."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QTabWidget
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QTabWidget)
-        except (ImportError, TypeError):
-            return False
+        return is_qtabwidget(self.field_type)
 
     def _normalize_tabs(self, tabs: dict[str, Any] | list[Any] | str | None) -> list[dict[str, Any]] | str | None:
         """Normalize tabs= to a consistent format.
@@ -979,22 +916,11 @@ class NewField:
 
     def _is_dock_type(self) -> bool:
         """Check if the field type is a Dock[T] generic alias."""
-        if self.field_type is None:
-            return False
-        return self._is_dock_type_param(self.field_type)
+        return is_dock_generic(self.field_type)
 
     def _is_dock_type_param(self, type_to_check: Any) -> bool:
         """Check if a given type is a Dock[T] generic alias."""
-        if type_to_check is None:
-            return False
-        try:
-            from .dock import Dock
-
-            # Check if the origin is Dock (e.g., Dock[ExplorerPanel])
-            origin = get_origin(type_to_check)
-            return origin is Dock
-        except (ImportError, TypeError):
-            return False
+        return is_dock_generic(type_to_check)
 
     def _is_signal(self, name: str) -> bool:
         """Check if name is a signal on the field type."""
@@ -1202,42 +1128,15 @@ class NewField:
 
     def _is_qspaceritem_type(self) -> bool:
         """Check if the field type is QSpacerItem."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QSpacerItem
-
-            return self.field_type is QSpacerItem
-        except (ImportError, TypeError):
-            return False
+        return is_qspaceritem(self.field_type)
 
     def _is_qlayout_type(self) -> bool:
         """Check if the field type is a QLayout subclass."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QLayout
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QLayout)
-        except (ImportError, TypeError):
-            return False
+        return is_qlayout(self.field_type)
 
     def _is_qsplitter_type(self) -> bool:
         """Check if the field type is QSplitter."""
-        if self.field_type is None:
-            return False
-        try:
-            from qtpy.QtWidgets import QSplitter
-
-            # field_type could be a generic alias, so check it's a proper type
-            if not isinstance(self.field_type, type):  # pyright: ignore[reportUnnecessaryIsInstance]
-                return False
-            return issubclass(self.field_type, QSplitter)
-        except (ImportError, TypeError):
-            return False
+        return is_qsplitter(self.field_type)
 
     def _extract_target_layout(self) -> None:
         """Extract layout= parameter for targeting nested layouts.

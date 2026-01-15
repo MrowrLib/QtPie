@@ -235,12 +235,15 @@ def create_expression_binding(
                             reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obs))
 
     # Also check for nested Observable paths like "view_model.is_dirty" or "record.is_valid"
-    # Find patterns like "name.attr" or "name.attr.method()" in the expression
-    nested_patterns = re.findall(r"\b(\w+(?:\.\w+)+)(?:\s*\()?", expr)
+    # or "auth?.type" (with optional chaining)
+    # Find patterns like "name.attr", "name?.attr", or "name.attr.method()" in the expression
+    nested_patterns = re.findall(r"\b(\w+(?:[?]?\.[\w]+)+)(?:\s*\()?", expr)
     for path in nested_patterns:
+        # Normalize ?. to . for attribute lookup
+        normalized_path = path.replace("?.", ".")
         # Try to evaluate the path to find Observables
         # Stop at paths that end with method calls like ".get()"
-        parts = path.split(".")
+        parts = normalized_path.split(".")
         # Try progressively longer paths to find Observable
         obj: Any = context
         for part in parts:
@@ -255,6 +258,23 @@ def create_expression_binding(
                 if obj not in reactive_collections:
                     reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], obj))
                 break
+
+        # For Widget[T], also try to subscribe to nested record paths like "auth.type"
+        # This allows expressions like "{auth?.type == AuthType.BASIC}" to work
+        if record_proxy_for_subscriptions is not None:
+            target = object.__getattribute__(record_proxy_for_subscriptions, "_target")
+            if target is not None:
+                try:
+                    # Try to resolve the full path on the record proxy
+                    field_obs = record_proxy_for_subscriptions.observable_for_path(normalized_path)
+                    if isinstance(field_obs, Observable):
+                        if field_obs not in observables:
+                            observables.append(field_obs)
+                    elif field_obs not in reactive_collections:
+                        # ObservableList, ObservableDict, or ObservableProxy
+                        reactive_collections.append(field_obs)
+                except (AttributeError, ValueError):
+                    pass  # Path doesn't exist on record or intermediate is None
 
     # Get module globals for class lookups (for isinstance checks)
     # This allows expressions like isinstance(item, Request) to work
@@ -315,6 +335,13 @@ def create_expression_binding(
 
         # Evaluate the expression
         try:
+            # Handle ?. optional chaining by converting to safe navigation
+            if "?." in expr:
+                from qtpie.bindings.format_binding import (
+                    _eval_with_optional_chaining,  # pyright: ignore[reportPrivateUsage]
+                )
+
+                return _eval_with_optional_chaining(expr, eval_context)
             value = eval(expr, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
             return value
         except Exception:
