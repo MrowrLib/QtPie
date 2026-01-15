@@ -136,18 +136,59 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
             # which would incorrectly bind and clear widget values
             target = object.__getattribute__(proxy, "_target")
             if target is not None:
+
+                def _get_enum_field_observable(path_str: str, parent_proxy: ObservableProxy[Any]) -> BindingSource | None:
+                    """Get field Observable for enum values (simple or nested paths).
+
+                    For selection bindings to work with enums, we need the field Observable
+                    (which has .get()/.set()) instead of the ObservableProxy wrapper.
+
+                    For simple paths like "body_type", use the record proxy directly.
+                    For nested paths like "auth.type", find the parent proxy and get the field from there.
+                    """
+                    result = parent_proxy.observable_for_path(path_str)
+                    if not isinstance(result, ObservableProxy):
+                        return None
+
+                    wrapped: Any = object.__getattribute__(result, "_target")
+                    if not isinstance(wrapped, Enum):
+                        return None
+
+                    # Handle simple paths (no dots) - field is on the record proxy
+                    # Remove optional chaining markers for path analysis
+                    clean_path = path_str.replace("?.", ".")
+                    if "." not in clean_path:
+                        return parent_proxy._get_or_create_field_observable(path_str)
+
+                    # Handle nested paths like "auth.type" - field is on the parent object's proxy
+                    # Split to get field name (we reconstruct parent path with markers below)
+                    parts = clean_path.rsplit(".", 1)
+                    field_name = parts[1]
+
+                    # Reconstruct parent path preserving optional markers
+                    # e.g., "auth?.type" -> parent_path_with_markers = "auth?"
+                    parent_path_with_markers = path_str[: path_str.rfind(field_name) - 1]
+                    if parent_path_with_markers.endswith("?"):
+                        parent_path_with_markers = parent_path_with_markers[:-1]
+
+                    try:
+                        nested_proxy = parent_proxy.observable_for_path(parent_path_with_markers)
+                        if isinstance(nested_proxy, ObservableProxy):
+                            return nested_proxy._get_or_create_field_observable(field_name)
+                    except (AttributeError, ValueError):
+                        pass
+
+                    return None
+
                 try:
-                    # Try original path first (e.g., "dogs" or "_dogs")
+                    # Try original path first (e.g., "dogs" or "_dogs" or "auth.type")
+                    # Check if it's an enum field that needs special handling
+                    enum_obs = _get_enum_field_observable(original_path, proxy)
+                    if enum_obs is not None:
+                        return enum_obs
+
+                    # Not an enum, return the normal result
                     result = proxy.observable_for_path(original_path)
-                    # For simple paths (no dots) returning an ObservableProxy wrapping an Enum,
-                    # return the field Observable instead. This allows selection bindings to work
-                    # with enum fields on records (e.g., selectedItem="body_type").
-                    # Complex paths like "body_type.name" still return the proxy for traversal.
-                    if "." not in original_path and isinstance(result, ObservableProxy):
-                        wrapped: Any = object.__getattribute__(cast("ObservableProxy[Any]", result), "_target")
-                        if isinstance(wrapped, Enum):
-                            # Return the field Observable from the parent proxy
-                            return proxy._get_or_create_field_observable(original_path)
                     return cast(BindingSource, result)
                 except AttributeError:
                     # Field not found on record, continue to fallback
@@ -155,12 +196,11 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
                 # If original path had underscore, also try stripped path on record
                 if has_leading_underscore:
                     try:
+                        enum_obs = _get_enum_field_observable(lookup_path, proxy)
+                        if enum_obs is not None:
+                            return enum_obs
+
                         result = proxy.observable_for_path(lookup_path)
-                        # Same enum check for stripped path
-                        if "." not in lookup_path and isinstance(result, ObservableProxy):
-                            wrapped = object.__getattribute__(cast("ObservableProxy[Any]", result), "_target")
-                            if isinstance(wrapped, Enum):
-                                return proxy._get_or_create_field_observable(lookup_path)
                         return cast(BindingSource, result)
                     except AttributeError:
                         pass

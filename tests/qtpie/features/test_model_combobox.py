@@ -982,3 +982,74 @@ class TestComboBoxEnumBindingWithRecord:
         # Record change -> should update widget
         instance.record.body_type = Priority.LOW
         assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+    def test_enum_binding_with_nested_record_field(self, qt: QtDriver) -> None:
+        """Enum binding with selectedItem='nested.field' binds to nested record property.
+
+        Regression test: nested enum fields like 'auth.type' weren't working because
+        resolve_binding_source returned ObservableProxy instead of Observable.
+        """
+        from qtpie import Widget, widget
+
+        @dataclass
+        class AuthSettings:
+            type: Priority = Priority.LOW
+
+        @dataclass
+        class RequestWithAuth:
+            auth: AuthSettings | None = None
+
+        @widget(record=RequestWithAuth(auth=AuthSettings(type=Priority.HIGH)))
+        class TestWidget(Widget[RequestWithAuth]):
+            _combo: QComboBox = new(bind=Priority, selectedItem="auth.type")
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Should reflect nested auth.type (HIGH = index 2)
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+
+        # User changes selection -> should update nested record field
+        instance._combo.setCurrentIndex(1)  # MEDIUM
+        assert_that(instance.record.auth.type.unwrap()).is_equal_to(Priority.MEDIUM)
+
+        # Nested record change -> should update widget
+        instance.record.auth.type = Priority.LOW
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+    def test_enum_binding_with_optional_nested_field(self, qt: QtDriver) -> None:
+        """Enum binding with selectedItem='auth?.type' handles optional chaining."""
+        from qtpie import Widget, widget
+
+        @dataclass
+        class AuthSettings:
+            type: Priority = Priority.LOW
+
+        @dataclass
+        class RequestWithAuth:
+            auth: AuthSettings | None = None
+
+        # Test with auth=None
+        @widget(record=RequestWithAuth(auth=None))
+        class TestWidgetNull(Widget[RequestWithAuth]):
+            _combo: QComboBox = new(bind=Priority, selectedItem="auth?.type")
+
+        instance1 = TestWidgetNull()
+        qt.track(instance1)
+        instance1.show()
+
+        # With auth=None, should default to first enum value
+        assert_that(instance1._combo.currentIndex()).is_equal_to(0)
+
+        # Test with auth set
+        @widget(record=RequestWithAuth(auth=AuthSettings(type=Priority.HIGH)))
+        class TestWidgetSet(Widget[RequestWithAuth]):
+            _combo: QComboBox = new(bind=Priority, selectedItem="auth?.type")
+
+        instance2 = TestWidgetSet()
+        qt.track(instance2)
+        instance2.show()
+
+        # Should reflect auth.type (HIGH = index 2)
+        assert_that(instance2._combo.currentIndex()).is_equal_to(2)

@@ -767,10 +767,18 @@ def create_format_binding(
                 if config.record_type is not None:
                     try:
                         record = widget.record
-                        if hasattr(record.observable, root_name):
-                            obs = getattr(record.observable, root_name)
-                            if isinstance(obs, Observable):
-                                context[root_name] = obs.get()
+                        # record is a RecordVariable with .observable property (ObservableProxy)
+                        proxy = record.observable
+                        # Check target is not None first (record might not be bound yet)
+                        target: Any = object.__getattribute__(proxy, "_target")
+                        if target is not None and hasattr(target, root_name):
+                            # Access field on proxy - returns Observable or ObservableProxy
+                            field_obs = getattr(proxy, root_name)
+                            if isinstance(field_obs, Observable):
+                                context[root_name] = field_obs.get()
+                                continue
+                            elif isinstance(field_obs, ObservableProxy):
+                                context[root_name] = field_obs.unwrap()
                                 continue
                     except (TypeError, AttributeError):
                         pass

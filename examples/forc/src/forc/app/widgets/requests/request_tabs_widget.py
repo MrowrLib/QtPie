@@ -3,13 +3,13 @@ from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
     QTableView,
     QTabWidget,
 )
 
 from forc.domain.models import KeyValue, Request
+from forc.domain.models.auth import AuthType
 from forc.domain.models.core import BodyType
 from qtpie import Stretch, Widget, new, widget
 
@@ -47,15 +47,15 @@ class ParamsTabContent(Widget[Request]):
 class HeadersTabContent(Widget[Request]):
     """Headers tab content showing request headers."""
 
-    _label: QLabel = new(bind="{record.headers}")
+    _label: QLabel = new(bind="headers")
 
 
 @widget(title="Auth")
 class AuthTabContent(Widget[Request]):
     """Auth tab content showing authentication settings."""
 
-    _label: QLabel = new(bind="{record.auth}")  # <--- this works!
-    _label2: QLabel = new(bind="{auth}")  # <--- this does not work! wtf, it shows 'None'
+    ### Widgets ###
+    _auth_type: QComboBox = new(bind=AuthType, selectedItem="auth?.type")
 
 
 @widget(title="Body")
@@ -63,27 +63,24 @@ class BodyTabContent(Widget[Request]):
     """Body tab content showing request body."""
 
     ### Widgets ###
-    _body_type: QComboBox = new(
-        bind=BodyType,
-        selectedItem="body_type",
-    )
-    _body_content: QPlainTextEdit = new(
-        bind="body",
-        visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
-    )
-    _body_fields_add_button: QPushButton = new(
-        "+ Add Field",
-        clicked="_on_add_body_field",
-        visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
-    )
-    _body_fields: QTableView = new(
-        bind="body_fields",
-        visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
-    )
+    _body_type: QComboBox = new(bind=BodyType, selectedItem="body_type")
+    # _body_content: QPlainTextEdit = new(
+    #     bind="body",
+    #     visible="{body_type in [BodyType.TEXT, BodyType.JSON, BodyType.XML]}",
+    # )
+    # _body_fields_add_button: QPushButton = new(
+    #     "+ Add Field",
+    #     clicked="_on_add_body_field",
+    #     visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+    # )
+    # _body_fields: QTableView = new(
+    #     bind="body_fields",
+    #     visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+    # )
 
-    ### Methods ###
-    def _on_add_body_field(self) -> None:
-        self.record.body_fields.append(KeyValue(key="", value=""))
+    # ### Methods ###
+    # def _on_add_body_field(self) -> None:
+    #     self.record.body_fields.append(KeyValue(key="", value=""))
 
 
 @widget

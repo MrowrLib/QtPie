@@ -36,6 +36,23 @@ class Employee:
     address: Address | None = None
 
 
+@dataclass
+class Auth:
+    """Auth model for testing optional fields."""
+
+    auth_type: str = "none"
+    token: str = ""
+
+
+@dataclass
+class Request:
+    """Request model with optional auth field."""
+
+    name: str = ""
+    url: str = ""
+    auth: Auth | None = None
+
+
 class TestAutoBindToRecord:
     """Test auto-binding QWidget fields to record fields."""
 
@@ -227,6 +244,47 @@ class TestFormatStringBinding:
         # Change just age
         w._qtpie.record_state.observable.age.set(41)  # type: ignore[union-attr]
         assert_that(w.summary.text()).is_equal_to("Frank (41)")
+
+    def test_format_string_optional_field_none(self, qt: QtDriver) -> None:
+        """Format string binding to optional record field that is None.
+
+        Regression test: {auth} should resolve to record.auth (None), not undefined.
+        Previously {auth} would fail because the code tried to access record.observable.auth
+        instead of using observable_for_path().
+        """
+
+        @widget
+        class RequestView(Widget[Request]):
+            auth_display: QLabel = new(bind="{auth}")
+
+        w = qt.track(RequestView())
+
+        # auth is None by default - should display "None" not cause an error
+        assert_that(w.auth_display.text()).is_equal_to("None")
+
+    def test_format_string_optional_field_with_value(self, qt: QtDriver) -> None:
+        """Format string binding to optional record field with a value."""
+
+        @widget(record=Request(name="test", auth=Auth(auth_type="bearer", token="abc123")))
+        class RequestView(Widget[Request]):
+            auth_display: QLabel = new(bind="{auth}")
+
+        w = qt.track(RequestView())
+
+        # auth has a value - should display the Auth object
+        assert_that(w.auth_display.text()).contains("Auth")
+        assert_that(w.auth_display.text()).contains("bearer")
+
+    def test_format_string_optional_field_nested(self, qt: QtDriver) -> None:
+        """Format string with expression on optional record field."""
+
+        @widget(record=Request(name="test", auth=Auth(auth_type="bearer", token="secret")))
+        class RequestView(Widget[Request]):
+            auth_type_display: QLabel = new(bind="{auth.auth_type if auth else 'none'}")
+
+        w = qt.track(RequestView())
+
+        assert_that(w.auth_type_display.text()).is_equal_to("bearer")
 
 
 class TestOptionalChaining:
