@@ -247,6 +247,7 @@ def apply_model_binding(
     # Extract ObservableList from Variable or use directly
     # Also handle dict -> list[KeyValuePair] conversion for QTableView
     is_dict_binding = False
+    source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = None  # Track source dict for editing
 
     if isinstance(source, VarType):
         wrapper = source.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
@@ -255,6 +256,7 @@ def apply_model_binding(
         elif isinstance(wrapper, ObservableDict):
             # Variable[dict] wraps ObservableDict - convert to list of tuples
             obs_list = ObservableList(list(cast(ObservableDict[Any, Any], wrapper).items()))
+            source_dict = cast(ObservableDict[Any, Any], wrapper)  # Track for editing
             is_dict_binding = True
         elif isinstance(wrapper, (Observable, ObservableProxy)):
             # Source might be Observable[list] or ObservableProxy with nested list
@@ -265,6 +267,7 @@ def apply_model_binding(
             elif isinstance(val, dict):
                 # Convert dict to list of (key, value) tuples for table display
                 obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
+                source_dict = cast(dict[Any, Any], val)  # Track for editing
                 is_dict_binding = True
             elif val is None:
                 # Initially None - create empty list, will populate later
@@ -274,6 +277,7 @@ def apply_model_binding(
     elif isinstance(source, ObservableDict):
         # ObservableDict directly - convert to list of tuples
         obs_list = ObservableList(list(cast(ObservableDict[Any, Any], source).items()))
+        source_dict = cast(ObservableDict[Any, Any], source)  # Track for editing
         is_dict_binding = True
     elif isinstance(source, Observable):
         val = source.get()  # pyright: ignore[reportUnknownVariableType]
@@ -281,6 +285,7 @@ def apply_model_binding(
             obs_list = ObservableList(cast(list[Any], val))
         elif isinstance(val, dict):
             obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
+            source_dict = cast(dict[Any, Any], val)  # Track for editing
             is_dict_binding = True
         elif val is None:
             obs_list = ObservableList[Any]()
@@ -340,6 +345,27 @@ def apply_model_binding(
             if headers is None:
                 headers = cast(dict[str | int, str], {0: "Key", 1: "Value"})
 
+        # Resolve editable - default is True (like other Qt widgets)
+        # readOnly=True sets editable=False
+        editable = field_info.table_editable
+        if field_info.table_readonly is True:
+            editable = False
+        elif editable is None:
+            # Default: editable=True (consistent with QLineEdit, QTextEdit, etc.)
+            editable = True
+
+        # For dict bindings, map "key"/"value" to column indices
+        if is_dict_binding and isinstance(editable, list):
+            mapped_editable: list[str | int] = []
+            for col in cast(list[str | int], editable):
+                if col == "key":
+                    mapped_editable.append(0)
+                elif col == "value":
+                    mapped_editable.append(1)
+                else:
+                    mapped_editable.append(col)
+            editable = mapped_editable
+
         model = ReactiveTableModel(
             obs_list,
             parent=widget_instance,
@@ -347,6 +373,8 @@ def apply_model_binding(
             headers=headers,
             checkable=field_info.table_checkable,
             checkable_text=field_info.table_checkable_text,
+            editable=editable,
+            source_dict=source_dict,
         )
     else:
         # Create ReactiveListModel for QComboBox, QListView, etc.

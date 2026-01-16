@@ -5,6 +5,7 @@
 # pyright: reportUntypedClassDecorator=false
 # pyright: reportUnknownArgumentType=false
 # pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
 # pyright: reportOptionalMemberAccess=false
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportCallIssue=false
@@ -1026,3 +1027,424 @@ class TestTableViewRecordDictBinding:
         entries = {(row0_key, row0_val), (row1_key, row1_val)}
         assert_that(entries).contains(("X-Header", "header-value"))
         assert_that(entries).contains(("Content-Type", "text/plain"))
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewEditable:
+    """QTableView with editable=/readOnly= parameters."""
+
+    def test_table_editable_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView is editable by default (consistent with QLineEdit, QTextEdit, etc.)."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check flags - SHOULD have ItemIsEditable by default
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+
+    def test_table_readonly_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with readOnly=True makes it read-only (like QLineEdit.setReadOnly)."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", readOnly=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check flags - should NOT have ItemIsEditable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+
+    def test_table_editable_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=False makes it read-only."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", editable=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check flags - should NOT have ItemIsEditable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+
+    def test_table_editable_all_columns_explicit(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=True explicitly makes all columns editable."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", editable=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Both columns should be editable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+
+    def test_table_editable_value_column_only(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=["value"] only allows editing the value column."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", editable=["value"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Key column (0) should NOT be editable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+        # Value column (1) SHOULD be editable
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+
+    def test_table_edit_dict_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """Editing dict value updates the underlying dict."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", editable=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Edit the value column
+        success = model.setData(model.index(0, 1), "text/plain", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify the underlying dict was updated
+        assert_that(instance._headers["Content-Type"]).is_equal_to("text/plain")
+
+    def test_table_edit_dict_key(self, base_class, decorator, qt: QtDriver) -> None:
+        """Editing dict key renames the key in the underlying dict."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Old-Key": "some-value"})
+            _table: QTableView = new(bind="_headers", editable=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Edit the key column
+        success = model.setData(model.index(0, 0), "New-Key", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify old key removed and new key exists
+        assert_that("Old-Key" in instance._headers).is_false()
+        assert_that("New-Key" in instance._headers).is_true()
+        assert_that(instance._headers["New-Key"]).is_equal_to("some-value")
+
+    def test_table_editable_dataclass(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=True for dataclass list allows editing fields."""
+
+        @dataclass
+        class Task:
+            name: str
+            done: bool = False
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task("Buy milk"), Task("Walk dog")])
+            _table: QTableView = new(bind="_tasks", editable=["name"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Edit the name field
+        success = model.setData(model.index(0, 0), "Buy bread", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify the underlying dataclass was updated
+        assert_that(instance._tasks[0].name).is_equal_to("Buy bread")
+
+    def test_table_editable_dict_str_int(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with Variable[dict[str, int]] editing converts values properly."""
+
+        @decorator
+        class TestClass(base_class):
+            dictionary: Variable[dict[str, int]] = new({"count": 42, "total": 100})
+            _table: QTableView = new(bind="dictionary", editable=["value"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Find the row with "count"
+        for row in range(model.rowCount()):
+            if model.data(model.index(row, 0)) == "count":
+                # Edit the value
+                success = model.setData(model.index(row, 1), "99", Qt.ItemDataRole.EditRole)
+                assert_that(success).is_true()
+                break
+
+        # Verify the underlying dict was updated
+        assert_that(instance.dictionary["count"]).is_equal_to("99")
+
+    def test_edit_role_returns_current_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """EditRole returns current cell value so editor is pre-populated."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers", editable=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # EditRole should return the current value (for pre-populating editor)
+        key_value = model.data(model.index(0, 0), Qt.ItemDataRole.EditRole)
+        value_value = model.data(model.index(0, 1), Qt.ItemDataRole.EditRole)
+
+        assert_that(key_value).is_equal_to("Content-Type")
+        assert_that(value_value).is_equal_to("application/json")
+
+
+# =============================================================================
+# Comprehensive Dict Binding Tests (ObservableDict, Variable[dict], RecordVariable[dict], raw dict)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewObservableDictBinding:
+    """QTableView with bind= to ObservableDict directly (not wrapped in Variable)."""
+
+    def test_table_binds_to_observable_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind=ObservableDict shows dict items as key/value rows."""
+        from observant import ObservableDict
+
+        @decorator
+        class TestClass(base_class):
+            headers: ObservableDict[str, str]
+            _table: QTableView = new(bind="headers")
+
+            def __setup__(self) -> None:
+                self.headers = ObservableDict({"Content-Type": "application/json", "Accept": "text/html"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have a model
+        assert_that(model).is_not_none()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+        # Should have 2 columns (Key, Value)
+        assert_that(model.columnCount()).is_equal_to(2)
+
+        # Check headers
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+    def test_observable_dict_editable(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=True and ObservableDict allows editing."""
+        from observant import ObservableDict
+
+        @decorator
+        class TestClass(base_class):
+            headers: ObservableDict[str, str]
+            _table: QTableView = new(bind="headers", editable=True)
+
+            def __setup__(self) -> None:
+                self.headers = ObservableDict({"X-Custom": "initial-value"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Edit the value column
+        success = model.setData(model.index(0, 1), "new-value", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify the underlying ObservableDict was updated
+        assert_that(instance.headers["X-Custom"]).is_equal_to("new-value")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewRawDictBinding:
+    """QTableView with bind= to plain Python dict (not Observable)."""
+
+    def test_table_binds_to_raw_dict_via_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind=Variable[dict] works when Variable wraps a raw dict."""
+
+        @decorator
+        class TestClass(base_class):
+            _headers: Variable[dict[str, str]] = new({"Content-Type": "application/json"})
+            _table: QTableView = new(bind="_headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have a model
+        assert_that(model).is_not_none()
+
+        # Should have 1 row
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Check headers
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+        # Check data
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Content-Type")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("application/json")
+
+
+@dataclass
+class HttpResponse:
+    """Test dataclass with dict property for RecordVariable[dict] tests."""
+
+    status_code: int
+    headers: dict[str, str]
+
+
+@dataclass
+class Config:
+    """Test dataclass with dict property."""
+
+    settings: dict[str, int]
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewRecordVariableDictBinding:
+    """QTableView with bind= to record.dict_property (RecordVariable[dict] scenario)."""
+
+    def test_table_binds_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind='headers' shows dict from Widget[HttpResponse].record."""
+
+        @decorator(record=HttpResponse(200, {"Content-Type": "text/html", "Server": "nginx"}))
+        class TestClass(base_class[HttpResponse]):  # type: ignore[misc]
+            _table: QTableView = new(bind="headers")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have a model
+        assert_that(model).is_not_none()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Check headers
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+    def test_record_dict_property_editable(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable= and record.dict_property allows editing."""
+
+        @decorator(record=HttpResponse(200, {"X-Test": "original"}))
+        class TestClass(base_class[HttpResponse]):  # type: ignore[misc]
+            _table: QTableView = new(bind="headers", editable=["value"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Key column (0) should NOT be editable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+        # Value column (1) SHOULD be editable
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+
+    def test_record_dict_via_child_widget_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[HttpResponse] with QTableView bind='headers' works.
+
+        This is the full scenario:
+        1. Parent has response: Variable[HttpResponse | None] = new(None)
+        2. Child Widget[HttpResponse] is created with _table: QTableView = new(bind="headers")
+        3. Parent sets response = HttpResponse(...) LATER
+        4. Child's QTableView should display the headers dict
+        """
+        from qtpie import Widget, widget
+
+        @widget
+        class HeadersViewer(Widget[HttpResponse]):
+            """Child widget that displays headers in a table."""
+
+            _table: QTableView = new(bind="headers")
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[HttpResponse | None] = new(None)
+            _viewer: HeadersViewer = new(bind="_response")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Get the child widget
+        viewer = instance._viewer
+        assert_that(viewer).is_not_none()
+
+        # Now set the response - THIS should trigger model binding
+        instance._response.value = HttpResponse(200, {"Authorization": "Bearer token"})
+
+        model = viewer._table.model()
+
+        # Model should be set NOW (after response was set)
+        assert_that(model).is_not_none()
+
+        # Should have 1 row (one dict entry)
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Check data
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Authorization")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Bearer token")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewDictBindingKeyValueFormat:
+    """Test {#key} and {#value} format placeholders work correctly."""
+
+    def test_dict_format_key_value_placeholders(self, base_class, decorator, qt: QtDriver) -> None:
+        """format='{#key}: {#value}' works for dict binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _settings: Variable[dict[str, int]] = new({"timeout": 30, "retries": 3})
+            _table: QTableView = new(bind="_settings")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have 2 rows
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Get all entries (order may vary)
+        row0_key = model.data(model.index(0, 0))
+        row0_val = model.data(model.index(0, 1))
+        row1_key = model.data(model.index(1, 0))
+        row1_val = model.data(model.index(1, 1))
+
+        entries = {(row0_key, row0_val), (row1_key, row1_val)}
+        assert_that(entries).contains(("timeout", "30"))
+        assert_that(entries).contains(("retries", "3"))
+
+    def test_dict_binding_with_different_value_types(self, base_class, decorator, qt: QtDriver) -> None:
+        """Dict binding works with different value types (int, float, bool)."""
+
+        @decorator
+        class TestClass(base_class):
+            _config: Variable[dict[str, int]] = new({"count": 10, "max": 100})
+            _table: QTableView = new(bind="_config")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Values should be converted to strings
+        entries = set()
+        for row in range(model.rowCount()):
+            key = model.data(model.index(row, 0))
+            val = model.data(model.index(row, 1))
+            entries.add((key, val))
+
+        assert_that(entries).contains(("count", "10"))
+        assert_that(entries).contains(("max", "100"))

@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import fields, is_dataclass
 from typing import Any, cast, override
 
-from observant import ObservableList
+from observant import ObservableDict, ObservableList
 from qtpy.QtCore import QAbstractTableModel, QModelIndex, QObject, QPersistentModelIndex, Qt
 
 
@@ -45,6 +45,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
         format_fns: dict[str | int, Callable[[Any], str]] | None = None,
         checkable: list[str] | bool | None = None,
         checkable_text: str | dict[str, str] | None = None,
+        editable: list[str | int] | bool | None = None,
+        source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
@@ -52,6 +54,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._format_fns = format_fns or {}
         self._checkable = checkable  # None=auto-detect, list=explicit, False=none
         self._checkable_text = checkable_text  # None=no text, str=all columns, dict=per-column
+        self._editable = editable  # None/False=none, True=all, list=specific columns
+        self._source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = source_dict  # For dict bindings
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
@@ -63,6 +67,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
         # Resolve checkable columns after columns are known
         self._checkable_columns: set[str] = self._resolve_checkable_columns()
+        # Resolve editable columns
+        self._editable_columns: set[str | int] = self._resolve_editable_columns()
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -95,6 +101,17 @@ class ReactiveTableModel[T](QAbstractTableModel):
             item = self._obs_list[0]
             if is_dataclass(item) and not isinstance(item, type):
                 return {f.name for f in fields(item) if f.type is bool or f.type == "bool"}
+        return set()
+
+    def _resolve_editable_columns(self) -> set[str | int]:
+        """Resolve which columns should be editable."""
+        if self._editable is None or self._editable is False:
+            return set()
+        if self._editable is True:
+            # All columns editable
+            return set(self._columns)
+        if isinstance(self._editable, list):  # pyright: ignore[reportUnnecessaryIsInstance]
+            return set(self._editable)
         return set()
 
     def _get_checkable_text_format(self, column_name: str) -> str | None:
@@ -148,9 +165,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
         item = self._obs_list[row]
         column_name = self._columns[col]
 
-        if role == Qt.ItemDataRole.DisplayRole:
-            # Handle checkable columns
-            if column_name in self._checkable_columns:
+        if role == Qt.ItemDataRole.DisplayRole or role == Qt.ItemDataRole.EditRole:
+            # Handle checkable columns (DisplayRole only)
+            if role == Qt.ItemDataRole.DisplayRole and column_name in self._checkable_columns:
                 text_format = self._get_checkable_text_format(column_name)
                 if text_format is None:
                     return ""  # Checkbox only, no text
@@ -169,7 +186,11 @@ class ReactiveTableModel[T](QAbstractTableModel):
                 # String column = attribute access
                 value = getattr(item, column_name, None)
 
-            # Apply format function if available
+            # For EditRole, return raw value (for editor to use)
+            if role == Qt.ItemDataRole.EditRole:
+                return str(cast(Any, value)) if value is not None else ""
+
+            # For DisplayRole, apply format function if available
             if column_name in self._format_fns:
                 return self._format_fns[column_name](value)
 
@@ -195,29 +216,64 @@ class ReactiveTableModel[T](QAbstractTableModel):
         value: Any,
         role: int = Qt.ItemDataRole.EditRole,
     ) -> bool:
-        """Set data for the given index (handles checkbox state changes)."""
+        """Set data for the given index (handles checkbox and edit changes)."""
         if not index.isValid():
             return False
 
+        row = index.row()
+        col = index.column()
+
+        if row < 0 or row >= len(self._obs_list):
+            return False
+        if col < 0 or col >= len(self._columns):
+            return False
+
+        column_name = self._columns[col]
+        item = self._obs_list[row]
+
         if role == Qt.ItemDataRole.CheckStateRole:
-            row = index.row()
-            col = index.column()
-
-            if row < 0 or row >= len(self._obs_list):
-                return False
-            if col < 0 or col >= len(self._columns):
-                return False
-
-            column_name = self._columns[col]
             if column_name not in self._checkable_columns:
                 return False
 
-            item = self._obs_list[row]
             # Qt.CheckState.Checked.value is 2, Unchecked.value is 0
             new_value = value == Qt.CheckState.Checked.value
             setattr(item, column_name, new_value)
             self.dataChanged.emit(index, index, [role])
             return True
+
+        elif role == Qt.ItemDataRole.EditRole:
+            if column_name not in self._editable_columns:
+                return False
+
+            # For dict bindings with tuple items (key, value)
+            if self._source_dict is not None and isinstance(item, tuple):
+                tuple_item = cast(tuple[Any, Any], item)
+                old_key = tuple_item[0]
+                old_value = tuple_item[1]
+
+                if column_name == 0:  # Key column
+                    # Rename key: delete old, insert new with same value
+                    new_key = str(value)
+                    if new_key != old_key:
+                        del self._source_dict[old_key]
+                        self._source_dict[new_key] = old_value
+                        # Update the tuple in the list
+                        self._obs_list[row] = (new_key, old_value)  # type: ignore[assignment]
+                elif column_name == 1:  # Value column
+                    # Update value for existing key
+                    new_val = str(value)
+                    self._source_dict[old_key] = new_val
+                    # Update the tuple in the list
+                    self._obs_list[row] = (old_key, new_val)  # type: ignore[assignment]
+
+                self.dataChanged.emit(index, index, [role])
+                return True
+
+            # For regular objects/dataclasses - use setattr
+            if isinstance(column_name, str):
+                setattr(item, column_name, value)
+                self.dataChanged.emit(index, index, [role])
+                return True
 
         return False
 
@@ -233,9 +289,15 @@ class ReactiveTableModel[T](QAbstractTableModel):
             return base_flags
 
         column_name = self._columns[col]
+        result_flags = base_flags
+
         if column_name in self._checkable_columns:
-            return base_flags | Qt.ItemFlag.ItemIsUserCheckable
-        return base_flags
+            result_flags = result_flags | Qt.ItemFlag.ItemIsUserCheckable
+
+        if column_name in self._editable_columns:
+            result_flags = result_flags | Qt.ItemFlag.ItemIsEditable
+
+        return result_flags
 
     @override
     def headerData(

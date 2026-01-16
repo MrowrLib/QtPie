@@ -1111,3 +1111,81 @@ class TestComboBoxDictBinding:
 
         assert_that(instance._combo.count()).is_equal_to(1)
         assert_that(instance._combo.itemText(0)).is_equal_to("X-Custom: test-value")
+
+
+# =============================================================================
+# Comprehensive Dict Binding Tests (ObservableDict, RecordVariable[dict])
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxObservableDictBinding:
+    """QComboBox with bind= to ObservableDict directly."""
+
+    def test_combo_binds_to_observable_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox with bind=ObservableDict shows dict items."""
+        from observant import ObservableDict
+
+        @decorator
+        class TestClass(base_class):
+            headers: ObservableDict[str, str]
+            _combo: QComboBox = new(bind="headers", format="{#key}: {#value}")
+
+            def __setup__(self) -> None:
+                self.headers = ObservableDict({"Content-Type": "application/json", "Accept": "text/html"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Should have 2 items (one per dict entry)
+        assert_that(instance._combo.count()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxRecordVariableDictBinding:
+    """QComboBox with bind= to record.dict_property (RecordVariable[dict] scenario)."""
+
+    def test_combo_binds_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """QComboBox with bind='headers' shows dict from Widget[Response].record."""
+
+        @decorator(record=Response(200, {"Content-Type": "text/html", "Server": "nginx"}))
+        class TestClass(base_class[Response]):  # type: ignore[misc]
+            _combo: QComboBox = new(bind="headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Should have 2 items (one per dict entry)
+        assert_that(instance._combo.count()).is_equal_to(2)
+
+    @pytest.mark.xfail(reason="Child widget dict binding with late record assignment not fully supported for QComboBox")
+    def test_record_dict_via_child_widget_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Response] with QComboBox bind='headers' works.
+
+        Note: This test is xfail because ReactiveListModel doesn't have the same
+        root sync callback as ReactiveTableModel for dict bindings. QTableView
+        passes this test but QComboBox doesn't auto-sync when parent sets record later.
+        """
+        from qtpie import Widget, widget
+
+        @widget
+        class HeadersSelector(Widget[Response]):
+            """Child widget that shows headers in a combo."""
+
+            _combo: QComboBox = new(bind="headers", format="{#key}: {#value}")
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _selector: HeadersSelector = new(bind="_response")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Get the child widget
+        selector = instance._selector
+        assert_that(selector).is_not_none()
+
+        # Now set the response - THIS should trigger model binding
+        instance._response.value = Response(200, {"Authorization": "Bearer token"})
+
+        # Combo should have 1 item NOW (after response was set)
+        assert_that(selector._combo.count()).is_equal_to(1)
+        assert_that(selector._combo.itemText(0)).is_equal_to("Authorization: Bearer token")

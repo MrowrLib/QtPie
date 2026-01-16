@@ -53,7 +53,7 @@ class ParamsTabContent(Widget[Request]):
 
 @widget(title="Headers")
 class HeadersTabContent(Widget[Request]):
-    _table: QTableView = new(bind="headers")
+    _table: QTableView = new(bind="headers")  # , editable=True)
 
 
 @widget(title="Auth")

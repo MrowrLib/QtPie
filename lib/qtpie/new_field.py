@@ -77,6 +77,9 @@ class NewField:
         # Checkable columns for QTableView (bool fields auto-detected by default)
         self.table_checkable: list[str] | bool | None = None  # Checkable columns or False to disable
         self.table_checkable_text: str | dict[str, str] | None = None  # Text format for checkable columns
+        # Editable columns for QTableView (default is editable, like other Qt widgets)
+        self.table_editable: list[str | int] | bool | None = None  # Editable columns: True=all, list=specific, False=none
+        self.table_readonly: bool | None = None  # readOnly=True sets editable=False (alias for consistency with other widgets)
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
@@ -680,6 +683,14 @@ class NewField:
                     # - str: format expression for all checkable columns
                     # - dict[str, str]: per-column format expressions
                     self.table_checkable_text = self.kwargs.pop("checkableText", None)
+                    # editable= specifies which columns can be edited
+                    # - None (default): all columns editable (like other Qt widgets)
+                    # - True: all columns editable (explicit)
+                    # - False: no columns editable (read-only)
+                    # - list[str|int]: only these columns are editable
+                    self.table_editable = self.kwargs.pop("editable", None)
+                    # readOnly= is an alias for editable=False (matches QLineEdit, QTextEdit, etc.)
+                    self.table_readonly = self.kwargs.pop("readOnly", None)
                 # Extract QListView-specific kwargs only if this is a QListView
                 elif self._is_qlistview_type():
                     # widget= specifies a Widget class to embed in each list item

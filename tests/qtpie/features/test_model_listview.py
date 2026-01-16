@@ -631,3 +631,79 @@ class TestListViewDictBinding:
 
         assert_that(model.rowCount()).is_equal_to(1)
         assert_that(model.data(model.index(0, 0))).is_equal_to("X-Custom: test-value")
+
+
+# =============================================================================
+# Comprehensive Dict Binding Tests (ObservableDict, RecordVariable[dict])
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewObservableDictBinding:
+    """QListView with bind= to ObservableDict directly."""
+
+    def test_list_binds_to_observable_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """QListView with bind=ObservableDict shows dict items."""
+        from observant import ObservableDict
+
+        @decorator
+        class TestClass(base_class):
+            headers: ObservableDict[str, str]
+            _list: QListView = new(bind="headers", format="{#key}: {#value}")
+
+            def __setup__(self) -> None:
+                self.headers = ObservableDict({"Content-Type": "application/json", "Accept": "text/html"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewRecordVariableDictBinding:
+    """QListView with bind= to record.dict_property (RecordVariable[dict] scenario)."""
+
+    def test_list_binds_to_record_dict_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """QListView with bind='headers' shows dict from Widget[Response].record."""
+
+        @decorator(record=Response(200, {"Content-Type": "text/html", "Server": "nginx"}))
+        class TestClass(base_class[Response]):  # type: ignore[misc]
+            _list: QListView = new(bind="headers", format="{#key}: {#value}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Should have 2 rows (one per dict entry)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_record_dict_via_child_widget_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Response] with QListView bind='headers' works."""
+        from qtpie import Widget, widget
+
+        @widget
+        class HeadersList(Widget[Response]):
+            """Child widget that shows headers in a list."""
+
+            _list: QListView = new(bind="headers", format="{#key}: {#value}")
+
+        @decorator
+        class TestClass(base_class):
+            _response: Variable[Response | None] = new(None)
+            _headers_list: HeadersList = new(bind="_response")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Get the child widget
+        headers_list = instance._headers_list
+        assert_that(headers_list).is_not_none()
+
+        # Now set the response - THIS should trigger model binding
+        instance._response.value = Response(200, {"Authorization": "Bearer token"})
+
+        model = headers_list._list.model()
+
+        # Model should have 1 row NOW (after response was set)
+        assert_that(model.rowCount()).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Authorization: Bearer token")
