@@ -53,7 +53,7 @@ class ParamsTabContent(Widget[Request]):
 
 @widget(title="Headers")
 class HeadersTabContent(Widget[Request]):
-    _label: QLabel = new(bind="headers")
+    _table: QTableView = new(bind="headers")
 
 
 @widget(title="Auth")
@@ -102,12 +102,6 @@ class BodyTabContent(Widget[Request]):
 
 @widget
 class RequestEditorWidget(Widget[Request]):
-    ### Tab Content Widgets ###
-    # _params_tab: ParamsTabContent = new(layout=False)
-    # _body_tab: BodyTabContent = new(layout=False)
-    # _auth_tab: AuthTabContent = new(layout=False)
-
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
-    # _tabs: QTabWidget = new(tabs=[_params_tab, _body_tab, _auth_tab])
-    _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent])
+    _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])

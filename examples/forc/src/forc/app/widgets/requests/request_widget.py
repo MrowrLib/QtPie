@@ -1,5 +1,5 @@
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtWidgets import QLabel, QSplitter, QTableView
+from qtpy.QtWidgets import QSplitter
 
 from forc.app.widgets.response import ResponseViewerWidget
 from forc.domain.models import Request, Response
@@ -24,11 +24,6 @@ class RequestWidget(Widget[Request]):
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
     _editor: RequestEditorWidget = new(splitter="_splitter")
     _response_xxx: ResponseViewerWidget = new(bind="response", splitter="_splitter")
-    _lbl: QLabel = new("... below me ...")
-
-    # EVEN THIS DOES NOT WORK, WHAT IS HAPPENING???
-    _headers_table: QTableView = new(bind="response?.headers")  # weird! nothing shows up here either????!!???
-    _headers_xxx: list[QLabel] = new(bind="response?.headers", format="HEADER: {#key}: {#value}")  # nothing shows up!
 
     ### Methods ###
     def __setup__(self) -> None:
