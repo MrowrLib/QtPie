@@ -642,9 +642,6 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             else:
                                 _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
 
-        # Connect signals (clicked="on_clicked" or clicked=lambda: ...)
-        _connect_signals(self, config)
-
         # Register validators from validate= parameter (before __setup__ so they're active)
         _register_validators(self, config)
 
@@ -668,6 +665,11 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
         pre_create_selection_variables(self, config)
 
         apply_auto_bindings(self, config)
+
+        # Connect user signals AFTER bindings are set up
+        # This ensures selection bindings run first, so user handlers see updated values
+        # (e.g., currentIndexChanged handler sees the new selectedItem value)
+        _connect_signals(self, config)
 
         # Apply property bindings (visible="_is_visible", enabled="{_count > 0}", etc.)
         apply_property_bindings(self, config, create_expression_binding_fn=create_expression_binding)

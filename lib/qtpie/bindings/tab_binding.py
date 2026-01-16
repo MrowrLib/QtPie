@@ -432,6 +432,23 @@ def apply_tab_widget_bindings(
     from qtpie.bindings import resolve_binding_source
     from qtpie.variable import Variable as VarType
 
+    # Guard against reapplying tab bindings (e.g., when _propagate_record_to_child calls apply_auto_bindings)
+    # This prevents clearing and recreating all tab widgets
+    qtpie_state = getattr(host, "_qtpie", None)
+    if qtpie_state is not None:
+        tab_widget_id = id(tab_widget)
+        connected_set = getattr(qtpie_state, "_selection_bindings_connected", None)
+        if connected_set is not None:
+            tab_key = f"tabwidget_{tab_widget_id}"
+            if tab_key in connected_set:
+                # Tab bindings already applied - just propagate record to existing tabs
+                for i in range(tab_widget.count()):
+                    child = tab_widget.widget(i)
+                    if child is not None:
+                        _propagate_record_to_child(host, child)
+                return
+            connected_set.add(tab_key)
+
     tabs_source = field_info.tabs
     tab_widgets: dict[str, QWidget] = {}
 

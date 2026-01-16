@@ -36,7 +36,6 @@ def setup_selection_bindings(
         return
 
     from observant import Observable, ObservableProxy
-    from qtpy.QtCore import QTimer
 
     from qtpie.variable import Variable as VarType
 
@@ -70,42 +69,10 @@ def setup_selection_bindings(
         if isinstance(source, VarType):
             items_list_var = source  # pyright: ignore[reportUnknownVariableType]
 
-    # Check if we couldn't resolve any Variables that were requested
-    # If so, the widget might not be parented yet - schedule deferred retry
-    missing_single = (selected_index_path is not None and index_var is None) or (selected_item_path is not None and item_var is None)
-    missing_multi = (selected_indexes_path is not None and indexes_var is None) or (selected_items_list_path is not None and items_list_var is None)
-
-    if missing_single or missing_multi:
-
-        def retry_binding() -> None:
-            # Re-resolve Variables after parenting
-            nonlocal index_var, item_var, indexes_var, items_list_var
-            if selected_index_path is not None and index_var is None:
-                source = resolve_or_create_variable_fn(host, selected_index_path, int)
-                if isinstance(source, VarType):
-                    index_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_item_path is not None and item_var is None:
-                source = resolve_or_create_variable_fn(host, selected_item_path, None)
-                if isinstance(source, VarType):
-                    item_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_indexes_path is not None and indexes_var is None:
-                source = resolve_or_create_variable_fn(host, selected_indexes_path, None)
-                if isinstance(source, VarType):
-                    indexes_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_items_list_path is not None and items_list_var is None:
-                source = resolve_or_create_variable_fn(host, selected_items_list_path, None)
-                if isinstance(source, VarType):
-                    items_list_var = source  # pyright: ignore[reportUnknownVariableType]
-
-            # If we found them now, set up the actual bindings
-            has_vars = index_var is not None or item_var is not None or indexes_var is not None or items_list_var is not None
-            if has_vars:
-                _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
-
-        QTimer.singleShot(0, retry_binding)
-        return
-
-    # Set up bindings immediately if Variables were found
+    # ALWAYS call _setup_selection_bindings_impl to connect the signal handler early.
+    # This ensures the selection binding handler is connected BEFORE user's signal handlers
+    # (which are connected later in _connect_signals). The handler uses a mutable container
+    # so it can access Variables that are resolved later when bindings are reapplied.
     _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
 
 
@@ -123,19 +90,54 @@ def _setup_selection_bindings_impl(
     from qtpy.QtCore import QModelIndex, Qt
     from qtpy.QtWidgets import QComboBox
 
+    # Use mutable containers for model and item_var so they can be updated when
+    # record changes. This allows the same signal handler to use updated references
+    # without needing to disconnect/reconnect (which would mess up handler ordering).
+    handler_key = f"selection_{id(widget)}"
+    qtpie_state = getattr(host, "_qtpie", None)
+    handler_connected = False
+
+    # Container for model, index_var, and item_var - allows updating references when bindings reapply
+    binding_container: dict[str, Any] = {
+        "model": model,
+        "index_var": index_var,
+        "item_var": item_var,
+        "is_observable": isinstance(item_var, Observable) if item_var is not None else False,
+        "connected": False,
+    }
+
+    if qtpie_state is not None:
+        handlers_dict: dict[str, Any] | None = getattr(qtpie_state, "_handlers", None)
+        if handlers_dict is not None:
+            existing = handlers_dict.get(handler_key)
+            # Check if it's a dict (our new format) vs a function (old QListView format)
+            if existing is not None and isinstance(existing, dict):
+                existing_dict: dict[str, Any] = existing  # pyright: ignore[reportUnknownVariableType]
+                # Update existing container with new model and Variables - the old signal
+                # handler's closures will now use these updated references
+                existing_dict["model"] = model
+                existing_dict["index_var"] = index_var
+                existing_dict["item_var"] = item_var
+                existing_dict["is_observable"] = isinstance(item_var, Observable) if item_var is not None else False
+                binding_container = existing_dict
+                handler_connected = bool(existing_dict.get("connected", False))
+            else:
+                # First time or old format - store container
+                handlers_dict[handler_key] = binding_container
+
     # Flag to prevent circular updates
     updating = {"flag": False}
 
     # Helper to check if model is still valid AND still the current model on the widget
     def is_model_valid() -> bool:
+        current_model_ref = binding_container["model"]
         try:
-            model.rowCount()  # Will raise RuntimeError if deleted
+            current_model_ref.rowCount()  # Will raise RuntimeError if deleted
             # Also check if this model is still the widget's current model
-            # (handles case where binding was set up multiple times with different models)
             get_model = getattr(widget, "model", None)
             if get_model is not None:
-                current_model: Any = get_model()
-                return current_model is model
+                widget_model: Any = get_model()
+                return widget_model is current_model_ref
             return True  # Widget doesn't have model() method, assume valid
         except RuntimeError:
             return False
@@ -143,10 +145,11 @@ def _setup_selection_bindings_impl(
     # Helper to get item at index via model's UserRole
     def get_item_at_index(idx: int) -> Any:
         try:
-            if idx < 0 or idx >= model.rowCount():
+            current_model = binding_container["model"]
+            if idx < 0 or idx >= current_model.rowCount():
                 return None
-            model_index = model.index(idx, 0)
-            return model.data(model_index, Qt.ItemDataRole.UserRole)
+            model_index = current_model.index(idx, 0)
+            return current_model.data(model_index, Qt.ItemDataRole.UserRole)
         except RuntimeError:
             # Model was deleted
             return None
@@ -154,7 +157,8 @@ def _setup_selection_bindings_impl(
     # Helper to find index of item
     def find_index_of_item(item: Any) -> int:
         try:
-            for i in range(model.rowCount()):
+            current_model = binding_container["model"]
+            for i in range(current_model.rowCount()):
                 if get_item_at_index(i) == item:
                     return i
             return -1
@@ -187,20 +191,23 @@ def _setup_selection_bindings_impl(
                 index_var.value = current_widget_idx
 
         # Helper to detect if item_var is Observable (uses .get()/.set()) vs Variable (uses .value)
-        item_var_is_observable = isinstance(item_var, Observable) if item_var is not None else False
+        # Use container so it can be updated when record changes
+        binding_container["is_observable"] = isinstance(item_var, Observable) if item_var is not None else False
 
         def get_item_var_value() -> Any:
-            if item_var is None:
+            current_item_var = binding_container["item_var"]
+            if current_item_var is None:
                 return None
-            return item_var.get() if item_var_is_observable else item_var.value
+            return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
 
         def set_item_var_value(val: Any) -> None:
-            if item_var is None:
+            current_item_var = binding_container["item_var"]
+            if current_item_var is None:
                 return
-            if item_var_is_observable:
-                item_var.set(val)
+            if binding_container["is_observable"]:
+                current_item_var.set(val)
             else:
-                item_var.value = val
+                current_item_var.value = val
 
         if item_var is not None:
             initial_item = get_item_var_value()
@@ -256,7 +263,10 @@ def _setup_selection_bindings_impl(
             item_var.on_change(on_item_var_change_combo)
 
         # Widget → Variable binding
-        if current_index_changed is not None and (index_var is not None or item_var is not None):
+        # IMPORTANT: Always connect the handler on first setup, even if item_var is None.
+        # This ensures the selection binding handler is connected BEFORE user's signal handlers,
+        # so when the signal fires, we update the Variable BEFORE user's handler runs.
+        if current_index_changed is not None:
 
             def on_widget_selection_changed_combo(new_idx: int) -> None:
                 # Guard: check if model is still valid (not deleted when widget was recreated)
@@ -264,15 +274,24 @@ def _setup_selection_bindings_impl(
                     return
                 if updating["flag"]:
                     return
+                # Get current item_var from container (may be None on first setup, valid later)
+                current_item_var = binding_container["item_var"]
+                current_index_var = binding_container.get("index_var")
+                if current_index_var is None and current_item_var is None:
+                    # No bindings yet, nothing to do
+                    return
                 updating["flag"] = True
                 try:
-                    if index_var is not None:
-                        index_var.value = new_idx
+                    if current_index_var is not None:
+                        current_index_var.value = new_idx
                     set_item_var_value(get_item_at_index(new_idx))
                 finally:
                     updating["flag"] = False
 
-            current_index_changed.connect(on_widget_selection_changed_combo)
+            # Only connect if handler wasn't already connected
+            if not handler_connected:
+                current_index_changed.connect(on_widget_selection_changed_combo)
+                binding_container["connected"] = True
 
     else:
         # QListView/QTableView - use selectionModel
@@ -431,3 +450,6 @@ def _setup_selection_bindings_impl(
                     updating["flag"] = False
 
             selection_model.selectionChanged.connect(on_view_multi_selection_changed)  # pyright: ignore[reportUnknownMemberType]
+            # Store handler for disconnection when bindings are reapplied
+            if qtpie_state is not None and hasattr(qtpie_state, "_handlers"):
+                qtpie_state._handlers[handler_key] = on_view_multi_selection_changed

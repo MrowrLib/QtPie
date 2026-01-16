@@ -383,13 +383,17 @@ class QtPieViewModelBase:
 class QtPieState(QtPieStateBase):
     """Instance-level QtPie state for Widget/Window."""
 
-    __slots__ = ("_view_model", "_widget_is_dirty", "_widget_is_valid")
+    __slots__ = ("_view_model", "_widget_is_dirty", "_widget_is_valid", "_selection_bindings_connected", "_handlers")
 
     def __init__(self, host: Any) -> None:
         super().__init__(host)
         self._view_model: QtPieViewModel | None = None
         self._widget_is_dirty: Observable[bool] | None = None
         self._widget_is_valid: Observable[bool] | None = None
+        # Track which fields have had selection bindings connected to prevent duplicate connections
+        self._selection_bindings_connected: set[str] = set()
+        # Store signal handlers for disconnection when bindings are reapplied
+        self._handlers: dict[str, Any] = {}
 
     @property
     def view_model(self) -> QtPieViewModel:

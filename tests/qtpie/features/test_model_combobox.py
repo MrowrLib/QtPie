@@ -1423,3 +1423,631 @@ class TestComboBoxRecordVariableDictBinding:
         # Combo should have 1 item NOW (after response was set)
         assert_that(selector._combo.count()).is_equal_to(1)
         assert_that(selector._combo.itemText(0)).is_equal_to("Authorization: Bearer token")
+
+
+# =============================================================================
+# Signal Handler Multiple Fire Bug Investigation
+# =============================================================================
+
+
+class TestComboBoxSignalHandlerMultipleFires:
+    """Investigate bug where currentIndexChanged fires multiple times.
+
+    User reported that with this setup:
+    - QComboBox bound to Enum
+    - selectedItem= bound to optional nested record field (auth?.location)
+    - currentIndexChanged signal connected to handler
+
+    The handler fires 3 times when user changes selection once.
+    """
+
+    def test_enum_combo_with_nested_selection_and_signal_handler(self, qt: QtDriver) -> None:
+        """Reproduce: Enum combo + selectedItem='auth?.location' + currentIndexChanged handler."""
+        from qtpie import Widget, widget
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        API_KEY_LOCATION_LABELS = {
+            ApiKeyLocation.HEADER: "Header",
+            ApiKeyLocation.QUERY: "Query Parameter",
+        }
+
+        @dataclass
+        class ApiKeyAuth:
+            location: ApiKeyLocation = ApiKeyLocation.HEADER
+
+        @dataclass
+        class Request:
+            auth: ApiKeyAuth | None = None
+
+        # Track how many times the handler is called
+        call_count = {"value": 0}
+
+        @widget(record=Request(auth=ApiKeyAuth(location=ApiKeyLocation.HEADER)))
+        class TestWidget(Widget[Request]):
+            _combo: QComboBox = new(
+                bind=ApiKeyLocation,
+                format=API_KEY_LOCATION_LABELS.get,
+                selectedItem="auth?.location",
+                currentIndexChanged="_on_location_changed",
+            )
+
+            def _on_location_changed(self) -> None:
+                call_count["value"] += 1
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup (setup may trigger the signal)
+        initial_count = call_count["value"]
+        call_count["value"] = 0
+
+        # User changes selection from HEADER (index 0) to QUERY (index 1)
+        instance._combo.setCurrentIndex(1)
+
+        # BUG: This should be 1, but user reports it fires 3 times
+        print(f"Initial setup fired {initial_count} times")
+        print(f"After setCurrentIndex(1), handler fired {call_count['value']} times")
+
+        # Assert it should only fire once
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_enum_combo_with_simple_variable_selection(self, qt: QtDriver) -> None:
+        """Control test: Enum combo + selectedItem='_location' (simple Variable)."""
+        from qtpie import Widget, widget
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        call_count = {"value": 0}
+
+        @widget
+        class TestWidget(Widget):
+            _location: Variable[ApiKeyLocation] = new(ApiKeyLocation.HEADER)
+            _combo: QComboBox = new(
+                bind=ApiKeyLocation,
+                selectedItem="_location",
+                currentIndexChanged="_on_location_changed",
+            )
+
+            def _on_location_changed(self) -> None:
+                call_count["value"] += 1
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        call_count["value"] = 0
+
+        # User changes selection
+        instance._combo.setCurrentIndex(1)
+
+        print(f"Simple Variable: handler fired {call_count['value']} times")
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_enum_combo_no_selection_binding(self, qt: QtDriver) -> None:
+        """Control test: Enum combo with NO selectedItem= binding."""
+        from qtpie import Widget, widget
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        call_count = {"value": 0}
+
+        @widget
+        class TestWidget(Widget):
+            _combo: QComboBox = new(
+                bind=ApiKeyLocation,
+                currentIndexChanged="_on_location_changed",
+            )
+
+            def _on_location_changed(self) -> None:
+                call_count["value"] += 1
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        call_count["value"] = 0
+
+        # User changes selection
+        instance._combo.setCurrentIndex(1)
+
+        print(f"No selection binding: handler fired {call_count['value']} times")
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_enum_combo_with_visible_binding(self, qt: QtDriver) -> None:
+        """Test: Enum combo + selectedItem + visible= binding (closer to user's setup)."""
+        from PySide6.QtWidgets import QLabel
+
+        from qtpie import Widget, widget
+
+        class AuthType(Enum):
+            NONE = "none"
+            API_KEY = "api_key"
+            BEARER = "bearer"
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        API_KEY_LOCATION_LABELS = {
+            ApiKeyLocation.HEADER: "Header",
+            ApiKeyLocation.QUERY: "Query Parameter",
+        }
+
+        @dataclass
+        class ApiKeyAuth:
+            location: ApiKeyLocation = ApiKeyLocation.HEADER
+
+        @dataclass
+        class Request:
+            auth_type: AuthType = AuthType.API_KEY
+            auth: ApiKeyAuth | None = None
+
+        call_count = {"value": 0}
+
+        @widget(record=Request(auth_type=AuthType.API_KEY, auth=ApiKeyAuth(location=ApiKeyLocation.HEADER)))
+        class TestWidget(Widget[Request]):
+            _label: QLabel = new("Auth Type:")
+            _auth_type_combo: QComboBox = new(bind=AuthType, selectedItem="auth_type")
+
+            _location_label: QLabel = new(
+                "Location:",
+                visible="{auth_type == AuthType.API_KEY}",
+            )
+            _location_combo: QComboBox = new(
+                bind=ApiKeyLocation,
+                format=API_KEY_LOCATION_LABELS.get,
+                selectedItem="auth?.location",
+                visible="{auth_type == AuthType.API_KEY}",
+                currentIndexChanged="_on_location_changed",
+            )
+
+            def _on_location_changed(self) -> None:
+                call_count["value"] += 1
+                print(f"  Handler called! Count now: {call_count['value']}")
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        initial_count = call_count["value"]
+        call_count["value"] = 0
+
+        print(f"Initial setup fired {initial_count} times")
+
+        # User changes location selection
+        print("Changing location from HEADER to QUERY...")
+        instance._location_combo.setCurrentIndex(1)
+
+        print(f"After setCurrentIndex(1), handler fired {call_count['value']} times")
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_enum_combo_full_user_scenario(self, qt: QtDriver) -> None:
+        """Full reproduction of user's scenario with format= and all bindings."""
+        from PySide6.QtWidgets import QFormLayout, QLineEdit
+
+        from qtpie import Widget, widget
+
+        class AuthType(Enum):
+            NONE = "none"
+            API_KEY = "api_key"
+            BEARER = "bearer"
+            BASIC = "basic"
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        API_KEY_LOCATION_LABELS = {
+            ApiKeyLocation.HEADER: "Header",
+            ApiKeyLocation.QUERY: "Query Parameter",
+        }
+
+        AUTH_TYPE_LABELS = {
+            AuthType.NONE: "None",
+            AuthType.API_KEY: "API Key",
+            AuthType.BEARER: "Bearer Token",
+            AuthType.BASIC: "Basic Auth",
+        }
+
+        @dataclass
+        class ApiKeyAuth:
+            type: AuthType = AuthType.API_KEY
+            location: ApiKeyLocation = ApiKeyLocation.HEADER
+            key: str = "X-API-Key"
+            value: str = ""
+
+        @dataclass
+        class BasicAuth:
+            type: AuthType = AuthType.BASIC
+            username: str = ""
+            password: str = ""
+
+        @dataclass
+        class BearerAuth:
+            type: AuthType = AuthType.BEARER
+            token: str = ""
+
+        @dataclass
+        class Request:
+            name: str = "Test Request"
+            auth: ApiKeyAuth | BasicAuth | BearerAuth | None = None
+
+        call_count = {"value": 0}
+        call_locations: list[str] = []
+
+        @widget(record=Request(auth=ApiKeyAuth()))
+        class TestWidget(Widget[Request]):
+            _auth_fields_layout: QFormLayout
+
+            # Auth type selector - THIS binds to auth?.type
+            _auth_type: QComboBox = new(
+                bind=AuthType,
+                format=AUTH_TYPE_LABELS.get,
+                selectedItem="auth?.type",
+            )
+
+            # Basic Auth fields
+            _basic_username: QLineEdit = new(
+                bind="auth?.username",
+                layout="_auth_fields_layout",
+                label="Username:",
+                visible="{auth?.type == AuthType.BASIC}",
+            )
+            _basic_password: QLineEdit = new(
+                bind="auth?.password",
+                layout="_auth_fields_layout",
+                label="Password:",
+                visible="{auth?.type == AuthType.BASIC}",
+            )
+
+            # Bearer Auth fields
+            _bearer_token: QLineEdit = new(
+                bind="auth?.token",
+                layout="_auth_fields_layout",
+                label="Token:",
+                visible="{auth?.type == AuthType.BEARER}",
+            )
+
+            # API Key Auth fields
+            _api_key_key: QLineEdit = new(
+                bind="auth?.key",
+                layout="_auth_fields_layout",
+                label="Key:",
+                visible="{auth?.type == AuthType.API_KEY}",
+            )
+            _api_key_value: QLineEdit = new(
+                bind="auth?.value",
+                layout="_auth_fields_layout",
+                label="Value:",
+                visible="{auth?.type == AuthType.API_KEY}",
+            )
+            _api_key_location: QComboBox = new(
+                bind=ApiKeyLocation,
+                format=API_KEY_LOCATION_LABELS.get,
+                layout="_auth_fields_layout",
+                label="Location:",
+                selectedItem="auth?.location",
+                visible="{auth?.type == AuthType.API_KEY}",
+                currentIndexChanged="_on_api_key_location_changed",
+            )
+
+            def _on_api_key_location_changed(self) -> None:
+                call_count["value"] += 1
+                # Try to access record like the user does
+                if self.record.auth is not None and isinstance(self.record_value.auth, ApiKeyAuth):
+                    loc = self.record_value.auth.location
+                    call_locations.append(str(loc))
+                    print(f"  Handler #{call_count['value']}: API Key location = {loc}")
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        initial_count = call_count["value"]
+        call_count["value"] = 0
+        call_locations.clear()
+
+        print(f"Initial setup fired {initial_count} times")
+
+        # User changes location selection
+        print("Changing location from HEADER (0) to QUERY (1)...")
+        instance._api_key_location.setCurrentIndex(1)
+
+        print(f"After setCurrentIndex(1), handler fired {call_count['value']} times")
+        print(f"Call locations: {call_locations}")
+
+        # This is the bug - should be 1, user reports 3
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_enum_combo_embedded_in_parent_widget(self, qt: QtDriver) -> None:
+        """Test: Widget embedded in parent with Variable binding to record."""
+        from PySide6.QtWidgets import QFormLayout, QLabel, QLineEdit
+
+        from qtpie import Widget, widget
+
+        class AuthType(Enum):
+            NONE = "none"
+            API_KEY = "api_key"
+            BEARER = "bearer"
+
+        class ApiKeyLocation(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        API_KEY_LOCATION_LABELS = {
+            ApiKeyLocation.HEADER: "Header",
+            ApiKeyLocation.QUERY: "Query Parameter",
+        }
+
+        AUTH_TYPE_LABELS = {
+            AuthType.NONE: "None",
+            AuthType.API_KEY: "API Key",
+            AuthType.BEARER: "Bearer Token",
+        }
+
+        @dataclass
+        class ApiKeyAuth:
+            type: AuthType = AuthType.API_KEY
+            location: ApiKeyLocation = ApiKeyLocation.HEADER
+            key: str = "X-API-Key"
+            value: str = ""
+
+        @dataclass
+        class Request:
+            name: str = "Test Request"
+            auth: ApiKeyAuth | None = None
+
+        call_count = {"value": 0}
+
+        # Child widget that edits auth
+        @widget(title="Auth")
+        class AuthTabContent(Widget[Request]):
+            _auth_fields_layout: QFormLayout
+
+            _auth_type: QComboBox = new(
+                bind=AuthType,
+                format=AUTH_TYPE_LABELS.get,
+                selectedItem="auth?.type",
+            )
+
+            _api_key_key: QLineEdit = new(
+                bind="auth?.key",
+                layout="_auth_fields_layout",
+                label="Key:",
+                visible="{auth?.type == AuthType.API_KEY}",
+            )
+            _api_key_value: QLineEdit = new(
+                bind="auth?.value",
+                layout="_auth_fields_layout",
+                label="Value:",
+                visible="{auth?.type == AuthType.API_KEY}",
+            )
+            _api_key_location: QComboBox = new(
+                bind=ApiKeyLocation,
+                format=API_KEY_LOCATION_LABELS.get,
+                layout="_auth_fields_layout",
+                label="Location:",
+                selectedItem="auth?.location",
+                visible="{auth?.type == AuthType.API_KEY}",
+                currentIndexChanged="_on_api_key_location_changed",
+            )
+
+            def _on_api_key_location_changed(self) -> None:
+                call_count["value"] += 1
+                print(f"  Handler #{call_count['value']} fired")
+
+        # Parent widget that holds the request
+        @widget
+        class ParentWidget(Widget):
+            _request: Variable[Request] = new(Request(auth=ApiKeyAuth()))
+            _auth_tab: AuthTabContent = new(bind="_request")
+            _name_label: QLabel = new(bind="Name: {_request.name}")
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        initial_count = call_count["value"]
+        call_count["value"] = 0
+
+        print(f"Initial setup fired {initial_count} times")
+
+        # User changes location selection on the child widget
+        print("Changing location from HEADER (0) to QUERY (1)...")
+        instance._auth_tab._api_key_location.setCurrentIndex(1)
+
+        print(f"After setCurrentIndex(1), handler fired {call_count['value']} times")
+
+        # Should be 1
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_signal_handler_sees_updated_value(self, qt: QtDriver) -> None:
+        """Verify that user's signal handler sees the UPDATED value, not the old one."""
+        from qtpie import Widget, widget
+
+        class Priority(Enum):
+            LOW = "low"
+            MEDIUM = "medium"
+            HIGH = "high"
+
+        seen_values: list[Priority] = []
+
+        @widget
+        class TestWidget(Widget):
+            _priority: Variable[Priority] = new(Priority.LOW)
+            _combo: QComboBox = new(
+                bind=Priority,
+                selectedItem="_priority",
+                currentIndexChanged="_on_changed",
+            )
+
+            def _on_changed(self) -> None:
+                # What value does the handler see?
+                seen_values.append(self._priority.value)
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        seen_values.clear()
+
+        # Change from LOW (0) to HIGH (2)
+        instance._combo.setCurrentIndex(2)
+
+        # Handler should see HIGH (the updated value)
+        assert_that(seen_values).is_equal_to([Priority.HIGH])
+
+    def test_combo_in_tab_widget_signal_fires_once(self, qt: QtDriver) -> None:
+        """Test that signal handler fires once when combo is in a tab widget.
+
+        BUG: When a Widget[T] is added via tabs=, _propagate_record_to_child calls
+        apply_auto_bindings AGAIN after the widget was already initialized. This causes
+        the selection binding's signal handler to be connected multiple times.
+        """
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        class Priority(Enum):
+            LOW = "low"
+            MEDIUM = "medium"
+            HIGH = "high"
+
+        @dataclass
+        class Settings:
+            priority: Priority = Priority.LOW
+
+        call_count = {"value": 0}
+
+        @widget(title="Settings")
+        class SettingsTab(Widget[Settings]):
+            _combo: QComboBox = new(
+                bind=Priority,
+                selectedItem="priority",
+                currentIndexChanged="_on_changed",
+            )
+
+            def _on_changed(self) -> None:
+                call_count["value"] += 1
+                print(f"  Tab handler #{call_count['value']} fired")
+
+        @widget(record=Settings(priority=Priority.LOW))
+        class ParentWidget(Widget[Settings]):
+            _tabs: QTabWidget = new(tabs=[SettingsTab])
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset count after initial setup
+        initial_count = call_count["value"]
+        call_count["value"] = 0
+
+        print(f"Initial setup fired {initial_count} times")
+
+        # Get the settings tab
+        settings_tab = instance._tabs.widget(0)
+        assert_that(settings_tab).is_instance_of(SettingsTab)
+
+        # User changes selection
+        print("Changing priority from LOW (0) to HIGH (2)...")
+        settings_tab._combo.setCurrentIndex(2)
+
+        print(f"After setCurrentIndex(2), handler fired {call_count['value']} times")
+
+        # BUG: This fires multiple times because apply_auto_bindings is called twice:
+        # 1. During SettingsTab.__init__
+        # 2. Again in _propagate_record_to_child
+        assert_that(call_count["value"]).is_equal_to(1)
+
+    def test_combo_deeply_nested_in_tab_widget(self, qt: QtDriver) -> None:
+        """Test: Deeply nested Widget[T] structure like Forc.
+
+        Structure: ParentWidget[Request] -> ChildWidget[Request] -> QTabWidget -> GrandchildTab[Request]
+        This matches Forc's: RequestWidget -> RequestEditorWidget -> QTabWidget -> AuthTabContent
+        """
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        class Priority(Enum):
+            LOW = "low"
+            MEDIUM = "medium"
+            HIGH = "high"
+
+        @dataclass
+        class Settings:
+            priority: Priority = Priority.LOW
+
+        call_count = {"value": 0}
+        init_count = {"value": 0}
+
+        @widget(title="Settings Tab")
+        class GrandchildTab(Widget[Settings]):
+            """The deepest widget - like AuthTabContent."""
+
+            _combo: QComboBox = new(
+                bind=Priority,
+                selectedItem="priority",
+                currentIndexChanged="_on_changed",
+            )
+
+            def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                init_count["value"] += 1
+                print(f"  GrandchildTab init #{init_count['value']}")
+                super().__init__(*args, **kwargs)
+
+            def _on_changed(self) -> None:
+                call_count["value"] += 1
+                print(f"  Handler #{call_count['value']} fired")
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            """Middle widget - like RequestEditorWidget."""
+
+            _tabs: QTabWidget = new(tabs=[GrandchildTab])
+
+        @widget(record=Settings(priority=Priority.LOW))
+        class ParentWidget(Widget[Settings]):
+            """Top-level widget - like RequestWidget."""
+
+            _child: ChildWidget
+
+        print("\nCreating ParentWidget...")
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        print(f"GrandchildTab was initialized {init_count['value']} times")
+        print(f"Initial handler fires: {call_count['value']}")
+
+        # Reset count
+        initial_calls = call_count["value"]
+        call_count["value"] = 0
+
+        # Get the deeply nested combo
+        grandchild = instance._child._tabs.widget(0)
+        assert_that(grandchild).is_instance_of(GrandchildTab)
+
+        # Change selection
+        print("\nChanging priority from LOW (0) to HIGH (2)...")
+        grandchild._combo.setCurrentIndex(2)
+
+        print(f"Handler fired {call_count['value']} times after change")
+        print(f"(Initial setup fired {initial_calls} times)")
+
+        # Should only fire once
+        assert_that(call_count["value"]).is_equal_to(1)

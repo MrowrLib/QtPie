@@ -70,11 +70,6 @@ class HeadersTabContent(Widget[Request]):
 
 @widget(title="Auth")
 class AuthTabContent(Widget[Request]):
-    ### Variables ###
-    # _api_key_locations: Variable[list[str]] = new(["header", "query"])
-
-    # _api_key_locations: dict[str, str] = new({ "header": "Header", "query": "Query Parameter" })
-
     ### Widgets ###
     _auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth?.type")
     _auth_fields_layout: QFormLayout
@@ -112,10 +107,11 @@ class AuthTabContent(Widget[Request]):
         visible="{auth?.type == AuthType.API_KEY}",
         currentIndexChanged="_on_api_key_location_changed",
     )
-    # ... more API key stuff ...
 
-    def _on_api_key_location_changed(self) -> None:
-        if self.record.auth is not None and isinstance(self.record_value.auth, ApiKeyAuth):
+    def _on_api_key_location_changed(self, index: int) -> None:
+        print("Hello.")
+        print(f"Index changed to: {index}")
+        if self.record_value and self.record_value.auth is not None and isinstance(self.record_value.auth, ApiKeyAuth):
             print(f"API Key location changed to: {self.record_value.auth.location}")
 
 
