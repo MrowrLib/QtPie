@@ -744,3 +744,241 @@ class TestMethodBinding:
 
         instance._count.value = 1
         assert_that(instance._label.text()).is_equal_to("1 item")
+
+
+# =============================================================================
+# Signal Handler Order Tests - User handlers should see UPDATED values
+# =============================================================================
+
+
+class TestSignalHandlerOrderSimpleWidgets:
+    """Test that user signal handlers see UPDATED values after widget changes.
+
+    This tests the same bug pattern fixed for QComboBox/QListView/QTableView/QTreeView,
+    but for simple widgets like QLineEdit, QSpinBox, QCheckBox, and QSlider.
+    """
+
+    def test_lineedit_textchanged_sees_updated_value(self, qt: QtDriver) -> None:
+        """QLineEdit textChanged handler sees updated Variable value."""
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Config:
+            name: str = "initial"
+
+        @dataclass
+        class Settings:
+            config: Config | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[str] = []
+
+        @widget(title="Config Tab")
+        class ConfigTab(Widget[Settings]):
+            _name: QLineEdit = new(
+                bind="config?.name",
+                textChanged="_on_text_changed",
+            )
+
+            def _on_text_changed(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.config:
+                    seen_values.append(self.record_value.config.name)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            _tabs: QTabWidget = new(tabs=[ConfigTab])
+
+        @widget(record=Settings(config=Config(name="initial")))
+        class ParentWidget(Widget[Settings]):
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        config_tab_widget = instance._child._tabs.widget(0)
+        assert isinstance(config_tab_widget, ConfigTab)
+        config_tab = config_tab_widget
+
+        # Simulate user typing
+        config_tab._name.setText("updated")
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to(["updated"])
+
+    def test_spinbox_valuechanged_sees_updated_value(self, qt: QtDriver) -> None:
+        """QSpinBox valueChanged handler sees updated Variable value."""
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QSpinBox, QTabWidget
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Config:
+            count: int = 0
+
+        @dataclass
+        class Settings:
+            config: Config | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[int] = []
+
+        @widget(title="Config Tab")
+        class ConfigTab(Widget[Settings]):
+            _count: QSpinBox = new(
+                bind="config?.count",
+                valueChanged="_on_value_changed",
+            )
+
+            def _on_value_changed(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.config:
+                    seen_values.append(self.record_value.config.count)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            _tabs: QTabWidget = new(tabs=[ConfigTab])
+
+        @widget(record=Settings(config=Config(count=0)))
+        class ParentWidget(Widget[Settings]):
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        config_tab_widget = instance._child._tabs.widget(0)
+        assert isinstance(config_tab_widget, ConfigTab)
+        config_tab = config_tab_widget
+
+        # Simulate user changing value
+        config_tab._count.setValue(42)
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([42])
+
+    def test_checkbox_toggled_sees_updated_value(self, qt: QtDriver) -> None:
+        """QCheckBox toggled handler sees updated Variable value."""
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Config:
+            enabled: bool = False
+
+        @dataclass
+        class Settings:
+            config: Config | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[bool] = []
+
+        @widget(title="Config Tab")
+        class ConfigTab(Widget[Settings]):
+            _enabled: QCheckBox = new(
+                "Enable feature",
+                bind="config?.enabled",
+                toggled="_on_toggled",
+            )
+
+            def _on_toggled(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.config:
+                    seen_values.append(self.record_value.config.enabled)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            _tabs: QTabWidget = new(tabs=[ConfigTab])
+
+        @widget(record=Settings(config=Config(enabled=False)))
+        class ParentWidget(Widget[Settings]):
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        config_tab_widget = instance._child._tabs.widget(0)
+        assert isinstance(config_tab_widget, ConfigTab)
+        config_tab = config_tab_widget
+
+        # Simulate user clicking checkbox
+        config_tab._enabled.setChecked(True)
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([True])
+
+    def test_slider_valuechanged_sees_updated_value(self, qt: QtDriver) -> None:
+        """QSlider valueChanged handler sees updated Variable value."""
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QSlider, QTabWidget
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Config:
+            volume: int = 50
+
+        @dataclass
+        class Settings:
+            config: Config | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[int] = []
+
+        @widget(title="Config Tab")
+        class ConfigTab(Widget[Settings]):
+            _volume: QSlider = new(
+                bind="config?.volume",
+                valueChanged="_on_value_changed",
+            )
+
+            def _on_value_changed(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.config:
+                    seen_values.append(self.record_value.config.volume)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            _tabs: QTabWidget = new(tabs=[ConfigTab])
+
+        @widget(record=Settings(config=Config(volume=50)))
+        class ParentWidget(Widget[Settings]):
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        config_tab_widget = instance._child._tabs.widget(0)
+        assert isinstance(config_tab_widget, ConfigTab)
+        config_tab = config_tab_widget
+
+        # Simulate user moving slider
+        config_tab._volume.setValue(75)
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([75])

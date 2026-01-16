@@ -515,6 +515,70 @@ def apply_auto_bindings(
                     return retry_bind
 
                 QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info))
+                continue
+
+            # For simple widgets (QLineEdit, QSpinBox, etc.), set up early signal connection.
+            # This ensures the binding handler is connected BEFORE user's signal handlers,
+            # even if the source isn't resolved yet. The handler resolves on-demand.
+            from qtpie.bindings.registry import get_binding_registry
+
+            registry = get_binding_registry()
+            default_prop = registry.get_default_prop(widget_instance)
+            adapter = registry.get(widget_instance, default_prop)
+            if adapter is not None and adapter.signal_name is not None and adapter.getter is not None:
+                # Mutable container to cache resolved source and track state
+                container: dict[str, Any] = {"source": None, "bound": False}
+                updating: dict[str, bool] = {"flag": False}
+
+                signal = getattr(widget_instance, adapter.signal_name, None)
+                getter = adapter.getter
+                setter = adapter.setter
+
+                def make_early_widget_to_obs(
+                    h: QWidget, bp: str, cont: dict[str, Any], g: Callable[[Any], Any], s: Callable[[Any, Any], None] | None, w: QWidget, upd: dict[str, bool]
+                ) -> Callable[[], None]:
+                    def on_widget_change() -> None:
+                        if upd["flag"]:
+                            return
+
+                        # Resolve source on-demand if not cached yet
+                        src = cont["source"]
+                        if src is None:
+                            resolved = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if isinstance(resolved, Observable):
+                                cont["source"] = resolved
+                                src = resolved
+                                # Set up Observable → Widget binding if not done yet
+                                if not cont["bound"] and s is not None:
+                                    cont["bound"] = True
+                                    # Capture setter in closure to satisfy pyright
+                                    setter_fn = s
+
+                                    def on_obs_change(v: Any) -> None:
+                                        if upd["flag"]:
+                                            return
+                                        upd["flag"] = True
+                                        try:
+                                            setter_fn(w, v)
+                                        finally:
+                                            upd["flag"] = False
+
+                                    src.on_change(on_obs_change)
+
+                        if src is None:
+                            return
+
+                        upd["flag"] = True
+                        try:
+                            src.set(g(w))
+                        finally:
+                            upd["flag"] = False
+
+                    return on_widget_change
+
+                if signal is not None:
+                    # Connect handler NOW (before user's handlers)
+                    signal.connect(make_early_widget_to_obs(host, bind_path, container, getter, setter, widget_instance, updating))
             continue
 
         # Check if this is a model widget (QComboBox, QListView, etc.) with a list source
@@ -536,6 +600,9 @@ def apply_auto_bindings(
             bind(source).to(widget_instance)
         elif isinstance(source, Observable):
             # Set up binding for Observable (e.g., from record field)
+            # NOTE: For nested Widget[T], the initial source may point to the wrong record.
+            # The record gets propagated from parent AFTER widget init. So we need to
+            # re-resolve the source in the signal handler to get the correct Observable.
             from qtpie.bindings.registry import get_binding_registry
 
             registry = get_binding_registry()
@@ -566,24 +633,29 @@ def apply_auto_bindings(
                 source.on_change(make_obs_to_widget(setter, widget_instance, updating))
 
                 # Two-way binding: Widget → Observable
+                # Re-resolve source on each invocation to handle record propagation
                 if adapter.signal_name is not None and adapter.getter is not None:
                     signal = getattr(widget_instance, adapter.signal_name, None)
                     getter = adapter.getter
 
-                    def make_widget_to_obs(obs: Observable[Any], g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
+                    def make_widget_to_obs_dynamic(h: QWidget, bp: str, g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
                         def on_widget_change() -> None:
                             if upd["flag"]:
                                 return
+                            # Re-resolve source to get the correct Observable after record propagation
+                            current_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if current_source is None or not isinstance(current_source, Observable):
+                                return
                             upd["flag"] = True
                             try:
-                                obs.set(g(w))
+                                current_source.set(g(w))
                             finally:
                                 upd["flag"] = False
 
                         return on_widget_change
 
                     if signal is not None:
-                        signal.connect(make_widget_to_obs(source, getter, widget_instance, updating))
+                        signal.connect(make_widget_to_obs_dynamic(host, bind_path, getter, widget_instance, updating))
 
 
 def apply_property_bindings(
