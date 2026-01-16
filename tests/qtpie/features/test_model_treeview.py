@@ -886,3 +886,88 @@ class TestTreeViewCheckable:
         # Two-way binding on nested node
         model.setData(child2_idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
         assert_that(instance._nodes.value[0].children[1].selected).is_true()
+
+
+class TestTreeViewSignalHandlerOrder:
+    """Test that user signal handlers see UPDATED values after selection changes."""
+
+    def test_treeview_deeply_nested_in_tab_widget(self, qt: QtDriver) -> None:
+        """Test: Deeply nested Widget[T] with QTreeView and nested optional path.
+
+        This test ensures that when a user's signal handler (clicked) fires,
+        the selectedItem binding has ALREADY updated the record field.
+        The handler should see the NEW value, not the OLD value.
+        """
+        from enum import Enum
+
+        from PySide6.QtCore import QItemSelectionModel
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        class Location(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+            def __str__(self) -> str:
+                return self.value
+
+        @dataclass
+        class AuthSettings:
+            location: Location = Location.HEADER
+
+        @dataclass
+        class Settings:
+            auth: AuthSettings | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[Location] = []
+
+        @widget(title="Auth Tab")
+        class GrandchildTab(Widget[Settings]):
+            """The deepest widget - like AuthTabContent."""
+
+            # Bind directly to Location enum values (they are the tree nodes)
+            _tree: QTreeView = new(
+                bind=list(Location),
+                selectedItem="auth?.location",
+                clicked="_on_clicked",
+            )
+
+            def _on_clicked(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.auth:
+                    seen_values.append(self.record_value.auth.location)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            """Middle widget."""
+
+            _tabs: QTabWidget = new(tabs=[GrandchildTab])
+
+        @widget(record=Settings(auth=AuthSettings(location=Location.HEADER)))
+        class ParentWidget(Widget[Settings]):
+            """Top-level widget."""
+
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        grandchild_widget = instance._child._tabs.widget(0)
+        assert_that(grandchild_widget).is_instance_of(GrandchildTab)
+        assert isinstance(grandchild_widget, GrandchildTab)
+        grandchild = grandchild_widget
+
+        # Simulate click on QUERY (row 1)
+        model = grandchild._tree.model()
+        index = model.index(1, 0)
+        grandchild._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        grandchild._tree.clicked.emit(index)
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([Location.QUERY])
