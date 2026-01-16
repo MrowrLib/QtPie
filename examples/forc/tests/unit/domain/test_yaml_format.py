@@ -7,6 +7,7 @@ from assertpy import assert_that
 from forc.domain.formats import YamlFormat
 from forc.domain.models import (
     ApiKeyAuth,
+    ApiKeyLocation,
     BasicAuth,
     BearerAuth,
     BodyType,
@@ -96,7 +97,7 @@ class TestYamlFormatRequest:
         req = Request(
             name="API Call",
             url="https://api.example.com/data",
-            auth=ApiKeyAuth(key="X-API-Key", value="my-key", location="header"),
+            auth=ApiKeyAuth(key="X-API-Key", value="my-key", location=ApiKeyLocation.HEADER),
         )
         path = Path(self.tmp_dir) / "api_call.yaml"
 

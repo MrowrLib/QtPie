@@ -1,4 +1,18 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Cookie:
+    """A single HTTP cookie from a response."""
+
+    name: str
+    value: str
+    domain: str = ""
+    path: str = ""
+    expires: int | None = None  # Unix timestamp
+    secure: bool = False
+    httponly: bool = False
+    samesite: str = ""
 
 
 @dataclass
@@ -11,3 +25,4 @@ class Response:
     body: bytes
     time_ms: float
     size_bytes: int
+    cookies: list[Cookie] = field(default_factory=lambda: [])

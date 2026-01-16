@@ -6,6 +6,7 @@ import httpx
 from assertpy import assert_that
 from forc.domain.models import (
     ApiKeyAuth,
+    ApiKeyLocation,
     BasicAuth,
     BearerAuth,
     BodyType,
@@ -212,7 +213,7 @@ class TestHttpClientAuth:
         req = Request(
             name="Test",
             url="https://example.com",
-            auth=ApiKeyAuth(key="X-API-Key", value="secret-key", location="header"),
+            auth=ApiKeyAuth(key="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER),
         )
         svc.send(req)
 
@@ -227,7 +228,7 @@ class TestHttpClientAuth:
         req = Request(
             name="Test",
             url="https://example.com",
-            auth=ApiKeyAuth(key="api_key", value="secret-key", location="query"),
+            auth=ApiKeyAuth(key="api_key", value="secret-key", location=ApiKeyLocation.QUERY),
         )
         svc.send(req)
 

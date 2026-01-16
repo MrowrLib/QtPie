@@ -6,6 +6,7 @@ from ruamel.yaml import YAML
 
 from forc.domain.models import (
     ApiKeyAuth,
+    ApiKeyLocation,
     Auth,
     AuthType,
     BasicAuth,
@@ -56,7 +57,7 @@ def _create_converter() -> cattrs.Converter:
         elif isinstance(auth, ApiKeyAuth):
             result["key"] = auth.key
             result["value"] = auth.value
-            result["location"] = auth.location
+            result["location"] = auth.location.value
         return result
 
     def structure_auth(data: dict[str, Any], _: type) -> Auth:
@@ -75,7 +76,7 @@ def _create_converter() -> cattrs.Converter:
                 return ApiKeyAuth(
                     key=data.get("key", ""),
                     value=data.get("value", ""),
-                    location=data.get("location", "header"),
+                    location=ApiKeyLocation(data.get("location", "header")),
                 )
             case AuthType.NONE:
                 return Auth()

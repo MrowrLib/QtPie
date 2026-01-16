@@ -9,6 +9,17 @@ class AuthType(Enum):
     API_KEY = "api_key"
 
 
+class ApiKeyLocation(Enum):
+    HEADER = "header"
+    QUERY = "query"
+
+
+API_KEY_LOCATION_LABELS: dict[ApiKeyLocation, str] = {
+    ApiKeyLocation.HEADER: "Header",
+    ApiKeyLocation.QUERY: "Query Param",
+}
+
+
 AUTH_TYPE_LABELS: dict[AuthType, str] = {
     AuthType.NONE: "No Auth",
     AuthType.BASIC: "Basic Auth",
@@ -43,7 +54,7 @@ class BearerAuth(Auth):
 class ApiKeyAuth(Auth):
     key: str = ""
     value: str = ""
-    location: str = "header"  # "header" or "query"
+    location: ApiKeyLocation = ApiKeyLocation.HEADER
 
     def __post_init__(self) -> None:
         self.type = AuthType.API_KEY

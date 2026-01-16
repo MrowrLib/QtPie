@@ -9,9 +9,11 @@ import httpx
 
 from forc.domain.models import (
     ApiKeyAuth,
+    ApiKeyLocation,
     BasicAuth,
     BearerAuth,
     BodyType,
+    Cookie,
     Request,
     Response,
 )
@@ -122,9 +124,9 @@ class HttpClientService:
             elif isinstance(request.auth, BearerAuth):
                 headers["Authorization"] = f"Bearer {self._resolve(request.auth.token)}"
             elif isinstance(request.auth, ApiKeyAuth):
-                if request.auth.location == "header":
+                if request.auth.location == ApiKeyLocation.HEADER:
                     headers[request.auth.key] = self._resolve(request.auth.value)
-                else:  # query
+                else:
                     params[request.auth.key] = self._resolve(request.auth.value)
 
         # Send request with timing
@@ -141,6 +143,22 @@ class HttpClientService:
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
 
+        # Extract cookies from response
+        cookies: list[Cookie] = []
+        for cookie in httpx_response.cookies.jar:
+            cookies.append(
+                Cookie(
+                    name=cookie.name,
+                    value=cookie.value or "",
+                    domain=cookie.domain or "",
+                    path=cookie.path or "",
+                    expires=cookie.expires,
+                    secure=cookie.secure,
+                    httponly=bool(cookie.get_nonstandard_attr("HttpOnly")),
+                    samesite=cookie.get_nonstandard_attr("SameSite") or "",
+                )
+            )
+
         # Build response (lowercase header names for consistent case-insensitive access)
         return Response(
             status_code=httpx_response.status_code,
@@ -149,4 +167,5 @@ class HttpClientService:
             body=httpx_response.content,
             time_ms=elapsed_ms,
             size_bytes=len(httpx_response.content),
+            cookies=cookies,
         )

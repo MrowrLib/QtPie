@@ -317,19 +317,72 @@ def apply_auto_bindings(
             )
             continue
 
+        # Handle inline list binding: bind=["a", "b", "c"]
+        if isinstance(bind_value, list) and _is_model_widget(widget_instance):
+            inline_list = cast(list[Any], bind_value)
+            obs_list = ObservableList(inline_list)
+            apply_model_binding(
+                host,
+                widget_instance,
+                obs_list,
+                "__inline_list__",
+                field_info,
+                is_table_view_fn=_is_table_view,
+                is_tree_view_fn=_is_tree_view,
+                resolve_or_create_variable_fn=_resolve_or_create_variable,
+            )
+            continue
+
+        # Handle inline dict binding: bind={"key": "Display Value"}
+        # Keys are the selectable items, values are the display text
+        if isinstance(bind_value, dict) and _is_model_widget(widget_instance):
+            inline_dict = cast(dict[Any, Any], bind_value)
+            # Store keys as the list items
+            keys: list[Any] = list(inline_dict.keys())
+            obs_list = ObservableList(keys)
+
+            # Create format function that looks up display text from the dict
+            # If no format= specified, default to showing the dict value
+            if field_info.model_format is None:
+                display_dict: dict[Any, Any] = dict(inline_dict)
+
+                def make_dict_formatter(d: dict[Any, Any]) -> Callable[[Any], str]:
+                    def formatter(item: Any) -> str:
+                        return str(d.get(item, item))
+
+                    return formatter
+
+                field_info.model_format = make_dict_formatter(display_dict)
+
+            apply_model_binding(
+                host,
+                widget_instance,
+                obs_list,
+                "__inline_dict__",
+                field_info,
+                is_table_view_fn=_is_table_view,
+                is_tree_view_fn=_is_tree_view,
+                resolve_or_create_variable_fn=_resolve_or_create_variable,
+            )
+            continue
+
         # bind=False is explicit opt-out - skip binding entirely
         if bind_value is False:
             continue
 
+        # At this point, bind_value should be a string path (or Translatable)
+        # List/dict/Enum cases were already handled with continue above
+        bind_path: str
         if isinstance(bind_value, Translatable):
             # Resolve translatable to get format string
             translatable = bind_value
             bind_path = translatable.resolve()
-        elif bind_value is not None:
+        elif isinstance(bind_value, str):
             bind_path = bind_value
-        elif config.auto_bind:
+        elif bind_value is None and config.auto_bind:
             bind_path = name.lstrip("_")
         else:
+            # Unknown bind type (shouldn't happen in normal usage)
             continue
 
         # Handle format strings
@@ -382,6 +435,62 @@ def apply_auto_bindings(
         # Resolve the binding source
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
         if source is None:
+            # Check if it's a plain list/dict attribute (static data for model widgets)
+            if _is_model_widget(widget_instance):
+                # Try to get the raw attribute (might be plain list/dict)
+                lookup_name = bind_path.lstrip("_")
+                raw_attr = getattr(host, bind_path, None)
+                if raw_attr is None:
+                    raw_attr = getattr(host, f"_{lookup_name}", None)
+                if raw_attr is None:
+                    raw_attr = getattr(host, lookup_name, None)
+
+                # Handle static list[T] attribute
+                if isinstance(raw_attr, list):
+                    static_list = cast(list[Any], raw_attr)
+                    obs_list = ObservableList(static_list)
+                    apply_model_binding(
+                        host,
+                        widget_instance,
+                        obs_list,
+                        bind_path,
+                        field_info,
+                        is_table_view_fn=_is_table_view,
+                        is_tree_view_fn=_is_tree_view,
+                        resolve_or_create_variable_fn=_resolve_or_create_variable,
+                    )
+                    continue
+
+                # Handle static dict[K, V] attribute (keys are items, values are display text)
+                if isinstance(raw_attr, dict):
+                    static_dict = cast(dict[Any, Any], raw_attr)
+                    keys: list[Any] = list(static_dict.keys())
+                    obs_list = ObservableList(keys)
+
+                    # Default format looks up display text from the dict
+                    if field_info.model_format is None:
+                        display_dict: dict[Any, Any] = dict(static_dict)
+
+                        def make_static_dict_formatter(d: dict[Any, Any]) -> Callable[[Any], str]:
+                            def formatter(item: Any) -> str:
+                                return str(d.get(item, item))
+
+                            return formatter
+
+                        field_info.model_format = make_static_dict_formatter(display_dict)
+
+                    apply_model_binding(
+                        host,
+                        widget_instance,
+                        obs_list,
+                        bind_path,
+                        field_info,
+                        is_table_view_fn=_is_table_view,
+                        is_tree_view_fn=_is_tree_view,
+                        resolve_or_create_variable_fn=_resolve_or_create_variable,
+                    )
+                    continue
+
             # Source not found - might not be parented yet
             # Schedule deferred retry for model widgets
             if _is_model_widget(widget_instance):

@@ -57,6 +57,9 @@ class NewField:
         # list[Dock[W]] support
         self.is_list_dock: bool = False
         self.list_dock_content_type: type | None = None  # The widget type inside list[Dock[W]]
+        # Static list/dict support (plain data types for QComboBox binding)
+        self.is_static_list: bool = False  # list[str] = new(["a", "b", "c"])
+        self.is_static_dict: bool = False  # dict[str, str] = new({"key": "Display"})
         # set[QWidget] support
         self.is_set_widget: bool = False
         self.set_widget_type: type | None = None  # The QWidget type inside set[QWidget]
@@ -580,6 +583,25 @@ class NewField:
                 self._extract_signal_connections_for_type(type_args[0])
 
                 return
+
+            # Handle plain list[T] where T is not QWidget/QAction/Dock
+            # e.g., list[str] = new(["a", "b", "c"]) for QComboBox static options
+            # Store the actual list data directly on the class
+            if type_args:
+                inner_type = type_args[0]
+                if not self._is_qwidget_class(inner_type) and not self._is_qaction_class(inner_type) and not self._is_dock_type_param(inner_type):
+                    # This is a plain data list - store the data directly
+                    self.is_static_list = True
+                    setattr(owner, name, self.args[0] if self.args else [])
+                    return
+
+        # Handle plain dict[K, V] for static key-value mappings
+        # e.g., dict[str, str] = new({"key": "Display"}) for QComboBox options
+        if origin is dict:
+            # Store the actual dict data directly on the class
+            self.is_static_dict = True
+            setattr(owner, name, self.args[0] if self.args else {})
+            return
 
         # Handle set[QWidget] - creates a SetWidgetRepeater bound to a set source
         if origin is set:

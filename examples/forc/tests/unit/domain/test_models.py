@@ -3,6 +3,7 @@
 from assertpy import assert_that
 from forc.domain.models import (
     ApiKeyAuth,
+    ApiKeyLocation,
     Auth,
     AuthType,
     BasicAuth,
@@ -63,15 +64,15 @@ class TestAuth:
         assert_that(auth.token).is_equal_to("secret-token")
 
     def test_api_key_auth_sets_type(self):
-        auth = ApiKeyAuth(key="X-API-Key", value="my-key", location="header")
+        auth = ApiKeyAuth(key="X-API-Key", value="my-key", location=ApiKeyLocation.HEADER)
         assert_that(auth.type).is_equal_to(AuthType.API_KEY)
         assert_that(auth.key).is_equal_to("X-API-Key")
         assert_that(auth.value).is_equal_to("my-key")
-        assert_that(auth.location).is_equal_to("header")
+        assert_that(auth.location).is_equal_to(ApiKeyLocation.HEADER)
 
     def test_api_key_defaults_to_header(self):
         auth = ApiKeyAuth(key="key", value="val")
-        assert_that(auth.location).is_equal_to("header")
+        assert_that(auth.location).is_equal_to(ApiKeyLocation.HEADER)
 
 
 class TestRequest:

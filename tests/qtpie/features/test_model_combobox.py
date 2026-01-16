@@ -1118,6 +1118,240 @@ class TestComboBoxDictBinding:
 # =============================================================================
 
 
+# =============================================================================
+# Static List/Dict Binding Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxStaticListBinding:
+    """QComboBox with bind= to static list[str] class attribute."""
+
+    def test_static_list_shows_items(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] attribute populates QComboBox."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query", "cookie"])
+            _combo: QComboBox = new(bind="_locations")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.count()).is_equal_to(3)
+        assert_that(instance._combo.itemText(0)).is_equal_to("header")
+        assert_that(instance._combo.itemText(1)).is_equal_to("query")
+        assert_that(instance._combo.itemText(2)).is_equal_to("cookie")
+
+    def test_static_list_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] with selectedItem= binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query"])
+            _selected: Variable[str] = new("query")
+            _combo: QComboBox = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initial selection from Variable
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("query")
+
+    def test_static_list_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] with two-way selectedItem binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query"])
+            _selected: Variable[str]  # Bare variable
+            _combo: QComboBox = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial sync from widget
+        assert_that(instance._selected.value).is_equal_to("header")
+
+        # Widget -> Variable
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._selected.value).is_equal_to("query")
+
+        # Variable -> Widget
+        instance._selected.value = "header"
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+    def test_static_list_with_selected_index(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] with selectedIndex= binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query", "cookie"])
+            _idx: Variable[int] = new(2)
+            _combo: QComboBox = new(bind="_locations", selectedIndex="_idx")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._combo.currentText()).is_equal_to("cookie")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxStaticDictBinding:
+    """QComboBox with bind= to static dict[str, str] class attribute.
+
+    Dict binding: keys are the selectable values, values are the display text.
+    """
+
+    def test_static_dict_shows_values_as_display(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static dict[str, str] shows dict values as display text."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: dict[str, str] = new({"header": "Header", "query": "Query Parameter"})
+            _combo: QComboBox = new(bind="_locations")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.count()).is_equal_to(2)
+        # Display text should be the values
+        assert_that(instance._combo.itemText(0)).is_equal_to("Header")
+        assert_that(instance._combo.itemText(1)).is_equal_to("Query Parameter")
+
+    def test_static_dict_selected_item_is_key(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static dict[str, str] selectedItem= binds to dict keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: dict[str, str] = new({"header": "Header", "query": "Query Parameter"})
+            _selected: Variable[str] = new("query")
+            _combo: QComboBox = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Variable value "query" should select the second item
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        # But display text is the value
+        assert_that(instance._combo.currentText()).is_equal_to("Query Parameter")
+
+    def test_static_dict_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static dict[str, str] two-way binding uses keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: dict[str, str] = new({"header": "Header", "query": "Query Parameter"})
+            _selected: Variable[str]  # Bare variable
+            _combo: QComboBox = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial sync - should get the key
+        assert_that(instance._selected.value).is_equal_to("header")
+
+        # Widget -> Variable (gets key, not display value)
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._selected.value).is_equal_to("query")
+
+        # Variable -> Widget (set key, displays value)
+        instance._selected.value = "header"
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+        assert_that(instance._combo.currentText()).is_equal_to("Header")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxInlineListBinding:
+    """QComboBox with bind= to inline list literal."""
+
+    def test_inline_list_shows_items(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list passed to bind= populates QComboBox."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind=["header", "query", "cookie"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.count()).is_equal_to(3)
+        assert_that(instance._combo.itemText(0)).is_equal_to("header")
+        assert_that(instance._combo.itemText(1)).is_equal_to("query")
+        assert_that(instance._combo.itemText(2)).is_equal_to("cookie")
+
+    def test_inline_list_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list with selectedItem= binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str] = new("query")
+            _combo: QComboBox = new(bind=["header", "query"], selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+
+    def test_inline_list_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list with two-way selectedItem binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str]  # Bare variable
+            _combo: QComboBox = new(bind=["header", "query"], selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial sync
+        assert_that(instance._selected.value).is_equal_to("header")
+
+        # Two-way binding
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._selected.value).is_equal_to("query")
+
+        instance._selected.value = "header"
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxInlineDictBinding:
+    """QComboBox with bind= to inline dict literal."""
+
+    def test_inline_dict_shows_values_as_display(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline dict passed to bind= shows values as display text."""
+
+        @decorator
+        class TestClass(base_class):
+            _combo: QComboBox = new(bind={"header": "Header", "query": "Query Parameter"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.count()).is_equal_to(2)
+        assert_that(instance._combo.itemText(0)).is_equal_to("Header")
+        assert_that(instance._combo.itemText(1)).is_equal_to("Query Parameter")
+
+    def test_inline_dict_selected_item_is_key(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline dict selectedItem= binds to dict keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str] = new("query")
+            _combo: QComboBox = new(bind={"header": "Header", "query": "Query Parameter"}, selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Variable value "query" should select the second item
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Query Parameter")
+
+    def test_inline_dict_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline dict two-way binding uses keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str]  # Bare variable
+            _combo: QComboBox = new(bind={"header": "Header", "query": "Query Parameter"}, selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial sync - should get the key
+        assert_that(instance._selected.value).is_equal_to("header")
+
+        # Widget -> Variable (gets key, not display value)
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._selected.value).is_equal_to("query")
+
+        # Variable -> Widget (set key, displays value)
+        instance._selected.value = "header"
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+        assert_that(instance._combo.currentText()).is_equal_to("Header")
+
+
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestComboBoxObservableDictBinding:
     """QComboBox with bind= to ObservableDict directly."""
