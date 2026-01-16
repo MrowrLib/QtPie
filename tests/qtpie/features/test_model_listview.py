@@ -707,3 +707,184 @@ class TestListViewRecordVariableDictBinding:
         # Model should have 1 row NOW (after response was set)
         assert_that(model.rowCount()).is_equal_to(1)
         assert_that(model.data(model.index(0, 0))).is_equal_to("Authorization: Bearer token")
+
+
+# =============================================================================
+# Static List/Dict Binding Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewStaticListBinding:
+    """QListView with bind= to static list[str] class attribute."""
+
+    def test_static_list_shows_items(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] attribute populates QListView."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query", "cookie"])
+            _list: QListView = new(bind="_locations")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.rowCount()).is_equal_to(3)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("header")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("query")
+        assert_that(model.data(model.index(2, 0))).is_equal_to("cookie")
+
+    def test_static_list_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] with selectedItem= binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: list[str] = new(["header", "query"])
+            _selected: Variable[str] = new("query")
+            _list: QListView = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial selection from Variable
+        current_idx = instance._list.selectionModel().currentIndex()
+        assert_that(current_idx.row()).is_equal_to(1)
+
+    def test_static_list_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static list[str] with format= customizes display."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: list[str] = new(["apple", "banana"])
+            _list: QListView = new(bind="_items", format="Item: {#self}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Item: apple")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Item: banana")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewStaticDictBinding:
+    """QListView with bind= to static dict[str, str] class attribute.
+
+    Dict binding: keys are the selectable values, values are the display text.
+    """
+
+    def test_static_dict_shows_values_as_display(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static dict[str, str] shows dict values as display text."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: dict[str, str] = new({"header": "Header", "query": "Query Parameter"})
+            _list: QListView = new(bind="_locations")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.rowCount()).is_equal_to(2)
+        # Display text should be the values
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Header")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Query Parameter")
+
+    def test_static_dict_selected_item_is_key(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static dict[str, str] selectedItem= binds to dict keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _locations: dict[str, str] = new({"header": "Header", "query": "Query Parameter"})
+            _selected: Variable[str] = new("query")
+            _list: QListView = new(bind="_locations", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Variable value "query" should select the second item
+        current_idx = instance._list.selectionModel().currentIndex()
+        assert_that(current_idx.row()).is_equal_to(1)
+
+        # But display text is the value
+        model = instance._list.model()
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Query Parameter")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewInlineListBinding:
+    """QListView with bind= to inline list literal."""
+
+    def test_inline_list_shows_items(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list passed to bind= populates QListView."""
+
+        @decorator
+        class TestClass(base_class):
+            _list: QListView = new(bind=["header", "query", "cookie"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.rowCount()).is_equal_to(3)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("header")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("query")
+        assert_that(model.data(model.index(2, 0))).is_equal_to("cookie")
+
+    def test_inline_list_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list with selectedItem= binding."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str] = new("query")
+            _list: QListView = new(bind=["header", "query"], selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        current_idx = instance._list.selectionModel().currentIndex()
+        assert_that(current_idx.row()).is_equal_to(1)
+
+    def test_inline_list_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline list with format= customizes display."""
+
+        @decorator
+        class TestClass(base_class):
+            _list: QListView = new(bind=["a", "b"], format="Value: {#self}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Value: a")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Value: b")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewInlineDictBinding:
+    """QListView with bind= to inline dict literal."""
+
+    def test_inline_dict_shows_values_as_display(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline dict passed to bind= shows values as display text."""
+
+        @decorator
+        class TestClass(base_class):
+            _list: QListView = new(bind={"header": "Header", "query": "Query Parameter"})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        assert_that(model.rowCount()).is_equal_to(2)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Header")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Query Parameter")
+
+    def test_inline_dict_selected_item_is_key(self, base_class, decorator, qt: QtDriver) -> None:
+        """Inline dict selectedItem= binds to dict keys."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[str] = new("query")
+            _list: QListView = new(bind={"header": "Header", "query": "Query Parameter"}, selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Variable value "query" should select the second item
+        current_idx = instance._list.selectionModel().currentIndex()
+        assert_that(current_idx.row()).is_equal_to(1)
+
+        # But display text is the value
+        model = instance._list.model()
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Query Parameter")

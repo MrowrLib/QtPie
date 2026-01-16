@@ -335,3 +335,70 @@ class TestRecordEdgeCases:
 
         instance.record.age = 31
         assert_that(instance.record.age).is_equal_to(31)
+
+
+# =============================================================================
+# Record Value (Unwrapped Access)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestRecordValue:
+    """Test record_value property for unwrapped access."""
+
+    def test_record_value_returns_raw_object(self, base_class, decorator, qt: QtDriver) -> None:
+        """record_value returns the actual dataclass, not ObservableProxy."""
+
+        @decorator(record=Person("Alice", 30))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        raw = instance.record_value
+
+        # Should be the actual Person instance
+        assert_that(raw).is_instance_of(Person)
+        assert_that(raw.name).is_equal_to("Alice")
+        assert_that(raw.age).is_equal_to(30)
+
+    def test_record_value_enables_isinstance(self, base_class, decorator, qt: QtDriver) -> None:
+        """record_value enables isinstance checks."""
+
+        @decorator(record=Person("Bob", 25))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # isinstance works on record_value
+        assert_that(isinstance(instance.record_value, Person)).is_true()
+
+    def test_record_value_reflects_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """record_value reflects changes made via record proxy."""
+
+        @decorator(record=Person("Charlie", 40))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.record_value.name).is_equal_to("Charlie")
+
+        # Change via proxy
+        instance.record.name = "Chuck"
+
+        # record_value should reflect the change
+        assert_that(instance.record_value.name).is_equal_to("Chuck")
+
+    def test_record_value_with_nested_objects(self, base_class, decorator, qt: QtDriver) -> None:
+        """record_value works with nested dataclasses."""
+
+        @decorator(record=Address("123 Main", "Springfield", "12345"))
+        class TestClass(base_class[Address]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        raw = instance.record_value
+
+        assert_that(isinstance(raw, Address)).is_true()
+        assert_that(raw.street).is_equal_to("123 Main")
+        assert_that(raw.city).is_equal_to("Springfield")

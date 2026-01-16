@@ -205,6 +205,30 @@ class Menu[T = None](QMenu):
         @record.setter
         def record(self, value: T) -> None: ...
 
+        @property
+        def record_value(self) -> T:
+            """Get the raw record value, unwrapped from the ObservableProxy.
+
+            Use this when you need the actual object (e.g., for isinstance checks):
+                if isinstance(self.record_value.auth, ApiKeyAuth):
+                    ...
+            """
+            ...
+
+    if not TYPE_CHECKING:
+        # Runtime-only: provide better error messages for .record access
+        # Hidden from pyright so it doesn't disable attribute checking
+        def __getattr__(self, name: str) -> Any:
+            """Handle attribute access for special cases."""
+            if name == "record":
+                raise AttributeError(f"{type(self).__name__} has no record type. Use Menu[YourModel] to enable record access.")
+            if name == "record_value":
+                # Return unwrapped record value if available
+                if hasattr(self, "_qtpie") and self._qtpie._record is not None:
+                    return self._qtpie._record.value
+                raise AttributeError(f"{type(self).__name__} has no record type. Use Menu[YourModel] to enable record_value access.")
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def _refresh_parent_bindings(self) -> None:
         """Refresh bindings that depend on #parent.
 

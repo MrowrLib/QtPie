@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, NoReturn, cast, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
 
 from observant import Observable
 from qtpy.QtWidgets import (
@@ -158,13 +158,28 @@ class Window[T = None](QMainWindow, QtPieComponentBase):
         @record.setter
         def record(self, value: T) -> None: ...
 
+        @property
+        def record_value(self) -> T:
+            """Get the raw record value, unwrapped from the ObservableProxy.
+
+            Use this when you need the actual object (e.g., for isinstance checks):
+                if isinstance(self.record_value.auth, ApiKeyAuth):
+                    ...
+            """
+            ...
+
     if not TYPE_CHECKING:
         # Runtime-only: provide better error messages for .record access
         # Hidden from pyright so it doesn't disable attribute checking
-        def __getattr__(self, name: str) -> NoReturn:
+        def __getattr__(self, name: str) -> Any:
             """Handle attribute access for special cases."""
             if name == "record":
                 raise TypeError(f"{type(self).__name__} has no record type. Use Window[YourModel] to enable record access.")
+            if name == "record_value":
+                # Return unwrapped record value if available
+                if hasattr(self, "_qtpie") and self._qtpie._record is not None:
+                    return self._qtpie._record.value
+                raise AttributeError(f"{type(self).__name__} has no record type. Use Window[YourModel] to enable record_value access.")
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     # -------------------------------------------------------------------------
