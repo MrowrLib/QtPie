@@ -1,6 +1,7 @@
 # pyright: reportPrivateUsage=false
 # pyright: reportMissingParameterType=false
 # pyright: reportUnknownParameterType=false
+# pyright: reportUnknownVariableType=false
 # pyright: reportUntypedBaseClass=false
 # pyright: reportUntypedClassDecorator=false
 # pyright: reportUnknownArgumentType=false
@@ -888,3 +889,143 @@ class TestListViewInlineDictBinding:
         # But display text is the value
         model = instance._list.model()
         assert_that(model.data(model.index(1, 0))).is_equal_to("Query Parameter")
+
+
+# =============================================================================
+# Signal Handler Order Tests (same issue as QComboBox)
+# =============================================================================
+
+
+class TestListViewSignalHandlerOrder:
+    """Test that user's signal handler sees UPDATED value after selection change.
+
+    This is the same bug that affected QComboBox - in nested Widget[T] scenarios,
+    the selection binding handler was connected AFTER user's handler, so user's
+    handler saw the OLD value.
+    """
+
+    def test_listview_signal_handler_sees_updated_value(self, qt: QtDriver) -> None:
+        """Verify that user's signal handler sees the UPDATED value, not the old one."""
+        from enum import Enum
+
+        from PySide6.QtCore import QItemSelectionModel
+
+        from qtpie import Widget, widget
+
+        class Priority(Enum):
+            LOW = "low"
+            MEDIUM = "medium"
+            HIGH = "high"
+
+        seen_values: list[Priority] = []
+
+        @widget
+        class TestWidget(Widget):
+            _priority: Variable[Priority] = new(Priority.LOW)
+            _list: QListView = new(
+                bind=Priority,
+                selectedItem="_priority",
+                clicked="_on_clicked",
+            )
+
+            def _on_clicked(self) -> None:
+                seen_values.append(self._priority.value)
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+
+        seen_values.clear()
+
+        # Simulate a real click: change selection THEN emit clicked
+        # (Qt does: selection change -> currentChanged -> clicked)
+        model = instance._list.model()
+        index = model.index(2, 0)
+        instance._list.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        instance._list.clicked.emit(index)
+
+        # Handler should see HIGH (the updated value)
+        assert_that(seen_values).is_equal_to([Priority.HIGH])
+
+    def test_listview_deeply_nested_in_tab_widget(self, qt: QtDriver) -> None:
+        """Test: Deeply nested Widget[T] with QListView and nested optional path.
+
+        This reproduces the exact Forc scenario:
+        - Nested Widget[T] in tabs
+        - selectedItem="auth?.location" (nested optional path)
+        - clicked handler that reads the record value
+        """
+        from enum import Enum
+
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        class Location(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        @dataclass
+        class AuthSettings:
+            location: Location = Location.HEADER
+
+        @dataclass
+        class Settings:
+            auth: AuthSettings | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[Location] = []
+
+        @widget(title="Auth Tab")
+        class GrandchildTab(Widget[Settings]):
+            """The deepest widget - like AuthTabContent."""
+
+            _list: QListView = new(
+                bind=Location,
+                selectedItem="auth?.location",  # Nested optional path like Forc
+                clicked="_on_clicked",
+            )
+
+            def _on_clicked(self) -> None:
+                call_count["value"] += 1
+                # What value does the handler see?
+                if self.record_value and self.record_value.auth:
+                    seen_values.append(self.record_value.auth.location)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            """Middle widget - like RequestEditorWidget."""
+
+            _tabs: QTabWidget = new(tabs=[GrandchildTab])
+
+        @widget(record=Settings(auth=AuthSettings(location=Location.HEADER)))
+        class ParentWidget(Widget[Settings]):
+            """Top-level widget - like RequestWidget."""
+
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Reset after initial setup
+        call_count["value"] = 0
+        seen_values.clear()
+
+        # Get the deeply nested listview
+        grandchild = instance._child._tabs.widget(0)
+        assert_that(grandchild).is_instance_of(GrandchildTab)
+
+        # Simulate Qt's click event sequence: selection changes THEN clicked fires
+        from PySide6.QtCore import QItemSelectionModel
+
+        model = grandchild._list.model()
+        index = model.index(1, 0)  # Click on QUERY (index 1)
+
+        # This simulates what Qt does internally when user clicks
+        grandchild._list.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        grandchild._list.clicked.emit(index)
+
+        # Handler should fire once and see the UPDATED value (QUERY, not HEADER)
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([Location.QUERY])

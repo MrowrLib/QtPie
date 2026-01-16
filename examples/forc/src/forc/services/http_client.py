@@ -39,6 +39,7 @@ class HttpClientService:
         self._workspace = workspace_service
         self._client = client
         self._owns_client = client is None
+        self.cookies: list[Cookie] = []
 
     def _get_client(self) -> httpx.Client:
         """Get or create the HTTP client."""
@@ -57,6 +58,42 @@ class HttpClientService:
         if self._owns_client and self._client is not None:
             self._client.close()
             self._client = None
+
+    def clear_cookies(self) -> None:
+        """Clear all cookies from the cookie jar."""
+        self.cookies.clear()
+
+    def _build_httpx_cookies(self) -> httpx.Cookies:
+        """Convert our Cookie list to httpx.Cookies for requests."""
+        jar = httpx.Cookies()
+        for cookie in self.cookies:
+            jar.set(cookie.name, cookie.value, domain=cookie.domain, path=cookie.path)
+        return jar
+
+    def _update_cookies_from_response(self, response_cookies: httpx.Cookies) -> None:
+        """Update our cookie list from response cookies."""
+        for cookie in response_cookies.jar:
+            # Update existing or add new
+            domain = cookie.domain or ""
+            existing = next(
+                (c for c in self.cookies if c.name == cookie.name and c.domain == domain),
+                None,
+            )
+            new_cookie = Cookie(
+                name=cookie.name,
+                value=cookie.value or "",
+                domain=cookie.domain or "",
+                path=cookie.path or "",
+                expires=cookie.expires,
+                secure=cookie.secure,
+                httponly=bool(cookie.get_nonstandard_attr("HttpOnly")),
+                samesite=cookie.get_nonstandard_attr("SameSite") or "",
+            )
+            if existing:
+                idx = self.cookies.index(existing)
+                self.cookies[idx] = new_cookie
+            else:
+                self.cookies.append(new_cookie)
 
     def send(self, request: Request, base_url: str = "") -> Response:
         """Send an HTTP request and return the response.
@@ -129,7 +166,7 @@ class HttpClientService:
                 else:
                     params[request.auth.key] = self._resolve(request.auth.value)
 
-        # Send request with timing
+        # Send request with timing (include cookies from jar)
         start = time.perf_counter()
         httpx_response = client.request(
             method=request.method.value,
@@ -140,8 +177,12 @@ class HttpClientService:
             data=data,
             files=files,
             auth=auth,
+            cookies=self._build_httpx_cookies(),
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
+
+        # Update cookie jar with response cookies
+        self._update_cookies_from_response(httpx_response.cookies)
 
         # Extract cookies from response
         cookies: list[Cookie] = []

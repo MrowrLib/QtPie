@@ -68,10 +68,10 @@ async def error_endpoint(code: int):
 async def set_cookies(response: Response):
     """Set various cookies for testing."""
     response.set_cookie(key="simple", value="simple_value")
-    response.set_cookie(key="httponly", value="httponly_value", httponly=True)
-    response.set_cookie(key="secure", value="secure_value", secure=True)
+    response.set_cookie(key="secret", value="secret_value", httponly=True)
+    response.set_cookie(key="protected", value="protected_value", secure=True)
     response.set_cookie(key="expiring", value="expiring_value", max_age=60)
-    return {"message": "Cookies set", "cookies": ["simple", "httponly", "secure", "expiring"]}
+    return {"message": "Cookies set", "cookies": ["simple", "secret", "protected", "expiring"]}
 
 
 @router.get("/cookies/check")

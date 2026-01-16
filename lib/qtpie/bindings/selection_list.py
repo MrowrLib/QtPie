@@ -301,13 +301,38 @@ def _setup_selection_bindings_impl(
         if selection_model is None:
             return
 
+        # Store selection model in container - when model changes, selection model changes too
+        old_selection_model = binding_container.get("selection_model")
+        binding_container["selection_model"] = selection_model
+
+        # If selection model changed, we need to reconnect the handler
+        if old_selection_model is not None and old_selection_model is not selection_model:
+            handler_connected = False  # Force reconnect to new selection model
+
+        # Helper to get/set item_var value (handles both Variable and Observable)
+        def get_item_var_value_view() -> Any:
+            current_item_var = binding_container["item_var"]
+            if current_item_var is None:
+                return None
+            return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
+
+        def set_item_var_value_view(val: Any) -> None:
+            current_item_var = binding_container["item_var"]
+            if current_item_var is None:
+                return
+            if binding_container["is_observable"]:
+                current_item_var.set(val)
+            else:
+                current_item_var.value = val
+
         # Helper to set index via selection model
         def set_row_index(row: int) -> None:
             if not is_model_valid():
                 return
-            if row < 0 or row >= model.rowCount():
+            current_model = binding_container["model"]
+            if row < 0 or row >= current_model.rowCount():
                 return
-            model_idx = model.index(row, 0)
+            model_idx = current_model.index(row, 0)
             selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
                 model_idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
             )
@@ -333,7 +358,7 @@ def _setup_selection_bindings_impl(
                 index_var.value = current_row if current_row >= 0 else 0
 
         if item_var is not None:
-            initial_item = item_var.value
+            initial_item = get_item_var_value_view()
             if initial_item is not None:
                 # Set widget to match item if index didn't already set it
                 if index_var is None:
@@ -344,7 +369,7 @@ def _setup_selection_bindings_impl(
             else:
                 # Sync item Variable to widget's current selection
                 effective_row = current_row if current_row >= 0 else 0
-                item_var.value = get_item_at_index(effective_row)
+                set_item_var_value_view(get_item_at_index(effective_row))
 
         # Variable → Widget binding
         if index_var is not None:
@@ -358,8 +383,9 @@ def _setup_selection_bindings_impl(
                 try:
                     set_row_index(new_idx)
                     # Also update item_var if both bindings are present
-                    if item_var is not None:
-                        item_var.value = get_item_at_index(new_idx)
+                    current_item_var = binding_container["item_var"]
+                    if current_item_var is not None:
+                        set_item_var_value_view(get_item_at_index(new_idx))
                 finally:
                     updating["flag"] = False
 
@@ -374,36 +400,47 @@ def _setup_selection_bindings_impl(
                     return
                 updating["flag"] = True
                 try:
-                    new_item = item_var.value  # type: ignore[union-attr]
+                    new_item = get_item_var_value_view()
                     idx = find_index_of_item(new_item)
                     if idx >= 0:
                         set_row_index(idx)
-                        if index_var is not None:
-                            index_var.value = idx
+                        current_index_var = binding_container["index_var"]
+                        if current_index_var is not None:
+                            current_index_var.value = idx
                 finally:
                     updating["flag"] = False
 
             item_var.on_change(on_item_var_change_view)
 
         # Widget → Variable binding via selection model's currentChanged signal
-        if index_var is not None or item_var is not None:
+        # IMPORTANT: Always connect the handler, even if index_var/item_var are None.
+        # This ensures the selection binding handler is connected BEFORE user's signal handlers.
+        def on_view_selection_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+            if not is_model_valid():
+                return
+            if updating["flag"]:
+                return
+            # Get current vars from container (may be None on first setup, valid later)
+            current_index_var = binding_container["index_var"]
+            current_item_var = binding_container["item_var"]
+            if current_index_var is None and current_item_var is None:
+                # No bindings yet, nothing to do
+                return
+            updating["flag"] = True
+            try:
+                row = current.row() if current.isValid() else -1
+                if current_index_var is not None:
+                    current_index_var.value = row
+                if current_item_var is not None:
+                    set_item_var_value_view(get_item_at_index(row) if row >= 0 else None)
+            finally:
+                updating["flag"] = False
 
-            def on_view_selection_changed(current: QModelIndex, _previous: QModelIndex) -> None:
-                if not is_model_valid():
-                    return
-                if updating["flag"]:
-                    return
-                updating["flag"] = True
-                try:
-                    row = current.row() if current.isValid() else -1
-                    if index_var is not None:
-                        index_var.value = row
-                    if item_var is not None:
-                        item_var.value = get_item_at_index(row) if row >= 0 else None
-                finally:
-                    updating["flag"] = False
-
+        # Always connect - handler uses container to get current vars
+        # Reconnect if selection model changed (happens when model is replaced)
+        if not handler_connected:
             selection_model.currentChanged.connect(on_view_selection_changed)  # pyright: ignore[reportUnknownMemberType]
+            binding_container["connected"] = True
 
         # QListView multi-selection bindings (selectedIndexes, selectedItems)
         # indexes_var and items_list_var are already resolved and passed in

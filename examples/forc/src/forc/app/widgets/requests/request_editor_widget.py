@@ -20,7 +20,6 @@ from forc.domain.models import (
     KeyValue,
     Request,
 )
-from forc.domain.models.auth import ApiKeyAuth
 from qtpie import Stretch, Widget, new, widget
 
 
@@ -105,14 +104,7 @@ class AuthTabContent(Widget[Request]):
         label="Location:",
         selectedItem="auth?.location",
         visible="{auth?.type == AuthType.API_KEY}",
-        currentIndexChanged="_on_api_key_location_changed",
     )
-
-    def _on_api_key_location_changed(self, index: int) -> None:
-        print("Hello.")
-        print(f"Index changed to: {index}")
-        if self.record_value and self.record_value.auth is not None and isinstance(self.record_value.auth, ApiKeyAuth):
-            print(f"API Key location changed to: {self.record_value.auth.location}")
 
 
 @widget(title="Body", on_delete="_on_delete")

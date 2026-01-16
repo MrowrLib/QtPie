@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTableView, QTabWidget
+from qtpy.QtWidgets import QLabel, QPlainTextEdit, QPushButton, QTableView, QTabWidget
 
 from forc.domain.models import Response
 from qtpie import Widget, new, widget
@@ -27,7 +27,12 @@ class ResponseHeadersTabContent(Widget[Response]):
 
 @widget(title="Cookies")
 class ResponseCookiesTabContent(Widget[Response]):
-    _placeholder: QLabel = new("Response cookies placeholder")
+    _cookies_table: QTableView = new(bind="cookies")
+
+    btn: QPushButton = new("Print record", clicked="_on_print_record")
+
+    def _on_print_record(self):
+        print(self.record)
 
 
 @widget

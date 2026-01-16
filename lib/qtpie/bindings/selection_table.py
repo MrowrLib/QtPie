@@ -34,133 +34,69 @@ def setup_table_selection_bindings(
     if not has_single and not has_multi:
         return
 
-    from qtpy.QtCore import QTimer
+    from observant import Observable
 
     from qtpie.variable import Variable as VarType
 
-    # Resolve all Variables
-    row_var: VarType[int] | None = None
-    column_var: VarType[int] | None = None
-    cell_var: VarType[tuple[int, int]] | None = None
-    item_var: VarType[Any] | None = None
-    rows_var: VarType[list[int]] | None = None
-    columns_var: VarType[list[int]] | None = None
-    cells_var: VarType[list[tuple[int, int]]] | None = None
-    items_var: VarType[list[Any]] | None = None
+    # Helper to check if source is Variable or Observable
+    def is_var_or_obs(source: Any) -> bool:
+        return isinstance(source, VarType) or isinstance(source, Observable)
+
+    # Resolve all Variables (or Observables for record field bindings)
+    row_var: Any | None = None
+    column_var: Any | None = None
+    cell_var: Any | None = None
+    item_var: Any | None = None
+    rows_var: Any | None = None
+    columns_var: Any | None = None
+    cells_var: Any | None = None
+    items_var: Any | None = None
 
     # Single selection variables
     if selected_row_path:
         source = resolve_or_create_variable_fn(host, selected_row_path, int)
-        if isinstance(source, VarType):
-            row_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            row_var = source
 
     if selected_column_path:
         source = resolve_or_create_variable_fn(host, selected_column_path, int)
-        if isinstance(source, VarType):
-            column_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            column_var = source
 
     if selected_cell_path:
         source = resolve_or_create_variable_fn(host, selected_cell_path, None)
-        if isinstance(source, VarType):
-            cell_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            cell_var = source
 
     if selected_item_path:
         source = resolve_or_create_variable_fn(host, selected_item_path, None)
-        if isinstance(source, VarType):
-            item_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            item_var = source
 
     # Multi selection variables
     if selected_rows_path:
         source = resolve_or_create_variable_fn(host, selected_rows_path, None)
-        if isinstance(source, VarType):
-            rows_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            rows_var = source
 
     if selected_columns_path:
         source = resolve_or_create_variable_fn(host, selected_columns_path, None)
-        if isinstance(source, VarType):
-            columns_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            columns_var = source
 
     if selected_cells_path:
         source = resolve_or_create_variable_fn(host, selected_cells_path, None)
-        if isinstance(source, VarType):
-            cells_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            cells_var = source
 
     if selected_items_path:
         source = resolve_or_create_variable_fn(host, selected_items_path, None)
-        if isinstance(source, VarType):
-            items_var = source  # pyright: ignore[reportUnknownVariableType]
+        if is_var_or_obs(source):
+            items_var = source
 
-    # Check if we couldn't resolve any Variables that were requested
-    # If so, the widget might not be parented yet - schedule deferred retry
-    missing_single = (
-        (selected_row_path is not None and row_var is None)
-        or (selected_column_path is not None and column_var is None)
-        or (selected_cell_path is not None and cell_var is None)
-        or (selected_item_path is not None and item_var is None)
-    )
-    missing_multi = (
-        (selected_rows_path is not None and rows_var is None)
-        or (selected_columns_path is not None and columns_var is None)
-        or (selected_cells_path is not None and cells_var is None)
-        or (selected_items_path is not None and items_var is None)
-    )
-
-    if missing_single or missing_multi:
-
-        def retry_binding() -> None:
-            # Re-resolve Variables after parenting
-            nonlocal row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var
-            if selected_row_path is not None and row_var is None:
-                source = resolve_or_create_variable_fn(host, selected_row_path, int)
-                if isinstance(source, VarType):
-                    row_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_column_path is not None and column_var is None:
-                source = resolve_or_create_variable_fn(host, selected_column_path, int)
-                if isinstance(source, VarType):
-                    column_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_cell_path is not None and cell_var is None:
-                source = resolve_or_create_variable_fn(host, selected_cell_path, None)
-                if isinstance(source, VarType):
-                    cell_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_item_path is not None and item_var is None:
-                source = resolve_or_create_variable_fn(host, selected_item_path, None)
-                if isinstance(source, VarType):
-                    item_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_rows_path is not None and rows_var is None:
-                source = resolve_or_create_variable_fn(host, selected_rows_path, None)
-                if isinstance(source, VarType):
-                    rows_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_columns_path is not None and columns_var is None:
-                source = resolve_or_create_variable_fn(host, selected_columns_path, None)
-                if isinstance(source, VarType):
-                    columns_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_cells_path is not None and cells_var is None:
-                source = resolve_or_create_variable_fn(host, selected_cells_path, None)
-                if isinstance(source, VarType):
-                    cells_var = source  # pyright: ignore[reportUnknownVariableType]
-            if selected_items_path is not None and items_var is None:
-                source = resolve_or_create_variable_fn(host, selected_items_path, None)
-                if isinstance(source, VarType):
-                    items_var = source  # pyright: ignore[reportUnknownVariableType]
-
-            # If we found any Variables now, set up the actual bindings
-            has_vars = (
-                row_var is not None
-                or column_var is not None
-                or cell_var is not None
-                or item_var is not None
-                or rows_var is not None
-                or columns_var is not None
-                or cells_var is not None
-                or items_var is not None
-            )
-            if has_vars:
-                _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var)
-
-        QTimer.singleShot(0, retry_binding)
-        return
-
-    # Set up bindings immediately if Variables were found
+    # ALWAYS call _setup_table_selection_bindings_impl to connect the signal handler early.
+    # This ensures the selection binding handler is connected BEFORE user's signal handlers.
+    # The handler uses a mutable container so it can access Variables resolved later.
     _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var)
 
 
@@ -178,54 +114,101 @@ def _setup_table_selection_bindings_impl(
     items_var: Any | None,  # Variable[list[Any]] | None
 ) -> None:
     """Implementation of table selection bindings (called after Variables are resolved)."""
+    from observant import Observable
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
-
-    has_single = row_var is not None or column_var is not None or cell_var is not None or item_var is not None
-    has_multi = rows_var is not None or columns_var is not None or cells_var is not None or items_var is not None
 
     # Flag to prevent circular updates
     updating = {"flag": False}
 
-    # Get selection model
-    selection_model = widget.selectionModel()  # type: ignore[attr-defined]
-    if selection_model is None:
-        return
+    # Use mutable container so handler closures can access updated values
+    # (Variables may be resolved AFTER handler is connected)
+    container: dict[str, Any] = {
+        "model": model,
+        "row_var": row_var,
+        "column_var": column_var,
+        "cell_var": cell_var,
+        "item_var": item_var,
+        "rows_var": rows_var,
+        "columns_var": columns_var,
+        "cells_var": cells_var,
+        "items_var": items_var,
+        "selection_model": None,
+    }
 
-    # Helper functions
-    def get_item_at_row(row: int) -> Any:
-        if row < 0 or row >= model.rowCount():
+    # Helper to check if something is an Observable (from record fields)
+    def is_observable(obj: Any) -> bool:
+        return isinstance(obj, Observable)
+
+    # Helper to get value from Variable or Observable
+    def get_var_value(var: Any) -> Any:
+        if var is None:
             return None
-        model_index = model.index(row, 0)
-        return model.data(model_index, Qt.ItemDataRole.UserRole)
+        if is_observable(var):
+            return var.get()  # pyright: ignore[reportUnknownMemberType]
+        return var.value  # pyright: ignore[reportUnknownMemberType]
+
+    # Helper to set value on Variable or Observable
+    def set_var_value(var: Any, value: Any) -> None:
+        if var is None:
+            return
+        if is_observable(var):
+            var.set(value)  # pyright: ignore[reportUnknownMemberType]
+        else:
+            var.value = value  # pyright: ignore[reportUnknownMemberType]
+
+    # Helper functions - use container for model/selection_model
+    def get_item_at_row(row: int) -> Any:
+        m = container["model"]
+        if m is None:
+            return None
+        if row < 0 or row >= m.rowCount():
+            return None
+        model_index = m.index(row, 0)
+        return m.data(model_index, Qt.ItemDataRole.UserRole)
 
     def get_current_row() -> int:
-        idx = selection_model.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        sm = container["selection_model"]
+        if sm is None:
+            return -1
+        idx = sm.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if idx.isValid():  # pyright: ignore[reportUnknownMemberType]
             return int(idx.row())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
         return -1
 
     def get_current_column() -> int:
-        idx = selection_model.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        sm = container["selection_model"]
+        if sm is None:
+            return -1
+        idx = sm.currentIndex()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if idx.isValid():  # pyright: ignore[reportUnknownMemberType]
             return int(idx.column())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
         return -1
 
     def get_selected_rows() -> list[int]:
-        indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        sm = container["selection_model"]
+        if sm is None:
+            return []
+        indexes = sm.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         rows: set[int] = set()
         for idx in indexes:  # pyright: ignore[reportUnknownVariableType]
             rows.add(int(idx.row()))  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
         return sorted(rows)
 
     def get_selected_columns() -> list[int]:
-        indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        sm = container["selection_model"]
+        if sm is None:
+            return []
+        indexes = sm.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         cols: set[int] = set()
         for idx in indexes:  # pyright: ignore[reportUnknownVariableType]
             cols.add(int(idx.column()))  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
         return sorted(cols)
 
     def get_selected_cells() -> list[tuple[int, int]]:
-        indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        sm = container["selection_model"]
+        if sm is None:
+            return []
+        indexes = sm.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         cells: list[tuple[int, int]] = []
         for idx in indexes:  # pyright: ignore[reportUnknownVariableType]
             cells.append((int(idx.row()), int(idx.column())))  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
@@ -236,63 +219,145 @@ def _setup_table_selection_bindings_impl(
         return [get_item_at_row(r) for r in rows if get_item_at_row(r) is not None]
 
     def set_current_cell(row: int, col: int) -> None:
-        if row < 0 or row >= model.rowCount():
+        m = container["model"]
+        sm = container["selection_model"]
+        if m is None or sm is None:
             return
-        if col < 0 or col >= model.columnCount():
+        if row < 0 or row >= m.rowCount():
             return
-        idx = model.index(row, col)
-        selection_model.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+        if col < 0 or col >= m.columnCount():
+            return
+        idx = m.index(row, col)
+        sm.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
             idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
         )
+
+    # Widget → Variable binding handler (must be defined BEFORE connecting)
+    def on_current_changed(current: QModelIndex, _previous: QModelIndex) -> None:
+        if updating["flag"]:
+            return
+        updating["flag"] = True
+        try:
+            row = current.row() if current.isValid() else -1
+            col = current.column() if current.isValid() else -1
+            rv = container["row_var"]
+            cv = container["column_var"]
+            cellv = container["cell_var"]
+            iv = container["item_var"]
+            if rv is not None:
+                set_var_value(rv, row)
+            if cv is not None:
+                set_var_value(cv, col)
+            if cellv is not None:
+                set_var_value(cellv, (row, col))
+            if iv is not None:
+                set_var_value(iv, get_item_at_row(row) if row >= 0 else None)
+        finally:
+            updating["flag"] = False
+
+    def on_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
+        if updating["flag"]:
+            return
+        updating["flag"] = True
+        try:
+            rowsv = container["rows_var"]
+            colsv = container["columns_var"]
+            cellsv = container["cells_var"]
+            itemsv = container["items_var"]
+            if rowsv is not None:
+                set_var_value(rowsv, get_selected_rows())
+            if colsv is not None:
+                set_var_value(colsv, get_selected_columns())
+            if cellsv is not None:
+                set_var_value(cellsv, get_selected_cells())
+            if itemsv is not None:
+                set_var_value(itemsv, get_selected_items())
+        finally:
+            updating["flag"] = False
+
+    # Connect handler to selection model
+    def connect_selection_handler() -> None:
+        sm = widget.selectionModel()  # type: ignore[attr-defined]
+        if sm is None:
+            return
+        old_sm = container["selection_model"]
+        if old_sm is sm:
+            return  # Same selection model, already connected
+        container["selection_model"] = sm
+        # Always connect to currentChanged for single selection vars
+        # Handler will check if vars are None
+        sm.currentChanged.connect(on_current_changed)  # pyright: ignore[reportUnknownMemberType]
+        # Always connect to selectionChanged for multi selection vars
+        sm.selectionChanged.connect(on_selection_changed)  # pyright: ignore[reportUnknownMemberType]
+
+    # Connect handler NOW (before user's signal handlers)
+    connect_selection_handler()
+
+    # Track model changes - selection model changes when model is replaced
+    if hasattr(model, "modelReset"):
+        model.modelReset.connect(connect_selection_handler)  # pyright: ignore[reportUnknownMemberType]
+
+    # Now do initialization and Variable → Widget bindings
+    # (only if variables are already resolved)
+
+    # Check if we have any vars to work with
+    has_single = row_var is not None or column_var is not None or cell_var is not None or item_var is not None
+    has_multi = rows_var is not None or columns_var is not None or cells_var is not None or items_var is not None
+
+    if not has_single and not has_multi:
+        return  # No vars yet, handler is connected and will work when vars are set
 
     # Initialize single selection variables from current state
     current_row = get_current_row()
     current_col = get_current_column()
 
     if row_var is not None:
-        if row_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            row_var.value = current_row if current_row >= 0 else 0
+        if get_var_value(row_var) is None:
+            set_var_value(row_var, current_row if current_row >= 0 else 0)
         else:
-            set_current_cell(row_var.value, current_col if current_col >= 0 else 0)
-            current_row = row_var.value
+            set_current_cell(get_var_value(row_var), current_col if current_col >= 0 else 0)
+            current_row = get_var_value(row_var)
 
     if column_var is not None:
-        if column_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            column_var.value = current_col if current_col >= 0 else 0
+        if get_var_value(column_var) is None:
+            set_var_value(column_var, current_col if current_col >= 0 else 0)
         else:
-            set_current_cell(current_row if current_row >= 0 else 0, column_var.value)
-            current_col = column_var.value
+            set_current_cell(current_row if current_row >= 0 else 0, get_var_value(column_var))
+            current_col = get_var_value(column_var)
 
     if cell_var is not None:
-        if cell_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
+        if get_var_value(cell_var) is None:
             effective_row = current_row if current_row >= 0 else 0
             effective_col = current_col if current_col >= 0 else 0
-            cell_var.value = (effective_row, effective_col)
+            set_var_value(cell_var, (effective_row, effective_col))
         else:
-            r, c = cell_var.value
+            r, c = get_var_value(cell_var)
             set_current_cell(r, c)
 
     if item_var is not None:
         effective_row = current_row if current_row >= 0 else 0
-        if item_var.value is None:
-            item_var.value = get_item_at_row(effective_row)
+        if get_var_value(item_var) is None:
+            set_var_value(item_var, get_item_at_row(effective_row))
 
     # Initialize multi selection variables
     if rows_var is not None:
-        if rows_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            rows_var.value = get_selected_rows() or [0] if model.rowCount() > 0 else []
+        if get_var_value(rows_var) is None:
+            m = container["model"]
+            set_var_value(rows_var, get_selected_rows() or ([0] if m and m.rowCount() > 0 else []))
 
     if columns_var is not None:
-        if columns_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            columns_var.value = get_selected_columns() or [0] if model.columnCount() > 0 else []
+        if get_var_value(columns_var) is None:
+            m = container["model"]
+            set_var_value(columns_var, get_selected_columns() or ([0] if m and m.columnCount() > 0 else []))
 
     if cells_var is not None:
-        if cells_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            cells_var.value = get_selected_cells() or [(0, 0)] if model.rowCount() > 0 else []
+        if get_var_value(cells_var) is None:
+            m = container["model"]
+            set_var_value(cells_var, get_selected_cells() or ([(0, 0)] if m and m.rowCount() > 0 else []))
 
     if items_var is not None:
-        if items_var.value is None:  # pyright: ignore[reportUnnecessaryComparison]
-            items_var.value = get_selected_items()
+        if get_var_value(items_var) is None:
+            set_var_value(items_var, get_selected_items())
 
     # Variable → Widget bindings (single)
     if row_var is not None:
@@ -305,10 +370,12 @@ def _setup_table_selection_bindings_impl(
                 col = get_current_column()
                 set_current_cell(new_row, col if col >= 0 else 0)
                 # Update related variables
-                if cell_var is not None:
-                    cell_var.value = (new_row, col if col >= 0 else 0)
-                if item_var is not None:
-                    item_var.value = get_item_at_row(new_row)
+                cellv = container["cell_var"]
+                iv = container["item_var"]
+                if cellv is not None:
+                    set_var_value(cellv, (new_row, col if col >= 0 else 0))
+                if iv is not None:
+                    set_var_value(iv, get_item_at_row(new_row))
             finally:
                 updating["flag"] = False
 
@@ -324,8 +391,9 @@ def _setup_table_selection_bindings_impl(
                 row = get_current_row()
                 set_current_cell(row if row >= 0 else 0, new_col)
                 # Update related variables
-                if cell_var is not None:
-                    cell_var.value = (row if row >= 0 else 0, new_col)
+                cellv = container["cell_var"]
+                if cellv is not None:
+                    set_var_value(cellv, (row if row >= 0 else 0, new_col))
             finally:
                 updating["flag"] = False
 
@@ -341,55 +409,16 @@ def _setup_table_selection_bindings_impl(
                 r, c = new_cell
                 set_current_cell(r, c)
                 # Update related variables
-                if row_var is not None:
-                    row_var.value = r
-                if column_var is not None:
-                    column_var.value = c
-                if item_var is not None:
-                    item_var.value = get_item_at_row(r)
+                rv = container["row_var"]
+                cv = container["column_var"]
+                iv = container["item_var"]
+                if rv is not None:
+                    set_var_value(rv, r)
+                if cv is not None:
+                    set_var_value(cv, c)
+                if iv is not None:
+                    set_var_value(iv, get_item_at_row(r))
             finally:
                 updating["flag"] = False
 
         cell_var.on_change(on_cell_var_change)
-
-    # Widget → Variable bindings
-    def on_current_changed(current: QModelIndex, _previous: QModelIndex) -> None:
-        if updating["flag"]:
-            return
-        updating["flag"] = True
-        try:
-            row = current.row() if current.isValid() else -1
-            col = current.column() if current.isValid() else -1
-            if row_var is not None:
-                row_var.value = row
-            if column_var is not None:
-                column_var.value = col
-            if cell_var is not None:
-                cell_var.value = (row, col)
-            if item_var is not None:
-                item_var.value = get_item_at_row(row) if row >= 0 else None
-        finally:
-            updating["flag"] = False
-
-    def on_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
-        if updating["flag"]:
-            return
-        updating["flag"] = True
-        try:
-            if rows_var is not None:
-                rows_var.value = get_selected_rows()
-            if columns_var is not None:
-                columns_var.value = get_selected_columns()
-            if cells_var is not None:
-                cells_var.value = get_selected_cells()
-            if items_var is not None:
-                items_var.value = get_selected_items()
-        finally:
-            updating["flag"] = False
-
-    # Connect signals
-    if has_single:
-        selection_model.currentChanged.connect(on_current_changed)  # pyright: ignore[reportUnknownMemberType]
-
-    if has_multi:
-        selection_model.selectionChanged.connect(on_selection_changed)  # pyright: ignore[reportUnknownMemberType]

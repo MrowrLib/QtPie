@@ -1448,3 +1448,82 @@ class TestTableViewDictBindingKeyValueFormat:
 
         assert_that(entries).contains(("count", "10"))
         assert_that(entries).contains(("max", "100"))
+
+
+# =============================================================================
+# Signal Handler Order Tests (same issue as QComboBox/QListView)
+# =============================================================================
+
+
+class TestTableViewSignalHandlerOrder:
+    """Test that user's signal handler sees UPDATED value after selection change."""
+
+    def test_tableview_deeply_nested_in_tab_widget(self, qt: QtDriver) -> None:
+        """Test: Deeply nested Widget[T] with QTableView and nested optional path."""
+        from enum import Enum
+
+        from PySide6.QtCore import QItemSelectionModel
+        from PySide6.QtWidgets import QTabWidget
+
+        from qtpie import Widget, widget
+
+        class Location(Enum):
+            HEADER = "header"
+            QUERY = "query"
+
+        @dataclass
+        class AuthSettings:
+            location: Location = Location.HEADER
+
+        @dataclass
+        class Settings:
+            auth: AuthSettings | None = None
+
+        call_count = {"value": 0}
+        seen_values: list[Location] = []
+
+        @widget(title="Auth Tab")
+        class GrandchildTab(Widget[Settings]):
+            """The deepest widget - like AuthTabContent."""
+
+            _table: QTableView = new(
+                bind=Location,
+                selectedItem="auth?.location",
+                clicked="_on_clicked",
+            )
+
+            def _on_clicked(self) -> None:
+                call_count["value"] += 1
+                if self.record_value and self.record_value.auth:
+                    seen_values.append(self.record_value.auth.location)
+
+        @widget
+        class ChildWidget(Widget[Settings]):
+            """Middle widget."""
+
+            _tabs: QTabWidget = new(tabs=[GrandchildTab])
+
+        @widget(record=Settings(auth=AuthSettings(location=Location.HEADER)))
+        class ParentWidget(Widget[Settings]):
+            """Top-level widget."""
+
+            _child: ChildWidget
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        call_count["value"] = 0
+        seen_values.clear()
+
+        grandchild = instance._child._tabs.widget(0)
+        assert_that(grandchild).is_instance_of(GrandchildTab)
+
+        # Simulate click on QUERY (row 1)
+        model = grandchild._table.model()
+        index = model.index(1, 0)
+        grandchild._table.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        grandchild._table.clicked.emit(index)
+
+        assert_that(call_count["value"]).is_equal_to(1)
+        assert_that(seen_values).is_equal_to([Location.QUERY])
