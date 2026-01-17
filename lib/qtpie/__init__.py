@@ -4,6 +4,7 @@ from . import debug as _debug  # noqa: F401 # pyright: ignore[reportUnusedImport
 from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
 from .create import create_instance
+from .dialog import ButtonInfo, Dialog, DialogButton, DialogButtons, DialogConfig, DialogResult, buttons, dialog
 from .dict_widget_repeater import DictWidgetRepeater
 from .dock import Dock
 from .dock_widget_repeater import DockWidgetRepeater
@@ -28,12 +29,20 @@ __all__ = [
     "App",
     "AppBase",
     "AppConfig",
+    "ButtonInfo",
     "ColorScheme",
+    "Dialog",
+    "DialogButton",
+    "DialogButtons",
+    "DialogConfig",
+    "DialogResult",
     "Dock",
     "EmbedConfig",
     "Stretch",
     "app",
+    "buttons",
     "create_instance",
+    "dialog",
     "DictWidgetRepeater",
     "DockWidgetRepeater",
     "embed",

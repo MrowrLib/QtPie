@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from PySide6.QtWidgets import QLabel
 
-from qtpie import AppBase, Menu, Widget, WidgetBase, Window, app, menu, widget, window
+from qtpie import AppBase, Dialog, Menu, Widget, WidgetBase, Window, app, dialog, menu, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -18,10 +18,11 @@ class WidgetBaseLabel[T = None](QLabel, WidgetBase[T]):
     pass
 
 
-# Class types that support QWidget children and layouts (Widget, Window, App)
+# Class types that support QWidget children and layouts (Widget, Window, Dialog, App)
 WIDGET_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
@@ -30,28 +31,31 @@ WIDGET_CLASS_TYPES = [
 ALL_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(Menu, menu, id="Menu"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
 
-# Widget only - for features that only work on basic Widget (not Window/App)
+# Widget only - for features that only work on basic Widget (not Window/App/Dialog)
 # Used for layout tests where Window has central_widget and App doesn't have layout()
 WIDGET_ONLY = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
 
-# Widget and Window only - for features that work on QWidget-based classes
+# Widget, Window, and Dialog - for features that work on QWidget-based classes
 # Used for name=/classes= tests since App is not a QWidget
 QWIDGET_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
 
 # Window and App only - for features that require QMainWindow (docks, menus, etc.)
 # App internally creates a Window, so docks work on both
+# Note: Dialog is NOT included here - it's QDialog, not QMainWindow
 WINDOW_CLASS_TYPES = [
     pytest.param(Window, window, id="Window"),
     pytest.param(AppBase, app, id="App"),
@@ -61,6 +65,7 @@ WINDOW_CLASS_TYPES = [
 RECORD_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(AppBase, app, id="App"),
 ]
 
