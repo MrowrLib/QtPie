@@ -253,12 +253,6 @@ class DockWidgetRepeater[T, W: QWidget]:
             # delete from the list again (which would cause a cascade delete)
             index_holder[0] = -1
 
-            # Disconnect visibility signal to prevent recursive removal
-            try:
-                dock.dock_widget.visibilityChanged.disconnect()
-            except (RuntimeError, TypeError):
-                pass  # Already disconnected or no connections
-
             # Remove and delete dock widget
             dock.dock_widget.close()
             dock.dock_widget.deleteLater()
@@ -291,10 +285,6 @@ class DockWidgetRepeater[T, W: QWidget]:
         """Handle list clear."""
         # Remove all docks
         for dock, _, _ in self._items:
-            try:
-                dock.dock_widget.visibilityChanged.disconnect()
-            except (RuntimeError, TypeError):
-                pass
             dock.dock_widget.close()
             dock.dock_widget.deleteLater()
         self._items.clear()

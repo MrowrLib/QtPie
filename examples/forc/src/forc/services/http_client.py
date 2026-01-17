@@ -173,7 +173,8 @@ class HttpClientService:
                 else:
                     params[request.auth.key] = self._resolve(request.auth.value)
 
-        # Send request with timing (include cookies from jar)
+        # Send request with timing (set cookies on client, not per-request)
+        client.cookies = self._build_httpx_cookies()
         start = time.perf_counter()
         httpx_response = client.request(
             method=request.method.value,
@@ -184,7 +185,6 @@ class HttpClientService:
             data=data,
             files=files,
             auth=auth,
-            cookies=self._build_httpx_cookies(),
         )
         elapsed_ms = (time.perf_counter() - start) * 1000
 

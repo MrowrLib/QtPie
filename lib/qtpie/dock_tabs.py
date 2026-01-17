@@ -211,10 +211,7 @@ class DockTabEventFilter(QObject):
         for dock in self._window.findChildren(QDockWidget):
             if dock.windowTitle() == tab_text:
                 siblings = self._window.tabifiedDockWidgets(dock)
-                self._window.removeDockWidget(dock)
-                self._window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
                 dock.setFloating(True)
-                dock.show()
 
                 # Update title bars for all affected docks
                 for d in [*siblings, dock]:
