@@ -402,3 +402,62 @@ class TestRecordValue:
         assert_that(isinstance(raw, Address)).is_true()
         assert_that(raw.street).is_equal_to("123 Main")
         assert_that(raw.city).is_equal_to("Springfield")
+
+
+# =============================================================================
+# Record Callable (Shorthand for .value)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestRecordCallable:
+    """record() callable shorthand for record.value."""
+
+    def test_record_call_returns_raw_dataclass(self, base_class, decorator, qt: QtDriver) -> None:
+        """record() returns the raw dataclass like record.value."""
+
+        @decorator(record=Person("Alice", 30))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        raw = instance.record()
+
+        assert_that(raw).is_instance_of(Person)
+        assert_that(raw.name).is_equal_to("Alice")
+        assert_that(raw.age).is_equal_to(30)
+
+    def test_record_call_equals_record_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """record() returns same object as record.value."""
+
+        @decorator(record=Person("Bob", 25))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.record()).is_same_as(instance.record.value)
+
+    def test_record_call_allows_attribute_access(self, base_class, decorator, qt: QtDriver) -> None:
+        """record().field works as shorthand."""
+
+        @decorator(record=Person("Charlie", 40))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.record().name).is_equal_to("Charlie")
+        assert_that(instance.record().age).is_equal_to(40)
+
+    def test_record_call_reflects_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """record() reflects changes made via record proxy."""
+
+        @decorator(record=Person("Dave", 50))
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.record().name).is_equal_to("Dave")
+
+        # Change via proxy
+        instance.record.name = "David"
+        assert_that(instance.record().name).is_equal_to("David")

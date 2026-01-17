@@ -606,6 +606,14 @@ class ObservableProxy[T]:
 
         value = getattr(target, name)
 
+        # For callables (methods, functions), return directly without wrapping
+        if callable(value):
+            return value  # type: ignore[return-value]
+
+        # If already an Observable type, return it directly (don't re-wrap)
+        if isinstance(value, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+            return value  # pyright: ignore[reportUnknownVariableType]
+
         # For primitives, return Observable
         if _is_primitive(value):
             return self._get_or_create_field_observable(name)

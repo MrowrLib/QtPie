@@ -181,19 +181,25 @@ class Variable[T, W = None]:
         object.__setattr__(self, "_widget_type", widget_type)
         object.__setattr__(self, "_widget", None)  # Populated later when widget is created
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(  # pyright: ignore[reportUnknownParameterType]
+        self, name: str
+    ):  # noqa: ANN204 - intentionally untyped for pyright Unknown
         """Forward attribute access to ObservableProxy for field access.
 
         For Variable[Dog], self._dog.name returns dog.name (unwrapped value).
         Use .observable.name for the Observable itself.
+
+        NOTE: Return type intentionally omitted so pyright treats it as Unknown.
+        This allows reportUnknownMemberType to catch accidental direct access
+        in strict mode, encouraging use of .value or () instead.
         """
         # Only forward to proxy if we're wrapping an ObservableProxy
-        wrapper: Any = object.__getattribute__(self, "_wrapper")
+        wrapper = object.__getattribute__(self, "_wrapper")
         if isinstance(wrapper, ObservableProxy):
-            result = getattr(cast(Any, wrapper), name)
+            result = getattr(wrapper, name)  # pyright: ignore[reportUnknownArgumentType]
             # Unwrap Observable to return actual value
             if isinstance(result, Observable):
-                return cast(Any, result.get())
+                return result.get()  # pyright: ignore[reportUnknownVariableType]
             return result
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
@@ -282,6 +288,10 @@ class Variable[T, W = None]:
     def on_change(self, callback: Any) -> None:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
+
+    def __call__(self) -> T:
+        """Shorthand for .value - allows my_var() instead of my_var.value."""
+        return self.value
 
     # -------------------------------------------------------------------------
     # Validation
@@ -632,9 +642,10 @@ class RecordVariable[T](Variable[T, None]):
         """Get the underlying ObservableProxy (typed specifically for records)."""
         return cast(ObservableProxy[T], self._wrapper)
 
-    def __call__(self) -> RecordVariable[T]:
-        """Call syntax: self.record().is_dirty returns RecordVariable for state access."""
-        return self
+    @override
+    def __call__(self) -> T:
+        """Shorthand for .value - allows record() instead of record.value."""
+        return self.value
 
 
 def _try_get_variable(obj: Any, name: str) -> Variable[Any, Any] | None:

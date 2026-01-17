@@ -1,6 +1,5 @@
-from qtpy.QtWidgets import QLabel, QLineEdit, QTableView
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QTableView
 
-from forc.domain.models.response import Cookie
 from forc.services import HttpClientService
 from qtpie import Variable, Widget, new, widget
 
@@ -11,21 +10,35 @@ class CookieManagerWidget(Widget):
     http_client_service: Variable[HttpClientService]
 
     ### Widgets ###
-    cookie_search: Variable[str, QLineEdit] = new()(
-        placeholderText="Search cookies...",
-        visible="{len(http_client_service?.cookies) > 0}",
-    )
+    tool_row: QHBoxLayout
     cookies_table: QTableView = new(
         bind="http_client_service?.cookies",
-        # filter="not {cookie_search} or {cookie_search.lower()} in {name.lower()}",
-        # filter="filter_cookies",
+        filter="not {cookie_search} or {cookie_search.lower()} in {name.lower()}",
         visible="{len(http_client_service?.cookies) > 0}",
     )
     cookie_count_label: QLabel = new(bind="Cookies stored: {len(http_client_service.cookies)}")
 
-    def filter_cookies(self, cookie: Cookie) -> bool:
-        print(f"Filtering cookie: {cookie.name}")
-        search_term = self.cookie_search.value.lower()
-        if not search_term:
-            return True
-        return search_term in cookie.name.lower() or search_term in cookie.value.lower()
+    ### Tool Row Widgets ###
+    cookie_search: Variable[str, QLineEdit] = new("")(
+        placeholderText="Search cookies...",
+        visible="{len(http_client_service?.cookies) > 0}",
+        layout="tool_row",
+    )
+    add_button: QPushButton = new(
+        "+ Add Cookie",
+        clicked="_on_add_cookie",
+        layout="tool_row",
+    )
+    delete_all_button: QPushButton = new(
+        "Delete All",
+        clicked="_on_delete_all",
+        visible="{len(http_client_service?.cookies) > 0}",
+        layout="tool_row",
+    )
+
+    ### Methods ###
+    def _on_add_cookie(self) -> None:
+        self.http_client_service().add_cookie()
+
+    def _on_delete_all(self) -> None:
+        self.http_client_service().clear_cookies()

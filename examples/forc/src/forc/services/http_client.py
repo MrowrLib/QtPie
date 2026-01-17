@@ -6,6 +6,7 @@ import time
 from typing import TYPE_CHECKING
 
 import httpx
+from observant import ObservableList
 
 from forc.domain.models import (
     ApiKeyAuth,
@@ -39,7 +40,7 @@ class HttpClientService:
         self._workspace = workspace_service
         self._client = client
         self._owns_client = client is None
-        self.cookies: list[Cookie] = []
+        self.cookies: ObservableList[Cookie] = ObservableList([])
 
     def _get_client(self) -> httpx.Client:
         """Get or create the HTTP client."""
@@ -62,6 +63,12 @@ class HttpClientService:
     def clear_cookies(self) -> None:
         """Clear all cookies from the cookie jar."""
         self.cookies.clear()
+
+    def add_cookie(self) -> Cookie:
+        """Add an empty cookie to the cookie jar for UI editing."""
+        cookie = Cookie(name="", value="")
+        self.cookies.append(cookie)
+        return cookie
 
     def _build_httpx_cookies(self) -> httpx.Cookies:
         """Convert our Cookie list to httpx.Cookies for requests."""

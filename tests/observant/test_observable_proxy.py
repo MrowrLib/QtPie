@@ -437,3 +437,67 @@ class TestObservableProxyNoTracking:
         proxy.name.set("Bob")
         assert_that(proxy.name.get()).is_equal_to("Bob")
         assert_that(changes).is_equal_to(["changed"])
+
+
+class Service:
+    """A service with methods for testing callable passthrough."""
+
+    def __init__(self) -> None:
+        self.items: list[str] = []
+
+    def add_item(self, item: str) -> str:
+        """Add an item and return it."""
+        self.items.append(item)
+        return item
+
+    def clear(self) -> None:
+        """Clear all items."""
+        self.items.clear()
+
+    def get_count(self) -> int:
+        """Get the count of items."""
+        return len(self.items)
+
+
+class TestObservableProxyCallables:
+    """Test that callables (methods) are returned directly without wrapping."""
+
+    def test_method_is_callable(self) -> None:
+        """Methods on proxied object are directly callable."""
+        service = Service()
+        proxy = ObservableProxy(service)
+
+        # Should be able to call the method directly
+        result = proxy.add_item("test")
+        assert_that(result).is_equal_to("test")
+        assert_that(service.items).is_equal_to(["test"])
+
+    def test_method_returns_value(self) -> None:
+        """Methods return their actual return value."""
+        service = Service()
+        proxy = ObservableProxy(service)
+
+        proxy.add_item("a")
+        proxy.add_item("b")
+        count = proxy.get_count()
+
+        assert_that(count).is_equal_to(2)
+
+    def test_method_with_no_return(self) -> None:
+        """Methods with no return value work correctly."""
+        service = Service()
+        proxy = ObservableProxy(service)
+
+        proxy.add_item("test")
+        proxy.clear()
+
+        assert_that(service.items).is_empty()
+
+    def test_method_not_wrapped_in_proxy(self) -> None:
+        """Methods are not wrapped in ObservableProxy."""
+        service = Service()
+        proxy = ObservableProxy(service)
+
+        method = proxy.add_item
+        assert_that(isinstance(method, ObservableProxy)).is_false()
+        assert_that(callable(method)).is_true()

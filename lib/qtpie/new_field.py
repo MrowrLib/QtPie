@@ -110,6 +110,9 @@ class NewField:
         self.list_checkable: str | bool | None = None
         # Filter for model widgets: "{_search} in {name}", "method_name", or callable
         self.model_filter: str | Callable[[Any], bool] | None = None
+        # Filter dependencies: Variable names to watch for callable/method filters
+        # When these Variables change, the filter is re-evaluated
+        self.filter_depends: list[str] | None = None
         # Sort key for model widgets: "{age}", "method_name", or callable
         self.model_sort: str | Callable[[Any], Any] | None = None
         # Embedded widget for model views (QListView, QTreeView, QTableView)
@@ -669,6 +672,8 @@ class NewField:
                 self.model_format = self.kwargs.pop("format", None)
                 # filter= specifies expression to filter items: "{_search} in {name}"
                 self.model_filter = self.kwargs.pop("filter", None)
+                # filter_depends= specifies Variables to watch for callable/method filters
+                self.filter_depends = self.kwargs.pop("filter_depends", None)
                 # sort= specifies how to sort items: "{age}", "method_name", or callable
                 self.model_sort = self.kwargs.pop("sort", None)
                 # Extract selection bindings for model widgets (QComboBox, QListView, QTableView)

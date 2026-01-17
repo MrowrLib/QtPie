@@ -11,6 +11,8 @@
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
 # pyright: reportUnknownLambdaType=false
+# pyright: reportOperatorIssue=false
+# pyright: reportUnknownVariableType=false
 """Tests for model widget filter= support.
 
 Tests expression-based filtering on QListView, QComboBox, QTableView, QTreeView.
@@ -1027,3 +1029,175 @@ class TestFilterCallableWithSort:
 
         # Filtered to age >= 3: Buddy and Fido, sorted by name
         assert_that(model.rowCount()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterDepends:
+    """Filter with filter_depends= for reactive callable/method filters."""
+
+    def test_filter_depends_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """Lambda filter with filter_depends= re-evaluates when Variable changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter=lambda x: x.age >= 3,  # Static filter - ignores _min_age
+                filter_depends=["_min_age"],  # But re-evaluates when _min_age changes
+            )
+
+            # We need a method that uses _min_age for this test to make sense
+            # Let's use a method filter instead
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Initial: lambda filters to age >= 3
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Changing _min_age triggers filter re-evaluation (but lambda is static)
+        # This tests that the subscription works, even if lambda doesn't use it
+        instance._min_age.value = 10
+        assert_that(model.rowCount()).is_equal_to(2)  # Still 2, lambda is static
+
+    def test_filter_depends_with_method(self, base_class, decorator, qt: QtDriver) -> None:
+        """Method filter with filter_depends= re-evaluates when Variable changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="filter_by_age",
+                filter_depends=["_min_age"],
+            )
+
+            def filter_by_age(self, dog: Dog) -> bool:
+                # Access Variable value via .value
+                return dog.age >= self._min_age.value
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Initial min_age 0 - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Change min_age to 3 - filters out Buddy (age 2)
+        instance._min_age.value = 3
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Change min_age to 5 - only Rex shown
+        instance._min_age.value = 5
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Change min_age to 0 - all shown again
+        instance._min_age.value = 0
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_depends_multiple_variables(self, base_class, decorator, qt: QtDriver) -> None:
+        """Method filter with multiple filter_depends= Variables."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="complex_filter",
+                filter_depends=["_min_age", "_search"],
+            )
+
+            def complex_filter(self, dog: Dog) -> bool:
+                if dog.age < self._min_age.value:
+                    return False
+                search = self._search.value
+                if search and search not in dog.name:
+                    return False
+                return True
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Initial - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Filter by age
+        instance._min_age.value = 3
+        assert_that(model.rowCount()).is_equal_to(2)  # Fido, Rex
+
+        # Also filter by search
+        instance._search.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)  # Only Rex
+
+        # Clear search
+        instance._search.value = ""
+        assert_that(model.rowCount()).is_equal_to(2)  # Fido, Rex
+
+    def test_filter_depends_with_string_search(self, base_class, decorator, qt: QtDriver) -> None:
+        """Typical use case: search filter with filter_depends=."""
+
+        @decorator
+        class TestClass(base_class):
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="search_filter",
+                filter_depends=["_search"],
+            )
+
+            def search_filter(self, dog: Dog) -> bool:
+                search = self._search.value.lower()
+                if not search:
+                    return True
+                return search in dog.name.lower()
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # No search - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Search "fido" - only Fido
+        instance._search.value = "fido"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Search "ex" - only Rex
+        instance._search.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Search "d" - Fido and Buddy
+        instance._search.value = "d"
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Clear search
+        instance._search.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)

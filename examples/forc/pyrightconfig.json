@@ -1,0 +1,8 @@
+{
+  "include": ["src"],
+  "pythonVersion": "3.13",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "strict",
+  "reportPrivateImportUsage": false,
+  "reportUnknownMemberType": "error"
+}

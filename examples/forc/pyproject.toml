@@ -18,3 +18,7 @@ requires = ["hatchling"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["tests", "test-apis"]
+
+[tool.pyright]
+# Stricter settings to catch missing .value or () on Variables
+reportUnknownMemberType = "error"  # Complain when calling methods on Any

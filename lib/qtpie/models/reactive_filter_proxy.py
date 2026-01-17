@@ -56,6 +56,7 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         parent: Any | None = None,
         *,
         filter_expr: str | Callable[[Any], bool] | None = None,
+        filter_depends: list[str] | None = None,
         sort_key: str | Callable[[Any], Any] | None = None,
         widget: Widget[Any] | None = None,
     ) -> None:
@@ -64,12 +65,14 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         Args:
             parent: Parent QObject.
             filter_expr: Filter - expression "{_search} in {name}", method name, or callable.
+            filter_depends: Variable names to watch for callable/method filters.
             sort_key: Sort key - expression "{age}", method name "get_sort_key", or callable.
             widget: Parent widget for resolving Variables and methods.
         """
         super().__init__(parent)
         self._filter_expr: str | None = None
         self._filter_fn: Callable[[Any], bool] | None = None
+        self._filter_depends = filter_depends
         self._sort_key = sort_key
         self._sort_key_fn: Callable[[Any], Any] | None = None
         self._widget = widget
@@ -91,14 +94,10 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         Args:
             filter_expr: Filter - expression "{_search} in {name}", method name, or callable.
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Case 1: Callable - use directly
         if callable(filter_expr):
             self._filter_fn = filter_expr
-            logger.debug("Filter: using callable directly")
+            self._subscribe_to_filter_depends()
             return
 
         # Case 2: String - could be expression "{...}" or method name "filter_items"
@@ -106,36 +105,31 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
             # Expression - parse and subscribe to Variables
             self._filter_expr = filter_expr
             self._parse_and_subscribe()
-            logger.debug("Filter: using expression %r", filter_expr)
         else:
             # Method name - resolve from widget
             if self._widget is not None:
                 method = getattr(self._widget, filter_expr, None)
-                # DEBUG: Remove after fixing
-                print(f"[FILTER DEBUG] widget={type(self._widget).__name__}, looking for {filter_expr!r}, found={method}")
-                print(f"[FILTER DEBUG] widget has attrs: {[a for a in dir(self._widget) if not a.startswith('_')][:20]}...")
-                logger.debug(
-                    "Filter: resolving method %r from widget %s -> %s",
-                    filter_expr,
-                    type(self._widget).__name__,
-                    method,
-                )
                 if method is not None and callable(method):
                     self._filter_fn = method  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+                    self._subscribe_to_filter_depends()
                 else:
                     # Not a method - treat as simple attribute expression
-                    logger.warning(
-                        "Filter: method %r not found on %s, treating as expression",
-                        filter_expr,
-                        type(self._widget).__name__,
-                    )
                     self._filter_expr = f"{{{filter_expr}}}"
                     self._parse_and_subscribe()
             else:
                 # No widget - treat as simple attribute expression
-                logger.warning("Filter: no widget provided, treating %r as expression", filter_expr)
                 self._filter_expr = f"{{{filter_expr}}}"
                 self._parse_and_subscribe()
+
+    def _subscribe_to_filter_depends(self) -> None:
+        """Subscribe to filter_depends Variables to auto-invalidate filter."""
+        if not self._filter_depends or not self._widget:
+            return
+
+        for var_name in self._filter_depends:
+            obs_list = _get_observables_for_name(self._widget, var_name)
+            for obs in obs_list:
+                obs.on_change(self._on_variable_change)
 
     def _parse_and_subscribe(self) -> None:
         """Parse the filter expression and subscribe to widget Variables."""

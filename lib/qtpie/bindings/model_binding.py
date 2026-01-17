@@ -404,6 +404,7 @@ def apply_model_binding(
         proxy = ReactiveFilterProxyModel(
             parent=widget_instance,
             filter_expr=field_info.model_filter,
+            filter_depends=field_info.filter_depends,
             sort_key=field_info.model_sort,
             widget=host,  # type: ignore[arg-type]
         )

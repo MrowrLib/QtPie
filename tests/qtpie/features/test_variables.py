@@ -742,3 +742,65 @@ class TestVariableWithWidgetPropertyBindings:
         instance._allow.value = False
         assert_that(instance._input.widget.isHidden()).is_false()
         assert_that(instance._input.widget.isEnabled()).is_false()
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestVariableCallable:
+    """Variable() callable shorthand for .value."""
+
+    def test_call_returns_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """my_var() returns same as my_var.value."""
+
+        @decorator
+        class TestClass(base_class):
+            _count: Variable[int] = new(42)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._count()).is_equal_to(42)
+        assert_that(instance._count()).is_equal_to(instance._count.value)
+
+    def test_call_returns_string(self, base_class, decorator, qt: QtDriver) -> None:
+        """String Variable callable works."""
+
+        @decorator
+        class TestClass(base_class):
+            _name: Variable[str] = new("hello")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._name()).is_equal_to("hello")
+        assert_that(instance._name().upper()).is_equal_to("HELLO")
+
+    def test_call_returns_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """List Variable callable returns list."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[str]] = new(default=["a", "b", "c"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._items()).is_equal_to(["a", "b", "c"])
+        assert_that(len(instance._items())).is_equal_to(3)
+
+    def test_call_returns_dict(self, base_class, decorator, qt: QtDriver) -> None:
+        """Dict Variable callable returns dict."""
+
+        @decorator
+        class TestClass(base_class):
+            _data: Variable[dict[str, int]] = new(default={"x": 1, "y": 2})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._data()).is_equal_to({"x": 1, "y": 2})
+        assert_that(instance._data()["x"]).is_equal_to(1)
+
+    def test_call_reflects_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """Callable reflects value changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _count: Variable[int] = new(0)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._count()).is_equal_to(0)
+
+        instance._count.value = 100
+        assert_that(instance._count()).is_equal_to(100)
