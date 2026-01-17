@@ -37,14 +37,14 @@ We use `qtpy` for Qt abstraction so it works with PySide6 or PyQt6.
 # Run all tests
 uv run pytest tests/ -v
 
-# Type check
-uv run pyright lib/qtpie/ tests/qtpie/
+# Type check - ENTIRE PROJECT (no path args!)
+uv run pyright
 
 # Lint
-uv run ruff check lib/qtpie/ tests/
+uv run ruff check lib/ tests/
 
 # Format
-uv run ruff format lib/qtpie/ tests/
+uv run ruff format lib/ tests/
 ```
 
 ---
