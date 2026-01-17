@@ -13,7 +13,7 @@ class ResponseStatusBarWidget(Widget[Response]):
 
 @widget(title="Body")
 class ResponseBodyTabContent(Widget[Response]):
-    body: QPlainTextEdit = new(
+    body_text: QPlainTextEdit = new(
         bind="{body.decode('utf-8', errors='ignore')}",
         content_type="{headers['content-type']}",
         readOnly=True,

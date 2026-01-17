@@ -114,7 +114,7 @@ class TestSendRequest:
         # Get the response viewer and check the body text widget
         body_tab = request_widget.response_viewer.get_tab(ResponseBodyTabContent)
         assert body_tab is not None
-        body_text_edit = body_tab.body
+        body_text_edit = body_tab.body_text
 
         # The QPlainTextEdit should contain the response body
         displayed_text = body_text_edit.toPlainText()
