@@ -132,6 +132,14 @@ _BUTTON_TYPE_TO_ROLE: dict[str, QDialogButtonBox.ButtonRole] = {
 _POSITIVE_BUTTON_TYPES = {"ok", "save", "yes", "apply"}
 
 
+def _normalize_button_name(name: str) -> str:
+    """Normalize a button field name to a button type.
+
+    Strips leading underscores so both 'ok' and '_ok' map to 'ok'.
+    """
+    return name.lstrip("_")
+
+
 @dataclass
 class ButtonInfo:
     """Information about a clicked dialog button."""
@@ -176,7 +184,8 @@ class DialogButton:
 class DialogButtonConfig:
     """Configuration for a DialogButton field."""
 
-    name: str  # Field name (must be valid DialogButtonType)
+    name: str  # Field name (e.g., '_ok' or 'ok')
+    button_type: str  # Normalized button type (e.g., 'ok') - used for Qt lookup
     label: str | None = None  # Custom label (None = use default)
     enabled: str | None = None  # Binding expression for enabled state
     visible: str | None = None  # Binding expression for visibility
@@ -443,9 +452,10 @@ def _collect_dialog_fields(cls: type[Dialog[Any]]) -> None:
 
         # Check for DialogButton annotation
         if annotation is DialogButton or (hasattr(annotation, "__origin__") and getattr(annotation, "__origin__", None) is DialogButton):
-            # Validate button type
-            if name not in _BUTTON_TYPE_TO_STANDARD:
-                raise TypeError(f"Invalid DialogButton field name '{name}'. Must be one of: {', '.join(_BUTTON_TYPE_TO_STANDARD.keys())}")
+            # Validate button type (normalize to strip leading underscores)
+            button_type = _normalize_button_name(name)
+            if button_type not in _BUTTON_TYPE_TO_STANDARD:
+                raise TypeError(f"Invalid DialogButton field name '{name}'. Must be one of: {', '.join(_BUTTON_TYPE_TO_STANDARD.keys())} (underscore prefix allowed)")
 
             # Extract configuration from NewField if present
             label: str | None = None
@@ -474,6 +484,7 @@ def _collect_dialog_fields(cls: type[Dialog[Any]]) -> None:
             config.button_configs.append(
                 DialogButtonConfig(
                     name=name,
+                    button_type=button_type,
                     label=label,
                     enabled=enabled,
                     visible=visible,
@@ -885,8 +896,8 @@ def _create_button_box(dialog: Dialog[Any], config: DialogConfig) -> QDialogButt
         return click_handler
 
     for btn_config in config.button_configs:
-        # Get standard button
-        standard_btn = _BUTTON_TYPE_TO_STANDARD.get(btn_config.name)
+        # Get standard button using normalized button_type
+        standard_btn = _BUTTON_TYPE_TO_STANDARD.get(btn_config.button_type)
         if standard_btn is None:
             continue
 
@@ -897,8 +908,8 @@ def _create_button_box(dialog: Dialog[Any], config: DialogConfig) -> QDialogButt
         if btn_config.label is not None:
             btn.setText(btn_config.label)
 
-        # Store reference
-        dialog._buttons[btn_config.name] = btn
+        # Store reference by button_type (so _get_button("ok") works for both "ok" and "_ok" fields)
+        dialog._buttons[btn_config.button_type] = btn
 
         # Connect clicked handler if provided
         if btn_config.clicked is not None:
@@ -910,7 +921,7 @@ def _create_button_box(dialog: Dialog[Any], config: DialogConfig) -> QDialogButt
                 btn.clicked.connect(btn_config.clicked)
 
         # Track which button was clicked
-        btn.clicked.connect(make_click_handler(btn_config.name))
+        btn.clicked.connect(make_click_handler(btn_config.button_type))
 
     # Connect button box signals to dialog accept/reject
     button_box.accepted.connect(dialog.accept)
@@ -924,13 +935,13 @@ def _apply_button_bindings(dialog: Dialog[Any], config: DialogConfig) -> None:
     from .bindings.expression import create_expression_binding
 
     for btn_config in config.button_configs:
-        btn = dialog._buttons.get(btn_config.name)
+        btn = dialog._buttons.get(btn_config.button_type)
         if btn is None:
             continue
 
         # Apply enabled binding
         enabled_expr = btn_config.enabled
-        if enabled_expr is None and btn_config.name in _POSITIVE_BUTTON_TYPES:
+        if enabled_expr is None and btn_config.button_type in _POSITIVE_BUTTON_TYPES:
             # Auto-bind positive buttons to is_valid
             enabled_expr = "{is_valid}"
 
@@ -1086,8 +1097,10 @@ def _collect_dialog_buttons_fields(cls: type[DialogButtons]) -> None:
         value = getattr(cls, name, None)
 
         if annotation is DialogButton:
-            if name not in _BUTTON_TYPE_TO_STANDARD:
-                raise TypeError(f"Invalid DialogButton field name '{name}'. Must be one of: {', '.join(_BUTTON_TYPE_TO_STANDARD.keys())}")
+            # Validate button type (normalize to strip leading underscores)
+            button_type = _normalize_button_name(name)
+            if button_type not in _BUTTON_TYPE_TO_STANDARD:
+                raise TypeError(f"Invalid DialogButton field name '{name}'. Must be one of: {', '.join(_BUTTON_TYPE_TO_STANDARD.keys())} (underscore prefix allowed)")
 
             label: str | None = None
             enabled: str | None = None
@@ -1104,6 +1117,7 @@ def _collect_dialog_buttons_fields(cls: type[DialogButtons]) -> None:
             config.button_configs.append(
                 DialogButtonConfig(
                     name=name,
+                    button_type=button_type,
                     label=label,
                     enabled=enabled,
                     visible=visible,
@@ -1158,7 +1172,7 @@ def _wrap_init_for_dialog_buttons(cls: type[DialogButtons]) -> None:
 
         # Create buttons
         for btn_config in config.button_configs:
-            standard_btn = _BUTTON_TYPE_TO_STANDARD.get(btn_config.name)
+            standard_btn = _BUTTON_TYPE_TO_STANDARD.get(btn_config.button_type)
             if standard_btn is None:
                 continue
 
@@ -1167,7 +1181,7 @@ def _wrap_init_for_dialog_buttons(cls: type[DialogButtons]) -> None:
             if btn_config.label is not None:
                 btn.setText(btn_config.label)
 
-            self._buttons[btn_config.name] = btn
+            self._buttons[btn_config.button_type] = btn
 
             # Connect clicked handler
             if btn_config.clicked is not None:

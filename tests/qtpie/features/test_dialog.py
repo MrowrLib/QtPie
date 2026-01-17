@@ -122,6 +122,89 @@ class TestDialogButtonBasics:
 
 
 # =============================================================================
+# Underscore-Prefixed Button Names
+# =============================================================================
+
+
+class TestUnderscorePrefixedButtons:
+    def test_underscore_prefixed_button_names(self, qt: QtDriver) -> None:
+        """Underscore-prefixed button names like _ok and _cancel should work."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _ok: DialogButton
+            _cancel: DialogButton
+
+        d = qt.track(TestDialog())
+        # Buttons should be accessible via button type (without underscore)
+        assert d._get_button("ok") is not None
+        assert d._get_button("cancel") is not None
+
+    def test_underscore_prefixed_with_custom_label(self, qt: QtDriver) -> None:
+        """Underscore-prefixed buttons should support custom labels."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _ok: DialogButton = new("Confirm")
+            _cancel: DialogButton = new("Abort")
+
+        d = qt.track(TestDialog())
+        ok_btn = d._get_button("ok")
+        cancel_btn = d._get_button("cancel")
+        assert ok_btn is not None
+        assert cancel_btn is not None
+        assert ok_btn.text() == "Confirm"
+        assert cancel_btn.text() == "Abort"
+
+    def test_mixed_prefixed_and_unprefixed(self, qt: QtDriver) -> None:
+        """Can mix underscore-prefixed and unprefixed button names."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _ok: DialogButton
+            cancel: DialogButton
+
+        d = qt.track(TestDialog())
+        assert d._get_button("ok") is not None
+        assert d._get_button("cancel") is not None
+
+    def test_underscore_prefixed_with_bindings(self, qt: QtDriver) -> None:
+        """Underscore-prefixed buttons should support enabled bindings."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _valid: Variable[bool] = new(False)
+            _ok: DialogButton = new(enabled="{_valid}")
+            _cancel: DialogButton
+
+        d = qt.track(TestDialog())
+        ok_btn = d._get_button("ok")
+        assert ok_btn is not None
+        assert not ok_btn.isEnabled()
+        d._valid.value = True
+        qt.process_events()
+        assert ok_btn.isEnabled()
+
+    def test_underscore_prefixed_with_clicked(self, qt: QtDriver) -> None:
+        """Underscore-prefixed buttons should support clicked handlers."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _apply: DialogButton = new(clicked="on_apply")
+            _cancel: DialogButton
+
+            def on_apply(self) -> None:
+                self._applied = True  # type: ignore[attr-defined]
+
+        d = qt.track(TestDialog())
+        d._applied = False  # type: ignore[attr-defined]
+        apply_btn = d._get_button("apply")
+        assert apply_btn is not None
+        qt.click(apply_btn)
+        assert d._applied is True  # type: ignore[attr-defined]
+
+
+# =============================================================================
 # Button Box Layout Position
 # =============================================================================
 
