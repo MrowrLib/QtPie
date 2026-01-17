@@ -6,7 +6,7 @@ from forc.app.widgets.environments import EnvironmentSelectorWidget
 from qtpie import Dialog, DialogButton, Stretch, Widget, dialog, new, widget
 
 
-@dialog(size=(900, 600), title="Cookie Manager", icon=":/icon.png")
+@dialog(size=(900, 600), title="Cookie Manager")
 class CookieManagerDialog(Dialog):
     header: QLabel = new("Cookie Manager")
     cookie_manager: CookieManagerWidget

@@ -505,6 +505,92 @@ class TestDialogValidation:
 
 
 # =============================================================================
+# Dialog Icon
+# =============================================================================
+
+
+class TestDialogIcon:
+    def test_dialog_icon_from_path(self, qt: QtDriver) -> None:
+        @dialog(title="Icon Test", icon=":/icons/test.png")
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        # Icon object is created (even if resource doesn't exist)
+        icon = d.windowIcon()
+        assert icon is not None
+
+    def test_dialog_icon_from_qicon(self, qt: QtDriver) -> None:
+        from PySide6.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        test_icon = QIcon(pixmap)
+
+        @dialog(title="Icon Test", icon=test_icon)
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        assert not d.windowIcon().isNull()
+
+    def test_dialog_icon_from_qpixmap(self, qt: QtDriver) -> None:
+        from PySide6.QtGui import QPixmap
+
+        pixmap = QPixmap(16, 16)
+
+        @dialog(title="Icon Test", icon=pixmap)
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        assert not d.windowIcon().isNull()
+
+    def test_dialog_inherits_icon_from_active_window(self, qt: QtDriver) -> None:
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QMainWindow
+
+        # Create a main window with an icon
+        pixmap = QPixmap(16, 16)
+        window_icon = QIcon(pixmap)
+        main_window = qt.track(QMainWindow())
+        main_window.setWindowIcon(window_icon)
+        main_window.show()
+        main_window.activateWindow()
+        qt.process_events()
+
+        # Dialog without explicit icon should inherit from active window
+        @dialog(title="Inherits Icon")
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        # Should have inherited the icon
+        assert not d.windowIcon().isNull()
+
+    def test_dialog_icon_false_opts_out(self, qt: QtDriver) -> None:
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QMainWindow
+
+        # Create a main window with an icon
+        pixmap = QPixmap(16, 16)
+        window_icon = QIcon(pixmap)
+        main_window = qt.track(QMainWindow())
+        main_window.setWindowIcon(window_icon)
+        main_window.show()
+        main_window.activateWindow()
+        qt.process_events()
+
+        # Dialog with icon=False should NOT inherit
+        @dialog(title="No Icon", icon=False)
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        # Should have NO icon (opted out)
+        assert d.windowIcon().isNull()
+
+
+# =============================================================================
 # Edge Cases
 # =============================================================================
 

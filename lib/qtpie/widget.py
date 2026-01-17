@@ -877,10 +877,24 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     )
 
     # Apply icon at runtime (when Qt resources are available)
-    if config.icon is not None:
+    # - None: inherit from active window
+    # - False: explicitly no icon (opt-out)
+    # - other: use specified icon
+    if config.icon is False:
+        pass  # Explicit opt-out, no icon
+    elif config.icon is not None:
         resolved_icon = resolve_icon(config.icon)
         if resolved_icon is not None:
             widget.setWindowIcon(resolved_icon)
+    else:
+        # Try to inherit icon from active window
+        from qtpy.QtWidgets import QApplication
+
+        active_window = QApplication.activeWindow()
+        if active_window is not None:
+            parent_icon = active_window.windowIcon()
+            if not parent_icon.isNull():
+                widget.setWindowIcon(parent_icon)
 
     # Apply initial size
     if config.size is not None:

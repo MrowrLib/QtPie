@@ -1,7 +1,7 @@
 """Layout utility functions shared across QtPie modules."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
@@ -18,7 +18,10 @@ from qtpy.QtWidgets import (
 from qtpie.layout import LayoutType
 
 # Type alias for icon parameter
-IconType = str | QIcon | QPixmap | QStyle.StandardPixmap | None
+# - None: inherit from parent/active window (default)
+# - False: explicitly no icon
+# - str/QIcon/QPixmap/StandardPixmap: explicit icon
+IconType = str | QIcon | QPixmap | QStyle.StandardPixmap | Literal[False] | None
 
 
 def resolve_icon(value: IconType) -> QIcon | None:
@@ -29,9 +32,10 @@ def resolve_icon(value: IconType) -> QIcon | None:
         - QIcon: Passed through unchanged
         - QPixmap: Converted to QIcon
         - QStyle.StandardPixmap: Resolved via application style
+        - False: Explicit opt-out, returns None
         - None: Returns None
     """
-    if value is None:
+    if value is None or value is False:
         return None
     if isinstance(value, QIcon):
         return value

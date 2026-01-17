@@ -666,13 +666,27 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
         if config.size is not None:
             self.resize(*config.size)
 
-        # Apply icon
-        if config.icon is not None:
+        # Apply icon (inherit from active window if not specified)
+        # - None: inherit from active window
+        # - False: explicitly no icon (opt-out)
+        # - other: use specified icon
+        if config.icon is False:
+            pass  # Explicit opt-out, no icon
+        elif config.icon is not None:
             from .utils.layouts import resolve_icon
 
             resolved_icon = resolve_icon(config.icon)
             if resolved_icon is not None:
                 self.setWindowIcon(resolved_icon)
+        else:
+            # Try to inherit icon from active window
+            from qtpy.QtWidgets import QApplication
+
+            active_window = QApplication.activeWindow()
+            if active_window is not None:
+                parent_icon = active_window.windowIcon()
+                if not parent_icon.isNull():
+                    self.setWindowIcon(parent_icon)
 
         # Set up layout if configured
         if config.layout is not None:

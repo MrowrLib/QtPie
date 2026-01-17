@@ -622,3 +622,49 @@ class TestWidgetIcon:
         # Icon should be resolved now at instantiation time
         w = qt.track(MyWidget())
         assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_inherits_from_active_window(self, qt: QtDriver) -> None:
+        """Widget without icon= inherits icon from active window."""
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QMainWindow
+
+        # Create a main window with an icon
+        pixmap = QPixmap(16, 16)
+        window_icon = QIcon(pixmap)
+        main_window = qt.track(QMainWindow())
+        main_window.setWindowIcon(window_icon)
+        main_window.show()
+        main_window.activateWindow()
+        qt.process_events()
+
+        # Widget without explicit icon should inherit from active window
+        @widget
+        class TestWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(TestWidget())
+        # Should have inherited the icon
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_icon_false_opts_out(self, qt: QtDriver) -> None:
+        """Widget with icon=False does not inherit icon."""
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QMainWindow
+
+        # Create a main window with an icon
+        pixmap = QPixmap(16, 16)
+        window_icon = QIcon(pixmap)
+        main_window = qt.track(QMainWindow())
+        main_window.setWindowIcon(window_icon)
+        main_window.show()
+        main_window.activateWindow()
+        qt.process_events()
+
+        # Widget with icon=False should NOT inherit
+        @widget(icon=False)
+        class TestWidget(Widget):
+            _label: QLabel = new("Hello")
+
+        w = qt.track(TestWidget())
+        # Should have NO icon (opted out)
+        assert_that(w.windowIcon().isNull()).is_true()
