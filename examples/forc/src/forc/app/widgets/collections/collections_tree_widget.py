@@ -9,12 +9,12 @@ from qtpie import Variable, Widget, new, widget
 class CollectionsTreeWidget(Widget):
     collection_item: Variable[Any | None] = new(None)
 
-    _header: QLabel = new(
+    header: QLabel = new(
         bind="{workspace?.name}",
         stylesheet="font-size: 14pt; font-weight: bold; margin-bottom: 10px;",
     )
 
-    _treeview: QTreeView = new(
+    treeview: QTreeView = new(
         bind="workspace.collections",
         children="items",
         format="{name}",

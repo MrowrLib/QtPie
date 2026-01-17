@@ -1,7 +1,4 @@
-# pyright: reportPrivateUsage=false
 """Integration tests for sending HTTP requests."""
-
-from typing import cast
 
 from assertpy import assert_that
 from forc.app.widgets.requests import RequestWidget
@@ -115,9 +112,9 @@ class TestSendRequest:
         qt.process_events()
 
         # Get the response viewer and check the body text widget
-        response_viewer = request_widget._response
-        body_tab = cast(ResponseBodyTabContent, response_viewer._tabs.widget(0))
-        body_text_edit = body_tab._body
+        body_tab = request_widget.response_viewer.get_tab(ResponseBodyTabContent)
+        assert body_tab is not None
+        body_text_edit = body_tab.body
 
         # The QPlainTextEdit should contain the response body
         displayed_text = body_text_edit.toPlainText()

@@ -1,8 +1,9 @@
 {
-  "include": ["src"],
+  "include": ["src", "tests"],
   "pythonVersion": "3.13",
   "pythonPlatform": "All",
   "typeCheckingMode": "strict",
   "reportPrivateImportUsage": false,
+  "reportPrivateUsage": "error",
   "reportUnknownMemberType": "error"
 }

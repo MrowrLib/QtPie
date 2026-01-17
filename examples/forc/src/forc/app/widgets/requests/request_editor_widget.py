@@ -143,3 +143,11 @@ class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
     _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
+
+    def get_tab[T: Widget[Request]](self, tab_type: type[T]) -> T | None:
+        """Get a tab by its widget type."""
+        for i in range(self._tabs.count()):
+            tab = self._tabs.widget(i)
+            if isinstance(tab, tab_type):
+                return tab
+        return None

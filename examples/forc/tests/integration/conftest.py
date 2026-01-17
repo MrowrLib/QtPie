@@ -1,4 +1,3 @@
-# pyright: reportPrivateUsage=false
 """Pytest configuration for Forc integration tests."""
 
 import os
@@ -50,8 +49,8 @@ def main_window(qapp: App, qt: QtDriver) -> ForcWindow:
     window = qapp.main_window
 
     # Reset state for test isolation
-    window._editors.clear()
-    window._selected_request_index.value = 0
+    window.editors.clear()
+    window.selected_request_index.value = 0
 
     qt.track(window)
     return window

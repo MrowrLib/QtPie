@@ -1,4 +1,3 @@
-# pyright: reportPrivateUsage=false
 """Integration tests for request tab management."""
 
 from assertpy import assert_that
@@ -36,7 +35,7 @@ class TestClickRequestOpensTab:
 
     def test_no_tabs_initially(self, main_window: ForcWindow, qt: QtDriver) -> None:
         """No request tabs should be open initially."""
-        assert_that(main_window._editors.value).is_empty()
+        assert_that(main_window.editors.value).is_empty()
 
     def test_clicking_request_opens_tab(self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver) -> None:
         """Clicking a request should open it in a new tab."""
@@ -47,8 +46,8 @@ class TestClickRequestOpensTab:
         qt.process_events()
 
         # Verify tab was opened
-        assert_that(main_window._editors.value).is_length(1)
-        assert_that(main_window._editors.value[0]).is_same_as(request)
+        assert_that(main_window.editors.value).is_length(1)
+        assert_that(main_window.editors.value[0]).is_same_as(request)
 
     def test_clicking_same_request_switches_tab(
         self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver
@@ -65,7 +64,7 @@ class TestClickRequestOpensTab:
         qt.process_events()
 
         # Should still only have one tab
-        assert_that(main_window._editors.value).is_length(1)
+        assert_that(main_window.editors.value).is_length(1)
 
     def test_clicking_different_requests_opens_multiple_tabs(
         self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver
@@ -92,9 +91,9 @@ class TestClickRequestOpensTab:
         qt.process_events()
 
         # Should have two tabs
-        assert_that(main_window._editors.value).is_length(2)
-        assert_that(main_window._editors.value[0]).is_same_as(requests[0])
-        assert_that(main_window._editors.value[1]).is_same_as(requests[1])
+        assert_that(main_window.editors.value).is_length(2)
+        assert_that(main_window.editors.value[0]).is_same_as(requests[0])
+        assert_that(main_window.editors.value[1]).is_same_as(requests[1])
 
     def test_selected_tab_index_updates(self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver) -> None:
         """Selected tab index should update when opening/switching tabs."""
@@ -115,17 +114,17 @@ class TestClickRequestOpensTab:
         # Open first request
         main_window.on_collection_item_clicked(requests[0])
         qt.process_events()
-        assert_that(main_window._selected_request_index.value).is_equal_to(0)
+        assert_that(main_window.selected_request_index.value).is_equal_to(0)
 
         # Open second request
         main_window.on_collection_item_clicked(requests[1])
         qt.process_events()
-        assert_that(main_window._selected_request_index.value).is_equal_to(1)
+        assert_that(main_window.selected_request_index.value).is_equal_to(1)
 
         # Click first request again - should switch back
         main_window.on_collection_item_clicked(requests[0])
         qt.process_events()
-        assert_that(main_window._selected_request_index.value).is_equal_to(0)
+        assert_that(main_window.selected_request_index.value).is_equal_to(0)
 
     def test_clicking_collection_does_not_open_tab(
         self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver
@@ -137,7 +136,7 @@ class TestClickRequestOpensTab:
         qt.process_events()
 
         # No tabs should be opened
-        assert_that(main_window._editors.value).is_empty()
+        assert_that(main_window.editors.value).is_empty()
 
 
 class TestTreeViewClicking:
@@ -146,8 +145,8 @@ class TestTreeViewClicking:
     def test_click_request_in_tree_opens_tab(self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver) -> None:
         """Clicking a request in the actual QTreeView should open a tab."""
         # Get the tree view
-        sidebar = main_window._sidebar.widget
-        tree = sidebar._collections._treeview
+        sidebar = main_window.sidebar.widget
+        tree = sidebar.collections.treeview
 
         # Find a request to click
         request = find_first_request(workspace)
@@ -165,16 +164,16 @@ class TestTreeViewClicking:
         qt.process_events()
 
         # Verify tab was opened
-        assert_that(main_window._editors.value).is_length(1)
-        assert_that(main_window._editors.value[0]).is_same_as(request)
+        assert_that(main_window.editors.value).is_length(1)
+        assert_that(main_window.editors.value[0]).is_same_as(request)
 
     def test_click_collection_in_tree_does_not_open_tab(
         self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver
     ) -> None:
         """Clicking a collection (folder) in the QTreeView should not open a tab."""
         # Get the tree view
-        sidebar = main_window._sidebar.widget
-        tree = sidebar._collections._treeview
+        sidebar = main_window.sidebar.widget
+        tree = sidebar.collections.treeview
 
         # Get the first collection
         collection = workspace.collections[0]
@@ -188,12 +187,12 @@ class TestTreeViewClicking:
         qt.process_events()
 
         # No tabs should be opened
-        assert_that(main_window._editors.value).is_empty()
+        assert_that(main_window.editors.value).is_empty()
 
     def test_click_multiple_requests_in_tree(self, main_window: ForcWindow, workspace: Workspace, qt: QtDriver) -> None:
         """Clicking multiple requests in tree should open multiple tabs."""
-        sidebar = main_window._sidebar.widget
-        tree = sidebar._collections._treeview
+        sidebar = main_window.sidebar.widget
+        tree = sidebar.collections.treeview
         tree.expandAll()
         qt.process_events()
 
@@ -218,4 +217,4 @@ class TestTreeViewClicking:
             qt.process_events()
 
         # Should have two tabs
-        assert_that(main_window._editors.value).is_length(2)
+        assert_that(main_window.editors.value).is_length(2)

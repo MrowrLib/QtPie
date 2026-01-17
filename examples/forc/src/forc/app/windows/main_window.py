@@ -23,29 +23,29 @@ class ForcWindow(Window):
     collection_item_clicked = Signal(Request)
 
     ### Variables ###
-    _selected_request_index: Variable[int]
+    selected_request_index: Variable[int]
 
     ### Menus ###
-    _file_menu: FileMenu
-    _view_menu: ViewMenu
+    file_menu: FileMenu
+    view_menu: ViewMenu
 
     ### Docks / Widgets ###
-    _sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)
-    _editors: Variable[list[Request], Dock[RequestWidget]] = new(
+    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)
+    editors: Variable[list[Request], Dock[RequestWidget]] = new(
         group="requests",
         dock="right",
         title="{name}",
-        groupSelectedIndex="_selected_request_index",
+        groupSelectedIndex="selected_request_index",
     )
 
     ### Methods ###
     def on_collection_item_clicked(self, item: Request | Collection) -> None:
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:
-            for index, editor in enumerate(self._editors.value):
+            for index, editor in enumerate(self.editors.value):
                 if editor is item:
-                    self._selected_request_index.value = index
+                    self.selected_request_index.value = index
                     return
             # Otherwise, add a new tab:
-            self._editors.append(item)
-            self._selected_request_index.value = len(self._editors) - 1
+            self.editors.append(item)
+            self.selected_request_index.value = len(self.editors) - 1

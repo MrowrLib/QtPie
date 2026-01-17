@@ -13,7 +13,7 @@ class ResponseStatusBarWidget(Widget[Response]):
 
 @widget(title="Body")
 class ResponseBodyTabContent(Widget[Response]):
-    _body: QPlainTextEdit = new(
+    body: QPlainTextEdit = new(
         bind="{body.decode('utf-8', errors='ignore')}",
         content_type="{headers['content-type']}",
         readOnly=True,
@@ -38,3 +38,11 @@ class ResponseCookiesTabContent(Widget[Response]):
 @widget
 class ResponseViewerWidget(Widget[Response]):
     _tabs: QTabWidget = new(tabs=[ResponseBodyTabContent, ResponseHeadersTabContent, ResponseCookiesTabContent])
+
+    def get_tab[T: Widget[Response]](self, tab_type: type[T]) -> T | None:
+        """Get a tab by its widget type."""
+        for i in range(self._tabs.count()):
+            tab = self._tabs.widget(i)
+            if isinstance(tab, tab_type):
+                return tab
+        return None

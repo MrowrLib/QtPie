@@ -23,7 +23,7 @@ class RequestWidget(Widget[Request]):
     ### Widgets ###
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
     _editor: RequestEditorWidget = new(splitter="_splitter")
-    _response: ResponseViewerWidget = new(bind="response", splitter="_splitter")
+    response_viewer: ResponseViewerWidget = new(bind="response", splitter="_splitter")
 
     ### Methods ###
     def __setup__(self) -> None:
