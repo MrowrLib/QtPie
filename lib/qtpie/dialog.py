@@ -25,6 +25,63 @@ from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
+from .widget import IconType
+
+# =============================================================================
+# ShowDialog Descriptor - Allows both class method and instance method behavior
+# =============================================================================
+
+
+class _ShowDialogDescriptor[T]:
+    """Descriptor that makes show_dialog work as both class method and instance method.
+
+    When called on class: MyDialog.show_dialog() → creates instance and shows
+    When called on instance: dialog.show_dialog() → shows the existing instance
+    """
+
+    @overload
+    def __get__(self, obj: None, objtype: type[Dialog[T]]) -> Callable[..., DialogResult[T]]: ...
+
+    @overload
+    def __get__(self, obj: Dialog[T], objtype: type[Dialog[T]] | None) -> Callable[..., DialogResult[T]]: ...
+
+    def __get__(
+        self,
+        obj: Dialog[T] | None,
+        objtype: type[Dialog[T]] | None = None,
+    ) -> Callable[..., DialogResult[T]]:
+        """Return a callable that shows the dialog.
+
+        Args:
+            obj: Instance if called on instance, None if called on class.
+            objtype: The class.
+
+        Returns:
+            Callable that shows the dialog and returns DialogResult.
+        """
+        if obj is None:
+            # Called on class: MyDialog.show_dialog()
+            def class_show_dialog(
+                record: T | None = None,
+                *,
+                parent: QWidget | None = None,
+            ) -> DialogResult[T]:
+                assert objtype is not None
+                instance = objtype()
+                if record is not None and hasattr(instance, "record"):
+                    instance.record = record  # type: ignore[assignment]
+                if parent is not None:
+                    instance.setParent(parent)
+                return instance._show_dialog()
+
+            return class_show_dialog
+        else:
+            # Called on instance: dialog.show_dialog()
+            def instance_show_dialog() -> DialogResult[T]:
+                return obj._show_dialog()
+
+            return instance_show_dialog
+
 
 # Button type literal for autocomplete support
 DialogButtonType = Literal["ok", "cancel", "yes", "no", "save", "discard", "apply", "close", "help", "reset"]
@@ -140,6 +197,7 @@ class DialogConfig:
     layout: LayoutType = "vertical"
     margins: int | tuple[int, int, int, int] | None = None
     size: tuple[int, int] | None = None
+    icon: IconType = None
     record_type: type[Any] | None = None
     record_default: Any | None = None
     required_bindings: set[str] = field(default_factory=lambda: set[str]())
@@ -310,25 +368,13 @@ class Dialog[T = None](QDialog, QtPieComponentBase):
             super().reject()
 
     # -------------------------------------------------------------------------
-    # show_dialog() Methods
+    # show_dialog() - Works as both class method and instance method
     # -------------------------------------------------------------------------
 
-    def show_dialog(
-        self,
-        *,
-        parent: QWidget | None = None,
-    ) -> DialogResult[T]:
-        """Show dialog (blocking). Returns DialogResult.
-
-        Args:
-            parent: Optional parent widget for the dialog.
-
-        Returns:
-            DialogResult with accepted/rejected status, button info, and record.
-        """
-        if parent is not None:
-            self.setParent(parent)
-        return self._show_dialog()
+    # Descriptor allows both:
+    #   MyDialog.show_dialog()     -> creates instance, shows it
+    #   dialog.show_dialog()       -> shows existing instance
+    show_dialog: _ShowDialogDescriptor[T] = _ShowDialogDescriptor()
 
     def _show_dialog(self) -> DialogResult[T]:
         """Internal method that actually executes the dialog.
@@ -463,6 +509,7 @@ def dialog[D: Dialog[Any]](
     cls: None = None,
     *,
     title: str | None = None,
+    icon: IconType = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     size: tuple[int, int] | None = None,
@@ -478,6 +525,7 @@ def dialog[D: Dialog[Any]](
     cls: type[D] | None = None,
     *,
     title: str | None = None,
+    icon: IconType = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] | None = None,
     size: tuple[int, int] | None = None,
@@ -504,6 +552,7 @@ def dialog[D: Dialog[Any]](
 
     Args:
         title: Dialog window title. Can be reactive: title="{_title}".
+        icon: Window icon. Can be a path string, QIcon, or QPixmap.
         layout: "vertical" | "horizontal" | "form" | "grid" | None
         margins: Layout margins. int applies to all sides.
         auto_bind: If True (default), enable auto-binding for Variables.
@@ -535,6 +584,7 @@ def dialog[D: Dialog[Any]](
         config.layout = layout
         config.margins = margins
         config.size = size
+        config.icon = icon
         config.auto_bind = auto_bind
         config.record_default = record
         config.widget_props = widget_props
@@ -615,6 +665,14 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
         # Apply initial size
         if config.size is not None:
             self.resize(*config.size)
+
+        # Apply icon
+        if config.icon is not None:
+            from .utils.layouts import resolve_icon
+
+            resolved_icon = resolve_icon(config.icon)
+            if resolved_icon is not None:
+                self.setWindowIcon(resolved_icon)
 
         # Set up layout if configured
         if config.layout is not None:

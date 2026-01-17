@@ -435,6 +435,9 @@ def apply_auto_bindings(
         # Resolve the binding source
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
         if source is None:
+            # Source not found yet - may need to wait for record propagation.
+            # Skip for now; apply_auto_bindings will be called again when record is set.
+
             # Check if it's a plain list/dict attribute (static data for model widgets)
             if _is_model_widget(widget_instance):
                 # Try to get the raw attribute (might be plain list/dict)
@@ -491,94 +494,78 @@ def apply_auto_bindings(
                     )
                     continue
 
-            # Source not found - might not be parented yet
-            # Schedule deferred retry for model widgets
-            if _is_model_widget(widget_instance):
-                from qtpy.QtCore import QTimer
+                # Source still not found - need to wait for Variable to be set.
+                # For nested paths like "http_client_service.cookies", listen to the
+                # first segment (Variable) and re-apply binding when it changes.
+                from qtpie.variable import Variable as VarType
 
-                def make_deferred_model_bind(w: QWidget, h: QWidget, bp: str, fi: Any) -> Callable[[], None]:
-                    def retry_bind() -> None:
-                        # Re-attempt resolution after parenting
-                        deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
-                        if deferred_source is not None:
-                            apply_model_binding(
-                                h,
-                                w,
-                                deferred_source,
-                                bp,
-                                fi,
-                                is_table_view_fn=_is_table_view,
-                                is_tree_view_fn=_is_tree_view,
-                                resolve_or_create_variable_fn=_resolve_or_create_variable,
-                            )
+                # Parse path to get first segment
+                first_segment = bind_path.split(".")[0].split("?")[0].lstrip("_")
+                var_source = getattr(host, first_segment, None) or getattr(host, f"_{first_segment}", None)
 
-                    return retry_bind
+                if isinstance(var_source, VarType):
+                    # Listen to Variable changes and re-apply binding
+                    applied: dict[str, bool] = {"done": False}
 
-                QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info))
-                continue
+                    def make_var_listener(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool]) -> Callable[[Any], None]:
+                        def on_var_change(value: Any) -> None:
+                            if app["done"]:
+                                return
+                            if value is None:
+                                return
+                            # Re-attempt resolution now that Variable has a value
+                            deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if deferred_source is not None:
+                                app["done"] = True
+                                apply_model_binding(
+                                    h,
+                                    w,
+                                    deferred_source,
+                                    bp,
+                                    fi,
+                                    is_table_view_fn=_is_table_view,
+                                    is_tree_view_fn=_is_tree_view,
+                                    resolve_or_create_variable_fn=_resolve_or_create_variable,
+                                )
 
-            # For simple widgets (QLineEdit, QSpinBox, etc.), set up early signal connection.
-            # This ensures the binding handler is connected BEFORE user's signal handlers,
-            # even if the source isn't resolved yet. The handler resolves on-demand.
-            from qtpie.bindings.registry import get_binding_registry
+                        return on_var_change
 
-            registry = get_binding_registry()
-            default_prop = registry.get_default_prop(widget_instance)
-            adapter = registry.get(widget_instance, default_prop)
-            if adapter is not None and adapter.signal_name is not None and adapter.getter is not None:
-                # Mutable container to cache resolved source and track state
-                container: dict[str, Any] = {"source": None, "bound": False}
-                updating: dict[str, bool] = {"flag": False}
+                    var_source.on_change(make_var_listener(widget_instance, host, bind_path, field_info, applied))
+                else:
+                    # Fallback: schedule deferred retries for parenting case.
+                    # Use multiple attempts with increasing delays because the parent
+                    # hierarchy might not be established until after several event loops.
+                    from qtpy.QtCore import QTimer
 
-                signal = getattr(widget_instance, adapter.signal_name, None)
-                getter = adapter.getter
-                setter = adapter.setter
+                    applied_flag: dict[str, bool] = {"done": False}
 
-                def make_early_widget_to_obs(
-                    h: QWidget, bp: str, cont: dict[str, Any], g: Callable[[Any], Any], s: Callable[[Any, Any], None] | None, w: QWidget, upd: dict[str, bool]
-                ) -> Callable[[], None]:
-                    def on_widget_change() -> None:
-                        if upd["flag"]:
-                            return
+                    def make_deferred_model_bind(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool], delays: list[int]) -> Callable[[], None]:
+                        def retry_bind() -> None:
+                            if app["done"]:
+                                return
+                            deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if deferred_source is not None:
+                                app["done"] = True
+                                apply_model_binding(
+                                    h,
+                                    w,
+                                    deferred_source,
+                                    bp,
+                                    fi,
+                                    is_table_view_fn=_is_table_view,
+                                    is_tree_view_fn=_is_tree_view,
+                                    resolve_or_create_variable_fn=_resolve_or_create_variable,
+                                )
+                            elif delays:
+                                # Try again with next delay
+                                QTimer.singleShot(delays[0], make_deferred_model_bind(w, h, bp, fi, app, delays[1:]))
 
-                        # Resolve source on-demand if not cached yet
-                        src = cont["source"]
-                        if src is None:
-                            resolved = resolve_binding_source(h, bp)  # type: ignore[arg-type]
-                            if isinstance(resolved, Observable):
-                                cont["source"] = resolved
-                                src = resolved
-                                # Set up Observable → Widget binding if not done yet
-                                if not cont["bound"] and s is not None:
-                                    cont["bound"] = True
-                                    # Capture setter in closure to satisfy pyright
-                                    setter_fn = s
+                        return retry_bind
 
-                                    def on_obs_change(v: Any) -> None:
-                                        if upd["flag"]:
-                                            return
-                                        upd["flag"] = True
-                                        try:
-                                            setter_fn(w, v)
-                                        finally:
-                                            upd["flag"] = False
+                    # Try immediately, then at 0ms, 10ms, 50ms, 100ms
+                    retry_delays = [0, 10, 50, 100]
+                    QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info, applied_flag, retry_delays))
 
-                                    src.on_change(on_obs_change)
-
-                        if src is None:
-                            return
-
-                        upd["flag"] = True
-                        try:
-                            src.set(g(w))
-                        finally:
-                            upd["flag"] = False
-
-                    return on_widget_change
-
-                if signal is not None:
-                    # Connect handler NOW (before user's handlers)
-                    signal.connect(make_early_widget_to_obs(host, bind_path, container, getter, setter, widget_instance, updating))
             continue
 
         # Check if this is a model widget (QComboBox, QListView, etc.) with a list source
@@ -600,9 +587,6 @@ def apply_auto_bindings(
             bind(source).to(widget_instance)
         elif isinstance(source, Observable):
             # Set up binding for Observable (e.g., from record field)
-            # NOTE: For nested Widget[T], the initial source may point to the wrong record.
-            # The record gets propagated from parent AFTER widget init. So we need to
-            # re-resolve the source in the signal handler to get the correct Observable.
             from qtpie.bindings.registry import get_binding_registry
 
             registry = get_binding_registry()
@@ -633,29 +617,51 @@ def apply_auto_bindings(
                 source.on_change(make_obs_to_widget(setter, widget_instance, updating))
 
                 # Two-way binding: Widget → Observable
-                # Re-resolve source on each invocation to handle record propagation
-                if adapter.signal_name is not None and adapter.getter is not None:
+                is_optional_chain = "?." in bind_path
+                if is_optional_chain and adapter.signal_name is not None and adapter.getter is not None:
+                    # For optional chain paths, use a re-resolving handler.
+                    # The Observable changes when the nested object changes (e.g., after record propagation).
+                    # This handler re-resolves the path on each signal emission to find the current Observable.
                     signal = getattr(widget_instance, adapter.signal_name, None)
                     getter = adapter.getter
 
-                    def make_widget_to_obs_dynamic(h: QWidget, bp: str, g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
+                    def make_reresolver_widget_to_obs(h: QWidget, bp: str, g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
                         def on_widget_change() -> None:
                             if upd["flag"]:
                                 return
-                            # Re-resolve source to get the correct Observable after record propagation
-                            current_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
-                            if current_source is None or not isinstance(current_source, Observable):
+                            resolved = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if resolved is None or not isinstance(resolved, Observable):
                                 return
                             upd["flag"] = True
                             try:
-                                current_source.set(g(w))
+                                resolved.set(g(w))
                             finally:
                                 upd["flag"] = False
 
                         return on_widget_change
 
                     if signal is not None:
-                        signal.connect(make_widget_to_obs_dynamic(host, bind_path, getter, widget_instance, updating))
+                        signal.connect(make_reresolver_widget_to_obs(host, bind_path, getter, widget_instance, updating))
+                elif adapter.signal_name is not None and adapter.getter is not None:
+                    # Use the original source (not re-resolved) to avoid infinite loops
+                    # with widgets like QPlainTextEdit where textChanged fires during init
+                    signal = getattr(widget_instance, adapter.signal_name, None)
+                    getter = adapter.getter
+
+                    def make_widget_to_obs(src: Observable[Any], g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
+                        def on_widget_change() -> None:
+                            if upd["flag"]:
+                                return
+                            upd["flag"] = True
+                            try:
+                                src.set(g(w))
+                            finally:
+                                upd["flag"] = False
+
+                        return on_widget_change
+
+                    if signal is not None:
+                        signal.connect(make_widget_to_obs(source, getter, widget_instance, updating))
 
 
 def apply_property_bindings(

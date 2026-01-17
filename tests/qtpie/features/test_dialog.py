@@ -252,6 +252,59 @@ class TestShowDialog:
         result = d.show_dialog()
         assert result.rejected
 
+    def test_class_method_show_dialog(self, qt: QtDriver) -> None:
+        """Test calling show_dialog() on the class (not instance)."""
+        # Track instances created
+        instances_created: list[QDialog] = []
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self) -> None:
+                super().__init__()
+                instances_created.append(self)
+                # Override _show_dialog to avoid blocking exec()
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        # Call on CLASS, not instance
+        result = TestDialog.show_dialog()
+
+        # Verify it created an instance
+        assert len(instances_created) == 1
+        qt.track(instances_created[0])  # Track for cleanup
+
+        # Verify result
+        assert isinstance(result, DialogResult)
+        assert result.accepted
+
+    def test_class_method_show_dialog_with_record(self, qt: QtDriver) -> None:
+        """Test class method show_dialog() with record parameter."""
+        instances_created: list[QDialog] = []
+
+        @dialog
+        class TestDialog(Dialog[Person]):
+            name: QLineEdit = new()
+            ok: DialogButton
+
+            def __init__(self) -> None:
+                super().__init__()
+                instances_created.append(self)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        # Call class method with record
+        person = Person("Alice", 30)
+        result = TestDialog.show_dialog(person)
+
+        assert len(instances_created) == 1
+        qt.track(instances_created[0])
+
+        # Verify record was set and returned
+        assert result.accepted
+        assert result.record is not None
+        assert result.record.name == "Alice"
+        assert result.record.age == 30
+
 
 # =============================================================================
 # DialogResult
