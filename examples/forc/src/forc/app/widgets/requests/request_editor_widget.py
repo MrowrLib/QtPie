@@ -142,5 +142,4 @@ class BodyTabContent(Widget[Request]):
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
-    # _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
-    _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent])
+    _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
