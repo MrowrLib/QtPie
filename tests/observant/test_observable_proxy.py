@@ -7,7 +7,7 @@
 from dataclasses import dataclass
 
 from assertpy import assert_that
-from observant import ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy
 
 
 @dataclass
@@ -501,3 +501,112 @@ class TestObservableProxyCallables:
         method = proxy.add_item
         assert_that(isinstance(method, ObservableProxy)).is_false()
         assert_that(callable(method)).is_true()
+
+
+class ServiceWithObservables:
+    """A service that uses Observable types directly."""
+
+    def __init__(self) -> None:
+        self.count: Observable[int] = Observable(0)
+        self.items: ObservableList[str] = ObservableList([])
+        self.data: ObservableDict[str, int] = ObservableDict({})
+
+    def add_item(self, item: str) -> None:
+        """Add an item via ObservableList."""
+        self.items.append(item)
+        self.count.set(self.count.get() + 1)
+
+
+class TestObservableProxyWithObservableFields:
+    """Test that Observable fields are returned directly without re-wrapping."""
+
+    def test_observable_field_returned_directly(self) -> None:
+        """Observable[T] field is returned as-is, not wrapped."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+
+        # Should return the exact same Observable instance
+        count_obs = proxy.count
+        assert_that(count_obs).is_same_as(service.count)
+        assert_that(count_obs).is_instance_of(Observable)
+
+    def test_observable_list_field_returned_directly(self) -> None:
+        """ObservableList[T] field is returned as-is, not copied."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+
+        # Should return the exact same ObservableList instance
+        items_list = proxy.items
+        assert_that(items_list).is_same_as(service.items)
+        assert_that(items_list).is_instance_of(ObservableList)
+
+    def test_observable_dict_field_returned_directly(self) -> None:
+        """ObservableDict[K,V] field is returned as-is, not copied."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+
+        # Should return the exact same ObservableDict instance
+        data_dict = proxy.data
+        assert_that(data_dict).is_same_as(service.data)
+        assert_that(data_dict).is_instance_of(ObservableDict)
+
+    def test_observable_list_changes_propagate(self) -> None:
+        """Changes to ObservableList via service methods are visible through proxy."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+
+        # Get the list via proxy
+        items = proxy.items
+
+        # Modify via service method
+        service.add_item("test")
+
+        # Should see the change (same instance)
+        assert_that(items.to_list()).is_equal_to(["test"])
+        assert_that(proxy.items.to_list()).is_equal_to(["test"])
+
+    def test_observable_changes_propagate(self) -> None:
+        """Changes to Observable via service methods are visible through proxy."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+
+        # Get the observable via proxy
+        count = proxy.count
+
+        # Modify via service method
+        service.add_item("test")
+
+        # Should see the change (same instance)
+        assert_that(count.get()).is_equal_to(1)
+        assert_that(proxy.count.get()).is_equal_to(1)
+
+    def test_can_subscribe_to_service_observable_via_proxy(self) -> None:
+        """Can subscribe to Observable obtained through proxy."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+        changes: list[int] = []
+
+        # Subscribe via proxy
+        proxy.count.on_change(lambda v: changes.append(v))
+
+        # Modify via service
+        service.add_item("a")
+        service.add_item("b")
+
+        # Should receive notifications
+        assert_that(changes).is_equal_to([1, 2])
+
+    def test_can_subscribe_to_service_observable_list_via_proxy(self) -> None:
+        """Can subscribe to ObservableList obtained through proxy."""
+        service = ServiceWithObservables()
+        proxy = ObservableProxy(service)
+        notifications: list[str] = []
+
+        # Subscribe via proxy
+        proxy.items.on_change(lambda: notifications.append("changed"))
+
+        # Modify via service
+        service.items.append("test")
+
+        # Should receive notification
+        assert_that(notifications).is_equal_to(["changed"])

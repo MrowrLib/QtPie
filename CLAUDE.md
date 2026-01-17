@@ -55,10 +55,10 @@ uv run ruff format lib/ tests/
 
 ```bash
 # 1. Ruff (linting) - ENTIRE PROJECT
-uv run ruff check lib/qtpie/ tests/
+uv run ruff check lib/ tests/
 
-# 2. Pyright (type checking) - ENTIRE PROJECT
-uv run pyright lib/qtpie/ tests/qtpie/
+# 2. Pyright (type checking) - ENTIRE PROJECT, NO PATH ARGS
+uv run pyright
 
 # 3. Pytest (tests) - ENTIRE PROJECT
 uv run python -m pytest tests/ -v
@@ -67,9 +67,11 @@ uv run python -m pytest tests/ -v
 **ALL THREE MUST PASS WITH ZERO ERRORS BEFORE YOU ANNOUNCE COMPLETION.**
 
 - Do NOT run checks on just the files you modified
+- Do NOT cherry-pick specific folders - run on the ENTIRE project
 - Do NOT skip ruff because "pyright passed"
 - Do NOT skip any of these checks for any reason
 - Do NOT announce a feature as done until all three pass
+- If user reports a check failing, run it on the ENTIRE project, not a subset
 
 If ANY check fails, fix it FIRST, then re-run ALL checks again.
 

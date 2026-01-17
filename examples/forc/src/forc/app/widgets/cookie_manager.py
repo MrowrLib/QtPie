@@ -26,19 +26,12 @@ class CookieManagerWidget(Widget):
     )
     add_button: QPushButton = new(
         "+ Add Cookie",
-        clicked="_on_add_cookie",
+        clicked="{http_client_service.add_cookie()}",
         layout="tool_row",
     )
     delete_all_button: QPushButton = new(
         "Delete All",
-        clicked="_on_delete_all",
+        clicked="{http_client_service.clear_cookies()}",
         visible="{len(http_client_service?.cookies) > 0}",
         layout="tool_row",
     )
-
-    ### Methods ###
-    def _on_add_cookie(self) -> None:
-        self.http_client_service().add_cookie()
-
-    def _on_delete_all(self) -> None:
-        self.http_client_service().clear_cookies()
