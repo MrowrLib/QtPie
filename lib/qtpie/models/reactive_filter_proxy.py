@@ -55,7 +55,7 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         self,
         parent: Any | None = None,
         *,
-        filter_expr: str | None = None,
+        filter_expr: str | Callable[[Any], bool] | None = None,
         sort_key: str | Callable[[Any], Any] | None = None,
         widget: Widget[Any] | None = None,
     ) -> None:
@@ -63,12 +63,13 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
 
         Args:
             parent: Parent QObject.
-            filter_expr: Filter expression like "{_search} in {name}".
+            filter_expr: Filter - expression "{_search} in {name}", method name, or callable.
             sort_key: Sort key - expression "{age}", method name "get_sort_key", or callable.
             widget: Parent widget for resolving Variables and methods.
         """
         super().__init__(parent)
-        self._filter_expr = filter_expr
+        self._filter_expr: str | None = None
+        self._filter_fn: Callable[[Any], bool] | None = None
         self._sort_key = sort_key
         self._sort_key_fn: Callable[[Any], Any] | None = None
         self._widget = widget
@@ -79,10 +80,62 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         self.setDynamicSortFilter(True)
 
         if filter_expr:
-            self._parse_and_subscribe()
+            self._setup_filter(filter_expr)
 
         if sort_key:
             self._setup_sort_key()
+
+    def _setup_filter(self, filter_expr: str | Callable[[Any], bool]) -> None:
+        """Set up the filter based on filter_expr parameter.
+
+        Args:
+            filter_expr: Filter - expression "{_search} in {name}", method name, or callable.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Case 1: Callable - use directly
+        if callable(filter_expr):
+            self._filter_fn = filter_expr
+            logger.debug("Filter: using callable directly")
+            return
+
+        # Case 2: String - could be expression "{...}" or method name "filter_items"
+        if "{" in filter_expr and "}" in filter_expr:
+            # Expression - parse and subscribe to Variables
+            self._filter_expr = filter_expr
+            self._parse_and_subscribe()
+            logger.debug("Filter: using expression %r", filter_expr)
+        else:
+            # Method name - resolve from widget
+            if self._widget is not None:
+                method = getattr(self._widget, filter_expr, None)
+                # DEBUG: Remove after fixing
+                print(f"[FILTER DEBUG] widget={type(self._widget).__name__}, looking for {filter_expr!r}, found={method}")
+                print(f"[FILTER DEBUG] widget has attrs: {[a for a in dir(self._widget) if not a.startswith('_')][:20]}...")
+                logger.debug(
+                    "Filter: resolving method %r from widget %s -> %s",
+                    filter_expr,
+                    type(self._widget).__name__,
+                    method,
+                )
+                if method is not None and callable(method):
+                    self._filter_fn = method  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+                else:
+                    # Not a method - treat as simple attribute expression
+                    logger.warning(
+                        "Filter: method %r not found on %s, treating as expression",
+                        filter_expr,
+                        type(self._widget).__name__,
+                    )
+                    self._filter_expr = f"{{{filter_expr}}}"
+                    self._parse_and_subscribe()
+            else:
+                # No widget - treat as simple attribute expression
+                logger.warning("Filter: no widget provided, treating %r as expression", filter_expr)
+                self._filter_expr = f"{{{filter_expr}}}"
+                self._parse_and_subscribe()
 
     def _parse_and_subscribe(self) -> None:
         """Parse the filter expression and subscribe to widget Variables."""
@@ -299,6 +352,14 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
 
     def _evaluate_filter(self, item: Any) -> bool:
         """Evaluate the filter expression for an item."""
+        # Case 1: Callable filter function
+        if self._filter_fn is not None:
+            try:
+                return bool(self._filter_fn(item))
+            except Exception:
+                return False
+
+        # Case 2: No filter - show all
         if not self._filter_expr:
             return True
 
@@ -423,9 +484,9 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         source_row: int,
         source_parent: QModelIndex | QPersistentModelIndex,
     ) -> bool:
-        """Determine if a row should be shown based on filter expression."""
+        """Determine if a row should be shown based on filter expression or callable."""
         # No filter = show all
-        if not self._filter_expr:
+        if not self._filter_expr and self._filter_fn is None:
             return True
 
         source_model = self.sourceModel()

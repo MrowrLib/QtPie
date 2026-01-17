@@ -646,3 +646,99 @@ class TestVariableHierarchyResolution:
         parent = qt.track(Parent())
         assert_that(parent._child._count.value).is_equal_to(42)
         assert_that(parent._child._name.value).is_equal_to("hello")
+
+
+class TestVariableWithWidgetPropertyBindings:
+    """Variable[T, W] with visible= and enabled= bindings on widget kwargs."""
+
+    def test_variable_widget_visible_binding(self, qt: QtDriver) -> None:
+        """Variable[T, W] with visible= binding on widget kwargs."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _show: Variable[bool] = new(True)
+            _name: Variable[str, QLineEdit] = new("")(visible="_show")
+
+        instance = qt.track(TestWidget())
+
+        # Initially visible
+        assert_that(instance._name.widget.isHidden()).is_false()
+
+        # Hide by changing variable
+        instance._show.value = False
+        assert_that(instance._name.widget.isHidden()).is_true()
+
+        # Show again
+        instance._show.value = True
+        assert_that(instance._name.widget.isHidden()).is_false()
+
+    def test_variable_widget_enabled_binding(self, qt: QtDriver) -> None:
+        """Variable[T, W] with enabled= binding on widget kwargs."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _can_edit: Variable[bool] = new(True)
+            _name: Variable[str, QLineEdit] = new("")(enabled="_can_edit")
+
+        instance = qt.track(TestWidget())
+
+        # Initially enabled
+        assert_that(instance._name.widget.isEnabled()).is_true()
+
+        # Disable by changing variable
+        instance._can_edit.value = False
+        assert_that(instance._name.widget.isEnabled()).is_false()
+
+        # Enable again
+        instance._can_edit.value = True
+        assert_that(instance._name.widget.isEnabled()).is_true()
+
+    def test_variable_widget_visible_expression_binding(self, qt: QtDriver) -> None:
+        """Variable[T, W] with visible= expression binding."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _count: Variable[int] = new(0)
+            _message: Variable[str, QLabel] = new("Hello")(visible="{_count > 0}")
+
+        instance = qt.track(TestWidget())
+
+        # Initially hidden (count is 0)
+        assert_that(instance._message.widget.isHidden()).is_true()
+
+        # Show when count > 0
+        instance._count.value = 5
+        assert_that(instance._message.widget.isHidden()).is_false()
+
+        # Hide again when count <= 0
+        instance._count.value = 0
+        assert_that(instance._message.widget.isHidden()).is_true()
+
+    def test_variable_widget_with_both_visible_and_enabled(self, qt: QtDriver) -> None:
+        """Variable[T, W] with both visible= and enabled= bindings."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _show: Variable[bool] = new(True)
+            _allow: Variable[bool] = new(True)
+            _input: Variable[str, QLineEdit] = new("")(visible="_show", enabled="_allow")
+
+        instance = qt.track(TestWidget())
+
+        # Initially visible and enabled
+        assert_that(instance._input.widget.isHidden()).is_false()
+        assert_that(instance._input.widget.isEnabled()).is_true()
+
+        # Hide
+        instance._show.value = False
+        assert_that(instance._input.widget.isHidden()).is_true()
+
+        # Show but disable
+        instance._show.value = True
+        instance._allow.value = False
+        assert_that(instance._input.widget.isHidden()).is_false()
+        assert_that(instance._input.widget.isEnabled()).is_false()

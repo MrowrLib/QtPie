@@ -975,6 +975,17 @@ class _VariableDescriptor[T]:
                     for key in signal_keys_to_remove:
                         del widget_kwargs_copy[key]
 
+                    # Extract property bindings (visible=, enabled=) - don't pass to widget constructor
+                    bindable_props = {"visible", "enabled", "windowModified", "acceptDrops", "updatesEnabled", "checked"}
+                    property_bindings: dict[str, str] = {}
+                    prop_keys_to_remove: list[str] = []
+                    for key, value in widget_kwargs_copy.items():
+                        if key in bindable_props and isinstance(value, str):
+                            property_bindings[key] = value
+                            prop_keys_to_remove.append(key)
+                    for key in prop_keys_to_remove:
+                        del widget_kwargs_copy[key]
+
                     try:
                         widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
@@ -1036,6 +1047,40 @@ class _VariableDescriptor[T]:
                         should_bind = is_primitive_type(self._inner_type) or is_widget_with_record(widget_instance)
                         if should_bind:
                             bind(var).to(widget_instance)
+
+                    # Apply property bindings (visible=, enabled=) after widget is created and bound
+                    if property_bindings:
+                        from .bindings import is_format_string
+                        from .bindings.expression import create_expression_binding
+                        from .bindings.path import resolve_binding_source
+                        from .bindings.property_bindings import get_widget_property_setter
+
+                        for prop_name, bind_expr_val in property_bindings.items():
+                            prop_setter = get_widget_property_setter(widget_instance, prop_name)
+                            if prop_setter is None:
+                                # Fall back to setXxx method
+                                setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
+                                prop_setter = getattr(widget_instance, setter_name, None)
+                                if prop_setter is None or not callable(prop_setter):
+                                    continue
+
+                            setter_fn = cast(Callable[[Any], None], prop_setter)
+
+                            if is_format_string(bind_expr_val):
+                                # Expression binding like "{_count > 0}"
+                                create_expression_binding(obj, bind_expr_val, setter_fn)
+                            else:
+                                # Simple variable reference like "_is_visible"
+                                source = resolve_binding_source(obj, bind_expr_val)  # type: ignore[arg-type]
+                                if source is None:
+                                    continue
+
+                                if isinstance(source, Variable):
+                                    setter_fn(source.value)  # pyright: ignore[reportUnknownMemberType]
+                                    source.on_change(setter_fn)
+                                elif isinstance(source, Observable):
+                                    setter_fn(source.get())
+                                    source.on_change(setter_fn)
 
                 var.widget = widget_instance  # Use setter
 

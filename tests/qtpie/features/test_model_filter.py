@@ -10,6 +10,7 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportUnknownLambdaType=false
 """Tests for model widget filter= support.
 
 Tests expression-based filtering on QListView, QComboBox, QTableView, QTreeView.
@@ -770,4 +771,259 @@ class TestFilterWithTreeView:
 
         # Filter to age >= 5
         instance._min_age.value = 5
+        assert_that(model.rowCount()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterCallable:
+    """Filter using callable functions (lambda or function)."""
+
+    def test_filter_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using lambda function."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter=lambda x: x.age >= 3)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Lambda filters to age >= 3: Fido (3) and Rex (5)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_filter_with_lambda_string_contains(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using lambda with string contains check."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Felix", 2),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter=lambda x: "F" in x.name)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Lambda filters to names containing "F": Fido and Felix
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_filter_with_lambda_complex_condition(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using lambda with complex condition."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3, "labrador"),
+                    Dog("Rex", 5, "german shepherd"),
+                    Dog("Buddy", 2, "labrador"),
+                    Dog("Max", 8, "poodle"),
+                ]
+            )
+            # Filter: labradors over age 2
+            _list: QListView = new(
+                bind="_dogs",
+                filter=lambda x: x.breed == "labrador" and x.age > 2,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Only Fido matches (labrador, age 3 > 2)
+        assert_that(model.rowCount()).is_equal_to(1)
+
+    def test_filter_with_lambda_on_primitives(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using lambda on primitive list."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[int]] = new([1, 5, 10, 15, 20])
+            _list: QListView = new(bind="_items", filter=lambda x: x >= 10)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Filters to >= 10: 10, 15, 20
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_with_lambda_all_filtered(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using lambda that filters everything."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter=lambda x: x.age > 100)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # No dog is over 100 years old
+        assert_that(model.rowCount()).is_equal_to(0)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterMethodName:
+    """Filter using widget method names."""
+
+    def test_filter_with_method_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using method name from widget."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter="should_show")
+
+            def should_show(self, dog: Dog) -> bool:
+                return dog.age >= 3
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Method filters to age >= 3: Fido and Rex
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_filter_with_method_using_widget_state(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter method can access widget state."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter="filter_by_min_age")
+
+            def filter_by_min_age(self, dog: Dog) -> bool:
+                return dog.age >= self._min_age.value
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Initial min_age 0 - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Note: With method-based filter, changing Variable doesn't auto-invalidate
+        # The filter proxy doesn't subscribe to Variables when using callable
+        # This is expected behavior - use expression syntax for reactive filters
+
+    def test_filter_with_method_string_search(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter method with string search."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Felix", 2),
+                ]
+            )
+            _list: QListView = new(bind="_dogs", filter="name_starts_with_f")
+
+            def name_starts_with_f(self, dog: Dog) -> bool:
+                return dog.name.startswith("F")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Fido and Felix start with F
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_filter_with_method_on_primitives(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter method on primitive list."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[str]] = new(["Apple", "Banana", "Apricot", "Cherry"])
+            _list: QListView = new(bind="_items", filter="starts_with_a")
+
+            def starts_with_a(self, item: str) -> bool:
+                return item.startswith("A")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Apple and Apricot start with A
+        assert_that(model.rowCount()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterCallableWithSort:
+    """Filter callable combined with sort."""
+
+    def test_filter_lambda_with_sort_expression(self, base_class, decorator, qt: QtDriver) -> None:
+        """Lambda filter combined with expression sort."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Buddy", 7),
+                    Dog("Rex", 2),
+                    Dog("Fido", 5),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter=lambda x: x.age >= 3,
+                sort="{age}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Filtered to age >= 3: Fido (5) and Buddy (7), sorted by age
+        assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_filter_method_with_sort_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """Method filter combined with lambda sort."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Buddy", 7),
+                    Dog("Rex", 2),
+                    Dog("Fido", 5),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="is_adult",
+                sort=lambda x: x.name,
+            )
+
+            def is_adult(self, dog: Dog) -> bool:
+                return dog.age >= 3
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # Filtered to age >= 3: Buddy and Fido, sorted by name
         assert_that(model.rowCount()).is_equal_to(2)

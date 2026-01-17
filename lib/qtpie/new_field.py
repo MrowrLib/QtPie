@@ -108,8 +108,8 @@ class NewField:
         self.tree_checkable: str | bool | None = None
         # QListView checkable: checkbox support for list items (same semantics as tree)
         self.list_checkable: str | bool | None = None
-        # Filter expression for model widgets: "{_search} in {name}"
-        self.model_filter: str | None = None  # Filter expression evaluated per item
+        # Filter for model widgets: "{_search} in {name}", "method_name", or callable
+        self.model_filter: str | Callable[[Any], bool] | None = None
         # Sort key for model widgets: "{age}", "method_name", or callable
         self.model_sort: str | Callable[[Any], Any] | None = None
         # Embedded widget for model views (QListView, QTreeView, QTableView)
