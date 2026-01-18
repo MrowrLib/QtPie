@@ -731,21 +731,10 @@ def create_format_binding(
     if variable is not None:
         if isinstance(variable, Variable):
             obs = variable.observable
-            if isinstance(obs, Observable):
-                all_observables.append(obs)
-            elif isinstance(obs, ObservableList):
-                all_observables.append(obs)
-            elif isinstance(obs, ObservableDict):
-                all_observables.append(obs)
-            elif isinstance(obs, ObservableSet):
-                all_observables.append(obs)
-        elif isinstance(variable, Observable):
-            all_observables.append(variable)
-        elif isinstance(variable, ObservableList):
-            all_observables.append(variable)
-        elif isinstance(variable, ObservableDict):
-            all_observables.append(variable)
-        elif isinstance(variable, ObservableSet):
+            # obs is AnyObservable - all types have on_change, so just append
+            all_observables.append(obs)
+        else:
+            # variable is Observable/ObservableList/ObservableDict/ObservableSet/ObservableProxy
             all_observables.append(variable)
 
     # Build the compute function

@@ -1,6 +1,6 @@
 from typing import cast
 
-from qtpy.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
+from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
 
 from forc.app.widgets.cookie_manager import CookieManagerDialog
 from forc.app.widgets.environments import EnvironmentSelectorWidget
@@ -14,6 +14,17 @@ class TextValueDialog(Dialog):
     kind: Variable[str]
     value: Variable[str, QLineEdit] = new()(label="{kind}", placeholderText="Enter {kind} name...")
     _ok: DialogButton = new(enabled="{value != ''}")
+    _cancel: DialogButton
+
+
+@dialog(layout="form", size=(450, 150), title="Add Collection")
+class AddCollectionDialog(Dialog):
+    name: Variable[str, QLineEdit] = new()(label="Collection Name", placeholderText="Enter collection name...")
+    parent_collection: Variable[Collection | None, QLabel] = new(None)(
+        bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}"
+    )
+    make_root_collection: Variable[bool, QCheckBox] = new(False)(label="Set as Root Collection")
+    _ok: DialogButton = new(enabled="{name != ''}")
     _cancel: DialogButton
 
 
@@ -60,10 +71,15 @@ class SidebarWidget(Widget):
         CookieManagerDialog.show_dialog()
 
     def _on_new_collection(self):
-        dialog = TextValueDialog(kind="Collection")
+        selected_item = cast(Collection | Request | None, self.var("current_workspace_item"))
+        if selected_item is None:
+            return
+        collection = selected_item if isinstance(selected_item, Collection) else selected_item.collection
+        dialog = AddCollectionDialog(parent_collection=collection)
         if dialog.show_dialog():
-            print("Creating new collection with name:", dialog.value())
-            self.workspace_service().add_collection(name=dialog.value())
+            collection_name = dialog.name()
+            print("Creating new collection with name:", collection_name)
+            self.workspace_service().add_collection(name=collection_name)
 
     def _on_new_request(self):
         selected_item = cast(Collection | Request | None, self.var("current_workspace_item"))
