@@ -21,6 +21,14 @@ from qtpie.styles.color_scheme import (
 )
 from qtpie.styles.compiler import compile_scss
 from qtpie.styles.loader import load_stylesheet
+from qtpie.styles.theme_runtime import (
+    get_theme,
+    get_themes,
+    is_dark_theme,
+    set_theme,
+)
+from qtpie.styles.theme_watcher import ThemeWatcher
+from qtpie.styles.themes import Theme, ThemeMode, ThemeSet
 from qtpie.styles.watcher import (
     QssWatcher,
     ScssWatcher,
@@ -51,6 +59,15 @@ __all__ = [
     "compile_scss",
     # Loader
     "load_stylesheet",
+    # Themes
+    "Theme",
+    "ThemeMode",
+    "ThemeSet",
+    "ThemeWatcher",
+    "get_theme",
+    "get_themes",
+    "is_dark_theme",
+    "set_theme",
     # Watchers
     "QssWatcher",
     "ScssWatcher",

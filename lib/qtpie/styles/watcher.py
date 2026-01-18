@@ -141,15 +141,30 @@ class ScssWatcher(QObject):
         self._watcher.addPath(str(self._scss_path.parent))
         self._ensure_file_watched(self._scss_path)
 
-        # Watch search path directories and their scss files
+        # Watch search path directories recursively and their scss files
         for search_path in self._search_paths:
             if search_path.exists():
-                self._watcher.addPath(str(search_path))
-                for scss_file in search_path.glob("*.scss"):
-                    self._ensure_file_watched(scss_file)
+                self._watch_directory_recursive(search_path)
 
         # Initial compile
         self._recompile_if_changed(initial=True)
+
+    def _watch_directory_recursive(self, directory: Path) -> None:
+        """Watch a directory and all subdirectories recursively."""
+        if not directory.exists():
+            return
+
+        # Watch the directory itself
+        self._watcher.addPath(str(directory))
+
+        # Watch all scss files in this directory
+        for scss_file in directory.glob("*.scss"):
+            self._ensure_file_watched(scss_file)
+
+        # Recursively watch subdirectories
+        for subdir in directory.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith("."):
+                self._watch_directory_recursive(subdir)
 
     def _ensure_file_watched(self, path: Path) -> None:
         """Ensure file is in watch list (re-arms after delete/rename)."""
@@ -166,10 +181,15 @@ class ScssWatcher(QObject):
         if changed.is_file():
             self._ensure_file_watched(changed)
 
-        # If a directory changed, re-watch any scss files in it
+        # If a directory changed, re-watch scss files and subdirectories
         if changed.is_dir():
             for scss_file in changed.glob("*.scss"):
                 self._ensure_file_watched(scss_file)
+            # Watch any new subdirectories
+            for subdir in changed.iterdir():
+                if subdir.is_dir() and not subdir.name.startswith("."):
+                    if str(subdir) not in self._watcher.directories():
+                        self._watch_directory_recursive(subdir)
 
         self._debounce_timer.start()
 
@@ -184,10 +204,10 @@ class ScssWatcher(QObject):
             except OSError:
                 pass
 
-        # Search path files
+        # Search path files (recursive)
         for search_path in self._search_paths:
             if search_path.exists():
-                for scss_file in search_path.glob("*.scss"):
+                for scss_file in search_path.rglob("*.scss"):
                     try:
                         mtimes[str(scss_file)] = scss_file.stat().st_mtime
                     except OSError:

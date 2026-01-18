@@ -17,7 +17,16 @@ from .new_fields import new_fields
 from .ref import Ref, ref
 from .set_widget_repeater import SetWidgetRepeater
 from .slot import slot
-from .styles import ColorScheme, enable_dark_mode, enable_light_mode, set_color_scheme
+from .styles import (
+    ColorScheme,
+    enable_dark_mode,
+    enable_light_mode,
+    get_theme,
+    get_themes,
+    is_dark_theme,
+    set_color_scheme,
+    set_theme,
+)
 from .translations import Translatable, set_language, t
 from .variable import RecordVariable, Variable
 from .widget import Widget, widget
@@ -62,6 +71,9 @@ __all__ = [
     "enable_dark_mode",
     "enable_light_mode",
     "entrypoint",
+    "get_theme",
+    "get_themes",
+    "is_dark_theme",
     "menu",
     "new",
     "new_fields",
@@ -71,6 +83,7 @@ __all__ = [
     "run_app",
     "set_color_scheme",
     "set_language",
+    "set_theme",
     "slot",
     "t",
     "widget",

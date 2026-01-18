@@ -1,0 +1,13 @@
+// Nord Light theme
+$bg-color: #eceff4;
+$fg-color: #2e3440;
+
+QWidget {
+    background-color: $bg-color;
+    color: $fg-color;
+}
+
+QPushButton {
+    background-color: #e5e9f0;
+    color: $fg-color;
+}

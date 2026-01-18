@@ -141,6 +141,7 @@ class BodyTabContent(Widget[Request]):
 @widget
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
+    _request_name: QLineEdit = new(bind="name", placeholderText="Request Name")
     _address_bar: RequestAddressBarWidget
     _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
 

@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QWidget
 
-from qtpie import Dock, Variable, new
+from qtpie import Dock, Variable, Widget, new, widget
 from qtpie.testing import QtDriver
 
 from .conftest import WINDOW_CLASS_TYPES, create_and_track, get_main_window
@@ -2439,3 +2439,153 @@ class TestVariableListDockGroupSelectedIndex:
         qt.process_events()
 
         assert instance._selected_index.value == 0
+
+
+# =============================================================================
+# Variable[list[T], Dock[W]] - Reactive Title Binding
+# =============================================================================
+
+
+# For reactive title tests, we need Widget[T] content widgets so the wrapper is shared
+
+
+@dataclass
+class TitledEditorItem:
+    """Item type for reactive title tests."""
+
+    name: str = "Untitled"
+    content: str = ""
+
+
+@widget(record=TitledEditorItem())
+class TitledEditorWidget(Widget[TitledEditorItem]):
+    """Widget[T] editor for reactive title tests."""
+
+    pass
+
+
+@dataclass
+class MultiPropItem:
+    """Item with multiple properties for testing."""
+
+    name: str = ""
+    status: str = ""
+
+
+@widget(record=MultiPropItem())
+class MultiPropWidget(Widget[MultiPropItem]):
+    """Widget[T] for multi-property tests."""
+
+    pass
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDockReactiveTitle:
+    """Test that title bindings update reactively when item properties change.
+
+    For reactive title updates to work, the content widget must be a Widget[T]
+    so that the repeater can share its ObservableProxy wrapper with the widget's
+    record. Then changes to record.property trigger title updates.
+    """
+
+    def test_title_updates_when_property_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """Title updates when the bound property changes via widget.record."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[TitledEditorItem], Dock[TitledEditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add an item
+        instance._editors.append(TitledEditorItem(name="Original"))
+        qt.process_events()
+
+        # Verify initial title
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "Original"
+
+        # Access the item through the widget's record (which shares the ObservableProxy)
+        content_widget: TitledEditorWidget = instance._editors.widget[0].widget
+        content_widget.record.name = "Updated"
+        qt.process_events()
+
+        # Title should have updated
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "Updated"
+
+    def test_title_updates_for_multiple_docks(self, base_class, decorator, qt: QtDriver) -> None:
+        """Each dock's title updates independently when its item changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[TitledEditorItem], Dock[TitledEditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add multiple items
+        instance._editors.append(TitledEditorItem(name="File1"))
+        instance._editors.append(TitledEditorItem(name="File2"))
+        instance._editors.append(TitledEditorItem(name="File3"))
+        qt.process_events()
+
+        # Verify initial titles
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "File1"
+        assert instance._editors.widget[1].dock_widget.windowTitle() == "File2"
+        assert instance._editors.widget[2].dock_widget.windowTitle() == "File3"
+
+        # Change middle item's name via its widget's record
+        content_widget: TitledEditorWidget = instance._editors.widget[1].widget
+        content_widget.record.name = "ModifiedFile2"
+        qt.process_events()
+
+        # Only the second dock's title should change
+        assert instance._editors.widget[0].dock_widget.windowTitle() == "File1"
+        assert instance._editors.widget[1].dock_widget.windowTitle() == "ModifiedFile2"
+        assert instance._editors.widget[2].dock_widget.windowTitle() == "File3"
+
+    def test_title_with_multiple_properties(self, base_class, decorator, qt: QtDriver) -> None:
+        """Title with multiple property placeholders updates for any change."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[MultiPropItem], Dock[MultiPropWidget]] = new(
+                group="items",
+                dock="right",
+                title="{name} - {status}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._items.append(MultiPropItem(name="Doc1", status="Draft"))
+        qt.process_events()
+
+        assert instance._items.widget[0].dock_widget.windowTitle() == "Doc1 - Draft"
+
+        # Access via widget's record
+        content_widget: MultiPropWidget = instance._items.widget[0].widget
+
+        # Change first property
+        content_widget.record.name = "Document1"
+        qt.process_events()
+        assert instance._items.widget[0].dock_widget.windowTitle() == "Document1 - Draft"
+
+        # Change second property
+        content_widget.record.status = "Final"
+        qt.process_events()
+        assert instance._items.widget[0].dock_widget.windowTitle() == "Document1 - Final"

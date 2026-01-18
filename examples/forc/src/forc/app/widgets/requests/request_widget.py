@@ -22,12 +22,12 @@ class RequestWidget(Widget[Request]):
 
     ### Widgets ###
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
-    _editor: RequestEditorWidget = new(splitter="_splitter")
+    request_editor: RequestEditorWidget = new(splitter="_splitter")
     response_viewer: ResponseViewerWidget = new(bind="response", splitter="_splitter")
 
     ### Methods ###
     def __setup__(self) -> None:
-        self._splitter.setSizes([200, 100])
+        self._splitter.setSizes([1000, 1000])
 
     def _on_send_request(self, request: Request) -> None:
         self.response = self.http_client_service.value.send(request)

@@ -57,6 +57,11 @@ class EntryConfig:
     translations: str | tuple[str, ...] | None = None
     language: str = "en"
     watch_translations: bool = False
+    # Theme support
+    themes: str | None = None  # Path to themes directory
+    theme: str | None = None  # Initial theme name
+    watch_themes: bool = False  # Hot-reload themes
+    themes_output: str | None = None  # Output path for compiled theme SCSS
 
 
 # Attribute name for storing entry config
@@ -186,6 +191,28 @@ def _load_translations(app: QApplication, config: EntryConfig) -> Any:
     return None
 
 
+def _load_themes(app: QApplication, config: EntryConfig) -> Any:
+    """Load themes and optionally set up hot-reload watcher.
+
+    If themes= is specified, the theme system takes precedence over
+    dark_mode/light_mode and stylesheet= parameters.
+
+    Returns the ThemeWatcher if watch_themes=True, otherwise None.
+    """
+    if config.themes is None:
+        return None
+
+    from qtpie.styles.theme_runtime import init_themes
+
+    return init_themes(
+        themes_dir=config.themes,
+        app=app,
+        initial_theme=config.theme,
+        watch=config.watch_themes,
+        output_dir=config.themes_output,
+    )
+
+
 def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     """Execute the entry point."""
     App = _get_app_class()
@@ -202,21 +229,30 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     # Keep watchers alive for duration of app
     _watcher: QssWatcher | ScssWatcher | None = None
     _translation_watcher: Any = None
+    _theme_watcher: Any = None
 
     def create_default_app() -> QApplication:
         """Create app with dark/light mode from config."""
         app_kwargs: dict[str, Any] = {}
-        if config.dark_mode:
-            app_kwargs["dark_mode"] = True
-        if config.light_mode:
-            app_kwargs["light_mode"] = True
+        # Don't set dark/light mode if themes are being used
+        # (themes will set color scheme based on selected theme)
+        if config.themes is None:
+            if config.dark_mode:
+                app_kwargs["dark_mode"] = True
+            if config.light_mode:
+                app_kwargs["light_mode"] = True
         return App(**app_kwargs)
 
     def setup_app(application: QApplication) -> None:
-        """Apply translations and stylesheet to app."""
-        nonlocal _translation_watcher, _watcher
+        """Apply translations, themes, and stylesheet to app."""
+        nonlocal _translation_watcher, _watcher, _theme_watcher
         _translation_watcher = _load_translations(application, config)
-        _watcher = _apply_stylesheet(application, config)
+
+        # Themes take precedence over stylesheet
+        if config.themes is not None:
+            _theme_watcher = _load_themes(application, config)
+        else:
+            _watcher = _apply_stylesheet(application, config)
 
     if is_app_subclass:
         # Target is an App or QApplication subclass
@@ -334,6 +370,10 @@ def entrypoint[T](
     translations: str | list[str] | None = ...,
     language: str = ...,
     watch_translations: bool = ...,
+    themes: str | None = ...,
+    theme: str | None = ...,
+    watch_themes: bool = ...,
+    themes_output: str | None = ...,
 ) -> type[T]: ...
 
 
@@ -353,6 +393,10 @@ def entrypoint[T](
     translations: str | list[str] | None = ...,
     language: str = ...,
     watch_translations: bool = ...,
+    themes: str | None = ...,
+    theme: str | None = ...,
+    watch_themes: bool = ...,
+    themes_output: str | None = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -372,6 +416,10 @@ def entrypoint[T](
     translations: str | list[str] | None = ...,
     language: str = ...,
     watch_translations: bool = ...,
+    themes: str | None = ...,
+    theme: str | None = ...,
+    watch_themes: bool = ...,
+    themes_output: str | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -390,6 +438,10 @@ def entrypoint(
     translations: str | list[str] | None = None,
     language: str = "en",
     watch_translations: bool = False,
+    themes: str | None = None,
+    theme: str | None = None,
+    watch_themes: bool = False,
+    themes_output: str | None = None,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -420,6 +472,16 @@ def entrypoint(
         translations: Path or list of paths to translation YAML files.
         language: Language code to use (e.g., "en", "fr", "de"). Default is "en".
         watch_translations: If True, hot-reload translations on file changes.
+        themes: Path to themes directory. Supports:
+            - Filesystem paths (e.g., "./themes")
+            - QRC paths (e.g., ":/themes") - QSS only, no watching
+            Themes can be QSS files or SCSS folders. Takes precedence over
+            stylesheet= and dark_mode=/light_mode= parameters.
+        theme: Initial theme name to activate.
+        watch_themes: If True, hot-reload theme files on changes.
+            Not applicable to QRC paths.
+        themes_output: Output directory for compiled theme SCSS -> QSS files.
+            If not provided, uses a temp directory.
 
     Examples:
         # Simplest - function returning a widget
@@ -459,6 +521,11 @@ def entrypoint(
         class MyApp(App):
             def __setup__(self):
                 print("Setting up!")
+
+        # With themes
+        @entrypoint(themes="./themes", theme="dark", watch_themes=True)
+        def main():
+            return MyWidget()
     """
     config = EntryConfig(
         dark_mode=dark_mode,
@@ -473,6 +540,10 @@ def entrypoint(
         translations=translations if isinstance(translations, str) else tuple(translations) if translations else None,
         language=language,
         watch_translations=watch_translations,
+        themes=themes,
+        theme=theme,
+        watch_themes=watch_themes,
+        themes_output=themes_output,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:

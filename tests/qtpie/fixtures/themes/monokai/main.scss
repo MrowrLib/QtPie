@@ -1,0 +1,14 @@
+// Monokai theme - main entry point
+@import "colors";
+@import "../_shared/shared";
+
+QWidget {
+    background-color: $bg-color;
+    border-color: $shared-color;
+    color: $fg-color;
+}
+
+QPushButton {
+    background-color: $button-bg;
+    color: $button-fg;
+}

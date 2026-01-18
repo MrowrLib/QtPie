@@ -12,11 +12,10 @@ from qtpie import entrypoint
 _qrc = qt_resource_data  # Prevent unused import from being removed
 
 
-# Hmm, idea... can we define different stylesheets for light/dark mode and have a toggle in the app to switch?
 @entrypoint(
-    stylesheet="resources/styles/styles.scss",
-    scss_output="resources/styles.qss",
-    watch_stylesheet=True,
+    themes="resources/themes",
+    theme="dark",
+    watch_themes=True,
 )
 def main():
     return ForcApp()
