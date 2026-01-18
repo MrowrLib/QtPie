@@ -259,8 +259,8 @@ class TestFormatStringBinding:
 
         w = qt.track(RequestView())
 
-        # auth is None by default - should display "None" not cause an error
-        assert_that(w.auth_display.text()).is_equal_to("None")
+        # auth is None by default - should display empty string not cause an error
+        assert_that(w.auth_display.text()).is_equal_to("")
 
     def test_format_string_optional_field_with_value(self, qt: QtDriver) -> None:
         """Format string binding to optional record field with a value."""

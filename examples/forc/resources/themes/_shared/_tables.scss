@@ -75,31 +75,19 @@ QTreeView::item:selected:active {
     background-color: $accent-muted;
 }
 
-// Branch indicators (expand/collapse arrows)
+// Branch indicators (expand/collapse arrows and tree lines)
 QTreeView::branch {
-    background: transparent;
-}
-
-QTreeView::branch:has-siblings:!adjoins-item {
+    background-color: $bg-primary;
+    border: none;
     border-image: none;
 }
 
-QTreeView::branch:has-siblings:adjoins-item {
-    border-image: none;
+QTreeView::branch:selected {
+    background-color: $bg-primary;
 }
 
-QTreeView::branch:!has-children:!has-siblings:adjoins-item {
-    border-image: none;
-}
-
-QTreeView::branch:has-children:!has-siblings:closed,
-QTreeView::branch:closed:has-children:has-siblings {
-    border-image: none;
-}
-
-QTreeView::branch:open:has-children:!has-siblings,
-QTreeView::branch:open:has-children:has-siblings {
-    border-image: none;
+QTreeView::branch:hover {
+    background-color: $bg-primary;
 }
 
 // List view

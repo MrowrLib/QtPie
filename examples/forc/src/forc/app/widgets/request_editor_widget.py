@@ -45,7 +45,7 @@ class ParamsTabContent(Widget[Request]):
 
     ### Widgets ###
     header: QLabel = new("Query Parameters:")
-    add_button: QPushButton = new("+ Add", clicked="_on_add")
+    add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
     table: QTableView = new(bind="record.query_params", columns=["key", "value", DeleteWidget])
 
     ### Methods ###
@@ -123,6 +123,7 @@ class BodyTabContent(Widget[Request]):
         "+ Add Field",
         clicked="_on_add_body_field",
         visible="{body_type in [BodyType.FORM_DATA, BodyType.FORM_URLENCODED]}",
+        classes=["add-button"],
     )
     _body_fields: QTableView = new(
         bind="body_fields",

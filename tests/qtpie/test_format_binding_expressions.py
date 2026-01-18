@@ -420,19 +420,19 @@ class TestCombinedExpressions:
 class TestErrorHandling:
     """Test graceful error handling in expressions."""
 
-    def test_invalid_expression_shows_none(self, qt: QtDriver) -> None:
-        """Invalid expression shows 'None' (allows using `or 'default'` pattern)."""
+    def test_invalid_expression_shows_empty(self, qt: QtDriver) -> None:
+        """Invalid expression shows empty string (allows using `or 'default'` pattern)."""
 
         @widget
         class Test(Widget):
             _label: QLabel = new(bind="{undefined_variable}")
 
         w = qt.track(Test())
-        # Should show "None" rather than crash (allows `or 'default'` pattern)
-        assert_that(w._label.text()).is_equal_to("None")
+        # Should show empty string rather than crash (allows `or 'default'` pattern)
+        assert_that(w._label.text()).is_equal_to("")
 
-    def test_exception_in_expression_shows_none(self, qt: QtDriver) -> None:
-        """Exception in expression shows 'None' (allows using `or 'default'` pattern)."""
+    def test_exception_in_expression_shows_empty(self, qt: QtDriver) -> None:
+        """Exception in expression shows empty string (allows using `or 'default'` pattern)."""
 
         @widget
         class Test(Widget):
@@ -440,8 +440,8 @@ class TestErrorHandling:
             _label: QLabel = new(bind="{1 / _value}")
 
         w = qt.track(Test())
-        # Division by zero should be caught, show "None"
-        assert_that(w._label.text()).is_equal_to("None")
+        # Division by zero should be caught, show empty string
+        assert_that(w._label.text()).is_equal_to("")
 
     def test_none_with_fallback(self, qt: QtDriver) -> None:
         """None values can use 'or' fallback pattern."""

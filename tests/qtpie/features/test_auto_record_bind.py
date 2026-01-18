@@ -292,8 +292,8 @@ class TestRecordFieldBindingSubscriptions:
         w = qt.track(ResponseWidget())
         qt.process_events()
 
-        # Initially shows None values
-        assert_that(w.status.text()).is_equal_to("Status: None None")
+        # Initially shows empty values (None renders as empty string)
+        assert_that(w.status.text()).is_equal_to("Status:  ")
 
         # Update the fields
         w.record.status_code = 200

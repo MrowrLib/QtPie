@@ -63,12 +63,14 @@ class SidebarWidget(Widget):
         "+ New Collection",
         clicked="_on_new_collection",
         layout="_buttons_layout",
+        classes=["add-button"],
     )
     _new_request_button: QPushButton = new(
         "+ New Request",
         clicked="_on_new_request",
         layout="_buttons_layout",
         enabled="{current_workspace_item is not None}",
+        classes=["add-button"],
     )
 
     ### Methods ###

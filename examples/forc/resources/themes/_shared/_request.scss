@@ -92,17 +92,9 @@
     padding-bottom: 8px;
 }
 
-#ParamsTabContent QPushButton#add_button {
-    background-color: transparent;
-    border: 1px dashed $border-default;
-    color: $text-secondary;
-    padding: 8px;
+// Add button spacing in Params tab
+#ParamsTabContent QPushButton[class~="add-button"] {
     margin-bottom: 8px;
-}
-
-#ParamsTabContent QPushButton#add_button:hover {
-    border-color: $accent;
-    color: $accent;
 }
 
 // Body tab content

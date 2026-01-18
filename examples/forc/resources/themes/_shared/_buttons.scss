@@ -62,14 +62,16 @@ QPushButton#delete-button:hover {
     background-color: $bg-hover;
 }
 
-// Add button style
-QPushButton#add-button {
+// Add button style (ghost with border)
+QPushButton#add-button,
+QPushButton[class~="add-button"] {
     background: transparent;
-    border: 1px dashed $border-default;
+    border: 1px solid $border-default;
     color: $text-secondary;
 }
 
-QPushButton#add-button:hover {
+QPushButton#add-button:hover,
+QPushButton[class~="add-button"]:hover {
     border-color: $accent;
     color: $accent;
     background-color: rgba(124, 58, 237, 0.1);

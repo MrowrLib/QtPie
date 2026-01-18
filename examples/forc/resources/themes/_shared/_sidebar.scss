@@ -13,25 +13,10 @@
     background-color: $bg-secondary;
 }
 
-// New collection/request buttons row
-#SidebarWidget QPushButton {
-    background-color: transparent;
-    border: 1px dashed $border-default;
-    color: $text-secondary;
-    padding: 8px 12px;
+// Sidebar buttons spacing
+#SidebarWidget QPushButton[class~="add-button"] {
     margin: 4px;
     font-size: 12px;
-}
-
-#SidebarWidget QPushButton:hover {
-    border-color: $accent;
-    color: $accent;
-    background-color: rgba(124, 58, 237, 0.08);
-}
-
-#SidebarWidget QPushButton:disabled {
-    color: $text-muted;
-    border-color: $border-subtle;
 }
 
 // Collections tree

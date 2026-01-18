@@ -893,7 +893,7 @@ def create_format_binding(
                     except Exception:
                         value = str(value)  # pyright: ignore[reportUnknownArgumentType]
                 else:
-                    value = str(value) if value is not None else "None"  # pyright: ignore[reportUnknownArgumentType]
+                    value = str(value) if value is not None else ""  # pyright: ignore[reportUnknownArgumentType]
 
                 result_parts.append(value)
 
