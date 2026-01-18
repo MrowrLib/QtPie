@@ -14,3 +14,5 @@ coverage.xml
 
 # mkdocs
 site/
+
+*.log
