@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast, override
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtCore import Qt, QTimer
@@ -195,11 +195,12 @@ class DockWidgetRepeater[T, W: QWidget]:
             features |= QDockWidget.DockWidgetFeature.DockWidgetMovable
         return features
 
-    def _setup_floating_dock_tracking(self, dock: Dock[W], index_holder: list[int]) -> None:
-        """Set up focus tracking for floating docks.
+    def _setup_dock_focus_tracking(self, dock: Dock[W], index_holder: list[int]) -> None:
+        """Set up focus tracking for docks.
 
-        When a dock becomes floating and gains focus, update the selection
-        bindings to reflect that this dock is now "selected".
+        When any widget inside a dock gains focus or the dock's title bar is clicked,
+        update the selection bindings to reflect that this dock is now "selected".
+        This works for floating docks, tabified docks, and standalone docks.
         """
         # Skip if no selection bindings or callbacks are configured
         has_bindings = self._selected_index_obs is not None or self._selected_item_obs is not None or self._selected_dock_obs is not None
@@ -208,18 +209,12 @@ class DockWidgetRepeater[T, W: QWidget]:
             return
 
         dock_widget = dock.dock_widget
-        focus_handler: Any = None  # Store handler reference for cleanup
 
-        def on_focus_changed(old: QWidget | None, new: QWidget | None) -> None:
-            # Check if focus moved to this floating dock
-            if new is None or not dock_widget.isFloating():
-                return
-            if not dock_widget.isAncestorOf(new) and new is not dock_widget:
-                return
+        def update_selection() -> None:
+            """Update selection to this dock."""
             if self._updating_selection:
                 return
 
-            # This floating dock gained focus - update selection
             idx = index_holder[0]
             if idx < 0 or idx >= len(self._items):
                 return
@@ -242,32 +237,32 @@ class DockWidgetRepeater[T, W: QWidget]:
             finally:
                 self._updating_selection = False
 
-        def on_top_level_changed(floating: bool) -> None:
-            nonlocal focus_handler
-            from qtpy.QtWidgets import QApplication
-
-            app = QApplication.instance()
-            if app is None or not isinstance(app, QApplication):
+        def on_focus_changed(old: QWidget | None, new: QWidget | None) -> None:
+            # Check if focus moved to this dock (floating or not)
+            if new is None:
                 return
+            if not dock_widget.isAncestorOf(new) and new is not dock_widget:
+                return
+            update_selection()
 
-            if floating:
-                # Dock became floating - start tracking focus
-                focus_handler = on_focus_changed
-                app.focusChanged.connect(focus_handler)
-            else:
-                # Dock was re-docked - stop tracking focus
-                if focus_handler is not None:
-                    try:
-                        app.focusChanged.disconnect(focus_handler)
-                    except (TypeError, RuntimeError):
-                        pass  # Already disconnected
-                    focus_handler = None
+        # Track focus changes for this dock's content
+        from qtpy.QtCore import QEvent, QObject
+        from qtpy.QtWidgets import QApplication
 
-        dock_widget.topLevelChanged.connect(on_top_level_changed)
+        app = QApplication.instance()
+        if app is not None and isinstance(app, QApplication):
+            app.focusChanged.connect(on_focus_changed)
 
-        # If already floating at creation time, start tracking immediately
-        if dock_widget.isFloating():
-            on_top_level_changed(True)
+        # Also track clicks on the dock widget itself (including title bar)
+        class DockClickFilter(QObject):
+            @override
+            def eventFilter(self_, watched: QObject, event: QEvent) -> bool:
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    update_selection()
+                return False
+
+        click_filter = DockClickFilter(dock_widget)
+        dock_widget.installEventFilter(click_filter)
 
     def _create_and_add_dock(self, index: int, item: T) -> None:
         """Create a dock for an item and add it to the window."""
@@ -351,8 +346,8 @@ class DockWidgetRepeater[T, W: QWidget]:
         close_filter = CloseFilter(self, index_holder, dock_widget)
         dock_widget.installEventFilter(close_filter)
 
-        # Set up floating dock focus tracking (selection updates when floating dock gains focus)
-        self._setup_floating_dock_tracking(dock, index_holder)
+        # Set up focus tracking (selection updates when dock gains focus, floating or not)
+        self._setup_dock_focus_tracking(dock, index_holder)
 
         # Insert at correct position
         self._items.insert(index, (dock, wrapper, index_holder))
@@ -471,149 +466,196 @@ class DockWidgetRepeater[T, W: QWidget]:
         if not self._items:
             return
 
+        from qtpy.QtCore import QEvent, QObject
         from qtpy.QtWidgets import QTabBar
 
-        # Find the tab bar that contains our docks
-        # We need to defer this because the tab bar may not exist until after tabification
-        def find_and_bind_tab_bar() -> None:
+        # Track which tab bars we've already connected to
+        connected_tab_bars: set[int] = set()  # Use id() since QTabBar isn't hashable
+
+        # Handler for tab changes - fires selection callbacks
+        def on_tab_changed(tab_bar: QTabBar, index: int) -> None:
+            if self._updating_selection:
+                return
+            self._updating_selection = True
+            try:
+                if index < 0 or index >= tab_bar.count():
+                    return
+                tab_title = tab_bar.tabText(index)
+                for i, (dock, _, _) in enumerate(self._items):
+                    if dock.dock_widget.windowTitle() == tab_title:
+                        if self._selected_index_obs is not None:
+                            self._selected_index_obs.set(i)
+                        if self._selected_item_obs is not None:
+                            self._selected_item_obs.set(self._obs_list[i])
+                        if self._selected_dock_obs is not None:
+                            self._selected_dock_obs.set(dock)
+                        if self._selected_index_changed_cb is not None:
+                            self._selected_index_changed_cb(i)
+                        if self._selected_item_changed_cb is not None:
+                            self._selected_item_changed_cb(self._obs_list[i])
+                        if self._selected_dock_changed_cb is not None:
+                            self._selected_dock_changed_cb(dock)
+                        break
+            finally:
+                self._updating_selection = False
+
+        def find_and_bind_new_tab_bars() -> None:
+            """Find any tab bars containing our docks and connect to them."""
             if not self._items:
                 return
 
-            first_dock = self._items[0][0]
-            dock_widget = first_dock.dock_widget
+            # Get all dock titles we care about
+            our_dock_titles = {dock.dock_widget.windowTitle() for dock, _, _ in self._items}
 
-            # Find the tab bar containing this dock
-            tab_bar: QTabBar | None = None
-            for tb in self._window.findChildren(QTabBar):
-                for i in range(tb.count()):
-                    if tb.tabText(i) == dock_widget.windowTitle():
-                        tab_bar = tb
+            for tab_bar in self._window.findChildren(QTabBar):
+                tb_id = id(tab_bar)
+                if tb_id in connected_tab_bars:
+                    continue
+
+                # Check if this tab bar contains any of our docks
+                has_our_dock = False
+                for i in range(tab_bar.count()):
+                    if tab_bar.tabText(i) in our_dock_titles:
+                        has_our_dock = True
                         break
-                if tab_bar:
-                    break
 
-            if not tab_bar:
-                return
+                if has_our_dock:
+                    connected_tab_bars.add(tb_id)
 
-            # Tab bar -> Observable (when user clicks a tab)
-            def on_tab_changed(index: int) -> None:
+                    # Create a closure to capture tab_bar
+                    def make_handler(tb: QTabBar) -> Callable[[int], None]:
+                        def handler(idx: int) -> None:
+                            on_tab_changed(tb, idx)
+
+                        return handler
+
+                    tab_bar.currentChanged.connect(make_handler(tab_bar))
+
+                    # Also install event filter to catch clicks on already-selected tabs
+                    # (currentChanged won't fire if clicking the already-selected tab)
+                    def make_click_filter(tb: QTabBar) -> QObject:
+                        class TabClickFilter(QObject):
+                            @override
+                            def eventFilter(self_, watched: QObject, event: QEvent) -> bool:
+                                if event.type() == QEvent.Type.MouseButtonPress:
+                                    from qtpy.QtGui import QMouseEvent
+
+                                    mouse_event = cast(QMouseEvent, event)
+                                    clicked_index = tb.tabAt(mouse_event.pos())
+                                    # Only fire if clicking the already-selected tab
+                                    # (otherwise currentChanged will handle it)
+                                    if clicked_index >= 0 and clicked_index == tb.currentIndex():
+                                        on_tab_changed(tb, clicked_index)
+                                return False
+
+                        return TabClickFilter(tb)
+
+                    tab_bar.installEventFilter(make_click_filter(tab_bar))
+
+        # Event filter to detect layout changes and bind to new tab bars
+        class TabBarWatcher(QObject):
+            @override
+            def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+                if event.type() == QEvent.Type.LayoutRequest:
+                    find_and_bind_new_tab_bars()
+                return False
+
+        watcher = TabBarWatcher(self._window)
+        self._window.installEventFilter(watcher)
+
+        # Observable -> Tab bar (when code changes the selection)
+        if self._selected_index_obs is not None:
+
+            def on_index_changed(index: int) -> None:
                 if self._updating_selection:
+                    return
+                if index < 0 or index >= len(self._items):
                     return
                 self._updating_selection = True
                 try:
-                    # Find which dock corresponds to this tab
-                    if index < 0 or index >= tab_bar.count():  # pyright: ignore[reportPossiblyUnbound]
-                        return
-                    tab_title = tab_bar.tabText(index)  # pyright: ignore[reportPossiblyUnbound]
-                    for i, (dock, _, _) in enumerate(self._items):
-                        if dock.dock_widget.windowTitle() == tab_title:
-                            # Note: Use `is not None` because Observable(None) is falsy
+                    dock = self._items[index][0]
+                    dock.raise_tab()
+                    if self._selected_item_obs is not None:
+                        self._selected_item_obs.set(self._obs_list[index])
+                    if self._selected_dock_obs is not None:
+                        self._selected_dock_obs.set(dock)
+                finally:
+                    self._updating_selection = False
+
+            self._selected_index_obs.on_change(on_index_changed)
+
+        if self._selected_item_obs is not None:
+
+            def on_item_changed(item: T | None) -> None:
+                if self._updating_selection:
+                    return
+                if item is None:
+                    return
+                self._updating_selection = True
+                try:
+                    # Find the index of this item
+                    for i, list_item in enumerate(self._obs_list):
+                        if list_item is item or list_item == item:
+                            dock = self._items[i][0]
+                            dock.raise_tab()
                             if self._selected_index_obs is not None:
                                 self._selected_index_obs.set(i)
-                            if self._selected_item_obs is not None:
-                                self._selected_item_obs.set(self._obs_list[i])
                             if self._selected_dock_obs is not None:
                                 self._selected_dock_obs.set(dock)
-                            # Fire callbacks
-                            if self._selected_index_changed_cb is not None:
-                                self._selected_index_changed_cb(i)
-                            if self._selected_item_changed_cb is not None:
-                                self._selected_item_changed_cb(self._obs_list[i])
-                            if self._selected_dock_changed_cb is not None:
-                                self._selected_dock_changed_cb(dock)
                             break
                 finally:
                     self._updating_selection = False
 
-            tab_bar.currentChanged.connect(on_tab_changed)
+            self._selected_item_obs.on_change(on_item_changed)
 
-            # Observable -> Tab bar (when code changes the selection)
-            # Note: Use `is not None` because Observable(None) is falsy
-            if self._selected_index_obs is not None:
+        if self._selected_dock_obs is not None:
 
-                def on_index_changed(index: int) -> None:
-                    if self._updating_selection:
-                        return
-                    if index < 0 or index >= len(self._items):
-                        return
-                    self._updating_selection = True
-                    try:
-                        dock = self._items[index][0]
-                        dock.raise_tab()
-                        if self._selected_item_obs is not None:
-                            self._selected_item_obs.set(self._obs_list[index])
-                        if self._selected_dock_obs is not None:
-                            self._selected_dock_obs.set(dock)
-                    finally:
-                        self._updating_selection = False
+            def on_dock_changed(dock: Dock[W] | None) -> None:
+                if self._updating_selection:
+                    return
+                if dock is None:
+                    return
+                self._updating_selection = True
+                try:
+                    # Find the index of this dock
+                    for i, (d, _, _) in enumerate(self._items):
+                        if d is dock:
+                            d.raise_tab()
+                            if self._selected_index_obs is not None:
+                                self._selected_index_obs.set(i)
+                            if self._selected_item_obs is not None:
+                                self._selected_item_obs.set(self._obs_list[i])
+                            break
+                finally:
+                    self._updating_selection = False
 
-                self._selected_index_obs.on_change(on_index_changed)
+            self._selected_dock_obs.on_change(on_dock_changed)
 
-            if self._selected_item_obs is not None:
-
-                def on_item_changed(item: T | None) -> None:
-                    if self._updating_selection:
-                        return
-                    if item is None:
-                        return
-                    self._updating_selection = True
-                    try:
-                        # Find the index of this item
-                        for i, list_item in enumerate(self._obs_list):
-                            if list_item is item or list_item == item:
-                                dock = self._items[i][0]
-                                dock.raise_tab()
-                                if self._selected_index_obs is not None:
-                                    self._selected_index_obs.set(i)
-                                if self._selected_dock_obs is not None:
-                                    self._selected_dock_obs.set(dock)
-                                break
-                    finally:
-                        self._updating_selection = False
-
-                self._selected_item_obs.on_change(on_item_changed)
-
-            if self._selected_dock_obs is not None:
-
-                def on_dock_changed(dock: Dock[W] | None) -> None:
-                    if self._updating_selection:
-                        return
-                    if dock is None:
-                        return
-                    self._updating_selection = True
-                    try:
-                        # Find the index of this dock
-                        for i, (d, _, _) in enumerate(self._items):
-                            if d is dock:
-                                d.raise_tab()
-                                if self._selected_index_obs is not None:
-                                    self._selected_index_obs.set(i)
-                                if self._selected_item_obs is not None:
-                                    self._selected_item_obs.set(self._obs_list[i])
-                                break
-                    finally:
-                        self._updating_selection = False
-
-                self._selected_dock_obs.on_change(on_dock_changed)
+        # Do initial binding and set initial values
+        def initialize() -> None:
+            find_and_bind_new_tab_bars()
 
             # Set initial values silently (don't fire callbacks)
-            # This ensures Variables have the correct initial value but user's
-            # on_change handlers don't fire until actual user interaction
-            if tab_bar.count() > 0:
-                initial_index = tab_bar.currentIndex()
-                if initial_index >= 0:
-                    # Find which dock corresponds to this tab
-                    tab_title = tab_bar.tabText(initial_index)
-                    for i, (dock, _, _) in enumerate(self._items):
-                        if dock.dock_widget.windowTitle() == tab_title:
-                            # Silent set - directly set _value to bypass callbacks
-                            if self._selected_index_obs is not None:
-                                self._selected_index_obs._value = i  # pyright: ignore[reportPrivateUsage]
-                            if self._selected_item_obs is not None:
-                                self._selected_item_obs._value = self._obs_list[i]  # pyright: ignore[reportPrivateUsage]
-                            if self._selected_dock_obs is not None:
-                                self._selected_dock_obs._value = dock  # pyright: ignore[reportPrivateUsage]
+            if self._items:
+                # Find the first visible/selected dock
+                for tab_bar in self._window.findChildren(QTabBar):
+                    our_dock_titles = {dock.dock_widget.windowTitle() for dock, _, _ in self._items}
+                    for j in range(tab_bar.count()):
+                        if tab_bar.tabText(j) in our_dock_titles:
+                            # Found a tab bar with our docks
+                            initial_index = tab_bar.currentIndex()
+                            if initial_index >= 0:
+                                tab_title = tab_bar.tabText(initial_index)
+                                for i, (dock, _, _) in enumerate(self._items):
+                                    if dock.dock_widget.windowTitle() == tab_title:
+                                        if self._selected_index_obs is not None:
+                                            self._selected_index_obs._value = i  # pyright: ignore[reportPrivateUsage]
+                                        if self._selected_item_obs is not None:
+                                            self._selected_item_obs._value = self._obs_list[i]  # pyright: ignore[reportPrivateUsage]
+                                        if self._selected_dock_obs is not None:
+                                            self._selected_dock_obs._value = dock  # pyright: ignore[reportPrivateUsage]
+                                        return
                             break
 
-        # Defer binding setup to after Qt event loop processes the tabification
-        QTimer.singleShot(0, find_and_bind_tab_bar)
+        # Defer to after Qt event loop processes the tabification
+        QTimer.singleShot(0, initialize)
