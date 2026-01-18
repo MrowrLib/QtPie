@@ -648,6 +648,62 @@ def apply_model_binding(
             last_nested_list_id: list[int] = [-1]  # -1 = not initialized yet
             syncing = False  # Re-entrancy guard
 
+            # Track subscribed ObservableLists to avoid duplicate subscriptions
+            subscribed_lists: set[int] = set()
+
+            def subscribe_to_nested_list(nested_list: ObservableList[Any]) -> None:
+                """Subscribe to nested ObservableList changes to keep target in sync."""
+                list_id = id(nested_list)
+                if list_id in subscribed_lists:
+                    return
+                subscribed_lists.add(list_id)
+
+                def on_nested_insert(index: int, item: Any) -> None:
+                    nonlocal syncing
+                    if syncing:
+                        return
+                    syncing = True
+                    try:
+                        target.insert(index, item)
+                    finally:
+                        syncing = False
+
+                def on_nested_remove(index: int, _item: Any) -> None:
+                    nonlocal syncing
+                    if syncing:
+                        return
+                    syncing = True
+                    try:
+                        target.pop(index)
+                    finally:
+                        syncing = False
+
+                def on_nested_replace(index: int, _old: Any, new: Any) -> None:
+                    nonlocal syncing
+                    if syncing:
+                        return
+                    syncing = True
+                    try:
+                        target[index] = new
+                    finally:
+                        syncing = False
+
+                def on_nested_clear(_items: list[Any]) -> None:
+                    nonlocal syncing
+                    if syncing:
+                        return
+                    syncing = True
+                    try:
+                        target.clear()
+                    finally:
+                        syncing = False
+
+                nested_list.on_insert(on_nested_insert)
+                nested_list.on_remove(on_nested_remove)
+                nested_list.on_replace(on_nested_replace)
+                nested_list.on_clear(on_nested_clear)
+                logger.debug("Subscribed target to nested ObservableList changes for path=%s", path)
+
             def on_root_change(*_: Any) -> None:
                 nonlocal syncing
                 if syncing:
@@ -693,6 +749,10 @@ def apply_model_binding(
                             target.extend(cast(list[Any], nested_val))
                         finally:
                             syncing = False
+
+                        # Subscribe to the nested ObservableList so future changes sync
+                        if isinstance(nested_val, ObservableList):
+                            subscribe_to_nested_list(cast(ObservableList[Any], nested_val))
                     else:
                         logger.debug(
                             "on_root_change: same list identity for path=%s (id=%d), skipping sync",

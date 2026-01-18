@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import types
 from collections.abc import Callable, Iterator
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Self, TypeVar, cast, get_args, get_origin, overload, override
 
 from observant import (
@@ -42,9 +41,6 @@ def _create_observable_for_type(
 ) -> AnyObservable[Any]:
     """Create the appropriate observable wrapper based on type.
 
-    Note: Mutable defaults (list, dict, complex objects) are deep-copied
-    to ensure each instance gets its own copy.
-
     Args:
         inner_type: The type inside Variable[T], e.g., str, list[int], MyClass, etc.
         default: The default value, or NO_DEFAULT if no default was provided.
@@ -63,24 +59,18 @@ def _create_observable_for_type(
     if inner_origin is list:
         if no_default_provided or default is None:
             default = []
-        else:
-            default = deepcopy(default)
         return ObservableList(default)
 
     # dict[K, V] → ObservableDict
     if inner_origin is dict:
         if no_default_provided or default is None:
             default = {}
-        else:
-            default = deepcopy(default)
         return ObservableDict(default)
 
     # set[T] → ObservableSet
     if inner_origin is set:
         if no_default_provided or default is None:
             default = set()  # pyright: ignore[reportUnknownVariableType]
-        else:
-            default = deepcopy(default)
         return ObservableSet(default)
 
     # Primitives → Observable
@@ -119,15 +109,6 @@ def _create_observable_for_type(
                 default = inner_type()
         except TypeError as e:
             raise ValueError(f"Cannot create Variable[{inner_type.__name__}] without a default value. Use new(default=YourClass(...)) or provide constructor args.") from e
-    else:
-        # Copy the default so each instance gets its own object
-        # (prevents shared mutable state between instances)
-        try:
-            default = deepcopy(default)
-        except TypeError:
-            # Object can't be copied (e.g., Qt objects like QIcon, QPixmap)
-            # Use original value - assume user knows what they're doing
-            pass
     return ObservableProxy(default)
 
 

@@ -51,11 +51,18 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         self._checkable = checkable
         self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
 
+        # Track subscribed children lists to avoid duplicate subscriptions
+        self._subscribed_children: set[int] = set()
+
         # Subscribe to root list changes
         observable_list.on_insert(self._on_root_insert)
         observable_list.on_remove(self._on_root_remove)
         observable_list.on_replace(self._on_root_replace)
         observable_list.on_clear(self._on_root_clear)
+
+        # Subscribe to existing items' children lists
+        for item in observable_list:
+            self._subscribe_to_children(item)
 
     def _get_children(self, item: T) -> list[T]:
         """Get children of an item."""
@@ -261,12 +268,70 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             # Field name: get attribute
             return bool(getattr(item, self._checkable, False))
 
+    # Children list subscription
+
+    def _subscribe_to_children(self, item: T) -> None:
+        """Subscribe to an item's children ObservableList for updates."""
+        children_raw = getattr(item, self._children_attr, None)
+        if children_raw is None or not isinstance(children_raw, ObservableList):
+            return
+
+        # Cast to proper type for pyright
+        from typing import cast
+
+        children: ObservableList[T] = cast(ObservableList[T], children_raw)
+
+        children_id = id(children)
+        if children_id in self._subscribed_children:
+            return
+        self._subscribed_children.add(children_id)
+
+        # Create handlers that find the parent index and emit proper signals
+        def on_child_insert(child_index: int, child_item: T) -> None:
+            parent_index = self._find_index_for_item(item)
+            if parent_index.isValid():
+                self.beginInsertRows(parent_index, child_index, child_index)
+                self.endInsertRows()
+            # Also subscribe to the new child's children if it has any
+            self._subscribe_to_children(child_item)
+
+        def on_child_remove(child_index: int, _child_item: T) -> None:
+            parent_index = self._find_index_for_item(item)
+            if parent_index.isValid():
+                self.beginRemoveRows(parent_index, child_index, child_index)
+                self.endRemoveRows()
+
+        def on_child_replace(child_index: int, _old_item: T, new_item: T) -> None:
+            parent_index = self._find_index_for_item(item)
+            if parent_index.isValid():
+                child_model_index = self.index(child_index, 0, parent_index)
+                self.dataChanged.emit(child_model_index, child_model_index)
+            # Subscribe to the new item's children
+            self._subscribe_to_children(new_item)
+
+        def on_child_clear(_items: list[T]) -> None:
+            parent_index = self._find_index_for_item(item)
+            if parent_index.isValid():
+                self.beginResetModel()
+                self.endResetModel()
+
+        children.on_insert(on_child_insert)
+        children.on_remove(on_child_remove)
+        children.on_replace(on_child_replace)
+        children.on_clear(on_child_clear)
+
+        # Recursively subscribe to existing children's children
+        for child in children:
+            self._subscribe_to_children(child)
+
     # Root list change handlers
 
     def _on_root_insert(self, index: int, item: T) -> None:
         """Handle root item insertion."""
         self.beginInsertRows(QModelIndex(), index, index)
         self.endInsertRows()
+        # Subscribe to the new item's children
+        self._subscribe_to_children(item)
 
     def _on_root_remove(self, index: int, item: T) -> None:
         """Handle root item removal."""
@@ -277,6 +342,8 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         """Handle root item replacement."""
         model_index = self.index(index, 0)
         self.dataChanged.emit(model_index, model_index)
+        # Subscribe to the new item's children
+        self._subscribe_to_children(new_item)
 
     def _on_root_clear(self, items: list[T]) -> None:
         """Handle root list clear."""

@@ -514,8 +514,11 @@ class TestVariableWithProxy:
         obj._person.observable.name.set("Evelyn")  # type: ignore[union-attr]
         assert_that(obj._person.is_dirty.get()).is_true()
 
-    def test_proxy_variable_per_instance(self) -> None:
-        """Each instance has its own proxy."""
+    def test_proxy_variable_shared_across_instances(self) -> None:
+        """Instances share the same default object (no deepcopy).
+
+        If you need per-instance data, use a factory or assign in __init__.
+        """
 
         @new_fields
         class MyClass:
@@ -524,10 +527,13 @@ class TestVariableWithProxy:
         a = MyClass()
         b = MyClass()
 
+        # Both share the same underlying Person object
         a._person.observable.name.set("Alice")  # type: ignore[union-attr]
+        # This modifies the same object
         b._person.observable.name.set("Bob")  # type: ignore[union-attr]
 
-        assert_that(a._person.value.name).is_equal_to("Alice")
+        # Both see "Bob" because they share state
+        assert_that(a._person.value.name).is_equal_to("Bob")
         assert_that(b._person.value.name).is_equal_to("Bob")
 
 

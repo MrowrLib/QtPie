@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 import pytest
 from assertpy import assert_that
+from observant import ObservableList
 from PySide6.QtWidgets import QLabel, QTreeView, QWidget
 
 from qtpie import Variable, new
@@ -971,3 +972,168 @@ class TestTreeViewSignalHandlerOrder:
 
         assert_that(call_count["value"]).is_equal_to(1)
         assert_that(seen_values).is_equal_to([Location.QUERY])
+
+
+@dataclass
+class ObservableTreeNode:
+    """Tree node with ObservableList children for reactive updates."""
+
+    name: str
+    children: "ObservableList[ObservableTreeNode]" = field(  # noqa: UP037
+        default_factory=lambda: ObservableList()
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewChildrenListUpdates:
+    """Test QTreeView reactively updates when children ObservableLists change."""
+
+    def test_tree_updates_on_child_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """Appending to a child's ObservableList updates QTreeView."""
+        from observant import ObservableList
+
+        root_children: ObservableList[ObservableTreeNode] = ObservableList([ObservableTreeNode("Child 1")])
+        root = ObservableTreeNode("Root", root_children)
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new([root])
+            _tree: QTreeView = new(bind="_nodes")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Initially 1 root with 1 child
+        root_idx = model.index(0, 0)
+        assert_that(model.rowCount(root_idx)).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0, root_idx))).is_equal_to("Child 1")
+
+        # Append a new child to root's children
+        root_children.append(ObservableTreeNode("Child 2"))
+
+        # Tree should now show 2 children
+        assert_that(model.rowCount(root_idx)).is_equal_to(2)
+        assert_that(model.data(model.index(1, 0, root_idx))).is_equal_to("Child 2")
+
+    def test_tree_updates_on_child_remove(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing from a child's ObservableList updates QTreeView."""
+        from observant import ObservableList
+
+        root_children: ObservableList[ObservableTreeNode] = ObservableList(
+            [
+                ObservableTreeNode("Child A"),
+                ObservableTreeNode("Child B"),
+                ObservableTreeNode("Child C"),
+            ]
+        )
+        root = ObservableTreeNode("Root", root_children)
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new([root])
+            _tree: QTreeView = new(bind="_nodes")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        root_idx = model.index(0, 0)
+        assert_that(model.rowCount(root_idx)).is_equal_to(3)
+
+        # Remove middle child
+        del root_children[1]
+
+        assert_that(model.rowCount(root_idx)).is_equal_to(2)
+        assert_that(model.data(model.index(0, 0, root_idx))).is_equal_to("Child A")
+        assert_that(model.data(model.index(1, 0, root_idx))).is_equal_to("Child C")
+
+    def test_tree_updates_on_child_clear(self, base_class, decorator, qt: QtDriver) -> None:
+        """Clearing a child's ObservableList updates QTreeView."""
+        from observant import ObservableList
+
+        root_children: ObservableList[ObservableTreeNode] = ObservableList([ObservableTreeNode("Child 1"), ObservableTreeNode("Child 2")])
+        root = ObservableTreeNode("Root", root_children)
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new([root])
+            _tree: QTreeView = new(bind="_nodes")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        root_idx = model.index(0, 0)
+        assert_that(model.rowCount(root_idx)).is_equal_to(2)
+
+        # Clear all children
+        root_children.clear()
+
+        assert_that(model.rowCount(root_idx)).is_equal_to(0)
+
+    def test_tree_updates_on_nested_child_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """Appending to a deeply nested child's ObservableList updates QTreeView."""
+        from observant import ObservableList
+
+        grandchild_children: ObservableList[ObservableTreeNode] = ObservableList()
+        grandchild = ObservableTreeNode("Grandchild", grandchild_children)
+        child_children: ObservableList[ObservableTreeNode] = ObservableList([grandchild])
+        child = ObservableTreeNode("Child", child_children)
+        root_children: ObservableList[ObservableTreeNode] = ObservableList([child])
+        root = ObservableTreeNode("Root", root_children)
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new([root])
+            _tree: QTreeView = new(bind="_nodes")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Navigate to grandchild
+        root_idx = model.index(0, 0)
+        child_idx = model.index(0, 0, root_idx)
+        grandchild_idx = model.index(0, 0, child_idx)
+
+        # Initially grandchild has no children
+        assert_that(model.rowCount(grandchild_idx)).is_equal_to(0)
+
+        # Append a great-grandchild
+        grandchild_children.append(ObservableTreeNode("Great-Grandchild"))
+
+        # Tree should now show 1 great-grandchild
+        assert_that(model.rowCount(grandchild_idx)).is_equal_to(1)
+        great_grandchild_idx = model.index(0, 0, grandchild_idx)
+        assert_that(model.data(great_grandchild_idx)).is_equal_to("Great-Grandchild")
+
+    def test_tree_updates_when_new_node_added_to_root_then_children_modified(self, base_class, decorator, qt: QtDriver) -> None:
+        """Adding a node to root and then modifying its children works."""
+        from observant import ObservableList
+
+        root_children: ObservableList[ObservableTreeNode] = ObservableList()
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new([])
+            _tree: QTreeView = new(bind="_nodes")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Start with empty tree
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Add root node
+        new_root = ObservableTreeNode("New Root", root_children)
+        instance._nodes.append(new_root)
+
+        assert_that(model.rowCount()).is_equal_to(1)
+        root_idx = model.index(0, 0)
+        assert_that(model.rowCount(root_idx)).is_equal_to(0)
+
+        # Now add children to the new root
+        root_children.append(ObservableTreeNode("New Child"))
+
+        assert_that(model.rowCount(root_idx)).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0, root_idx))).is_equal_to("New Child")
