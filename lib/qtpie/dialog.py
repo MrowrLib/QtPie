@@ -162,6 +162,10 @@ class DialogResult[T = None]:
         """Convenience: True if dialog was rejected."""
         return not self.accepted
 
+    def __bool__(self) -> bool:
+        """True if dialog was accepted (OK, Yes, Save, etc.), False if rejected (Cancel, No, X, Escape, etc.)."""
+        return self.accepted
+
 
 class DialogButton:
     """Marker class for dialog buttons.

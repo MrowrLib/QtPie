@@ -126,17 +126,64 @@ class WorkspaceService:
 
     # Collection operations
 
-    def add_collection(self, collection: Collection) -> None:
-        """Add a collection to the workspace."""
+    def add_collection(self, name: str, parent: Collection | None = None) -> Collection:
+        """Create and add a collection.
+
+        Args:
+            name: Collection name
+            parent: Optional parent collection (None = top-level)
+
+        Returns:
+            The created collection
+        """
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
-        self._workspace.collections.append(collection)
+        collection = Collection(name=name)
+        if parent is None:
+            self._workspace.collections.append(collection)
+        else:
+            parent.items.append(collection)
+        return collection
+
+    def add_request(self, name: str, collection: Collection) -> Request:
+        """Create and add a request to a collection.
+
+        Args:
+            name: Request name
+            collection: Parent collection
+
+        Returns:
+            The created request
+        """
+        request = Request(name=name)
+        collection.items.append(request)
+        return request
 
     def remove_collection(self, name: str) -> None:
-        """Remove a collection by name."""
+        """Remove a top-level collection by name."""
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
         self._workspace.collections = [c for c in self._workspace.collections if c.name != name]
+
+    def remove_item(self, item: Request | Collection, parent: Collection | None = None) -> None:
+        """Remove an item from a collection or workspace.
+
+        Args:
+            item: The request or collection to remove
+            parent: Parent collection (None = search top-level collections)
+        """
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if parent is not None:
+            parent.items.remove(item)
+        elif isinstance(item, Collection):
+            self._workspace.collections.remove(item)
+        else:
+            # Request at top level? Shouldn't happen, but search for it
+            for collection in self._workspace.collections:
+                if item in collection.items:
+                    collection.items.remove(item)
+                    return
 
     # Variable resolution (delegate to EnvironmentsService)
 
