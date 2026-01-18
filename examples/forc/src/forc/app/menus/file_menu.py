@@ -6,6 +6,9 @@ from qtpie import Menu, menu, new
 
 @menu(title="File")
 class FileMenu(Menu):
+    ### Signals ###
     on_quit = Signal()
 
+    ### Actions ###
+    save: QAction = new("&Save", shortcut="Ctrl+S", triggered="on_save")
     quit: QAction = new("&Quit", shortcut="Ctrl+Q", triggered="on_quit")

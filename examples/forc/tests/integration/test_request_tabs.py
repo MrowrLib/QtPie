@@ -2,7 +2,7 @@
 """Integration tests for request tab management."""
 
 from assertpy import assert_that
-from forc.app.windows import ForcWindow
+from forc.app import ForcWindow
 from forc.domain.models import Collection, Request, Workspace
 
 from qtpie.testing import QtDriver

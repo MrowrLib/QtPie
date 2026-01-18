@@ -124,6 +124,45 @@ class WorkspaceService:
         if self._workspace.active_environment == name:
             self._workspace.active_environment = None
 
+    # Request operations
+
+    def save_request(self, request: Request) -> None:
+        """Save a single request to its YAML file.
+
+        Args:
+            request: The request to save
+
+        Raises:
+            RuntimeError: If no workspace path is set
+        """
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        path = self._get_request_path(request)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._format.save_request(request, path)
+
+    def _get_request_path(self, request: Request) -> Path:
+        """Get the file path for a request based on its collection hierarchy."""
+        from forc.domain.formats.yaml_format import slugify
+
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        # Build collection path parts
+        parts: list[str] = []
+        collection = request.collection
+        while collection is not None:
+            parts.append(slugify(collection.name))
+            collection = collection.parent
+        parts.reverse()
+
+        # workspace/collections/coll1/coll2/request-name.yaml
+        path = self._path / "collections"
+        for part in parts:
+            path = path / part
+        return path / f"{slugify(request.name)}.yaml"
+
     # Collection operations
 
     def add_collection(self, name: str, parent: Collection | None = None) -> Collection:

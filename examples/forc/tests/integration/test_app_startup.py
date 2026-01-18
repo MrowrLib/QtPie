@@ -1,7 +1,7 @@
 """Integration tests for Forc app startup and basic functionality."""
 
 from assertpy import assert_that
-from forc.app.windows import ForcWindow
+from forc.app import ForcWindow
 from forc.domain.models import Workspace
 
 from qtpie.testing import QtDriver

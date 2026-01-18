@@ -10,7 +10,7 @@ import pytest
 if "--onscreen" not in sys.argv:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from forc.app.windows import ForcWindow
+from forc.app import ForcWindow
 from forc.domain.models import Workspace
 from forc.services import HttpClientService, WorkspaceService
 

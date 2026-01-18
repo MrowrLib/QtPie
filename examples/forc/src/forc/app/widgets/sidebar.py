@@ -2,6 +2,7 @@ from typing import cast
 
 from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
 
+from forc.app.helpers import filename_safe_validator
 from forc.app.widgets.cookie_manager import CookieManagerDialog
 from forc.app.widgets.environments import EnvironmentSelectorWidget
 from forc.domain.models import Collection, Request
@@ -19,7 +20,11 @@ class TextValueDialog(Dialog):
 
 @dialog(layout="form", size=(450, 150), title="Add Collection")
 class AddCollectionDialog(Dialog):
-    name: Variable[str, QLineEdit] = new()(label="Collection Name", placeholderText="Enter collection name...")
+    name: Variable[str, QLineEdit] = new()(
+        label="Collection Name",
+        placeholderText="Enter collection name...",
+        validator=filename_safe_validator,
+    )
     parent_collection: Variable[Collection | None, QLabel] = new(None)(
         bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}"
     )

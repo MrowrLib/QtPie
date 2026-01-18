@@ -991,6 +991,9 @@ class _VariableDescriptor[T]:
                     for key in format_keys_to_remove:
                         del widget_kwargs_copy[key]
 
+                    # Extract validator= for input validation (QLineEdit, QComboBox, etc.)
+                    validator_spec = widget_kwargs_copy.pop("validator", None)
+
                     try:
                         widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
@@ -1004,6 +1007,12 @@ class _VariableDescriptor[T]:
                         from .styles import set_classes
 
                         set_classes(widget_instance, self._css_classes)
+
+                    # Apply input validator if specified
+                    if validator_spec is not None and hasattr(widget_instance, "setValidator"):
+                        from .input_validator import apply_validator
+
+                        apply_validator(widget_instance, validator_spec)
 
                     # Connect extracted signals to parent widget methods
                     for signal_name, handler_spec in signal_connections.items():

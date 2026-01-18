@@ -169,6 +169,13 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                             set_classes(instance, field.css_classes)
 
+                        # Apply input validator (QLineEdit, QComboBox, etc.)
+                        if field.validator is not None:
+                            if hasattr(instance, "setValidator"):
+                                from .input_validator import apply_validator
+
+                                apply_validator(instance, field.validator)
+
                     # Apply widget props (windowTitle="X" → setWindowTitle("X")
                     # Also resolve Translatable markers in widget_props
                     for prop_name, value in field.widget_props.items():

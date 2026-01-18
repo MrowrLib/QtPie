@@ -1,19 +1,25 @@
 from .environments import EnvironmentSelectorWidget
-from .layout import CollectionsTreeWidget, SidebarWidget
-from .requests import RequestAddressBarWidget, RequestEditorWidget
-from .response import ResponseStatusBarWidget, ResponseViewerWidget
+from .request_editor_widget import RequestAddressBarWidget, RequestEditorWidget
+from .request_widget import RequestWidget
+from .response_viewer_widget import (
+    ResponseBodyTabContent,
+    ResponseCookiesTabContent,
+    ResponseHeadersTabContent,
+    ResponseStatusBarWidget,
+    ResponseViewerWidget,
+)
+from .sidebar import CollectionsTreeWidget, SidebarWidget
 
 __all__ = [
-    # Collections
     "CollectionsTreeWidget",
-    # Environments
     "EnvironmentSelectorWidget",
-    # Layout
     "SidebarWidget",
-    # Requests
     "RequestAddressBarWidget",
     "RequestEditorWidget",
-    # Response
-    "ResponseStatusBarWidget",
+    "RequestWidget",
     "ResponseViewerWidget",
+    "ResponseStatusBarWidget",
+    "ResponseBodyTabContent",
+    "ResponseCookiesTabContent",
+    "ResponseHeadersTabContent",
 ]

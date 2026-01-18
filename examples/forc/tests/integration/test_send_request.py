@@ -2,9 +2,8 @@
 """Integration tests for sending HTTP requests."""
 
 from assertpy import assert_that
-from forc.app.widgets.requests import RequestWidget
-from forc.app.widgets.response.response_viewer_widget import ResponseBodyTabContent
-from forc.app.windows import ForcWindow
+from forc.app import ForcWindow
+from forc.app.widgets import RequestWidget, ResponseBodyTabContent
 from forc.domain.models import Collection, Request, Workspace
 from qtpy.QtWidgets import QDockWidget
 

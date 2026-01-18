@@ -287,6 +287,7 @@ def apply_auto_bindings(
     from qtpie.bindings import bind, create_format_binding, is_format_string, resolve_binding_source
     from qtpie.bindings.model_binding import apply_model_binding
     from qtpie.bindings.tab_binding import apply_tab_widget_bindings
+    from qtpie.input_validator import apply_validator
     from qtpie.translations.translatable import Translatable
     from qtpie.variable import Variable as VarType
 
@@ -299,6 +300,10 @@ def apply_auto_bindings(
         widget_instance = getattr(host, name, None)
         if widget_instance is None or not isinstance(widget_instance, QWidget):
             continue
+
+        # Apply input validator if specified (for QLineEdit, QComboBox, etc.)
+        if field_info.validator is not None and hasattr(widget_instance, "setValidator"):
+            apply_validator(widget_instance, field_info.validator)
 
         # Handle QTabWidget with tabs= binding
         if field_info.is_tab_widget and field_info.tabs is not None:

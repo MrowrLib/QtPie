@@ -175,6 +175,13 @@ class NewField:
         self.is_variable_list_dock: bool = False
         self.variable_list_dock_item_type: type | None = None  # The item type T inside Variable[list[T], Dock[W]]
         self.variable_list_dock_widget_type: type | None = None  # The widget type W inside Variable[list[T], Dock[W]]
+        # QLineEdit input validator support
+        # validator= can be:
+        # - str (regex): QRegularExpressionValidator with the pattern
+        # - Callable[[str], bool]: Simple predicate (True=accept, False=reject)
+        # - Callable[[str, int], QValidator.State]: Full control over validation state
+        # - str (method name): Look up method on widget instance
+        self.validator: str | Callable[..., Any] | None = None
         # QPlainTextEdit/QTextEdit syntax highlighter support
         # highlighter= can be:
         # - type: Static highlighter class to instantiate
@@ -775,6 +782,15 @@ class NewField:
                         self.editor_content_type = content_type_val.name
                     elif isinstance(content_type_val, str):
                         self.editor_content_type = content_type_val
+
+            # Extract validator= for input validation (works on QLineEdit, QComboBox, etc.)
+            # - str (regex): QRegularExpressionValidator
+            # - Callable[[str], bool]: Simple predicate
+            # - Callable[[str, int], State]: Full control
+            # - str (method name): Look up on widget
+            validator_val = self.kwargs.pop("validator", None)
+            if validator_val is not None:
+                self.validator = validator_val
 
             # Handle layout= parameter:
             # - layout=False → exclude from layout

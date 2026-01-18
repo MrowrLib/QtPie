@@ -216,10 +216,10 @@ class YamlFormat:
         # Save items
         for item in collection.items:
             if isinstance(item, Request):
-                item_path = path / f"{_slugify(item.name)}{self.extension}"
+                item_path = path / f"{slugify(item.name)}{self.extension}"
                 self.save_request(item, item_path)
             else:
-                item_path = path / _slugify(item.name)
+                item_path = path / slugify(item.name)
                 self.save_collection(item, item_path)
 
     def load_workspace(self, path: Path) -> Workspace:
@@ -285,17 +285,29 @@ class YamlFormat:
         # Save collections
         collections_path = path / "collections"
         for collection in workspace.collections:
-            coll_path = collections_path / _slugify(collection.name)
+            coll_path = collections_path / slugify(collection.name)
             self.save_collection(collection, coll_path)
 
         # Save environments
         environments_path = path / "environments"
         environments_path.mkdir(parents=True, exist_ok=True)
         for environment in workspace.environments:
-            env_path = environments_path / f"{_slugify(environment.name)}{self.extension}"
+            env_path = environments_path / f"{slugify(environment.name)}{self.extension}"
             self.save_environment(environment, env_path)
 
 
-def _slugify(name: str) -> str:
+def slugify(name: str) -> str:
     """Convert a name to a filesystem-safe slug."""
-    return name.lower().replace(" ", "-").replace("/", "-")
+    import re
+    import unicodedata
+
+    # Normalize unicode (é -> e)
+    name = unicodedata.normalize("NFKD", name)
+    name = name.encode("ascii", "ignore").decode("ascii")
+    # Lowercase, replace spaces with hyphens
+    name = name.lower().replace(" ", "-")
+    # Remove anything not alphanumeric or hyphen
+    name = re.sub(r"[^a-z0-9\-]", "", name)
+    # Collapse multiple hyphens
+    name = re.sub(r"-+", "-", name)
+    return name.strip("-")

@@ -1,8 +1,7 @@
 from qtpy.QtCore import Signal
 
 from forc.app.menus import FileMenu, ViewMenu
-from forc.app.widgets.layout import SidebarWidget
-from forc.app.widgets.requests import RequestWidget
+from forc.app.widgets import RequestWidget, SidebarWidget
 from forc.domain.models import Collection, Request
 from qtpie import Dock, Window, new, window
 from qtpie.variable import Variable
@@ -23,7 +22,8 @@ class ForcWindow(Window):
     on_current_workspace_item_changed = Signal()
 
     ### Variables ###
-    current_workspace_item: Variable[Collection | Request | None] = new(None)
+    # Ah, we should rename, current_workspace_item is just in the SIDEBAR selection, not e.g. the current tab! right?
+    current_workspace_item: Variable[Collection | Request | None]
     selected_request_index: Variable[int]
 
     ### Menus ###
