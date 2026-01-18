@@ -176,6 +176,7 @@ class NewField:
         self.dock_movable: bool | None = None  # movable=False (can't drag)
         self.dock_allowed_areas: list[str] | None = None  # allowedAreas=["left", "right"]
         self.dock_vertical_title_bar: bool | None = None  # verticalTitleBar=True
+        self.dock_hide_title_bar: bool | None = None  # hideTitleBar=True (always hide title bar)
         self.dock_hide_title_bar_when_tabbed: bool | None = None  # hideTitleBarWhenTabbed=True/False
         # Variable[T, Dock[W]] support - Variable with a docked widget
         self.is_variable_dock: bool = False
@@ -387,6 +388,7 @@ class NewField:
                             "dock_movable": self.dock_movable,
                             "dock_allowed_areas": self.dock_allowed_areas,
                             "dock_vertical_title_bar": self.dock_vertical_title_bar,
+                            "dock_hide_title_bar": self.dock_hide_title_bar,
                             "dock_hide_title_bar_when_tabbed": self.dock_hide_title_bar_when_tabbed,
                         }
                         # Use the content type as widget_type for the descriptor
@@ -1298,6 +1300,7 @@ class NewField:
             self.dock_floating = source.pop("floating", None)
             self.dock_allowed_areas = source.pop("allowedAreas", None)
             self.dock_vertical_title_bar = source.pop("verticalTitleBar", None)
+            self.dock_hide_title_bar = source.pop("hideTitleBar", None)
             self.dock_hide_title_bar_when_tabbed = source.pop("hideTitleBarWhenTabbed", None)
 
     def _extract_embed_widget(self) -> None:

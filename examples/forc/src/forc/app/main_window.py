@@ -33,7 +33,7 @@ class ForcWindow(Window):
     view_menu: ViewMenu
 
     ### Docks / Widgets ###
-    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer")(maximumWidth=400)
+    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
     editors: Variable[list[Request], Dock[RequestWidget]] = new(
         group="requests",
         dock="right",

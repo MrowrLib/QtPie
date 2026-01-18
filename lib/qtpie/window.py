@@ -941,6 +941,7 @@ def _create_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             fld.dock_movable,
             fld.dock_allowed_areas,
             fld.dock_vertical_title_bar,
+            fld.dock_hide_title_bar,
         )
 
         # Create Dock wrapper
@@ -1215,9 +1216,11 @@ def _apply_dock_features(
     movable: bool | None,
     allowed_areas: list[str] | None,
     vertical_title_bar: bool | None,
+    hide_title_bar: bool | None = None,
 ) -> None:
     """Apply dock widget features (closable, floatable, movable, etc.)."""
     from qtpy.QtCore import Qt as QtCore
+    from qtpy.QtWidgets import QWidget
 
     # Build features flag - start with all features enabled
     features = QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
@@ -1251,12 +1254,22 @@ def _apply_dock_features(
     if vertical_title_bar is True:
         dock_widget.setFeatures(dock_widget.features() | QDockWidget.DockWidgetFeature.DockWidgetVerticalTitleBar)
 
+    # Hide title bar completely (use setFixedHeight like _hide_titlebar does)
+    print(f"[DEBUG] _apply_dock_features: hide_title_bar={hide_title_bar}")
+    if hide_title_bar is True:
+        print(f"[DEBUG] _apply_dock_features: HIDING title bar for {dock_widget.objectName()}")
+        empty_widget = QWidget()
+        empty_widget.setFixedHeight(0)
+        dock_widget.setTitleBarWidget(empty_widget)
+        dock_widget.setProperty("_qtpie_titlebar_hidden", True)
+
 
 def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[QDockWidget, dict[str, Any]]:
     """Collect per-dock overrides from NewField configurations.
 
     Returns a dict mapping QDockWidget instances to their override settings.
     Currently supports:
+    - hide_title_bar: Always hide title bar for this dock
     - hide_title_bar_when_tabbed: Override window's dockTabsHideTitleBar for this dock
     """
     from .dock import Dock
@@ -1268,10 +1281,14 @@ def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[Q
         dock_obj = getattr(window, field_name, None)
         if isinstance(dock_obj, Dock):
             field = config.fields.get(field_name)
-            if field is not None and field.dock_hide_title_bar_when_tabbed is not None:
-                overrides[dock_obj.dock_widget] = {
-                    "hide_title_bar_when_tabbed": field.dock_hide_title_bar_when_tabbed,
-                }
+            if field is not None:
+                dock_overrides: dict[str, Any] = {}
+                if field.dock_hide_title_bar is not None:
+                    dock_overrides["hide_title_bar"] = field.dock_hide_title_bar
+                if field.dock_hide_title_bar_when_tabbed is not None:
+                    dock_overrides["hide_title_bar_when_tabbed"] = field.dock_hide_title_bar_when_tabbed
+                if dock_overrides:
+                    overrides[dock_obj.dock_widget] = dock_overrides
 
     # Collect from Variable[T, Dock[W]] fields
     for field_name in config.variable_dock_fields:
@@ -1280,10 +1297,14 @@ def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[Q
             dock_attr = getattr(var, "dock", None)
             if isinstance(dock_attr, Dock):
                 field = config.fields.get(field_name)
-                if field is not None and field.dock_hide_title_bar_when_tabbed is not None:
-                    overrides[dock_attr.dock_widget] = {
-                        "hide_title_bar_when_tabbed": field.dock_hide_title_bar_when_tabbed,
-                    }
+                if field is not None:
+                    dock_overrides_var: dict[str, Any] = {}
+                    if field.dock_hide_title_bar is not None:
+                        dock_overrides_var["hide_title_bar"] = field.dock_hide_title_bar
+                    if field.dock_hide_title_bar_when_tabbed is not None:
+                        dock_overrides_var["hide_title_bar_when_tabbed"] = field.dock_hide_title_bar_when_tabbed
+                    if dock_overrides_var:
+                        overrides[dock_attr.dock_widget] = dock_overrides_var
 
     return overrides
 
@@ -1768,6 +1789,7 @@ def _create_variable_dock_fields(window: Window[Any], config: WindowConfig) -> N
             dock_info.get("dock_movable"),
             dock_info.get("dock_allowed_areas"),
             dock_info.get("dock_vertical_title_bar"),
+            dock_info.get("dock_hide_title_bar"),
         )
 
         # Create Dock wrapper

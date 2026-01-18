@@ -1,0 +1,478 @@
+2026-01-18 15:34:37,743 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:37,743   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:37,743 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:37,743   -> already hidden, skip
+2026-01-18 15:34:37,773 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:37,773   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:37,773 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:37,774   -> already hidden, skip
+2026-01-18 15:34:37,908 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:37,909   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:37,909 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:37,909   -> already hidden, skip
+2026-01-18 15:34:37,920 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:37,920   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:37,920 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:37,920   -> already hidden, skip
+2026-01-18 15:34:37,920 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:37,921   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:37,921 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:37,921   -> already hidden, skip
+2026-01-18 15:34:38,940 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:38,940   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:38,940 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:38,940   -> already hidden, skip
+2026-01-18 15:34:38,940 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:38,941 _show: obj='' hidden=None floating=False
+2026-01-18 15:34:38,941   -> skip (not hidden)
+2026-01-18 15:34:38,956 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:38,957   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:38,957 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:38,957   -> already hidden, skip
+2026-01-18 15:34:38,957 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:38,957 _show: obj='' hidden=None floating=False
+2026-01-18 15:34:38,957   -> skip (not hidden)
+2026-01-18 15:34:38,962 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:38,962   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:38,962 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:38,962   -> already hidden, skip
+2026-01-18 15:34:38,962 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:38,962 _show: obj='' hidden=None floating=False
+2026-01-18 15:34:38,962   -> skip (not hidden)
+2026-01-18 15:34:38,963 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:38,963   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:38,963 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:38,963   -> already hidden, skip
+2026-01-18 15:34:38,963 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:38,963 _show: obj='' hidden=None floating=False
+2026-01-18 15:34:38,963   -> skip (not hidden)
+2026-01-18 15:34:38,964 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:38,964   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:38,964 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:38,964   -> already hidden, skip
+2026-01-18 15:34:38,964 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:38,964 _show: obj='' hidden=None floating=False
+2026-01-18 15:34:38,965   -> skip (not hidden)
+2026-01-18 15:34:39,580 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:39,580 _hide: obj='' hidden=None
+2026-01-18 15:34:39,581   -> HIDING (setTitleBarWidget + prop=True)
+2026-01-18 15:34:39,581 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:39,581   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:39,581 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:39,581   -> already hidden, skip
+2026-01-18 15:34:39,581 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=None
+2026-01-18 15:34:39,581 _hide: obj='' hidden=None
+2026-01-18 15:34:39,581   -> HIDING (setTitleBarWidget + prop=True)
+2026-01-18 15:34:39,602 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,602 _hide: obj='' hidden=True
+2026-01-18 15:34:39,602   -> already hidden, skip
+2026-01-18 15:34:39,602 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:39,602   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:39,602 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:39,602   -> already hidden, skip
+2026-01-18 15:34:39,602 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,603 _hide: obj='' hidden=True
+2026-01-18 15:34:39,603   -> already hidden, skip
+2026-01-18 15:34:39,604 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,604 _hide: obj='' hidden=True
+2026-01-18 15:34:39,604   -> already hidden, skip
+2026-01-18 15:34:39,604 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:39,604   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:39,604 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:39,604   -> already hidden, skip
+2026-01-18 15:34:39,605 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,605 _hide: obj='' hidden=True
+2026-01-18 15:34:39,605   -> already hidden, skip
+2026-01-18 15:34:39,618 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,619 _hide: obj='' hidden=True
+2026-01-18 15:34:39,619   -> already hidden, skip
+2026-01-18 15:34:39,619 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:39,619   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:39,619 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:39,619   -> already hidden, skip
+2026-01-18 15:34:39,619 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,619 _hide: obj='' hidden=True
+2026-01-18 15:34:39,619   -> already hidden, skip
+2026-01-18 15:34:39,621 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,621 _hide: obj='' hidden=True
+2026-01-18 15:34:39,621   -> already hidden, skip
+2026-01-18 15:34:39,621 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:39,621   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:39,621 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:39,622   -> already hidden, skip
+2026-01-18 15:34:39,622 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:39,622 _hide: obj='' hidden=True
+2026-01-18 15:34:39,622   -> already hidden, skip
+2026-01-18 15:34:40,325 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:40,325 _hide: obj='' hidden=True
+2026-01-18 15:34:40,325   -> already hidden, skip
+2026-01-18 15:34:40,325 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:40,325   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:40,325 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:40,325   -> already hidden, skip
+2026-01-18 15:34:40,325 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:40,325 _hide: obj='' hidden=True
+2026-01-18 15:34:40,325   -> already hidden, skip
+2026-01-18 15:34:40,494 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:40,494 _show: obj='' hidden=True floating=False
+2026-01-18 15:34:40,494   -> SHOWING (was_floating=False)
+2026-01-18 15:34:40,495   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:40,495   -> done, titleBarWidget=None
+2026-01-18 15:34:40,502 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,502 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,502   -> skip (not hidden)
+2026-01-18 15:34:40,502 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,502 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,502   -> skip (not hidden)
+2026-01-18 15:34:40,507 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:40,507 _show: obj='' hidden=True floating=False
+2026-01-18 15:34:40,507   -> SHOWING (was_floating=False)
+2026-01-18 15:34:40,509   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:40,509   -> done, titleBarWidget=None
+2026-01-18 15:34:40,509 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,509 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,509   -> skip (not hidden)
+2026-01-18 15:34:40,523 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:40,523 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:40,524   -> skip (not hidden)
+2026-01-18 15:34:40,524 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:40,524   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:40,524 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:40,524   -> already hidden, skip
+2026-01-18 15:34:40,524 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,524 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,524   -> skip (not hidden)
+2026-01-18 15:34:40,530 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:40,531 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:40,531   -> skip (not hidden)
+2026-01-18 15:34:40,531 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:40,531   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:40,531 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:40,531   -> already hidden, skip
+2026-01-18 15:34:40,531 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,531 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,531   -> skip (not hidden)
+2026-01-18 15:34:40,535 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:40,535 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:40,535   -> skip (not hidden)
+2026-01-18 15:34:40,535 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:40,535   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:40,535 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:40,535   -> already hidden, skip
+2026-01-18 15:34:40,535 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:40,535 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:40,536   -> skip (not hidden)
+2026-01-18 15:34:42,155 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,156 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,156   -> skip (not hidden)
+2026-01-18 15:34:42,156 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,156   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,156 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,156   -> already hidden, skip
+2026-01-18 15:34:42,156 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:42,156 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:42,156   -> skip (not hidden)
+2026-01-18 15:34:42,156 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,156 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,156   -> skip (not hidden)
+2026-01-18 15:34:42,156 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,156   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,157 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,157   -> already hidden, skip
+2026-01-18 15:34:42,157 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:42,157 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:42,157   -> skip (not hidden)
+2026-01-18 15:34:42,157 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,157 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,157   -> skip (not hidden)
+2026-01-18 15:34:42,157 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,157   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,157 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,157   -> already hidden, skip
+2026-01-18 15:34:42,157 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=True hidden=False
+2026-01-18 15:34:42,157 _show: obj='' hidden=False floating=True
+2026-01-18 15:34:42,158   -> skip (not hidden)
+2026-01-18 15:34:42,626 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,626 _hide: obj='' hidden=False
+2026-01-18 15:34:42,626   -> HIDING (setTitleBarWidget + prop=True)
+2026-01-18 15:34:42,627 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,627 _hide: obj='' hidden=True
+2026-01-18 15:34:42,627   -> already hidden, skip
+2026-01-18 15:34:42,632 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,632   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,632 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,633   -> already hidden, skip
+2026-01-18 15:34:42,633 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,633 _hide: obj='' hidden=True
+2026-01-18 15:34:42,633   -> already hidden, skip
+2026-01-18 15:34:42,633 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,633 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,633   -> skip (not hidden)
+2026-01-18 15:34:42,634 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,634   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,634 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,634   -> already hidden, skip
+2026-01-18 15:34:42,634 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,634 _hide: obj='' hidden=True
+2026-01-18 15:34:42,634   -> already hidden, skip
+2026-01-18 15:34:42,634 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,634 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,634   -> skip (not hidden)
+2026-01-18 15:34:42,641 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,641   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,642 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,642   -> already hidden, skip
+2026-01-18 15:34:42,642 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,642 _hide: obj='' hidden=True
+2026-01-18 15:34:42,642   -> already hidden, skip
+2026-01-18 15:34:42,642 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,642 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,642   -> skip (not hidden)
+2026-01-18 15:34:42,646 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,646   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,646 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,646   -> already hidden, skip
+2026-01-18 15:34:42,646 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,646 _hide: obj='' hidden=True
+2026-01-18 15:34:42,646   -> already hidden, skip
+2026-01-18 15:34:42,646 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,646 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,646   -> skip (not hidden)
+2026-01-18 15:34:42,647 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:42,647   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:42,648 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:42,648   -> already hidden, skip
+2026-01-18 15:34:42,648 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:42,648 _hide: obj='' hidden=True
+2026-01-18 15:34:42,648   -> already hidden, skip
+2026-01-18 15:34:42,648 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:42,648 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:42,648   -> skip (not hidden)
+2026-01-18 15:34:43,826 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:43,826 _hide: obj='' hidden=True
+2026-01-18 15:34:43,826   -> already hidden, skip
+2026-01-18 15:34:43,826 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:43,827   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:43,827 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:43,827   -> already hidden, skip
+2026-01-18 15:34:43,827 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:43,827 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:43,827   -> skip (not hidden)
+2026-01-18 15:34:44,058 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:44,058 _hide: obj='' hidden=True
+2026-01-18 15:34:44,058   -> already hidden, skip
+2026-01-18 15:34:44,058 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:44,059   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:44,059 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:44,059   -> already hidden, skip
+2026-01-18 15:34:44,059 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:44,059 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:44,059   -> skip (not hidden)
+2026-01-18 15:34:45,249 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:45,249 _hide: obj='' hidden=True
+2026-01-18 15:34:45,249   -> already hidden, skip
+2026-01-18 15:34:45,249 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:45,249   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:45,249 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:45,250   -> already hidden, skip
+2026-01-18 15:34:45,250 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,250 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,250   -> skip (not hidden)
+2026-01-18 15:34:45,302 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:45,302   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:45,303 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:45,303   -> already hidden, skip
+2026-01-18 15:34:45,309 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=True
+2026-01-18 15:34:45,309   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,309 _show: obj='sidebar' hidden=True floating=True
+2026-01-18 15:34:45,309   -> SHOWING (was_floating=True)
+2026-01-18 15:34:45,310   -> temporarily unfloated
+2026-01-18 15:34:45,311   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:45,311   -> refloated
+2026-01-18 15:34:45,311   -> done, titleBarWidget=None
+2026-01-18 15:34:45,311 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:45,311   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,311 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:45,312   -> skip (not hidden)
+2026-01-18 15:34:45,322 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:45,323 _show: obj='' hidden=True floating=False
+2026-01-18 15:34:45,323   -> SHOWING (was_floating=False)
+2026-01-18 15:34:45,324   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:45,324   -> done, titleBarWidget=None
+2026-01-18 15:34:45,324 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:45,324   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,325 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:45,325   -> skip (not hidden)
+2026-01-18 15:34:45,345 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,346 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,346   -> skip (not hidden)
+2026-01-18 15:34:45,346 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:45,346   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,346 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:45,346   -> skip (not hidden)
+2026-01-18 15:34:45,346 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,346 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,346   -> skip (not hidden)
+2026-01-18 15:34:45,353 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,353 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,353   -> skip (not hidden)
+2026-01-18 15:34:45,353 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:45,353   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,353 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:45,354   -> skip (not hidden)
+2026-01-18 15:34:45,354 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,354 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,354   -> skip (not hidden)
+2026-01-18 15:34:45,355 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,356 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,356   -> skip (not hidden)
+2026-01-18 15:34:45,356 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:45,356   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:45,356 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:45,356   -> skip (not hidden)
+2026-01-18 15:34:45,356 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:45,356 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:45,356   -> skip (not hidden)
+2026-01-18 15:34:46,957 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,957 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,957   -> skip (not hidden)
+2026-01-18 15:34:46,957 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:46,958   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:46,958 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:46,958   -> skip (not hidden)
+2026-01-18 15:34:46,958 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,958 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,958   -> skip (not hidden)
+2026-01-18 15:34:46,975 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,975 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,975   -> skip (not hidden)
+2026-01-18 15:34:46,975 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:46,975   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:46,976 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:46,976   -> skip (not hidden)
+2026-01-18 15:34:46,976 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,976 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,976   -> skip (not hidden)
+2026-01-18 15:34:46,976 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,976 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,976   -> skip (not hidden)
+2026-01-18 15:34:46,976 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:46,976   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:46,977 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:46,977   -> skip (not hidden)
+2026-01-18 15:34:46,977 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:46,977 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:46,977   -> skip (not hidden)
+2026-01-18 15:34:47,542 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=False
+2026-01-18 15:34:47,542   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,542 _hide: obj='sidebar' hidden=False
+2026-01-18 15:34:47,542   -> HIDING (setTitleBarWidget + prop=True)
+2026-01-18 15:34:47,543 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:47,543   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,543 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:47,543   -> already hidden, skip
+2026-01-18 15:34:47,545 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:47,545 _hide: obj='' hidden=False
+2026-01-18 15:34:47,546   -> HIDING (setTitleBarWidget + prop=True)
+2026-01-18 15:34:47,546 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:47,546   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,546 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:47,546   -> already hidden, skip
+2026-01-18 15:34:47,546 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:47,547 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:47,547   -> skip (not hidden)
+2026-01-18 15:34:47,547 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:47,547 _hide: obj='' hidden=True
+2026-01-18 15:34:47,547   -> already hidden, skip
+2026-01-18 15:34:47,547 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:47,547   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,547 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:47,548   -> already hidden, skip
+2026-01-18 15:34:47,548 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:47,548 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:47,548   -> skip (not hidden)
+2026-01-18 15:34:47,558 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:47,559 _hide: obj='' hidden=True
+2026-01-18 15:34:47,559   -> already hidden, skip
+2026-01-18 15:34:47,559 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:47,559   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,559 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:47,559   -> already hidden, skip
+2026-01-18 15:34:47,559 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:47,559 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:47,559   -> skip (not hidden)
+2026-01-18 15:34:47,565 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:47,565 _hide: obj='' hidden=True
+2026-01-18 15:34:47,565   -> already hidden, skip
+2026-01-18 15:34:47,565 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:47,565   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:47,565 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:47,565   -> already hidden, skip
+2026-01-18 15:34:47,566 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:47,566 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:47,566   -> skip (not hidden)
+2026-01-18 15:34:48,842 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:48,842 _hide: obj='' hidden=True
+2026-01-18 15:34:48,842   -> already hidden, skip
+2026-01-18 15:34:48,842 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:48,842   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:48,842 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:48,842   -> already hidden, skip
+2026-01-18 15:34:48,842 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,842 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,842   -> skip (not hidden)
+2026-01-18 15:34:48,929 _update: obj='sidebar' title='Explorer' always_hide=True floating=False hidden=True
+2026-01-18 15:34:48,930   -> HIDE titlebar (docked, always_hide=True)
+2026-01-18 15:34:48,930 _hide: obj='sidebar' hidden=True
+2026-01-18 15:34:48,930   -> already hidden, skip
+2026-01-18 15:34:48,936 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=True
+2026-01-18 15:34:48,936   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,936 _show: obj='sidebar' hidden=True floating=True
+2026-01-18 15:34:48,936   -> SHOWING (was_floating=True)
+2026-01-18 15:34:48,937   -> temporarily unfloated
+2026-01-18 15:34:48,937   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:48,938   -> refloated
+2026-01-18 15:34:48,938   -> done, titleBarWidget=None
+2026-01-18 15:34:48,938 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:48,938   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,938 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:48,938   -> skip (not hidden)
+2026-01-18 15:34:48,947 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=True
+2026-01-18 15:34:48,948 _show: obj='' hidden=True floating=False
+2026-01-18 15:34:48,948   -> SHOWING (was_floating=False)
+2026-01-18 15:34:48,949   -> setTitleBarWidget(None) called, titleBarWidget=None
+2026-01-18 15:34:48,949   -> done, titleBarWidget=None
+2026-01-18 15:34:48,949 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:48,949   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,949 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:48,950   -> skip (not hidden)
+2026-01-18 15:34:48,963 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,963 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,963   -> skip (not hidden)
+2026-01-18 15:34:48,963 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:48,963   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,963 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:48,963   -> skip (not hidden)
+2026-01-18 15:34:48,963 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,963 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,963   -> skip (not hidden)
+2026-01-18 15:34:48,970 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,970 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,970   -> skip (not hidden)
+2026-01-18 15:34:48,970 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:48,970   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,970 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:48,970   -> skip (not hidden)
+2026-01-18 15:34:48,970 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,970 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,970   -> skip (not hidden)
+2026-01-18 15:34:48,973 _update: obj='' title='Slow Response (2s) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,973 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,973   -> skip (not hidden)
+2026-01-18 15:34:48,973 _update: obj='sidebar' title='Explorer' always_hide=True floating=True hidden=False
+2026-01-18 15:34:48,973   -> SHOW titlebar (floating, always_hide=True)
+2026-01-18 15:34:48,973 _show: obj='sidebar' hidden=False floating=True
+2026-01-18 15:34:48,973   -> skip (not hidden)
+2026-01-18 15:34:48,973 _update: obj='' title='Error 404 (Not Found) ' always_hide=None floating=False hidden=False
+2026-01-18 15:34:48,973 _show: obj='' hidden=False floating=False
+2026-01-18 15:34:48,973   -> skip (not hidden)

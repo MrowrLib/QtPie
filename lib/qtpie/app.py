@@ -1576,6 +1576,7 @@ def _create_dock_fields_for_app(
             fld.dock_movable,
             fld.dock_allowed_areas,
             fld.dock_vertical_title_bar,
+            fld.dock_hide_title_bar,
         )
 
         # Create Dock wrapper
@@ -1708,6 +1709,7 @@ def _create_variable_dock_fields_for_app(
             dock_info.get("dock_movable"),
             dock_info.get("dock_allowed_areas"),
             dock_info.get("dock_vertical_title_bar"),
+            dock_info.get("dock_hide_title_bar"),
         )
 
         dock = Dock(inner_widget, dock_widget)
@@ -1733,9 +1735,11 @@ def _apply_dock_features_for_app(
     movable: bool | None,
     allowed_areas: list[str] | None,
     vertical_title_bar: bool | None,
+    hide_title_bar: bool | None = None,
 ) -> None:
     """Apply dock widget features (closable, floatable, movable, etc.)."""
     from qtpy.QtCore import Qt as QtCore
+    from qtpy.QtWidgets import QWidget
 
     features = QDockWidget.DockWidgetFeature.DockWidgetClosable | QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
 
@@ -1764,6 +1768,13 @@ def _apply_dock_features_for_app(
 
     if vertical_title_bar is True:
         dock_widget.setFeatures(dock_widget.features() | QDockWidget.DockWidgetFeature.DockWidgetVerticalTitleBar)
+
+    # Hide title bar completely
+    if hide_title_bar is True:
+        empty_widget = QWidget()
+        empty_widget.setMaximumHeight(0)
+        dock_widget.setTitleBarWidget(empty_widget)
+        dock_widget.setProperty("_qtpie_titlebar_hidden", True)
 
 
 def _collect_dock_overrides_for_app(app: AppBase[Any], config: AppConfig) -> dict[QDockWidget, dict[str, Any]]:
