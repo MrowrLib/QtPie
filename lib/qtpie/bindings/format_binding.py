@@ -1132,24 +1132,28 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
 def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str, Any]], str]:
     """Create a function that formats an item using a template string with additional context.
 
-    Like create_item_formatter, but accepts extra context variables like #index, #value, etc.
+    Like create_item_formatter, but accepts extra context variables like #index, #value, #widget, etc.
 
     Supports:
     - Simple fields: {name}, {age}
-    - Special placeholders: {#index}, {#value}, {#self}
+    - Special placeholders: {#index}, {#value}, {#self}, {#widget}
     - Method calls: {name.upper()}
     - Function calls: {len(name)}
     - Format specs: {price:.2f}
 
     Args:
-        template: Format string like "{title} (#{#index})"
+        template: Format string like "{title} (#{#index})" or "{name} {'*' if #widget.is_dirty else ''}"
 
     Returns:
         A callable that takes (item, context_dict) and returns the formatted string.
+        Context dict can include: index, value, widget, etc.
 
     Example:
         formatter = create_item_formatter_with_context("{title} - Row #{#index}")
         result = formatter(task, {"index": 0, "value": True})  # "Buy milk - Row #0"
+
+        formatter = create_item_formatter_with_context("{name} {'*' if #widget.is_dirty else ''}")
+        result = formatter(request, {"widget": request_widget})  # "GET /users *"
     """
     # Parse the template once
     parsed = _parse_format_template(template)
@@ -1162,6 +1166,7 @@ def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str
     uses_self = any("#self" in f.expression for f in fields)
     uses_index = any("#index" in f.expression for f in fields)
     uses_value = any("#value" in f.expression for f in fields)
+    uses_widget = any("#widget" in f.expression for f in fields)
 
     def format_item_with_context(item: Any, extra_context: dict[str, Any]) -> str:
         """Format a single item using the template with extra context."""
@@ -1174,10 +1179,12 @@ def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str
             context["index"] = extra_context["index"]
         if uses_value and "value" in extra_context:
             context["value"] = extra_context["value"]
+        if uses_widget and "widget" in extra_context:
+            context["widget_ref"] = extra_context["widget"]
 
-        # Add any other extra context
+        # Add any other extra context (but not special keys that we handle above)
         for key, val in extra_context.items():
-            if key not in context:
+            if key not in context and key not in ("index", "value", "widget"):
                 context[key] = val
 
         # Add item attributes to context
@@ -1198,6 +1205,7 @@ def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str
                 eval_expr = eval_expr.replace("#self", "self")
                 eval_expr = eval_expr.replace("#index", "index")
                 eval_expr = eval_expr.replace("#value", "value")
+                eval_expr = eval_expr.replace("#widget", "widget_ref")
 
                 # Evaluate the expression
                 try:

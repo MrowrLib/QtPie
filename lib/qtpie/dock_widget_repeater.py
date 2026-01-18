@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import re
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QWidget
 
-from .bindings.format_binding import create_item_formatter
+from .bindings.format_binding import (
+    _extract_ast_names,  # pyright: ignore[reportPrivateUsage]
+    _parse_format_fields,  # pyright: ignore[reportPrivateUsage]
+    create_item_formatter_with_context,
+)
 from .dock import Dock
 from .repeaters.utils import create_item_wrapper, rebind_child_widgets
 
@@ -88,7 +92,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         self._items: list[tuple[Dock[W], Observable[Any] | ObservableProxy[Any], list[int]]] = []
 
         # Create title formatter using the real format binding system
-        self._title_formatter: Callable[[Any], str] = create_item_formatter(title)
+        self._title_formatter = create_item_formatter_with_context(title)
 
         # Create initial docks for existing items
         for i, item in enumerate(observable_list):
@@ -113,32 +117,59 @@ class DockWidgetRepeater[T, W: QWidget]:
         }
         return area_map.get(self._dock_area, Qt.DockWidgetArea.RightDockWidgetArea)
 
-    def _resolve_title(self, item: T) -> str:
+    def _resolve_title(self, item: T, widget: W | None = None) -> str:
         """Resolve title expression for an item using the format binding system."""
-        return self._title_formatter(item)
+        context: dict[str, Any] = {}
+        if widget is not None:
+            context["widget"] = widget
+        return self._title_formatter(item, context)
 
     def _subscribe_to_title_changes(
         self,
         item: T,
         wrapper: Observable[Any] | ObservableProxy[Any],
         dock_widget: QDockWidget,
+        widget: W,
     ) -> None:
-        """Subscribe to wrapper changes and update title reactively."""
-        # For Observable (primitive), subscribe directly
+        """Subscribe to all observables referenced in title and update reactively."""
+
+        def update_title() -> None:
+            if isinstance(wrapper, Observable):
+                new_title = self._resolve_title(wrapper.get(), widget)
+            else:
+                new_title = self._resolve_title(wrapper.unwrap(), widget)
+            dock_widget.setWindowTitle(new_title)
+
+        # Subscribe to item wrapper changes
         if isinstance(wrapper, Observable):
-
-            def on_value_change(new_value: Any) -> None:
-                new_title = self._resolve_title(new_value)
-                dock_widget.setWindowTitle(new_title)
-
-            wrapper.on_change(on_value_change)
+            wrapper.on_change(lambda _: update_title())
         else:
-            # For ObservableProxy, subscribe to any field change
-            def on_proxy_change() -> None:
-                new_title = self._resolve_title(wrapper.unwrap())
-                dock_widget.setWindowTitle(new_title)
+            wrapper.on_change(update_title)
 
-            wrapper.on_change(on_proxy_change)
+        # Parse title expression to find all referenced names
+        fields = _parse_format_fields(self._title_expr)
+        all_names: set[str] = set()
+        for field in fields:
+            # Normalize #widget to widget_ref for AST parsing
+            expr = field.expression.replace("#widget", "widget_ref").replace("#self", "self_ref")
+            all_names.update(_extract_ast_names(expr))
+
+        # Find observables on the widget (for #widget.* references)
+        if "widget_ref" in all_names:
+            # Look for any Observable attributes on the widget that are referenced
+            # Parse expressions like "widget_ref.is_dirty" to find "is_dirty"
+            for field in fields:
+                expr = field.expression
+                if "#widget" in expr:
+                    # Find all #widget.attr patterns
+                    for match in re.finditer(r"#widget\.(\w+)", expr):
+                        attr_name = match.group(1)
+                        if hasattr(widget, attr_name):
+                            attr = getattr(widget, attr_name)
+                            if isinstance(attr, Observable):
+                                attr.on_change(lambda _val: update_title())  # pyright: ignore[reportUnknownLambdaType,reportUnknownMemberType]
+                            elif isinstance(attr, (ObservableList, ObservableProxy)):
+                                attr.on_change(update_title)
 
     def _create_dock_features(self) -> QDockWidget.DockWidgetFeature:
         """Create dock widget features flags."""
@@ -182,8 +213,8 @@ class DockWidgetRepeater[T, W: QWidget]:
             # Also re-apply bindings on child Widget[T] instances that bind to parent's record
             rebind_child_widgets(widget)
 
-        # Resolve title
-        title = self._resolve_title(item)
+        # Resolve title (pass widget for #widget.* placeholders)
+        title = self._resolve_title(item, widget)
 
         # Create dock widget
         dock_widget = QDockWidget(title, self._window)
@@ -191,7 +222,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         dock_widget.setFeatures(self._create_dock_features())
 
         # Subscribe to title property changes for reactive updates
-        self._subscribe_to_title_changes(item, wrapper, dock_widget)
+        self._subscribe_to_title_changes(item, wrapper, dock_widget, widget)
 
         # Add to window
         main_window: QMainWindow = self._window
@@ -287,7 +318,7 @@ class DockWidgetRepeater[T, W: QWidget]:
                 return
 
             # Update title
-            new_title = self._resolve_title(new_item)
+            new_title = self._resolve_title(new_item, dock.widget)
             dock.dock_widget.setWindowTitle(new_title)
 
     def _on_clear(self, removed_items: list[T]) -> None:
