@@ -103,9 +103,14 @@ def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None
             all_selection_paths.add(field_info.selected_items.lstrip("_"))
         # Note: QTreeView uses selected_item and selected_items which are already
         # handled above (shared with QComboBox/QListView/QTableView)
-        # Dock group selection binding
+        # Dock group selection bindings
         if field_info.dock_group_selected_index is not None:
             all_selection_paths.add(field_info.dock_group_selected_index.lstrip("_"))
+        if field_info.dock_group_selected_dock is not None:
+            all_selection_paths.add(field_info.dock_group_selected_dock.lstrip("_"))
+        # Dock list selection binding (for list[Dock[W]])
+        if field_info.selected_dock is not None:
+            all_selection_paths.add(field_info.selected_dock.lstrip("_"))
 
     # Also check Variable[T, Dock[W]] and Variable[list[T], Dock[W]] fields
     # These store dock_info on the _VariableDescriptor, not in config.fields
@@ -119,8 +124,12 @@ def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None
                 all_selection_paths.add(dock_info["selected_index"].lstrip("_"))
             if dock_info.get("selected_item"):
                 all_selection_paths.add(dock_info["selected_item"].lstrip("_"))
+            if dock_info.get("selected_dock"):
+                all_selection_paths.add(dock_info["selected_dock"].lstrip("_"))
             if dock_info.get("dock_group_selected_index"):
                 all_selection_paths.add(dock_info["dock_group_selected_index"].lstrip("_"))
+            if dock_info.get("dock_group_selected_dock"):
+                all_selection_paths.add(dock_info["dock_group_selected_dock"].lstrip("_"))
 
     if not all_selection_paths:
         return

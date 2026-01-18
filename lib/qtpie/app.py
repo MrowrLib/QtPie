@@ -720,6 +720,13 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
 
             apply_variable_kwargs(self, variable_kwargs)
 
+        # Pre-create bare Variables for selection bindings BEFORE registering them
+        # This ensures that Variable[T | None] types used for selectedDock, selectedItem, etc.
+        # get created with Observable(None) rather than failing on UnionType
+        from .bindings.apply import pre_create_selection_variables
+
+        pre_create_selection_variables(self, config)  # type: ignore[arg-type]
+
         # Register Variables in state
         for var_name in config.variable_names:
             var = getattr(self, var_name, None)
@@ -1466,6 +1473,12 @@ def _create_docks_for_app(
 
     setup_dock_tab_options(window, config)
 
+    # Pre-create bare Variables for selection bindings BEFORE creating dock fields
+    # This allows groupSelectedDock="_var" to work with bare Variable[Dock[Any] | None] annotations
+    from .bindings.apply import pre_create_selection_variables
+
+    pre_create_selection_variables(app, config)  # type: ignore[arg-type]
+
     # First, create regular Dock[T] fields
     if config.dock_fields:
         _create_dock_fields_for_app(app, window, config)
@@ -1638,7 +1651,7 @@ def _create_dock_fields_for_app(
         anchor_dock.dock_widget.raise_()
 
     # Set up bindings for dock fields
-    _setup_dock_bindings_for_app(app, config, dock_info, created_docks, groups)
+    _setup_dock_bindings_for_app(app, window, config, dock_info, created_docks, groups)
 
 
 def _create_variable_dock_fields_for_app(
@@ -1791,15 +1804,17 @@ def _collect_dock_overrides_for_app(app: AppBase[Any], config: AppConfig) -> dic
 
 def _setup_dock_bindings_for_app(
     app: AppBase[Any],
+    window: QMainWindow,
     config: AppConfig,
     dock_info: dict[str, dict[str, Any]],
     created_docks: dict[str, Any],
     groups: dict[str, list[str]],
 ) -> None:
-    """Set up bindings for dock fields (visible=, floating=, title=, icon=, etc.)."""
+    """Set up bindings for dock fields (visible=, floating=, title=, icon=, groupSelectedIndex=, groupSelectedDock=)."""
     from qtpie.dock import Dock
 
-    groups_with_binding: set[str] = set()
+    groups_with_index_binding: set[str] = set()
+    groups_with_dock_binding: set[str] = set()
 
     for name in config.dock_fields:
         info = dock_info.get(name)
@@ -1824,14 +1839,33 @@ def _setup_dock_bindings_for_app(
         if fld.dock_floating:
             _setup_dock_floating_binding_for_app(app, dock, fld.dock_floating)
 
-        # groupSelectedIndex= binding
-        if fld.dock_group_selected_index and fld.dock_group:
+        # groupSelectedIndex= binding and/or groupSelectedIndexChanged= callback
+        # Either binding or callback (or both) can be specified
+        if (fld.dock_group_selected_index or fld.dock_group_selected_index_changed) and fld.dock_group:
             group_name = fld.dock_group
-            if group_name not in groups_with_binding:
-                groups_with_binding.add(group_name)
+            if group_name not in groups_with_index_binding:
+                groups_with_index_binding.add(group_name)
                 group_dock_names = groups.get(group_name, [])
                 if group_dock_names:
-                    _setup_group_selected_index_binding_for_app(app, fld.dock_group_selected_index, group_dock_names, created_docks)
+                    # Resolve callback if specified
+                    index_changed_cb = None
+                    if fld.dock_group_selected_index_changed:
+                        index_changed_cb = getattr(app, fld.dock_group_selected_index_changed, None)
+                    _setup_group_selected_index_binding_for_app(app, window, fld.dock_group_selected_index, group_dock_names, created_docks, index_changed_cb)
+
+        # groupSelectedDock= binding and/or groupSelectedDockChanged= callback
+        # Either binding or callback (or both) can be specified
+        if (fld.dock_group_selected_dock or fld.dock_group_selected_dock_changed) and fld.dock_group:
+            group_name = fld.dock_group
+            if group_name not in groups_with_dock_binding:
+                groups_with_dock_binding.add(group_name)
+                group_dock_names = groups.get(group_name, [])
+                if group_dock_names:
+                    # Resolve callback if specified
+                    dock_changed_cb = None
+                    if fld.dock_group_selected_dock_changed:
+                        dock_changed_cb = getattr(app, fld.dock_group_selected_dock_changed, None)
+                    _setup_group_selected_dock_binding_for_app(app, window, fld.dock_group_selected_dock, group_dock_names, created_docks, dock_changed_cb)
 
 
 def _setup_dock_visible_binding_for_app(app: AppBase[Any], dock: Any, binding: str) -> None:
@@ -1954,18 +1988,25 @@ def _setup_dock_icon_binding_for_app(app: AppBase[Any], dock: Any, icon: str) ->
 
 def _setup_group_selected_index_binding_for_app(
     app: AppBase[Any],
-    binding: str,
+    window: QMainWindow,
+    binding: str | None,
     group_dock_names: list[str],
     created_docks: dict[str, Any],
+    callback: Callable[[int], None] | None = None,
 ) -> None:
-    """Set up two-way binding between Variable and tab bar current index for a dock group."""
+    """Set up two-way binding between Variable and tab bar current index for a dock group.
+
+    Either binding or callback (or both) can be specified.
+    """
     from qtpy.QtCore import QTimer
     from qtpy.QtWidgets import QTabBar
 
     from qtpie.variable import _get_variable_observable
 
-    observable = _get_variable_observable(app, binding)
-    if observable is None:
+    observable = _get_variable_observable(app, binding) if binding else None
+
+    # Need either observable or callback to do anything
+    if observable is None and callback is None:
         return
 
     if not group_dock_names:
@@ -1976,10 +2017,7 @@ def _setup_group_selected_index_binding_for_app(
         return
 
     dock_widget = first_dock.dock_widget
-    window = app.window
-
-    if window is None:
-        return
+    # Note: window is passed as parameter - don't use app.window since it may not be set yet
 
     def find_tab_bar_for_dock() -> QTabBar | None:
         for tab_bar in window.findChildren(QTabBar):
@@ -1993,20 +2031,197 @@ def _setup_group_selected_index_binding_for_app(
         if tab_bar is None:
             return
 
-        def on_variable_change(index: int) -> None:
-            if 0 <= index < tab_bar.count() and tab_bar.currentIndex() != index:
-                tab_bar.setCurrentIndex(index)
+        # Variable -> Tab bar index (only if observable exists)
+        if observable is not None:
 
-        observable.on_change(on_variable_change)
-        on_variable_change(observable.get())
+            def on_variable_change(index: int) -> None:
+                if 0 <= index < tab_bar.count() and tab_bar.currentIndex() != index:
+                    tab_bar.setCurrentIndex(index)
 
+            observable.on_change(on_variable_change)
+            on_variable_change(observable.get())
+
+        # Tab bar index -> Variable and/or callback
         def on_tab_change(index: int) -> None:
-            if observable.get() != index:
+            if observable is not None and observable.get() != index:
                 observable.set(index)
+            if callback is not None:
+                callback(index)
 
         tab_bar.currentChanged.connect(on_tab_change)
 
     QTimer.singleShot(0, setup_binding)
+
+
+def _setup_group_selected_dock_binding_for_app(
+    app: AppBase[Any],
+    window: QMainWindow,
+    binding: str | None,
+    group_dock_names: list[str],
+    created_docks: dict[str, Any],
+    callback: Callable[[Any], None] | None = None,
+) -> None:
+    """Set up two-way binding between Variable and selected dock for a dock group.
+
+    Unlike groupSelectedIndex which binds to the tab bar index, this binds to
+    the actual Dock wrapper object. This allows users to:
+    - Check which dock is currently selected by identity
+    - Programmatically select a dock by setting the Variable
+
+    The Variable type should be Dock[Any] | None since static dock groups
+    can have heterogeneous dock types.
+
+    Either binding or callback (or both) can be specified.
+    """
+    from qtpy.QtCore import QTimer
+    from qtpy.QtWidgets import QTabBar
+
+    from qtpie.dock import Dock
+    from qtpie.variable import _get_variable_observable
+
+    observable = _get_variable_observable(app, binding) if binding else None
+
+    # Need either observable or callback to do anything
+    if observable is None and callback is None:
+        return
+
+    if not group_dock_names:
+        return
+
+    # Build ordered list of docks (same order as they appear in the tab bar)
+    docks: list[Dock[Any]] = []
+    for dock_name in group_dock_names:
+        dock = created_docks.get(dock_name)
+        if dock is not None:
+            docks.append(dock)
+
+    if not docks:
+        return
+
+    first_dock = docks[0]
+    dock_widget = first_dock.dock_widget
+    # Note: window is passed as parameter - don't use app.window since it may not be set yet
+
+    def find_tab_bar_for_dock() -> QTabBar | None:
+        for tab_bar in window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == dock_widget.windowTitle():
+                    return tab_bar
+        return None
+
+    def setup_binding() -> None:
+        tab_bar = find_tab_bar_for_dock()
+        if tab_bar is None:
+            return
+
+        # Build a mapping from tab title to dock for efficient lookup
+        title_to_dock: dict[str, Dock[Any]] = {d.dock_widget.windowTitle(): d for d in docks}
+
+        # Set initial value silently if observable exists (don't fire callbacks)
+        if observable is not None:
+            initial_index = tab_bar.currentIndex()
+            if 0 <= initial_index < tab_bar.count():
+                initial_title = tab_bar.tabText(initial_index)
+                initial_dock = title_to_dock.get(initial_title)
+                if initial_dock is not None:
+                    observable._value = initial_dock  # pyright: ignore[reportPrivateUsage]
+
+            # Variable -> Tab bar (raise the dock when Variable changes)
+            def on_variable_change(dock: Dock[Any] | None) -> None:
+                if dock is None:
+                    return
+                dock_title = dock.dock_widget.windowTitle()
+                for i in range(tab_bar.count()):
+                    if tab_bar.tabText(i) == dock_title:
+                        if tab_bar.currentIndex() != i:
+                            tab_bar.setCurrentIndex(i)
+                        break
+
+            observable.on_change(on_variable_change)
+
+        # Tab bar -> Variable and/or callback (update when tab changes)
+        def on_tab_change(index: int) -> None:
+            if 0 <= index < tab_bar.count():
+                tab_title = tab_bar.tabText(index)
+                dock = title_to_dock.get(tab_title)
+                if dock is not None:
+                    if observable is not None and observable.get() is not dock:
+                        observable.set(dock)
+                    if callback is not None:
+                        callback(dock)
+
+        tab_bar.currentChanged.connect(on_tab_change)
+
+        # Also track floating dock focus
+        _setup_floating_dock_focus_for_group_app(docks, observable, callback)
+
+    QTimer.singleShot(0, setup_binding)
+
+
+def _setup_floating_dock_focus_for_group_app(
+    docks: list[Any],
+    observable: Any,
+    callback: Callable[[Any], None] | None = None,
+) -> None:
+    """Set up focus tracking for floating docks in a static group (App version).
+
+    When a floating dock gains focus, update the selection Variable.
+    """
+    from qtpy.QtWidgets import QApplication
+
+    updating = [False]  # Mutable flag to prevent recursive updates
+
+    for dock in docks:
+        dock_widget = dock.dock_widget
+        focus_handler: list[Any] = [None]  # Store handler reference for cleanup
+
+        def make_on_focus_changed(d: Any) -> Any:
+            def on_focus_changed(old: QWidget | None, new: QWidget | None) -> None:
+                if updating[0]:
+                    return
+                if new is None or not d.dock_widget.isFloating():
+                    return
+                if not d.dock_widget.isAncestorOf(new) and new is not d.dock_widget:
+                    return
+
+                # This floating dock gained focus - update selection
+                updating[0] = True
+                try:
+                    if observable.get() is not d:
+                        observable.set(d)
+                        if callback is not None:
+                            callback(d)
+                finally:
+                    updating[0] = False
+
+            return on_focus_changed
+
+        def make_on_top_level_changed(d: Any, fh: list[Any]) -> Any:
+            def on_top_level_changed(floating: bool) -> None:
+                app = QApplication.instance()
+                if app is None or not isinstance(app, QApplication):
+                    return
+
+                if floating:
+                    # Dock became floating - start tracking focus
+                    fh[0] = make_on_focus_changed(d)
+                    app.focusChanged.connect(fh[0])
+                else:
+                    # Dock was re-docked - stop tracking focus
+                    if fh[0] is not None:
+                        try:
+                            app.focusChanged.disconnect(fh[0])
+                        except (TypeError, RuntimeError):
+                            pass
+                        fh[0] = None
+
+            return on_top_level_changed
+
+        dock_widget.topLevelChanged.connect(make_on_top_level_changed(dock, focus_handler))
+
+        # If already floating, start tracking immediately
+        if dock_widget.isFloating():
+            make_on_top_level_changed(dock, focus_handler)(True)
 
 
 def _apply_corner_assignments_for_app(window: QMainWindow, corners: dict[str, str]) -> None:
@@ -2114,11 +2329,25 @@ def _create_variable_list_dock_field_for_app(
     # (both bind to the tab bar index, which corresponds to list index)
     selected_index_obs = None
     selected_item_obs = None
+    selected_dock_obs = None
     index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
     if index_binding:
         selected_index_obs = _get_variable_observable(app, index_binding)
     if dock_info.get("selected_item"):
         selected_item_obs = _get_variable_observable(app, dock_info["selected_item"])
+    if dock_info.get("selected_dock"):
+        selected_dock_obs = _get_variable_observable(app, dock_info["selected_dock"])
+
+    # Resolve selection change callbacks
+    selected_index_changed_cb = None
+    selected_item_changed_cb = None
+    selected_dock_changed_cb = None
+    if dock_info.get("selected_index_changed"):
+        selected_index_changed_cb = getattr(app, dock_info["selected_index_changed"], None)
+    if dock_info.get("selected_item_changed"):
+        selected_item_changed_cb = getattr(app, dock_info["selected_item_changed"], None)
+    if dock_info.get("selected_dock_changed"):
+        selected_dock_changed_cb = getattr(app, dock_info["selected_dock_changed"], None)
 
     # Extract dock feature flags with defaults
     closable_val = dock_info.get("dock_closable")
@@ -2141,6 +2370,10 @@ def _create_variable_list_dock_field_for_app(
         widget_kwargs={},
         selected_index_observable=selected_index_obs,
         selected_item_observable=selected_item_obs,
+        selected_dock_observable=selected_dock_obs,
+        selected_index_changed_callback=selected_index_changed_cb,
+        selected_item_changed_callback=selected_item_changed_cb,
+        selected_dock_changed_callback=selected_dock_changed_cb,
     )
 
     # Store the repeater on the Variable's widget property

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
@@ -53,6 +54,10 @@ class DockWidgetRepeater[T, W: QWidget]:
         widget_kwargs: dict[str, Any] | None = None,
         selected_index_observable: Observable[int] | None = None,
         selected_item_observable: Observable[T | None] | None = None,
+        selected_dock_observable: Observable[Dock[W] | None] | None = None,
+        selected_index_changed_callback: Callable[[int], None] | None = None,
+        selected_item_changed_callback: Callable[[T | None], None] | None = None,
+        selected_dock_changed_callback: Callable[[Dock[W] | None], None] | None = None,
     ) -> None:
         """Initialize the dock widget repeater.
 
@@ -71,6 +76,10 @@ class DockWidgetRepeater[T, W: QWidget]:
             widget_kwargs: Keyword args for widget constructor.
             selected_index_observable: Observable to sync with selected tab index.
             selected_item_observable: Observable to sync with selected item.
+            selected_dock_observable: Observable to sync with selected dock wrapper.
+            selected_index_changed_callback: Callback when selected index changes.
+            selected_item_changed_callback: Callback when selected item changes.
+            selected_dock_changed_callback: Callback when selected dock changes.
         """
         self._obs_list = observable_list
         self._item_type = item_type
@@ -86,6 +95,10 @@ class DockWidgetRepeater[T, W: QWidget]:
         self._widget_kwargs = widget_kwargs or {}
         self._selected_index_obs = selected_index_observable
         self._selected_item_obs = selected_item_observable
+        self._selected_dock_obs = selected_dock_observable
+        self._selected_index_changed_cb = selected_index_changed_callback
+        self._selected_item_changed_cb = selected_item_changed_callback
+        self._selected_dock_changed_cb = selected_dock_changed_callback
         self._updating_selection = False  # Prevent recursive updates
 
         # Track: (dock, item_wrapper, index_holder)
@@ -182,6 +195,80 @@ class DockWidgetRepeater[T, W: QWidget]:
             features |= QDockWidget.DockWidgetFeature.DockWidgetMovable
         return features
 
+    def _setup_floating_dock_tracking(self, dock: Dock[W], index_holder: list[int]) -> None:
+        """Set up focus tracking for floating docks.
+
+        When a dock becomes floating and gains focus, update the selection
+        bindings to reflect that this dock is now "selected".
+        """
+        # Skip if no selection bindings or callbacks are configured
+        has_bindings = self._selected_index_obs is not None or self._selected_item_obs is not None or self._selected_dock_obs is not None
+        has_callbacks = self._selected_index_changed_cb is not None or self._selected_item_changed_cb is not None or self._selected_dock_changed_cb is not None
+        if not has_bindings and not has_callbacks:
+            return
+
+        dock_widget = dock.dock_widget
+        focus_handler: Any = None  # Store handler reference for cleanup
+
+        def on_focus_changed(old: QWidget | None, new: QWidget | None) -> None:
+            # Check if focus moved to this floating dock
+            if new is None or not dock_widget.isFloating():
+                return
+            if not dock_widget.isAncestorOf(new) and new is not dock_widget:
+                return
+            if self._updating_selection:
+                return
+
+            # This floating dock gained focus - update selection
+            idx = index_holder[0]
+            if idx < 0 or idx >= len(self._items):
+                return
+
+            self._updating_selection = True
+            try:
+                if self._selected_index_obs is not None:
+                    self._selected_index_obs.set(idx)
+                if self._selected_item_obs is not None:
+                    self._selected_item_obs.set(self._obs_list[idx])
+                if self._selected_dock_obs is not None:
+                    self._selected_dock_obs.set(dock)
+                # Fire callbacks
+                if self._selected_index_changed_cb is not None:
+                    self._selected_index_changed_cb(idx)
+                if self._selected_item_changed_cb is not None:
+                    self._selected_item_changed_cb(self._obs_list[idx])
+                if self._selected_dock_changed_cb is not None:
+                    self._selected_dock_changed_cb(dock)
+            finally:
+                self._updating_selection = False
+
+        def on_top_level_changed(floating: bool) -> None:
+            nonlocal focus_handler
+            from qtpy.QtWidgets import QApplication
+
+            app = QApplication.instance()
+            if app is None or not isinstance(app, QApplication):
+                return
+
+            if floating:
+                # Dock became floating - start tracking focus
+                focus_handler = on_focus_changed
+                app.focusChanged.connect(focus_handler)
+            else:
+                # Dock was re-docked - stop tracking focus
+                if focus_handler is not None:
+                    try:
+                        app.focusChanged.disconnect(focus_handler)
+                    except (TypeError, RuntimeError):
+                        pass  # Already disconnected
+                    focus_handler = None
+
+        dock_widget.topLevelChanged.connect(on_top_level_changed)
+
+        # If already floating at creation time, start tracking immediately
+        if dock_widget.isFloating():
+            on_top_level_changed(True)
+
     def _create_and_add_dock(self, index: int, item: T) -> None:
         """Create a dock for an item and add it to the window."""
         wrapper = create_item_wrapper(item, self._item_type)
@@ -264,6 +351,9 @@ class DockWidgetRepeater[T, W: QWidget]:
         close_filter = CloseFilter(self, index_holder, dock_widget)
         dock_widget.installEventFilter(close_filter)
 
+        # Set up floating dock focus tracking (selection updates when floating dock gains focus)
+        self._setup_floating_dock_tracking(dock, index_holder)
+
         # Insert at correct position
         self._items.insert(index, (dock, wrapper, index_holder))
 
@@ -281,7 +371,15 @@ class DockWidgetRepeater[T, W: QWidget]:
         # Set up selection bindings when the second dock is added -
         # that's when Qt creates the tab bar (tabification requires 2+ docks).
         # Note: Use `is not None` because Observable(None) is falsy
-        if count_before == 1 and (self._selected_index_obs is not None or self._selected_item_obs is not None):
+        has_bindings_or_callbacks = (
+            self._selected_index_obs is not None
+            or self._selected_item_obs is not None
+            or self._selected_dock_obs is not None
+            or self._selected_index_changed_cb is not None
+            or self._selected_item_changed_cb is not None
+            or self._selected_dock_changed_cb is not None
+        )
+        if count_before == 1 and has_bindings_or_callbacks:
             self._setup_selection_bindings()
 
     def _on_remove(self, index: int, item: T) -> None:
@@ -363,9 +461,11 @@ class DockWidgetRepeater[T, W: QWidget]:
             yield dock
 
     def _setup_selection_bindings(self) -> None:
-        """Set up two-way bindings for selectedIndex and selectedItem."""
+        """Set up two-way bindings for selectedIndex, selectedItem, and selectedDock."""
         # Note: Use `is None` because Observable(None) is falsy
-        if self._selected_index_obs is None and self._selected_item_obs is None:
+        has_bindings = self._selected_index_obs is not None or self._selected_item_obs is not None or self._selected_dock_obs is not None
+        has_callbacks = self._selected_index_changed_cb is not None or self._selected_item_changed_cb is not None or self._selected_dock_changed_cb is not None
+        if not has_bindings and not has_callbacks:
             return
 
         if not self._items:
@@ -412,6 +512,15 @@ class DockWidgetRepeater[T, W: QWidget]:
                                 self._selected_index_obs.set(i)
                             if self._selected_item_obs is not None:
                                 self._selected_item_obs.set(self._obs_list[i])
+                            if self._selected_dock_obs is not None:
+                                self._selected_dock_obs.set(dock)
+                            # Fire callbacks
+                            if self._selected_index_changed_cb is not None:
+                                self._selected_index_changed_cb(i)
+                            if self._selected_item_changed_cb is not None:
+                                self._selected_item_changed_cb(self._obs_list[i])
+                            if self._selected_dock_changed_cb is not None:
+                                self._selected_dock_changed_cb(dock)
                             break
                 finally:
                     self._updating_selection = False
@@ -433,6 +542,8 @@ class DockWidgetRepeater[T, W: QWidget]:
                         dock.raise_tab()
                         if self._selected_item_obs is not None:
                             self._selected_item_obs.set(self._obs_list[index])
+                        if self._selected_dock_obs is not None:
+                            self._selected_dock_obs.set(dock)
                     finally:
                         self._updating_selection = False
 
@@ -454,15 +565,55 @@ class DockWidgetRepeater[T, W: QWidget]:
                                 dock.raise_tab()
                                 if self._selected_index_obs is not None:
                                     self._selected_index_obs.set(i)
+                                if self._selected_dock_obs is not None:
+                                    self._selected_dock_obs.set(dock)
                                 break
                     finally:
                         self._updating_selection = False
 
                 self._selected_item_obs.on_change(on_item_changed)
 
-            # Set initial values
+            if self._selected_dock_obs is not None:
+
+                def on_dock_changed(dock: Dock[W] | None) -> None:
+                    if self._updating_selection:
+                        return
+                    if dock is None:
+                        return
+                    self._updating_selection = True
+                    try:
+                        # Find the index of this dock
+                        for i, (d, _, _) in enumerate(self._items):
+                            if d is dock:
+                                d.raise_tab()
+                                if self._selected_index_obs is not None:
+                                    self._selected_index_obs.set(i)
+                                if self._selected_item_obs is not None:
+                                    self._selected_item_obs.set(self._obs_list[i])
+                                break
+                    finally:
+                        self._updating_selection = False
+
+                self._selected_dock_obs.on_change(on_dock_changed)
+
+            # Set initial values silently (don't fire callbacks)
+            # This ensures Variables have the correct initial value but user's
+            # on_change handlers don't fire until actual user interaction
             if tab_bar.count() > 0:
-                on_tab_changed(tab_bar.currentIndex())
+                initial_index = tab_bar.currentIndex()
+                if initial_index >= 0:
+                    # Find which dock corresponds to this tab
+                    tab_title = tab_bar.tabText(initial_index)
+                    for i, (dock, _, _) in enumerate(self._items):
+                        if dock.dock_widget.windowTitle() == tab_title:
+                            # Silent set - directly set _value to bypass callbacks
+                            if self._selected_index_obs is not None:
+                                self._selected_index_obs._value = i  # pyright: ignore[reportPrivateUsage]
+                            if self._selected_item_obs is not None:
+                                self._selected_item_obs._value = self._obs_list[i]  # pyright: ignore[reportPrivateUsage]
+                            if self._selected_dock_obs is not None:
+                                self._selected_dock_obs._value = dock  # pyright: ignore[reportPrivateUsage]
+                            break
 
         # Defer binding setup to after Qt event loop processes the tabification
         QTimer.singleShot(0, find_and_bind_tab_bar)

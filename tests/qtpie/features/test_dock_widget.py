@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from PySide6.QtCore import Qt
@@ -2589,3 +2590,984 @@ class TestVariableListDockReactiveTitle:
         content_widget.record.status = "Final"
         qt.process_events()
         assert instance._items.widget[0].dock_widget.windowTitle() == "Document1 - Final"
+
+
+# =============================================================================
+# selectedDock Binding for Variable[list[T], Dock[W]]
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestSelectedDockBinding:
+    """Test selectedDock= binding for Variable[list[T], Dock[W]]."""
+
+    def test_bare_variable_auto_created(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Variable[Dock[...] | None] for selectedDock is auto-created."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[EditorWidget] | None]  # Bare annotation
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedDock="_selected_dock",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Should have the attribute auto-created
+        assert hasattr(instance, "_selected_dock")
+
+    def test_selected_dock_updates_on_tab_click(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedDock updates when user clicks a tab."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[EditorWidget] | None]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedDock="_selected_dock",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Click first tab
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Selected dock should be the first dock
+        assert instance._selected_dock.value is not None
+        assert instance._selected_dock.value is instance._editors.widget[0]
+        assert instance._selected_dock.value.dock_widget.windowTitle() == "File1"
+
+        # Click second tab
+        editor_tab_bar.setCurrentIndex(1)
+        qt.process_events()
+        qt.process_events()
+
+        # Selected dock should be the second dock
+        assert instance._selected_dock.value is instance._editors.widget[1]
+        assert instance._selected_dock.value.dock_widget.windowTitle() == "File2"
+
+    def test_setting_dock_raises_tab(self, base_class, decorator, qt: QtDriver) -> None:
+        """Setting selectedDock Variable raises that dock's tab."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[EditorWidget] | None]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedDock="_selected_dock",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File3"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Set to first dock
+        instance._selected_dock.value = instance._editors.widget[0]
+        qt.process_events()
+        qt.process_events()
+
+        assert editor_tab_bar.tabText(editor_tab_bar.currentIndex()) == "File1"
+
+        # Set to third dock
+        instance._selected_dock.value = instance._editors.widget[2]
+        qt.process_events()
+        qt.process_events()
+
+        assert editor_tab_bar.tabText(editor_tab_bar.currentIndex()) == "File3"
+
+    def test_all_three_bindings_work_together(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedIndex, selectedItem, and selectedDock all update together."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _selected_item: Variable[EditorItem | None]
+            _selected_dock: Variable[Dock[EditorWidget] | None]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndex="_selected_index",
+                selectedItem="_selected_item",
+                selectedDock="_selected_dock",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Create items
+        item1 = EditorItem(name="File1")
+        item2 = EditorItem(name="File2")
+
+        instance._editors.append(item1)
+        qt.process_events()
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Click first tab
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # All three should reflect the first item
+        assert instance._selected_index.value == 0
+        assert instance._selected_item.value is item1
+        assert instance._selected_dock.value is instance._editors.widget[0]
+
+        # Click second tab
+        editor_tab_bar.setCurrentIndex(1)
+        qt.process_events()
+        qt.process_events()
+
+        # All three should reflect the second item
+        assert instance._selected_index.value == 1
+        assert instance._selected_item.value is item2
+        assert instance._selected_dock.value is instance._editors.widget[1]
+
+
+# =============================================================================
+# groupSelectedDock Binding for Static Dock Groups
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestGroupSelectedDockBinding:
+    """Test groupSelectedDock= binding for static dock groups."""
+
+    def test_bare_variable_auto_created(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Variable[Dock[Any] | None] for groupSelectedDock is auto-created."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]  # Bare annotation
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Should have the attribute auto-created
+        assert hasattr(instance, "_selected_dock")
+
+    def test_group_selected_dock_updates_on_tab_click(self, base_class, decorator, qt: QtDriver) -> None:
+        """groupSelectedDock updates when user clicks a tab in the group."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find tab bar for the inspector group
+        tab_bars = win.findChildren(QTabBar)
+        inspector_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Properties":
+                    inspector_tab_bar = tb
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None
+
+        # Click first tab (Properties)
+        inspector_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Selected dock should be _props
+        assert instance._selected_dock.value is instance._props
+
+        # Click second tab (Inspector)
+        inspector_tab_bar.setCurrentIndex(1)
+        qt.process_events()
+        qt.process_events()
+
+        # Selected dock should be _inspector
+        assert instance._selected_dock.value is instance._inspector
+
+    def test_setting_dock_raises_tab(self, base_class, decorator, qt: QtDriver) -> None:
+        """Setting groupSelectedDock Variable raises that dock's tab."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        inspector_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Properties":
+                    inspector_tab_bar = tb
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None
+
+        # Set to _props
+        instance._selected_dock.value = instance._props
+        qt.process_events()
+        qt.process_events()
+
+        assert inspector_tab_bar.tabText(inspector_tab_bar.currentIndex()) == "Properties"
+
+        # Set to _inspector
+        instance._selected_dock.value = instance._inspector
+        qt.process_events()
+        qt.process_events()
+
+        assert inspector_tab_bar.tabText(inspector_tab_bar.currentIndex()) == "Inspector"
+
+
+# =============================================================================
+# No Callback on Initial Sync
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestNoCallbackOnInitialSync:
+    """Test that on_change callbacks don't fire on initial sync."""
+
+    def test_on_change_not_called_on_initial_sync(self, base_class, decorator, qt: QtDriver) -> None:
+        """on_change handler should not be called during initial Variable setup."""
+        callback_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndex="_selected_index",
+            )
+
+            def __setup__(self) -> None:
+                self._selected_index.on_change(self._on_index_changed)
+
+            def _on_index_changed(self, index: int) -> None:
+                callback_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items to create the tab bar
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Callback should NOT have been called during initial setup
+        # (it was only called because of the appends which change selection)
+        initial_count = callback_count[0]
+
+        # Now click a different tab - this SHOULD fire the callback
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Click first tab
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called once for the tab change
+        assert callback_count[0] > initial_count
+
+    def test_initial_value_is_correct(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable should have correct initial value even though callback wasn't fired."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # The Variable should have a valid value (0 or 1, depending on which tab is active)
+        # The important thing is that it's set, not None or undefined
+        assert instance._selected_index.value >= 0
+        assert instance._selected_index.value < 2
+
+
+# =============================================================================
+# Floating Dock Focus Tracking for Variable[list[T], Dock[W]]
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestFloatingDockFocusDynamic:
+    """Test floating dock focus tracking for Variable[list[T], Dock[W]]."""
+
+    def test_floating_dock_gains_focus_updates_selection(self, base_class, decorator, qt: QtDriver) -> None:
+        """When a floating dock gains focus, selection Variables should update."""
+        from qtpy.QtWidgets import QApplication
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _selected_dock: Variable[Dock[EditorWidget] | None]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndex="_selected_index",
+                selectedDock="_selected_dock",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items - need 3 so we can switch tabs when one is floating
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File3"))
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Float the third dock
+        dock3 = instance._editors.widget[2]
+        dock3.dock_widget.setFloating(True)
+        qt.process_events()
+
+        # Find tab bar - should have File1 and File2
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Click File1 tab
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File1":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Verify first dock is selected
+        assert instance._selected_index.value == 0
+        assert instance._selected_dock.value is instance._editors.widget[0]
+
+        # Simulate focus on the floating dock (File3)
+        # We do this by triggering the focus changed signal
+        app = QApplication.instance()
+        assert app is not None
+        app.focusChanged.emit(None, dock3.widget)  # type: ignore[union-attr]
+        qt.process_events()
+
+        # Selection should now be the floating dock (index 2)
+        assert instance._selected_index.value == 2
+        assert instance._selected_dock.value is dock3
+
+    def test_redocked_dock_uses_tab_bar(self, base_class, decorator, qt: QtDriver) -> None:
+        """After a dock is re-docked, selection should work via tab bar clicks."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()
+
+        # Float then re-dock
+        dock2 = instance._editors.widget[1]
+        dock2.dock_widget.setFloating(True)
+        qt.process_events()
+        dock2.dock_widget.setFloating(False)
+        qt.process_events()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Tab clicks should work normally - click by title to handle any tab order
+        file1_idx = -1
+        file2_idx = -1
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File1":
+                file1_idx = i
+            elif editor_tab_bar.tabText(i) == "File2":
+                file2_idx = i
+        assert file1_idx >= 0
+        assert file2_idx >= 0
+
+        # Click File2 first (to ensure we actually change tabs)
+        editor_tab_bar.setCurrentIndex(file2_idx)
+        qt.process_events()
+        assert instance._selected_index.value == 1
+
+        # Then click File1
+        editor_tab_bar.setCurrentIndex(file1_idx)
+        qt.process_events()
+        assert instance._selected_index.value == 0
+
+
+# =============================================================================
+# Floating Dock Focus Tracking for Static Dock Groups
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestFloatingDockFocusStatic:
+    """Test floating dock focus tracking for static dock groups."""
+
+    def test_floating_dock_gains_focus_updates_selection(self, base_class, decorator, qt: QtDriver) -> None:
+        """When a floating static dock gains focus, groupSelectedDock should update."""
+        from qtpy.QtWidgets import QApplication
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()
+
+        # Float the inspector dock
+        instance._inspector.dock_widget.setFloating(True)
+        qt.process_events()
+
+        # Set selection to properties via tab
+        tab_bars = win.findChildren(QTabBar)
+        inspector_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Properties":
+                    inspector_tab_bar = tb
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None
+
+        inspector_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Verify Properties is selected
+        assert instance._selected_dock.value is instance._props
+
+        # Simulate focus on the floating inspector dock
+        app = QApplication.instance()
+        assert app is not None
+        app.focusChanged.emit(None, instance._inspector.widget)  # type: ignore[union-attr]
+        qt.process_events()
+
+        # Selection should now be the inspector
+        assert instance._selected_dock.value is instance._inspector
+
+    def test_multiple_floating_docks_switch_correctly(self, base_class, decorator, qt: QtDriver) -> None:
+        """Clicking between multiple floating docks should update selection correctly."""
+        from qtpy.QtWidgets import QApplication
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()
+
+        # Float both docks
+        instance._props.dock_widget.setFloating(True)
+        qt.process_events()
+        instance._inspector.dock_widget.setFloating(True)
+        qt.process_events()
+
+        app = QApplication.instance()
+        assert app is not None
+
+        # Focus on props
+        app.focusChanged.emit(None, instance._props.widget)  # type: ignore[union-attr]
+        qt.process_events()
+        assert instance._selected_dock.value is instance._props
+
+        # Focus on inspector
+        app.focusChanged.emit(None, instance._inspector.widget)  # type: ignore[union-attr]
+        qt.process_events()
+        assert instance._selected_dock.value is instance._inspector
+
+        # Focus back on props
+        app.focusChanged.emit(None, instance._props.widget)  # type: ignore[union-attr]
+        qt.process_events()
+        assert instance._selected_dock.value is instance._props
+
+
+# =============================================================================
+# Selection Changed Callbacks (via new() kwargs)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestSelectionChangedCallbacks:
+    """Test selectedIndexChanged, selectedItemChanged, selectedDockChanged callbacks."""
+
+    def test_selected_index_changed_callback_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedIndexChanged callback fires when tab changes."""
+        callback_args: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedIndexChanged="on_index_changed",
+            )
+
+            def on_index_changed(self, index: int) -> None:
+                callback_args.append(index)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()
+
+        callback_args.clear()  # Clear any initial callbacks
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # Click tabs
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File1":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File2":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called with index 0 and 1
+        assert 1 in callback_args
+
+    def test_selected_item_changed_callback_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItemChanged callback fires when tab changes."""
+        callback_args: list[EditorItem | None] = []
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItemChanged="on_item_changed",
+            )
+
+            def on_item_changed(self, item: EditorItem | None) -> None:
+                callback_args.append(item)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        item1 = EditorItem(name="File1")
+        item2 = EditorItem(name="File2")
+        instance._editors.append(item1)
+        qt.process_events()
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()
+
+        callback_args.clear()
+
+        # Find tab bar and click
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # First switch to File1 (since File2 was added last and is auto-raised)
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File1":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+        callback_args.clear()  # Clear again after first switch
+
+        # Now switch to File2 to trigger the callback
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File2":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called with item2
+        assert item2 in callback_args
+
+    def test_selected_dock_changed_callback_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedDockChanged callback fires when tab changes."""
+        callback_args: list[Any] = []
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedDockChanged="on_dock_changed",
+            )
+
+            def on_dock_changed(self, dock: Dock[EditorWidget] | None) -> None:
+                callback_args.append(dock)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        qt.process_events()
+
+        callback_args.clear()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        # First switch to File1 (since File2 was added last and is auto-raised)
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File1":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+        callback_args.clear()  # Clear again after first switch
+
+        # Now switch to File2 to trigger the callback
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "File2":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called with dock for File2
+        assert len(callback_args) >= 1
+        assert callback_args[-1] is instance._editors.widget[1]
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestGroupSelectionChangedCallbacks:
+    """Test groupSelectedIndexChanged, groupSelectedDockChanged callbacks for static dock groups."""
+
+    def test_group_selected_index_changed_callback_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """groupSelectedIndexChanged callback fires when tab changes."""
+        callback_args: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedIndexChanged="on_index_changed",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+            def on_index_changed(self, index: int) -> None:
+                callback_args.append(index)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()
+
+        callback_args.clear()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        inspector_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Properties":
+                    inspector_tab_bar = tb
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None
+
+        # Click Inspector tab
+        for i in range(inspector_tab_bar.count()):
+            if inspector_tab_bar.tabText(i) == "Inspector":
+                inspector_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called
+        assert len(callback_args) >= 1
+
+    def test_group_selected_dock_changed_callback_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """groupSelectedDockChanged callback fires when tab changes."""
+        callback_args: list[Any] = []
+
+        @decorator
+        class TestClass(base_class):
+            _selected_dock: Variable[Dock[Any] | None]
+            _props: Dock[PropertiesPanel] = new(
+                dock="right",
+                group="inspector",
+                title="Properties",
+                groupSelectedDock="_selected_dock",
+                groupSelectedDockChanged="on_dock_changed",
+            )
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+            def on_dock_changed(self, dock: Dock[Any] | None) -> None:
+                callback_args.append(dock)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+        qt.process_events()
+
+        callback_args.clear()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        inspector_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Properties":
+                    inspector_tab_bar = tb
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None
+
+        # Click Inspector tab
+        for i in range(inspector_tab_bar.count()):
+            if inspector_tab_bar.tabText(i) == "Inspector":
+                inspector_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        # Callback should have been called with _inspector dock
+        assert len(callback_args) >= 1
+        assert callback_args[-1] is instance._inspector

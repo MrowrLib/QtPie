@@ -491,7 +491,10 @@ def _auto_new_bare_annotations(cls: type) -> None:
         origin = get_origin(annotation)
 
         # Skip Variables - have their own bare handling
+        # Also handle string annotations from 'from __future__ import annotations'
         if origin is Variable or annotation is Variable:
+            continue
+        if isinstance(annotation, str) and (annotation.startswith("Variable[") or annotation == "Variable"):
             continue
 
         # Skip list/dict/set - handled by repeaters

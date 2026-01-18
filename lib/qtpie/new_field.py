@@ -86,6 +86,11 @@ class NewField:
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
+        self.selected_dock: str | None = None  # Variable name for selectedDock binding (Dock wrapper)
+        # Selection change callbacks (method names)
+        self.selected_index_changed: str | None = None  # Callback for selectedIndexChanged
+        self.selected_item_changed: str | None = None  # Callback for selectedItemChanged
+        self.selected_dock_changed: str | None = None  # Callback for selectedDockChanged
         # QListView-specific selection bindings (multi)
         self.selected_indexes: str | None = None  # Variable name for selectedIndexes binding (list[int])
         self.selected_items_list: str | None = None  # Variable name for selectedItems binding (list[T]) for QListView
@@ -159,6 +164,10 @@ class NewField:
         self.dock_above: str | None = None  # above="_explorer" (vertical split)
         self.dock_group: str | None = None  # group="inspector" (tabify together)
         self.dock_group_selected_index: str | None = None  # groupSelectedIndex="_tab_index"
+        self.dock_group_selected_dock: str | None = None  # groupSelectedDock="_selected_dock"
+        # Static dock group selection change callbacks
+        self.dock_group_selected_index_changed: str | None = None  # groupSelectedIndexChanged="on_index_changed"
+        self.dock_group_selected_dock_changed: str | None = None  # groupSelectedDockChanged="on_dock_changed"
         self.dock_icon: str | None = None  # icon="terminal.svg" (tab icon)
         self.dock_visible: str | None = None  # visible="_show_dock" or "{expr}"
         self.dock_floating: str | None = None  # floating="_is_floating"
@@ -318,6 +327,11 @@ class NewField:
                         # Extract selection bindings
                         self.selected_index = self.kwargs.pop("selectedIndex", None)
                         self.selected_item = self.kwargs.pop("selectedItem", None)
+                        self.selected_dock = self.kwargs.pop("selectedDock", None)
+                        # Extract selection change callbacks
+                        self.selected_index_changed = self.kwargs.pop("selectedIndexChanged", None)
+                        self.selected_item_changed = self.kwargs.pop("selectedItemChanged", None)
+                        self.selected_dock_changed = self.kwargs.pop("selectedDockChanged", None)
 
                         # Store dock info for window.py to use
                         dock_info = {
@@ -333,6 +347,10 @@ class NewField:
                             "list_dock_widget_type": self.variable_list_dock_widget_type,
                             "selected_index": self.selected_index,
                             "selected_item": self.selected_item,
+                            "selected_dock": self.selected_dock,
+                            "selected_index_changed": self.selected_index_changed,
+                            "selected_item_changed": self.selected_item_changed,
+                            "selected_dock_changed": self.selected_dock_changed,
                         }
                         # Don't create a widget - this is a repeater, widget_type stays None
                         widget_type = None
@@ -1263,6 +1281,9 @@ class NewField:
         self.dock_title = source.pop("windowTitle", None) or source.pop("title", None)
         self.dock_group = source.pop("group", None)
         self.dock_group_selected_index = source.pop("groupSelectedIndex", None)
+        self.dock_group_selected_dock = source.pop("groupSelectedDock", None)
+        self.dock_group_selected_index_changed = source.pop("groupSelectedIndexChanged", None)
+        self.dock_group_selected_dock_changed = source.pop("groupSelectedDockChanged", None)
         self.dock_closable = source.pop("closable", None)
         self.dock_floatable = source.pop("floatable", None)
         self.dock_movable = source.pop("movable", None)
