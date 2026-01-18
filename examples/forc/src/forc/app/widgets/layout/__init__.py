@@ -1,3 +1,3 @@
-from .sidebar_widget import SidebarWidget
+from .sidebar_widget import CollectionsTreeWidget, SidebarWidget
 
-__all__ = ["SidebarWidget"]
+__all__ = ["SidebarWidget", "CollectionsTreeWidget"]

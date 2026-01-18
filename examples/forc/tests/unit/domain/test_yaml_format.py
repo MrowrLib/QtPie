@@ -18,6 +18,7 @@ from forc.domain.models import (
     Request,
     Workspace,
 )
+from observant import ObservableList
 
 
 class TestYamlFormatRequest:
@@ -153,10 +154,12 @@ class TestYamlFormatCollection:
     def test_save_and_load_collection_with_requests(self):
         coll = Collection(
             name="Users",
-            items=[
-                Request(name="Get Users", url="/users"),
-                Request(name="Create User", method=HttpMethod.POST, url="/users"),
-            ],
+            items=ObservableList(
+                [
+                    Request(name="Get Users", url="/users"),
+                    Request(name="Create User", method=HttpMethod.POST, url="/users"),
+                ]
+            ),
         )
         path = Path(self.tmp_dir) / "users"
 
@@ -172,11 +175,11 @@ class TestYamlFormatCollection:
     def test_save_and_load_nested_collection(self):
         inner = Collection(
             name="Auth",
-            items=[Request(name="Login", method=HttpMethod.POST)],
+            items=ObservableList([Request(name="Login", method=HttpMethod.POST)]),
         )
         outer = Collection(
             name="API",
-            items=[inner, Request(name="Health")],
+            items=ObservableList([inner, Request(name="Health")]),
         )
         path = Path(self.tmp_dir) / "api"
 
@@ -232,15 +235,19 @@ class TestYamlFormatWorkspace:
     def test_save_and_load_full_workspace(self):
         ws = Workspace(
             name="Full Project",
-            collections=[
-                Collection(
-                    name="Users API",
-                    items=[
-                        Request(name="Get Users"),
-                        Request(name="Create User", method=HttpMethod.POST),
-                    ],
-                ),
-            ],
+            collections=ObservableList(
+                [
+                    Collection(
+                        name="Users API",
+                        items=ObservableList(
+                            [
+                                Request(name="Get Users"),
+                                Request(name="Create User", method=HttpMethod.POST),
+                            ]
+                        ),
+                    ),
+                ]
+            ),
             environments=[
                 Environment(name="dev"),
             ],

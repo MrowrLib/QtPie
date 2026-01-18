@@ -1,6 +1,5 @@
-from .collections import CollectionsTreeWidget
 from .environments import EnvironmentSelectorWidget
-from .layout import SidebarWidget
+from .layout import CollectionsTreeWidget, SidebarWidget
 from .requests import RequestAddressBarWidget, RequestEditorWidget
 from .response import ResponseStatusBarWidget, ResponseViewerWidget
 

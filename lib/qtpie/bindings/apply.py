@@ -460,6 +460,13 @@ def apply_auto_bindings(
 
         # Resolve the binding source
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
+        logger.debug(
+            "Model binding resolution: bind_path=%r, source=%s (type=%s), widget=%s",
+            bind_path,
+            source,
+            type(source).__name__ if source else None,
+            type(widget_instance).__name__,
+        )
         if source is None:
             # Source not found yet - may need to wait for record propagation.
             # Skip for now; apply_auto_bindings will be called again when record is set.

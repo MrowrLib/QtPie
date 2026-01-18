@@ -17,6 +17,7 @@ from forc.domain.models import (
     Response,
     Workspace,
 )
+from observant import ObservableList
 
 
 class TestKeyValue:
@@ -118,16 +119,18 @@ class TestCollection:
     def test_create_with_requests(self):
         coll = Collection(
             name="Users",
-            items=[
-                Request(name="Get Users"),
-                Request(name="Create User", method=HttpMethod.POST),
-            ],
+            items=ObservableList(
+                [
+                    Request(name="Get Users"),
+                    Request(name="Create User", method=HttpMethod.POST),
+                ]
+            ),
         )
         assert_that(coll.items).is_length(2)
 
     def test_nested_collections(self):
-        inner = Collection(name="Auth", items=[Request(name="Login")])
-        outer = Collection(name="API", items=[inner, Request(name="Health")])
+        inner = Collection(name="Auth", items=ObservableList([Request(name="Login")]))
+        outer = Collection(name="API", items=ObservableList([inner, Request(name="Health")]))
         assert_that(outer.items).is_length(2)
         assert_that(outer.items[0]).is_instance_of(Collection)
         assert_that(outer.items[1]).is_instance_of(Request)
@@ -161,7 +164,7 @@ class TestWorkspace:
     def test_create_full(self):
         ws = Workspace(
             name="Project",
-            collections=[Collection(name="API")],
+            collections=ObservableList([Collection(name="API")]),
             environments=[Environment(name="dev"), Environment(name="prod")],
             active_environment="dev",
         )

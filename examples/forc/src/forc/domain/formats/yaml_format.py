@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import IO, Any, cast
 
 import cattrs
+from observant import ObservableList
 from ruamel.yaml import YAML
 
 from forc.domain.models import (
@@ -184,7 +185,7 @@ class YamlFormat:
         else:
             name = path.name
 
-        items: list[Request | Collection] = []
+        items: ObservableList[Request | Collection] = ObservableList()
 
         for item_path in sorted(path.iterdir()):
             if item_path.name.startswith("_"):
@@ -245,7 +246,7 @@ class YamlFormat:
         active_environment = str(active_environment_raw) if active_environment_raw else None
 
         # Load collections
-        collections: list[Collection] = []
+        collections: ObservableList[Collection] = ObservableList()
         collections_path = path / "collections"
         if collections_path.exists():
             for coll_path in sorted(collections_path.iterdir()):

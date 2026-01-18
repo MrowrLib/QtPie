@@ -401,6 +401,14 @@ def apply_model_binding(
     from qtpie.bindings.selection_tree import setup_tree_selection_bindings
     from qtpie.variable import Variable as VarType
 
+    logger.debug(
+        "apply_model_binding: source=%s (type=%s), bind_path=%r, widget=%s",
+        source,
+        type(source).__name__,
+        bind_path,
+        type(widget_instance).__name__,
+    )
+
     obs_list: ObservableList[Any] | None = None
     root_variable: VarType[Any] | None = None
 
@@ -453,7 +461,16 @@ def apply_model_binding(
             # Source might be Observable[list] or ObservableProxy with nested list
             # Create a synced ObservableList that updates when source changes
             val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()  # pyright: ignore[reportUnknownVariableType]
-            if isinstance(val, list):
+            logger.debug(
+                "apply_model_binding: unwrapped val=%s (type=%s), wrapper=%s",
+                val,  # pyright: ignore[reportUnknownArgumentType]
+                type(val).__name__ if val is not None else None,  # pyright: ignore[reportUnknownArgumentType]
+                type(wrapper).__name__,  # pyright: ignore[reportUnknownArgumentType]
+            )
+            if isinstance(val, ObservableList):
+                # Already an ObservableList - use it directly!
+                obs_list = val  # pyright: ignore[reportUnknownVariableType]
+            elif isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
             elif isinstance(val, dict):
                 # Convert dict to list of (key, value) tuples for table display
@@ -472,7 +489,10 @@ def apply_model_binding(
         is_dict_binding = True
     elif isinstance(source, Observable):
         val = source.get()  # pyright: ignore[reportUnknownVariableType]
-        if isinstance(val, list):
+        if isinstance(val, ObservableList):
+            # Already an ObservableList - use it directly!
+            obs_list = val  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(val, list):
             obs_list = ObservableList(cast(list[Any], val))
         elif isinstance(val, dict):
             obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
@@ -656,7 +676,7 @@ def apply_model_binding(
                 # Only re-sync if the nested list/dict object itself changed (identity change)
                 # Skip if it's the same collection just being mutated - this prevents expensive
                 # clear()+extend() on every append/remove to the nested list
-                if isinstance(nested_val, list):
+                if isinstance(nested_val, (list, ObservableList)):
                     nested_id = id(cast(list[Any], nested_val))
                     if nested_id != last_nested_list_id[0]:
                         logger.debug(

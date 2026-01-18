@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from observant import ObservableList
+
 from .auth import Auth
 
 
@@ -60,7 +62,7 @@ class Request:
 @dataclass
 class Collection:
     name: str
-    items: list[Request | Collection] = field(default_factory=lambda: [])
+    items: ObservableList[Request | Collection] = field(default_factory=lambda: ObservableList[Request | Collection]())
     parent: Collection | None = field(default=None, repr=False)
 
 
@@ -73,6 +75,6 @@ class Environment:
 @dataclass
 class Workspace:
     name: str
-    collections: list[Collection] = field(default_factory=lambda: [])
+    collections: ObservableList[Collection] = field(default_factory=lambda: ObservableList[Collection]())
     environments: list[Environment] = field(default_factory=lambda: [])
     active_environment: str | None = None

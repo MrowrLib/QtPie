@@ -163,7 +163,9 @@ class WorkspaceService:
         """Remove a top-level collection by name."""
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
-        self._workspace.collections = [c for c in self._workspace.collections if c.name != name]
+        for c in list(self._workspace.collections):
+            if c.name == name:
+                self._workspace.collections.remove(c)
 
     def remove_item(self, item: Request | Collection) -> None:
         """Remove an item from its parent collection or workspace.
