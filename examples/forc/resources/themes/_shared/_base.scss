@@ -1,0 +1,78 @@
+// Base styles - fonts, global resets, app-wide defaults
+
+// Main widget/window background
+QWidget {
+    background-color: $bg-primary;
+    color: $text-primary;
+    font-size: 13px;
+    font-family: "Segoe UI", "SF Pro Text", system-ui, sans-serif;
+}
+
+// Remove the box around focus
+*:focus {
+    outline: none;
+}
+
+// Main window
+QMainWindow {
+    background-color: $bg-base;
+}
+
+// Scrollbars
+QScrollBar:vertical {
+    background: $scrollbar-track;
+    width: 10px;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background: $scrollbar-thumb;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: $scrollbar-thumb-hover;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: $scrollbar-track;
+    height: 10px;
+    border: none;
+}
+
+QScrollBar::handle:horizontal {
+    background: $scrollbar-thumb;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: $scrollbar-thumb-hover;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+// Labels
+QLabel {
+    background: transparent;
+    padding: 2px;
+}
+
+// Tool tips
+QToolTip {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    padding: 4px 8px;
+}

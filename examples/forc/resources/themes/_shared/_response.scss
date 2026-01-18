@@ -1,0 +1,53 @@
+// Response viewer widget styles
+
+#ResponseViewerWidget {
+    background-color: $bg-primary;
+    padding: 8px;
+}
+
+// Status bar
+#ResponseStatusBarWidget {
+    background-color: $bg-secondary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+}
+
+#ResponseStatusBarWidget QLabel {
+    font-size: 12px;
+    padding: 0 8px;
+}
+
+#ResponseStatusBarWidget QLabel#_status {
+    font-weight: 600;
+}
+
+#ResponseStatusBarWidget QLabel#_time {
+    color: $text-secondary;
+}
+
+#ResponseStatusBarWidget QLabel#_size {
+    color: $text-secondary;
+}
+
+// Response body tab
+#ResponseBodyTabContent {
+    padding: 8px;
+}
+
+#ResponseBodyTabContent QPlainTextEdit {
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+// Response headers tab
+#ResponseHeadersTabContent {
+    padding: 8px;
+}
+
+// Response cookies tab
+#ResponseCookiesTabContent {
+    padding: 8px;
+}

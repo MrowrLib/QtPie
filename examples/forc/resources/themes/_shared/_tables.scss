@@ -1,0 +1,126 @@
+// Table and tree view styles
+
+// Table view
+QTableView {
+    background-color: $bg-primary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    gridline-color: $border-subtle;
+    selection-background-color: $accent;
+    selection-color: white;
+}
+
+QTableView::item {
+    padding: 6px 10px;
+    border: none;
+}
+
+QTableView::item:hover {
+    background-color: $bg-hover;
+}
+
+QTableView::item:selected {
+    background-color: $accent;
+}
+
+// Header
+QHeaderView {
+    background-color: $bg-secondary;
+}
+
+QHeaderView::section {
+    background-color: $bg-secondary;
+    color: $text-secondary;
+    border: none;
+    border-right: 1px solid $border-subtle;
+    border-bottom: 1px solid $border-default;
+    padding: 8px 10px;
+    font-weight: 600;
+}
+
+QHeaderView::section:hover {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+}
+
+QHeaderView::section:last {
+    border-right: none;
+}
+
+// Tree view
+QTreeView {
+    background-color: $bg-primary;
+    color: $text-primary;
+    border: none;
+    selection-background-color: transparent;
+}
+
+QTreeView::item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin: 1px 4px;
+}
+
+QTreeView::item:hover {
+    background-color: $bg-hover;
+}
+
+QTreeView::item:selected {
+    background-color: $bg-selected;
+    color: $text-primary;
+}
+
+QTreeView::item:selected:active {
+    background-color: $accent-muted;
+}
+
+// Branch indicators (expand/collapse arrows)
+QTreeView::branch {
+    background: transparent;
+}
+
+QTreeView::branch:has-siblings:!adjoins-item {
+    border-image: none;
+}
+
+QTreeView::branch:has-siblings:adjoins-item {
+    border-image: none;
+}
+
+QTreeView::branch:!has-children:!has-siblings:adjoins-item {
+    border-image: none;
+}
+
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:closed:has-children:has-siblings {
+    border-image: none;
+}
+
+QTreeView::branch:open:has-children:!has-siblings,
+QTreeView::branch:open:has-children:has-siblings {
+    border-image: none;
+}
+
+// List view
+QListView {
+    background-color: $bg-primary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+}
+
+QListView::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px 4px;
+}
+
+QListView::item:hover {
+    background-color: $bg-hover;
+}
+
+QListView::item:selected {
+    background-color: $accent;
+    color: white;
+}

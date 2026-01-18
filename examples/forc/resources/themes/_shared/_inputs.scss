@@ -1,0 +1,132 @@
+// Input styles - QLineEdit, QComboBox, QPlainTextEdit, QTextEdit
+
+// Line edit (single line input)
+QLineEdit {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 10px;
+    selection-background-color: $accent;
+    selection-color: white;
+}
+
+QLineEdit:hover {
+    border-color: $border-strong;
+}
+
+QLineEdit:focus {
+    border-color: $border-focus;
+    background-color: $bg-primary;
+}
+
+QLineEdit:disabled {
+    background-color: $bg-tertiary;
+    color: $text-muted;
+}
+
+QLineEdit::placeholder {
+    color: $text-placeholder;
+}
+
+// URL input (bigger, more prominent)
+#RequestAddressBarWidget QLineEdit {
+    font-size: 14px;
+    padding: 8px 12px;
+}
+
+// Combo box (dropdown)
+QComboBox {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 10px;
+    padding-right: 24px;
+    min-width: 80px;
+}
+
+QComboBox:hover {
+    border-color: $border-strong;
+}
+
+QComboBox:focus {
+    border-color: $border-focus;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    // Using text-based arrow via font
+    image: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    selection-background-color: $accent;
+    selection-color: white;
+    padding: 4px;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 6px 10px;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    background-color: $bg-hover;
+}
+
+// Plain text edit (multiline)
+QPlainTextEdit,
+QTextEdit {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 8px;
+    selection-background-color: $accent;
+    selection-color: white;
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+    font-size: 13px;
+}
+
+QPlainTextEdit:focus,
+QTextEdit:focus {
+    border-color: $border-focus;
+}
+
+// Spin box
+QSpinBox,
+QDoubleSpinBox {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+QSpinBox:focus,
+QDoubleSpinBox:focus {
+    border-color: $border-focus;
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button,
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    background-color: $bg-tertiary;
+    border: none;
+    width: 16px;
+}
+
+QSpinBox::up-button:hover,
+QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover {
+    background-color: $bg-hover;
+}

@@ -1,0 +1,64 @@
+// Sidebar widget styles
+
+#SidebarWidget {
+    background-color: $bg-secondary;
+    border-right: 1px solid $border-default;
+}
+
+#SidebarWidget QLabel#header {
+    font-size: 14px;
+    font-weight: 600;
+    color: $text-primary;
+    padding: 12px;
+    background-color: $bg-secondary;
+}
+
+// New collection/request buttons row
+#SidebarWidget QPushButton {
+    background-color: transparent;
+    border: 1px dashed $border-default;
+    color: $text-secondary;
+    padding: 8px 12px;
+    margin: 4px;
+    font-size: 12px;
+}
+
+#SidebarWidget QPushButton:hover {
+    border-color: $accent;
+    color: $accent;
+    background-color: rgba(124, 58, 237, 0.08);
+}
+
+#SidebarWidget QPushButton:disabled {
+    color: $text-muted;
+    border-color: $border-subtle;
+}
+
+// Collections tree
+#CollectionsTreeWidget {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidget QTreeView {
+    background-color: transparent;
+    font-size: 13px;
+}
+
+// Cookie manager button
+#SidebarWidget QPushButton#_cookie_manager_button {
+    border-style: solid;
+    margin-top: 8px;
+}
+
+// Environment selector
+#EnvironmentSelectorWidget {
+    padding: 8px;
+    border-top: 1px solid $border-default;
+}
+
+#EnvironmentSelectorWidget QLabel {
+    font-size: 11px;
+    color: $text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

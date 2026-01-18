@@ -1,0 +1,68 @@
+// Tab widget styles
+
+QTabWidget {
+    background: transparent;
+}
+
+QTabWidget::pane {
+    background-color: $bg-primary;
+    border: 1px solid $border-default;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+}
+
+QTabBar {
+    background: transparent;
+}
+
+QTabBar::tab {
+    background-color: $bg-secondary;
+    color: $text-secondary;
+    border: 1px solid $border-default;
+    border-bottom: none;
+    padding: 8px 16px;
+    margin-right: 2px;
+    border-radius: 4px 4px 0 0;
+}
+
+QTabBar::tab:hover {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+}
+
+QTabBar::tab:selected {
+    background-color: $bg-primary;
+    color: $text-primary;
+    border-bottom: 2px solid $accent;
+}
+
+QTabBar::tab:!selected {
+    margin-top: 2px;
+}
+
+// Close button on tabs (if any)
+QTabBar::close-button {
+    image: none;
+    subcontrol-position: right;
+}
+
+QTabBar::close-button:hover {
+    background-color: $error-muted;
+    border-radius: 2px;
+}
+
+// Tab widget in document mode (flatter, for request tabs at top)
+QTabBar[documentMode="true"]::tab {
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 10px 16px;
+}
+
+QTabBar[documentMode="true"]::tab:selected {
+    border-bottom-color: $accent;
+}
+
+QTabBar[documentMode="true"]::tab:hover:!selected {
+    border-bottom-color: $border-strong;
+}

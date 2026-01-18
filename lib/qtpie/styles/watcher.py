@@ -239,9 +239,12 @@ class ScssWatcher(QObject):
                 qss = self._qss_path.read_text()
                 self._target.setStyleSheet(qss)
                 self.stylesheetApplied.emit()
-        except Exception:
+        except Exception as e:
             # Don't crash on SCSS errors - just keep old styles
-            pass
+            import traceback
+
+            print(f"[SCSS ERROR] {e}")
+            traceback.print_exc()
 
     def stop(self) -> None:
         """Stop watching."""

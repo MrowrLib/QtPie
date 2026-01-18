@@ -1,15 +1,7 @@
+// Dark Theme
+// Import colors first, then shared styles that use those colors
+
+@import "_colors.scss";
 @import "../_shared/_shared.scss";
 
-/* Example styles below just to show some of the app's main identifiers */
-
-#RequestWidget QWidget {
-  color: red;
-}
-
-#RequestWidget #request_editor QWidget {
-  color: purple;
-}
-
-#RequestWidget #response_viewer QWidget {
-  color: green;
-}
+// Dark-theme-specific overrides (if any) go here

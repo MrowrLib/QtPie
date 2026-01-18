@@ -1,0 +1,58 @@
+// Dark Theme Color Palette
+// Inspired by Insomnia's dark purple aesthetic
+
+// Backgrounds (darkest to lightest)
+$bg-base: #121212;
+$bg-primary: #1e1e1e;
+$bg-secondary: #2a2a2a;
+$bg-tertiary: #353535;
+$bg-hover: #404040;
+$bg-selected: #4a4a4a;
+
+// Text
+$text-primary: #e4e4e4;
+$text-secondary: #a0a0a0;
+$text-muted: #707070;
+$text-placeholder: #606060;
+
+// Accent (Insomnia-style purple)
+$accent: #7c3aed;
+$accent-hover: #6d28d9;
+$accent-active: #5b21b6;
+$accent-muted: #4c1d95;
+
+// Semantic colors
+$success: #22c55e;
+$success-muted: #166534;
+$warning: #f59e0b;
+$warning-muted: #b45309;
+$error: #ef4444;
+$error-muted: #b91c1c;
+$info: #3b82f6;
+$info-muted: #1d4ed8;
+
+// HTTP Method colors
+$method-get: #22c55e;
+$method-post: #f59e0b;
+$method-put: #3b82f6;
+$method-patch: #8b5cf6;
+$method-delete: #ef4444;
+$method-options: #ec4899;
+$method-head: #06b6d4;
+
+// Borders
+$border-subtle: #2a2a2a;
+$border-default: #3a3a3a;
+$border-strong: #4a4a4a;
+$border-focus: $accent;
+
+// Scrollbar
+$scrollbar-track: $bg-secondary;
+$scrollbar-thumb: #4a4a4a;
+$scrollbar-thumb-hover: #5a5a5a;
+
+// Status codes
+$status-success: $success;      // 2xx
+$status-redirect: $info;        // 3xx
+$status-client-error: $warning; // 4xx
+$status-server-error: $error;   // 5xx

@@ -133,7 +133,7 @@ class ThemeWatcher(QObject):
         qss_path = self._get_qss_output_path(theme)
         theme_path = theme.path if isinstance(theme.path, Path) else Path(theme.path)
 
-        # Search paths include the theme folder AND the themes root directory
+        # Search paths include the theme folder, themes root, and _shared folder
         # This allows @import '../_shared/...' to work and watches shared folders
         search_paths: list[str] = []
         if theme_path.is_dir():
@@ -141,8 +141,16 @@ class ThemeWatcher(QObject):
         themes_dir = self._theme_set.themes_dir
         if isinstance(themes_dir, Path):
             search_paths.append(str(themes_dir))
+            # Add _shared folder so imports within _shared.scss can find siblings
+            shared_dir = themes_dir / "_shared"
+            if shared_dir.is_dir():
+                search_paths.append(str(shared_dir))
         elif not themes_dir.startswith(":/"):
             search_paths.append(themes_dir)
+            # Add _shared folder so imports within _shared.scss can find siblings
+            shared_dir = Path(themes_dir) / "_shared"
+            if shared_dir.is_dir():
+                search_paths.append(str(shared_dir))
 
         return ScssWatcher(
             self._target,

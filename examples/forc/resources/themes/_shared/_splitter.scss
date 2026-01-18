@@ -1,0 +1,25 @@
+// Splitter handle styles
+
+QSplitter {
+    background: transparent;
+}
+
+QSplitter::handle {
+    background-color: $border-default;
+}
+
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+QSplitter::handle:hover {
+    background-color: $accent;
+}
+
+QSplitter::handle:pressed {
+    background-color: $accent-hover;
+}
