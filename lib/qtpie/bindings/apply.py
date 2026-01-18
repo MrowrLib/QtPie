@@ -214,13 +214,39 @@ def _resolve_or_create_variable(
             return var
 
     # Try to find Variable in parent hierarchy (for selection bindings to parent Variables)
+    # First check _logical_parent (set during widget creation, before Qt parenting)
     from qtpy.QtWidgets import QApplication
 
+    from qtpie.state import QtPieState
+
     current: Any = host
+
+    # Check logical parent chain first (may be set before Qt parent)
+    # Walk up the logical parent hierarchy until we find the Variable or run out of logical parents
+    logical_current = host
+    while True:
+        lp_state = getattr(logical_current, "_qtpie", None)
+        if not isinstance(lp_state, QtPieState) or lp_state._logical_parent is None:  # pyright: ignore[reportPrivateUsage]
+            break
+        logical_parent = lp_state._logical_parent  # pyright: ignore[reportPrivateUsage]
+        for attr_name in [path, lookup_name, underscore_name]:
+            found = _try_get_variable(logical_parent, attr_name)
+            if found is not None:
+                return found
+        # Move up the logical parent chain
+        logical_current = logical_parent
+        # Also update current for Qt parent traversal starting point
+        current = logical_parent
+
+    # Then search Qt parent hierarchy
     while True:
         if not hasattr(current, "parent") or not callable(current.parent):
             break
-        parent: Any = current.parent()
+        try:
+            parent: Any = current.parent()
+        except RuntimeError:
+            # parent() can fail if __init__ hasn't completed yet
+            break
         if parent is None:
             break
 

@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """Integration tests for sending HTTP requests."""
 
 from assertpy import assert_that
@@ -8,6 +9,12 @@ from forc.domain.models import Collection, Request, Workspace
 from qtpy.QtWidgets import QDockWidget
 
 from qtpie.testing import QtDriver
+
+
+def click_item(main_window: ForcWindow, item: Request | Collection) -> None:
+    """Simulate clicking an item in the tree."""
+    main_window.current_workspace_item.value = item
+    main_window._on_current_workspace_item_changed()
 
 
 def find_request_by_name(workspace: Workspace, name: str) -> Request | None:
@@ -53,7 +60,7 @@ class TestSendRequest:
         assert request is not None, "Echo (GET) request not found in workspace"
 
         # Open the request in a tab
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         # Get the RequestWidget
@@ -79,7 +86,7 @@ class TestSendRequest:
         request = find_request_by_name(workspace, "Echo (GET)")
         assert request is not None
 
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         request_widget = get_request_widget(main_window)
@@ -102,7 +109,7 @@ class TestSendRequest:
         request = find_request_by_name(workspace, "Echo (GET)")
         assert request is not None
 
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         request_widget = get_request_widget(main_window)

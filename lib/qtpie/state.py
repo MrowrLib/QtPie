@@ -81,7 +81,7 @@ class QtPieStateBase:
         result = {name for name, var in self.variables.items() if name != "record" and var.is_dirty.get()}
         # Include record dirty fields (prefixed with "record.")
         if self._record is not None:
-            for field_name in self._record.dirty_fields:
+            for field_name in self._record.dirty_fields:  # pyright: ignore[reportUnknownVariableType]
                 result.add(f"record.{field_name}")
         return result
 
@@ -383,7 +383,7 @@ class QtPieViewModelBase:
 class QtPieState(QtPieStateBase):
     """Instance-level QtPie state for Widget/Window."""
 
-    __slots__ = ("_view_model", "_widget_is_dirty", "_widget_is_valid", "_selection_bindings_connected", "_handlers")
+    __slots__ = ("_view_model", "_widget_is_dirty", "_widget_is_valid", "_selection_bindings_connected", "_handlers", "_logical_parent")
 
     def __init__(self, host: Any) -> None:
         super().__init__(host)
@@ -394,6 +394,9 @@ class QtPieState(QtPieStateBase):
         self._selection_bindings_connected: set[str] = set()
         # Store signal handlers for disconnection when bindings are reapplied
         self._handlers: dict[str, Any] = {}
+        # Logical parent reference for hierarchy lookups (set when child is created via new())
+        # This is needed because Qt parenting may not be set yet when bindings are applied
+        self._logical_parent: Any = None
 
     @property
     def view_model(self) -> QtPieViewModel:

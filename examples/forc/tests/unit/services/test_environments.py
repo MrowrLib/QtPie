@@ -169,11 +169,11 @@ class TestEnvironmentsServiceResolution:
         assert_that(result).is_equal_to("Bearer dev-key-123")
 
     def test_resolve_disabled_not_resolved(self):
-        result = self.svc.resolve("${DISABLED}")
+        result = self.svc.resolve("${DISABLED}", strict=False)
         assert_that(result).is_equal_to("${DISABLED}")
 
     def test_resolve_unresolved_left_as_is(self):
-        result = self.svc.resolve("${UNKNOWN}")
+        result = self.svc.resolve("${UNKNOWN}", strict=False)
         assert_that(result).is_equal_to("${UNKNOWN}")
 
     def test_resolve_uses_active_environment(self):
@@ -183,7 +183,7 @@ class TestEnvironmentsServiceResolution:
 
     def test_resolve_no_active_environment(self):
         self.svc.set_active(None)
-        result = self.svc.resolve("${BASE_URL}")
+        result = self.svc.resolve("${BASE_URL}", strict=False)
         assert_that(result).is_equal_to("${BASE_URL}")
 
     def test_resolve_fallback_to_system_env(self):

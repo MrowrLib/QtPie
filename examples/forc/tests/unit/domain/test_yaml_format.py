@@ -108,7 +108,7 @@ class TestYamlFormatRequest:
         assert isinstance(loaded.auth, ApiKeyAuth)
         assert_that(loaded.auth.key).is_equal_to("X-API-Key")
         assert_that(loaded.auth.value).is_equal_to("my-key")
-        assert_that(loaded.auth.location).is_equal_to("header")
+        assert_that(loaded.auth.location).is_equal_to(ApiKeyLocation.HEADER)
 
 
 class TestYamlFormatEnvironment:

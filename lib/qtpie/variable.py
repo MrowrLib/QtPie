@@ -997,6 +997,19 @@ class _VariableDescriptor[T]:
                     for key in prop_keys_to_remove:
                         del widget_kwargs_copy[key]
 
+                    # Extract format string kwargs (e.g., label="{kind}", placeholderText="{name}")
+                    # These need reactive binding, not direct passing to widget constructor
+                    from .bindings import is_format_string
+
+                    format_string_kwargs: dict[str, str] = {}
+                    format_keys_to_remove: list[str] = []
+                    for key, value in widget_kwargs_copy.items():
+                        if isinstance(value, str) and is_format_string(value):
+                            format_string_kwargs[key] = value
+                            format_keys_to_remove.append(key)
+                    for key in format_keys_to_remove:
+                        del widget_kwargs_copy[key]
+
                     try:
                         widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
@@ -1092,6 +1105,17 @@ class _VariableDescriptor[T]:
                                 elif isinstance(source, Observable):
                                     setter_fn(source.get())
                                     source.on_change(setter_fn)
+
+                    # Apply format string kwargs (e.g., label="{kind}", placeholderText="{name}")
+                    if format_string_kwargs:
+                        from .bindings import create_format_binding
+
+                        for kwarg_name, format_template in format_string_kwargs.items():
+                            # Find the setter for this kwarg (e.g., label -> setLabel, placeholderText -> setPlaceholderText)
+                            setter_name = f"set{kwarg_name[0].upper()}{kwarg_name[1:]}"
+                            setter_method = getattr(widget_instance, setter_name, None)
+                            if setter_method is not None and callable(setter_method):
+                                create_format_binding(obj, format_template, setter_method)  # type: ignore[arg-type]
 
                 var.widget = widget_instance  # Use setter
 

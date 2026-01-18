@@ -74,13 +74,20 @@ def create_and_track(
     qt: QtDriver,
     decorated_class: type,
     base_class: type,
+    **kwargs: Any,
 ) -> Any:
     """Create an instance and track it appropriately based on type.
 
     - Widget, Window, Menu, WidgetBaseLabel: QWidget-based, tracked with qt.track()
     - AppBase: Not a QWidget, just instantiated directly
+
+    Args:
+        qt: QtDriver instance for tracking
+        decorated_class: The decorated class to instantiate
+        base_class: The base class (used to determine tracking behavior)
+        **kwargs: Additional kwargs passed to the constructor (e.g., Variable values)
     """
-    instance = decorated_class()
+    instance = decorated_class(**kwargs)
 
     if base_class is AppBase:
         # AppBase is not a QWidget, but if it has a window, track that

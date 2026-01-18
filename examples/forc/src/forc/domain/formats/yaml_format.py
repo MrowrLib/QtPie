@@ -98,6 +98,31 @@ def _create_converter() -> cattrs.Converter:
 
     converter.register_structure_hook(Request | Collection, structure_collection_item)
 
+    # Request/Collection - exclude parent references to avoid circular serialization
+    def unstructure_request(request: Request) -> dict[str, Any]:
+        return {
+            "name": request.name,
+            "method": request.method.value,
+            "url": request.url,
+            "headers": converter.unstructure(request.headers),
+            "query_params": converter.unstructure(request.query_params),
+            "body": request.body,
+            "body_fields": converter.unstructure(request.body_fields),
+            "body_type": request.body_type.value,
+            "auth": converter.unstructure(request.auth) if request.auth else None,
+            # Exclude 'collection' - it's a runtime-only parent reference
+        }
+
+    def unstructure_collection(collection: Collection) -> dict[str, Any]:
+        return {
+            "name": collection.name,
+            "items": [converter.unstructure(item) for item in collection.items],
+            # Exclude 'parent' - it's a runtime-only parent reference
+        }
+
+    converter.register_unstructure_hook(Request, unstructure_request)
+    converter.register_unstructure_hook(Collection, unstructure_collection)
+
     return converter
 
 
@@ -169,7 +194,14 @@ class YamlFormat:
             elif item_path.suffix == self.extension:
                 items.append(self.load_request(item_path))
 
-        return Collection(name=name, items=items)
+        collection = Collection(name=name, items=items)
+        # Set parent references
+        for item in items:
+            if isinstance(item, Request):
+                item.collection = collection
+            else:
+                item.parent = collection
+        return collection
 
     def save_collection(self, collection: Collection, path: Path) -> None:
         """Save a collection to a directory."""

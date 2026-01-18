@@ -7,10 +7,11 @@ from forc.services import WorkspaceService
 from qtpie import Dialog, DialogButton, Variable, Widget, dialog, new, widget
 
 
-@dialog(layout="form", size=(300, 100), title="New {#record}")
-class NameDialog(Dialog[str]):
-    name: Variable[str, QLineEdit] = new()(label="{#record}", placeholderText="Enter {#record} name...")
-    _ok: DialogButton = new(enabled="{collection_name != ''}")
+@dialog(layout="form", size=(400, 100), title="{kind}")
+class TextValueDialog(Dialog):
+    kind: Variable[str]
+    value: Variable[str, QLineEdit] = new()(label="{kind}", placeholderText="Enter {kind} name...")
+    _ok: DialogButton = new(enabled="{value != ''}")
     _cancel: DialogButton
 
 
@@ -42,10 +43,14 @@ class SidebarWidget(Widget):
         CookieManagerDialog.show_dialog()
 
     def _on_new_collection(self):
-        dialog = NameDialog()
-        dialog.record = "Collection"
+        dialog = TextValueDialog(kind="Collection")
         if dialog.show_dialog():
-            self.workspace_service().add_collection(dialog.name())
+            self.workspace_service().add_collection(dialog.value())
 
     def _on_new_request(self):
-        print("New Request button clicked!")
+        ...
+        # dialog = TextValueDialog(kind="Request")
+        # if dialog.show_dialog():
+        #     self.workspace_service().add_request(
+        #         dialog.value()
+        #     )

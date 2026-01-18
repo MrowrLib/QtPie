@@ -542,6 +542,8 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
     original_init = cls.__init__
 
     def wrapped_init(self: Menu[Any], *args: Any, **kwargs: Any) -> None:
+        nonlocal config
+
         from qtpy.QtGui import QAction
 
         from .bindings.apply import apply_auto_bindings, apply_property_bindings, apply_reactive_widget_props
@@ -549,25 +551,33 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
         # Extract _qtpie_bindings before passing kwargs to original init
         _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
 
-        nonlocal config
+        # Extract Variable kwargs (match against variable_names and required_bindings)
+        variable_kwargs: dict[str, Any] = {}
+        all_variable_names = set(config.variable_names) | config.required_bindings
+        for var_name in all_variable_names:
+            if var_name in kwargs:
+                variable_kwargs[var_name] = kwargs.pop(var_name)
+
+        # Initialize QtPieState early so Variables have somewhere to register
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)  # pyright: ignore[reportPrivateUsage]
 
         # Apply parent variable bindings BEFORE original_init runs
         # This ensures required Variables exist before child widgets are created
         if _qtpie_bindings is not None:
-            # Initialize QtPieState early so Variables have somewhere to register
-            if not hasattr(self, "_qtpie"):
-                self._qtpie = QtPieState(self)  # pyright: ignore[reportPrivateUsage]
             parent, bindings = _qtpie_bindings
             from .new_fields import _apply_variable_bindings_direct
 
             _apply_variable_bindings_direct(parent, self, bindings)
 
+        # Apply constructor variable kwargs
+        if variable_kwargs:
+            from .new_fields import apply_variable_kwargs
+
+            apply_variable_kwargs(self, variable_kwargs)
+
         # Call original __init__
         original_init(self, *args, **kwargs)
-
-        # Initialize QtPie state (if not already done for bindings)
-        if not hasattr(self, "_qtpie"):
-            self._qtpie = QtPieState(self)  # pyright: ignore[reportPrivateUsage]
 
         # Set menu title
         menu_text = config.text

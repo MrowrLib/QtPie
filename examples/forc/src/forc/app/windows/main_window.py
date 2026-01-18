@@ -11,7 +11,7 @@ from qtpie.variable import Variable
 @window(
     title="Forc :: Free Open-source Rest Client",
     icon=":/icon.png",
-    collection_item_clicked="on_collection_item_clicked",
+    on_current_workspace_item_changed="_on_current_workspace_item_changed",
     dockTabsClosable=True,
     dockTabsHideTitleBar=True,
     dockTabsMovable=True,
@@ -20,13 +20,11 @@ from qtpie.variable import Variable
 )
 class ForcWindow(Window):
     ### Signals ###
-    collection_item_clicked = Signal(Request)
+    on_current_workspace_item_changed = Signal()
 
     ### Variables ###
+    current_workspace_item: Variable[Collection | Request | None] = new(None)
     selected_request_index: Variable[int]
-
-    # for testing...
-    collection_items_for_list: Variable[list[Request | Collection]] = new(None)
 
     ### Menus ###
     file_menu: FileMenu
@@ -42,7 +40,10 @@ class ForcWindow(Window):
     )
 
     ### Methods ###
-    def on_collection_item_clicked(self, item: Request | Collection) -> None:
+    def _on_current_workspace_item_changed(self) -> None:
+        print("Signal: Current workspace item changed.")
+        print("Current workspace item changed:", self.current_workspace_item())
+        item = self.current_workspace_item()
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:
             for index, editor in enumerate(self.editors.value):

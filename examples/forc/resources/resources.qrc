@@ -2,6 +2,6 @@
 <RCC version="1.0">
   <qresource prefix="/">
     <file alias="styles.qss">styles.qss</file>
-    <file alias="icon.png">images/icon.png</file>
+    <file alias="icon.png">images/icon_transparent_256.png</file>
   </qresource>
 </RCC>

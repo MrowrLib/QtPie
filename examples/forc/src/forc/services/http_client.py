@@ -51,7 +51,7 @@ class HttpClientService:
     def _resolve(self, text: str) -> str:
         """Resolve ${VAR} placeholders using workspace service."""
         if self._workspace is None:
-            raise RuntimeError(f"HttpClientService has no workspace_service - cannot resolve variables in: {text}")
+            return text  # No workspace = no variable resolution
         return self._workspace.resolve_variables(text)
 
     def close(self) -> None:

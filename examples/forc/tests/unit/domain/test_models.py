@@ -44,7 +44,7 @@ class TestHttpMethod:
 class TestBodyType:
     def test_all_types_exist(self):
         types = [t.value for t in BodyType]
-        assert_that(types).contains("none", "json", "form", "text", "xml")
+        assert_that(types).contains("none", "json", "form_urlencoded", "form_data", "text", "xml")
 
 
 class TestAuth:

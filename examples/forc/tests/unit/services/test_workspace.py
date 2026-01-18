@@ -1,10 +1,11 @@
+# pyright: reportPrivateUsage=false
 """Tests for workspace service."""
 
 import tempfile
 from pathlib import Path
 
 from assertpy import assert_that
-from forc.domain.models import Collection, Environment, HttpMethod, KeyValue, Request
+from forc.domain.models import Environment, HttpMethod, KeyValue, Request
 from forc.services.workspace import WorkspaceService
 
 
@@ -114,16 +115,16 @@ class TestWorkspaceServiceCollections:
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_add_collection(self):
-        coll = Collection(name="Users API", items=[Request(name="Get Users")])
-        self.svc.add_collection(coll)
+        coll = self.svc.add_collection("Users API")
+        self.svc.add_request("Get Users", coll)
 
         assert self.svc.workspace is not None
         assert_that(self.svc.workspace.collections).is_length(1)
         assert_that(self.svc.workspace.collections[0].name).is_equal_to("Users API")
 
     def test_remove_collection(self):
-        self.svc.add_collection(Collection(name="API 1"))
-        self.svc.add_collection(Collection(name="API 2"))
+        self.svc.add_collection("API 1")
+        self.svc.add_collection("API 2")
         self.svc.remove_collection("API 1")
 
         assert self.svc.workspace is not None
@@ -191,12 +192,14 @@ class TestWorkspaceServiceVariableResolution:
         self.svc.add_environment(env)
         self.svc.set_active_environment("dev")
 
-        result = self.svc.resolve_variables("${DISABLED}")
+        # strict=False to test "left as-is" behavior
+        result = self.svc._environments.resolve("${DISABLED}", strict=False)
 
         assert_that(result).is_equal_to("${DISABLED}")  # Left as-is
 
     def test_unresolved_left_as_is(self):
-        result = self.svc.resolve_variables("${UNKNOWN_VAR}")
+        # strict=False to test "left as-is" behavior
+        result = self.svc._environments.resolve("${UNKNOWN_VAR}", strict=False)
         assert_that(result).is_equal_to("${UNKNOWN_VAR}")
 
 
@@ -269,15 +272,13 @@ class TestWorkspaceServicePersistence:
         # Create with data
         self.svc.create("Full Project", self.tmp_dir / "project")
         self.svc.add_environment(Environment(name="dev", variables=[KeyValue(key="X", value="Y")]))
-        self.svc.add_collection(
-            Collection(
-                name="API",
-                items=[
-                    Request(name="Get", method=HttpMethod.GET, url="/get"),
-                    Request(name="Post", method=HttpMethod.POST, url="/post"),
-                ],
-            )
-        )
+        api_coll = self.svc.add_collection("API")
+        get_req = self.svc.add_request("Get", api_coll)
+        get_req.method = HttpMethod.GET
+        get_req.url = "/get"
+        post_req = self.svc.add_request("Post", api_coll)
+        post_req.method = HttpMethod.POST
+        post_req.url = "/post"
         self.svc.set_active_environment("dev")
         self.svc.save()
 

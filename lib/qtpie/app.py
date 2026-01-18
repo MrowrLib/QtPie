@@ -696,7 +696,14 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
     config = cls._qtpie_config
 
     def wrapped_init(self: AppBase[Any], *args: Any, **kwargs: Any) -> None:
-        # Call original __init__
+        # Extract Variable kwargs (match against variable_names and required_bindings)
+        variable_kwargs: dict[str, Any] = {}
+        all_variable_names = set(config.variable_names) | config.required_bindings
+        for var_name in all_variable_names:
+            if var_name in kwargs:
+                variable_kwargs[var_name] = kwargs.pop(var_name)
+
+        # Call original __init__ (QApplication MUST be initialized first)
         original_init(self, *args, **kwargs)
 
         # Initialize state for dirty tracking and validation
@@ -706,6 +713,12 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)  # type: ignore[attr-defined]
         state = self._qtpie  # type: ignore[attr-defined]
+
+        # Apply constructor variable kwargs
+        if variable_kwargs:
+            from .new_fields import apply_variable_kwargs
+
+            apply_variable_kwargs(self, variable_kwargs)
 
         # Register Variables in state
         for var_name in config.variable_names:

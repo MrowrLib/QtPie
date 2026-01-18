@@ -65,9 +65,10 @@ class _ShowDialogDescriptor[T]:
                 record: T | None = None,
                 *,
                 parent: QWidget | None = None,
+                **kwargs: Any,
             ) -> DialogResult[T]:
                 assert objtype is not None
-                instance = objtype()
+                instance = objtype(**kwargs)  # Forward kwargs to constructor
                 if record is not None and hasattr(instance, "record"):
                     instance.record = record  # type: ignore[assignment]
                 if parent is not None:
@@ -630,19 +631,34 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
         # Extract _qtpie_bindings before passing kwargs to original init
         _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
 
+        # Extract Variable kwargs (match against variable_names and required_bindings)
+        variable_kwargs: dict[str, Any] = {}
+        all_variable_names = set(config.variable_names) | config.required_bindings
+        for var_name in all_variable_names:
+            if var_name in kwargs:
+                variable_kwargs[var_name] = kwargs.pop(var_name)
+
         # Set translation context
         from qtpie.translations import set_translation_context
 
         set_translation_context(type(self).__name__)
 
+        # Initialize QtPieState early so Variables have somewhere to register
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)
+
         # Apply parent variable bindings BEFORE original_init runs
         if _qtpie_bindings is not None:
-            if not hasattr(self, "_qtpie"):
-                self._qtpie = QtPieState(self)
             parent, bindings = _qtpie_bindings
             from .new_fields import _apply_variable_bindings_direct
 
             _apply_variable_bindings_direct(parent, self, bindings)
+
+        # Apply constructor variable kwargs
+        if variable_kwargs:
+            from .new_fields import apply_variable_kwargs
+
+            apply_variable_kwargs(self, variable_kwargs)
 
         # Call original __init__
         original_init(self, *args, **kwargs)
@@ -814,6 +830,8 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             var_label_translatable: Any = None
                             grid: GridPosition | None = None
                             target_layout_name: str | None = None
+                            is_format_label = False
+                            raw_label: Any = None
                             if isinstance(descriptor, _VariableDescriptor):
                                 if descriptor.exclude_from_layout:
                                     continue
@@ -821,6 +839,11 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                 if isinstance(raw_label, Translatable):
                                     var_label = raw_label.resolve()
                                     var_label_translatable = raw_label
+                                elif isinstance(raw_label, str) and "{" in raw_label and "}" in raw_label:
+                                    # Format string label like "{kind}" - use placeholder, will be set by binding
+                                    # Use space (not empty string) so Qt creates the QLabel widget
+                                    var_label = " "  # Placeholder - binding sets initial value immediately
+                                    is_format_label = True
                                 else:
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
@@ -833,6 +856,17 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             if target_layout_name is None:
                                 _validate_layout_params(name, config.layout, var_label, grid)
                                 _add_to_layout(target, var.widget, config.layout, var_label, grid, var_label_translatable)
+
+                                # Apply format binding to form label if it was a format string
+                                if is_format_label and config.layout == "form" and isinstance(raw_label, str):
+                                    from qtpy.QtWidgets import QFormLayout
+
+                                    from .bindings import create_format_binding
+
+                                    form_layout = cast(QFormLayout, target)
+                                    label_widget = form_layout.labelForField(var.widget)
+                                    if label_widget is not None:  # pyright: ignore[reportUnnecessaryComparison] - Qt returns None for spanningWidget
+                                        create_format_binding(self, raw_label, label_widget.setText)  # type: ignore[union-attr]
                             else:
                                 _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
 

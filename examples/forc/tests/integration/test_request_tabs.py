@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """Integration tests for request tab management."""
 
 from assertpy import assert_that
@@ -7,6 +8,12 @@ from forc.domain.models import Collection, Request, Workspace
 from qtpie.testing import QtDriver
 
 from .helpers import click_tree_item, find_tree_index
+
+
+def click_item(main_window: ForcWindow, item: Request | Collection) -> None:
+    """Simulate clicking an item in the tree."""
+    main_window.current_workspace_item.value = item
+    main_window._on_current_workspace_item_changed()
 
 
 def find_first_request(workspace: Workspace) -> Request:
@@ -42,7 +49,7 @@ class TestClickRequestOpensTab:
         request = find_first_request(workspace)
 
         # Simulate clicking the request in the tree
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         # Verify tab was opened
@@ -56,11 +63,11 @@ class TestClickRequestOpensTab:
         request = find_first_request(workspace)
 
         # Open the request
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         # Click it again
-        main_window.on_collection_item_clicked(request)
+        click_item(main_window, request)
         qt.process_events()
 
         # Should still only have one tab
@@ -86,8 +93,8 @@ class TestClickRequestOpensTab:
             return
 
         # Open both requests
-        main_window.on_collection_item_clicked(requests[0])
-        main_window.on_collection_item_clicked(requests[1])
+        click_item(main_window, requests[0])
+        click_item(main_window, requests[1])
         qt.process_events()
 
         # Should have two tabs
@@ -112,17 +119,17 @@ class TestClickRequestOpensTab:
             return
 
         # Open first request
-        main_window.on_collection_item_clicked(requests[0])
+        click_item(main_window, requests[0])
         qt.process_events()
         assert_that(main_window.selected_request_index.value).is_equal_to(0)
 
         # Open second request
-        main_window.on_collection_item_clicked(requests[1])
+        click_item(main_window, requests[1])
         qt.process_events()
         assert_that(main_window.selected_request_index.value).is_equal_to(1)
 
         # Click first request again - should switch back
-        main_window.on_collection_item_clicked(requests[0])
+        click_item(main_window, requests[0])
         qt.process_events()
         assert_that(main_window.selected_request_index.value).is_equal_to(0)
 
@@ -132,7 +139,7 @@ class TestClickRequestOpensTab:
         """Clicking a Collection (folder) should not open a tab."""
         collection = workspace.collections[0]
 
-        main_window.on_collection_item_clicked(collection)
+        click_item(main_window, collection)
         qt.process_events()
 
         # No tabs should be opened

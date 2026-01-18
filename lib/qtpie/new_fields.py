@@ -130,7 +130,9 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             if child_record_type is not None and "record" not in bindings_dict:
                                 bindings_dict["record"] = field.bind
 
-                    if bindings_dict:
+                    # Pass parent reference to QtPie classes so they can find parent Variables
+                    # during binding setup (only if field type has _qtpie_config - Widget, Window, Menu, Dialog, App)
+                    if hasattr(field.field_type, "_qtpie_config"):
                         resolved_kwargs["_qtpie_bindings"] = (self, bindings_dict)
 
                     instance = field.field_type(*resolved_args, **resolved_kwargs)
@@ -656,6 +658,59 @@ def _apply_literal_binding(child: Any, child_var_name: str, value: Any) -> None:
 
     # Assign to the child - triggers descriptor's __set__
     setattr(child, child_var_name, child_var)
+
+
+def apply_variable_kwargs(instance: Any, variable_kwargs: dict[str, Any]) -> None:
+    """Apply constructor kwargs to Variables.
+
+    This function handles three cases:
+    - Static value (int, str, etc.) → set as initial value on the Variable
+    - Observable → bind to it (share the Observable)
+    - Variable → bind to its underlying Observable
+
+    For bare Variables (required bindings), we create a new Variable directly
+    since the descriptor would try to resolve from parent hierarchy.
+
+    Args:
+        instance: The widget/window/dialog/menu/app instance
+        variable_kwargs: Dict mapping variable names to values
+    """
+    from observant import Observable
+
+    # Import descriptor types for isinstance checks
+    # These are internal types but we need them to distinguish bare vs initialized Variables
+    from .variable import (
+        _RequiredBindingDescriptor,  # pyright: ignore[reportPrivateUsage]
+        _VariableDescriptor,  # pyright: ignore[reportPrivateUsage]
+    )
+
+    for var_name, value in variable_kwargs.items():
+        if isinstance(value, Observable):
+            # Share the Observable directly - create a Variable wrapping it
+            shared_var: Variable[Any] = Variable(value)  # pyright: ignore[reportUnknownArgumentType]
+            setattr(instance, var_name, shared_var)
+        elif isinstance(value, Variable):
+            # Share the underlying Observable from the other Variable
+            shared_var = Variable(value.observable)  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+            setattr(instance, var_name, shared_var)
+        else:
+            # Static value - need to handle bare Variables differently
+            # Check if this is a _RequiredBindingDescriptor (bare Variable)
+            cls_attr = getattr(type(instance), var_name, None)  # pyright: ignore[reportUnknownArgumentType]
+            if isinstance(cls_attr, _RequiredBindingDescriptor):
+                # For bare Variables, create a new Variable with the static value
+                # (Can't use getattr because it would try to resolve from parent)
+                wrapper: Observable[Any] = Observable(value)
+                new_var: Variable[Any] = Variable(wrapper)  # pyright: ignore[reportUnknownArgumentType]
+                setattr(instance, var_name, new_var)
+            elif isinstance(cls_attr, _VariableDescriptor):
+                # For Variables with = new(), access normally and set value
+                var = getattr(instance, var_name)
+                var.value = value  # pyright: ignore[reportUnknownMemberType]
+            else:
+                # Fallback - try normal access
+                var = getattr(instance, var_name)
+                var.value = value
 
 
 def _is_menu_marker_type(field_type: type | None) -> bool:

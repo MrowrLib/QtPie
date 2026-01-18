@@ -19,13 +19,79 @@ def _try_get_variable_from_obj(obj: Any, var_name: str) -> Any | None:
     return None
 
 
+def find_variable_in_hierarchy(context: Any, name: str) -> Any | None:
+    """Find a Variable by name in the widget hierarchy (without unwrapping value).
+
+    Searches in this order:
+    1. The context object itself (with and without underscore prefix)
+    2. Logical parent chain (set during widget creation, before Qt parenting)
+    3. Parent widget hierarchy (walking up parent() chain)
+    4. QApplication.instance() for app-level Variables
+
+    Args:
+        context: The context object (Widget, Window, App, or Menu instance).
+        name: The variable name to resolve (e.g., "count" or "_count").
+
+    Returns:
+        The Variable object if found, None otherwise.
+    """
+    from qtpie.state import QtPieState
+
+    # Try on context itself
+    found = _try_get_variable_from_obj(context, name)
+    if found is not None:
+        return found
+
+    current: Any = context
+
+    # Walk up the logical parent chain (set during widget creation, before Qt parenting)
+    logical_current = context
+    while True:
+        lp_state = getattr(logical_current, "_qtpie", None)
+        if not isinstance(lp_state, QtPieState) or lp_state._logical_parent is None:  # pyright: ignore[reportPrivateUsage]
+            break
+        logical_parent = lp_state._logical_parent  # pyright: ignore[reportPrivateUsage]
+        found = _try_get_variable_from_obj(logical_parent, name)
+        if found is not None:
+            return found
+        # Move up the logical parent chain
+        logical_current = logical_parent
+        # Also update current for Qt parent traversal starting point
+        current = logical_parent
+
+    # Search Qt parent hierarchy
+    if hasattr(current, "parent") and callable(current.parent):
+        from qtpy.QtWidgets import QApplication
+
+        while True:
+            parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+            if parent_obj is None:
+                break
+
+            found = _try_get_variable_from_obj(parent_obj, name)
+            if found is not None:
+                return found
+
+            current = parent_obj
+
+        # Check QApplication.instance() for app-level Variables
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            found = _try_get_variable_from_obj(app_instance, name)
+            if found is not None:
+                return found
+
+    return None
+
+
 def resolve_var(context: Any, name: str) -> Any:
     """Resolve a variable by name from the binding context.
 
     Searches in this order:
     1. The context object itself (with and without underscore prefix)
-    2. Parent widget hierarchy (walking up parent() chain)
-    3. QApplication.instance() for app-level Variables
+    2. Logical parent chain (set during widget creation, before Qt parenting)
+    3. Parent widget hierarchy (walking up parent() chain)
+    4. QApplication.instance() for app-level Variables
 
     Args:
         context: The context object (Widget, Window, App, or Menu instance).
@@ -42,6 +108,7 @@ def resolve_var(context: Any, name: str) -> Any:
         count = self.var("count")  # Gets current value of _count Variable
         item = self.var("selected_item")  # May resolve from parent widget
     """
+    from qtpie.state import QtPieState
     from qtpie.variable import Variable
 
     # Try on context itself (with underscore variants)
@@ -52,11 +119,27 @@ def resolve_var(context: Any, name: str) -> Any:
                 return raw_attr.value  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
             return raw_attr  # pyright: ignore[reportUnknownVariableType]
 
-    # Search parent hierarchy (if context has parent() method)
-    if hasattr(context, "parent") and callable(context.parent):
+    current: Any = context
+
+    # Walk up the logical parent chain (set during widget creation, before Qt parenting)
+    logical_current = context
+    while True:
+        lp_state = getattr(logical_current, "_qtpie", None)
+        if not isinstance(lp_state, QtPieState) or lp_state._logical_parent is None:  # pyright: ignore[reportPrivateUsage]
+            break
+        logical_parent = lp_state._logical_parent  # pyright: ignore[reportPrivateUsage]
+        found_var = _try_get_variable_from_obj(logical_parent, name)
+        if found_var is not None:
+            return found_var.value  # pyright: ignore[reportUnknownMemberType]
+        # Move up the logical parent chain
+        logical_current = logical_parent
+        # Also update current for Qt parent traversal starting point
+        current = logical_parent
+
+    # Search Qt parent hierarchy
+    if hasattr(current, "parent") and callable(current.parent):
         from qtpy.QtWidgets import QApplication
 
-        current: Any = context
         while True:
             parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
             if parent_obj is None:

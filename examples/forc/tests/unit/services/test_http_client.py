@@ -246,7 +246,7 @@ class TestHttpClientBodyTypes:
             name="Test",
             method=HttpMethod.POST,
             url="https://example.com",
-            body="key=value",
+            body_fields=[KeyValue(key="key", value="value")],
             body_type=BodyType.FORM_URLENCODED,
         )
         svc.send(req)

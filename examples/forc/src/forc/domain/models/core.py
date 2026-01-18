@@ -54,12 +54,14 @@ class Request:
     body_fields: list[KeyValue] = field(default_factory=lambda: [])  # For form bodies
     body_type: BodyType = BodyType.NONE
     auth: Auth | None = None
+    collection: Collection | None = field(default=None, repr=False)
 
 
 @dataclass
 class Collection:
     name: str
     items: list[Request | Collection] = field(default_factory=lambda: [])
+    parent: Collection | None = field(default=None, repr=False)
 
 
 @dataclass
