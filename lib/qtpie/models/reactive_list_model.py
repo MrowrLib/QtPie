@@ -179,3 +179,16 @@ class ReactiveListModel[T](QAbstractListModel):
             return list(self._obs_list).index(item)
         except ValueError:
             return -1
+
+    def notify_item_changed(self, item: T) -> None:
+        """Notify that an item's data has changed (e.g., a property was modified).
+
+        This finds the item in the list and emits dataChanged so the view updates.
+
+        Args:
+            item: The item whose data changed.
+        """
+        idx = self.index_of(item)
+        if idx >= 0:
+            model_index = self.index(idx, 0)
+            self.dataChanged.emit(model_index, model_index)

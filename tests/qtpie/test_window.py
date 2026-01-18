@@ -89,6 +89,30 @@ class TestWindowBasicLayout:
         # No QWidget fields, so no central widget created
         assert_that(w.centralWidget()).is_none()
 
+    def test_variable_list_without_widget_no_central(self, qt: QtDriver) -> None:
+        """Window with Variable[list[T]] (no widget type) should NOT create central widget.
+
+        Variable[list[T]] is just a data container, not a widget.
+        Only Variable[T, W] (with widget type) should contribute to layout.
+        """
+
+        @dataclass
+        class Item:
+            name: str
+
+        @window
+        class MainWindow(Window):
+            # Variable[list[T]] without widget type - just data, no widget
+            items: Variable[list[Item]] = new([])
+
+        w = qt.track(MainWindow())
+        # Variable without widget should NOT create central widget
+        assert_that(w.centralWidget()).is_none()
+        # But the variable should still work
+        assert_that(w.items.value).is_equal_to([])
+        w.items.append(Item("test"))
+        assert_that(len(w.items)).is_equal_to(1)
+
 
 class TestWindowMargins:
     """Test Window central widget layout margins."""

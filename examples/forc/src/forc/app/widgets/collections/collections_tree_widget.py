@@ -1,13 +1,12 @@
-from typing import Any
-
 from qtpy.QtWidgets import QLabel, QTreeView
 
+from forc.domain.models import Collection, Request
 from qtpie import Variable, Widget, new, widget
 
 
 @widget
 class CollectionsTreeWidget(Widget):
-    collection_item: Variable[Any | None] = new(None)
+    collection_item: Variable[Collection | Request | None] = new(None)
 
     header: QLabel = new(
         bind="{workspace?.name}",

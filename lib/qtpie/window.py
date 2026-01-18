@@ -401,9 +401,14 @@ def _has_layout_items(
                 if _is_qwidget_not_qmenu(field.field_type):
                     return True
 
-        # Check if it's a Variable with widget
+        # Check if it's a Variable with widget (Variable[T, W] has widget_type set)
         if name in config.variable_names:
-            return True
+            # Get the descriptor to check if it actually has a widget type
+            descriptor = getattr(cls, name, None)
+            from .variable import _VariableDescriptor
+
+            if isinstance(descriptor, _VariableDescriptor) and descriptor._widget_type is not None:
+                return True
 
     return False
 

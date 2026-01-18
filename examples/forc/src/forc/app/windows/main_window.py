@@ -25,6 +25,9 @@ class ForcWindow(Window):
     ### Variables ###
     selected_request_index: Variable[int]
 
+    # for testing...
+    collection_items_for_list: Variable[list[Request | Collection]] = new(None)
+
     ### Menus ###
     file_menu: FileMenu
     view_menu: ViewMenu

@@ -13,7 +13,7 @@ logger = logging.getLogger("qtpie.bindings")
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from qtpie.models import ReactiveTreeModel
+    from qtpie.models import ReactiveListModel, ReactiveTreeModel
 
 
 def _setup_tree_proxy_watching(
@@ -31,8 +31,13 @@ def _setup_tree_proxy_watching(
         obs_list: The ObservableList backing the model.
         children_attr: Attribute name for accessing children.
     """
+    import weakref
+
     # Track which (item_id, proxy_id) pairs we've subscribed to
     subscribed_pairs: set[tuple[int, int]] = set()
+
+    # Use weak reference to model so callback doesn't prevent GC
+    model_ref = weakref.ref(model)
 
     # Collect all items in the tree (root + nested children)
     def get_all_items() -> set[int]:
@@ -57,10 +62,24 @@ def _setup_tree_proxy_watching(
             return
         subscribed_pairs.add(pair_key)
 
-        # Create a closure that captures the item
+        # Create a closure that captures the item and weak model ref
         def on_proxy_change() -> None:
+            m = model_ref()
+            if m is None:
+                return  # Model was garbage collected
+            # Check if Qt C++ object is still valid using shiboken
+            try:
+                from shiboken6 import isValid
+
+                if not isValid(m):
+                    return  # C++ object deleted
+            except ImportError:
+                pass  # Not using PySide6, skip check
             logger.debug("Proxy changed for %s, notifying tree model", type(item).__name__)
-            model.notify_item_changed(item)
+            try:
+                m.notify_item_changed(item)
+            except RuntimeError:
+                pass  # C++ object deleted during call
 
         proxy.on_change(on_proxy_change)
         logger.debug("Subscribed tree model to proxy changes for %s", type(item).__name__)
@@ -89,11 +108,98 @@ def _setup_tree_proxy_watching(
     # Register global callback to be notified when NEW proxies are created
     # This handles the case where an item is opened in an editor AFTER the tree is created
     def on_new_proxy(target: Any, proxy: ObservableProxy[Any]) -> None:
+        # Check if model still exists
+        if model_ref() is None:
+            return
         # Check if this target is one of our tree items
         target_id = id(target)
         all_item_ids = get_all_items()
         if target_id in all_item_ids:
             logger.debug("New proxy registered for tree item %s, subscribing", type(target).__name__)
+            subscribe_to_proxy(target, proxy)
+
+    on_proxy_registered(on_new_proxy)
+
+
+def _setup_list_proxy_watching(
+    model: ReactiveListModel[Any],
+    obs_list: ObservableList[Any],
+) -> None:
+    """Set up watching for proxy changes so list view updates when item properties change.
+
+    When items in the list are edited through ObservableProxy (e.g., in a Widget[T]),
+    this ensures the list model emits dataChanged so the view updates.
+
+    Args:
+        model: The ReactiveListModel to notify when items change.
+        obs_list: The ObservableList backing the model.
+    """
+    import weakref
+
+    # Track which (item_id, proxy_id) pairs we've subscribed to
+    subscribed_pairs: set[tuple[int, int]] = set()
+
+    # Use weak reference to model so callback doesn't prevent GC
+    model_ref = weakref.ref(model)
+
+    def get_all_items() -> set[int]:
+        """Get ids of all items currently in the list."""
+        return {id(item) for item in obs_list}
+
+    def subscribe_to_proxy(item: Any, proxy: ObservableProxy[Any]) -> None:
+        """Subscribe to a proxy's changes for a specific item."""
+        pair_key = (id(item), id(proxy))
+        if pair_key in subscribed_pairs:
+            return
+        subscribed_pairs.add(pair_key)
+
+        # Create a closure that captures the item and weak model ref
+        def on_proxy_change() -> None:
+            m = model_ref()
+            if m is None:
+                return  # Model was garbage collected
+            # Check if Qt C++ object is still valid using shiboken
+            try:
+                from shiboken6 import isValid
+
+                if not isValid(m):
+                    return  # C++ object deleted
+            except ImportError:
+                pass  # Not using PySide6, skip check
+            logger.debug("Proxy changed for %s, notifying list model", type(item).__name__)
+            try:
+                m.notify_item_changed(item)
+            except RuntimeError:
+                pass  # C++ object deleted during call
+
+        proxy.on_change(on_proxy_change)
+        logger.debug("Subscribed list model to proxy changes for %s", type(item).__name__)
+
+    def subscribe_to_item(item: Any) -> None:
+        """Subscribe to all existing proxies for an item."""
+        for proxy in get_proxies_for(item):
+            subscribe_to_proxy(item, proxy)
+
+    # Subscribe to all existing items and their existing proxies
+    for item in obs_list:
+        subscribe_to_item(item)
+
+    # Subscribe to new items when they're added to the list
+    def on_insert(_index: int, item: Any) -> None:
+        subscribe_to_item(item)
+
+    obs_list.on_insert(on_insert)
+
+    # Register global callback to be notified when NEW proxies are created
+    def on_new_proxy(target: Any, proxy: ObservableProxy[Any]) -> None:
+        # Check if model still exists
+        if model_ref() is None:
+            return
+        # Check if this target is one of our list items
+        target_id = id(target)
+        all_item_ids = get_all_items()
+        if target_id in all_item_ids:
+            logger.debug("New proxy registered for list item %s, subscribing", type(target).__name__)
             subscribe_to_proxy(target, proxy)
 
     on_proxy_registered(on_new_proxy)
@@ -677,6 +783,12 @@ def apply_model_binding(
         # Set up embedded widget for QListView (not QComboBox)
         if field_info.embed_widget is not None and _is_list_view(widget_instance):
             _setup_embedded_widget(host, widget_instance, model, obs_list, field_info.embed_widget, field_info.embed_config)
+
+        # Set up proxy watching for format= bindings so list updates when item properties change
+        if field_info.model_format is not None and not callable(field_info.model_format):
+            from qtpie.models import ReactiveListModel
+
+            _setup_list_proxy_watching(cast("ReactiveListModel[Any]", model), obs_list)
 
     # Set up embedded widget for QTreeView
     if use_tree_model and field_info.embed_widget is not None:
