@@ -9,15 +9,12 @@ This module provides window-level dock tab features:
 - dockTabsDragToUndock: Drag tab outside tab bar to float dock
 """
 
-import logging
 from collections.abc import Callable
 from typing import Any, Protocol, cast, override
 
 from qtpy.QtCore import QEvent, QObject, QPoint, Qt, QTimer
 from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QTabBar, QTabWidget, QWidget
-
-_log = logging.getLogger(__name__)
 
 
 class DockTabConfig(Protocol):
@@ -151,11 +148,8 @@ class DockTabEventFilter(QObject):
             if dock.property("_qtpie_titlebar_hooks"):
                 continue
 
-            _log.debug("_setup_new_dock_hooks: Setting up hooks for NEW dock %r", dock.windowTitle())
-
             def make_handler(d: QDockWidget) -> Callable[..., None]:
                 def handler(*_args: Any) -> None:
-                    _log.debug("Signal handler (from _setup_new_dock_hooks) triggered for dock %r", d.windowTitle())
                     _update_title_bar_for_dock(self._window, d, self._config, self._dock_overrides)
 
                 return handler  # noqa: B023 - closure factory pattern, `d` is captured via parameter
@@ -167,7 +161,6 @@ class DockTabEventFilter(QObject):
 
         # Update ALL dock title bars on layout change
         # This ensures existing docks hide their title bars when a new dock joins their tab group
-        _log.debug("_setup_new_dock_hooks: Updating ALL dock title bars")
         for dock in self._window.findChildren(QDockWidget):
             _update_title_bar_for_dock(self._window, dock, self._config, self._dock_overrides)
 
@@ -218,16 +211,17 @@ class DockTabEventFilter(QObject):
 
     def _undock_tab(self, tab_text: str) -> None:
         """Undock the tab with the given title to a floating window."""
-        _log.debug("_undock_tab called for tab_text=%r", tab_text)
         for dock in self._window.findChildren(QDockWidget):
             if dock.windowTitle() == tab_text:
                 siblings = self._window.tabifiedDockWidgets(dock)
-                _log.debug("  Found dock %r, siblings=%d, setting floating=True", dock.windowTitle(), len(siblings))
+                # Must remove and re-add the dock to properly detach it from the tab group
+                # Just setFloating(True) doesn't properly restore the title bar on Windows
+                self._window.removeDockWidget(dock)
+                self._window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
                 dock.setFloating(True)
-                _log.debug("  After setFloating: isFloating=%s", dock.isFloating())
+                dock.show()
 
                 # Update title bars for all affected docks
-                _log.debug("  Updating title bars for %d docks", len(siblings) + 1)
                 for d in [*siblings, dock]:
                     _update_title_bar_for_dock(self._window, d, self._config, self._dock_overrides)
                 break
@@ -255,17 +249,12 @@ def _setup_title_bar_hooks(
     Connects to topLevelChanged and dockLocationChanged signals on each dock
     to update title bar visibility when tabification state changes.
     """
-    _log.debug("_setup_title_bar_hooks called")
     for dock in window.findChildren(QDockWidget):
         if dock.property("_qtpie_titlebar_hooks"):
-            _log.debug("  Skipping dock %r (already has hooks)", dock.windowTitle())
             continue
-
-        _log.debug("  Setting up hooks for dock %r", dock.windowTitle())
 
         def make_handler(d: QDockWidget) -> Callable[..., None]:
             def handler(*_args: Any) -> None:
-                _log.debug("Signal handler triggered for dock %r", d.windowTitle())
                 _update_title_bar_for_dock(window, d, config, dock_overrides)
 
             return handler  # noqa: B023 - closure factory pattern, `d` is captured via parameter
@@ -276,7 +265,6 @@ def _setup_title_bar_hooks(
         dock.setProperty("_qtpie_titlebar_hooks", True)
 
         # Apply initial state
-        _log.debug("  Applying initial state for dock %r", dock.windowTitle())
         _update_title_bar_for_dock(window, dock, config, dock_overrides)
 
 
@@ -297,73 +285,38 @@ def _update_title_bar_for_dock(
         config: Configuration with dock_tabs_hide_title_bar setting
         dock_overrides: Per-dock overrides
     """
-    _log.debug("_update_title_bar_for_dock: dock=%r", dock.windowTitle())
-
     # Check per-dock override first
     override = dock_overrides.get(dock, {}).get("hide_title_bar_when_tabbed")
     should_hide = override if override is not None else config.dock_tabs_hide_title_bar
-    _log.debug("  override=%s, config.dock_tabs_hide_title_bar=%s, should_hide=%s", override, config.dock_tabs_hide_title_bar, should_hide)
 
     if not should_hide:
         # Feature disabled for this dock - ensure title bar is shown
-        _log.debug("  should_hide=False, calling _show_titlebar")
         _show_titlebar(dock)
         return
 
     # Check if dock is tabified
     is_tabified = len(window.tabifiedDockWidgets(dock)) > 0
     is_floating = dock.isFloating()
-    _log.debug("  is_tabified=%s, is_floating=%s", is_tabified, is_floating)
 
     if is_tabified and not is_floating:
-        _log.debug("  -> _hide_titlebar (tabified and not floating)")
         _hide_titlebar(dock)
     else:
-        _log.debug("  -> _show_titlebar (not tabified or floating)")
         _show_titlebar(dock)
-        # Log final state
-        final_titlebar = dock.titleBarWidget()
-        _log.debug("  FINAL STATE: titleBarWidget=%s, maxHeight=%s", type(final_titlebar).__name__ if final_titlebar else None, final_titlebar.maximumHeight() if final_titlebar else "N/A")
 
 
 def _hide_titlebar(dock: QDockWidget) -> None:
     """Hide a dock widget's title bar by replacing it with a zero-height widget."""
     current = cast("QWidget | None", dock.titleBarWidget())
-    current_height = current.maximumHeight() if current else "N/A"
-    _log.debug("_hide_titlebar: dock=%r, current=%s, maxHeight=%s", dock.windowTitle(), type(current).__name__ if current else None, current_height)
-
-    # Check if already hidden via our marker property
-    if dock.property("_qtpie_titlebar_hidden"):
-        _log.debug("  -> Already hidden (marker set), no action")
-        return
-
-    # Store that we're hiding the title bar
-    dock.setProperty("_qtpie_titlebar_hidden", True)
-
-    hidden = QWidget()
-    hidden.setFixedHeight(0)
-    dock.setTitleBarWidget(hidden)
-    _log.debug("  -> Set zero-height title bar widget")
+    # Only replace if it's not already hidden (check maximumHeight, not sizeHint)
+    if current is None or current.maximumHeight() != 0:
+        hidden = QWidget()
+        hidden.setFixedHeight(0)
+        dock.setTitleBarWidget(hidden)
 
 
 def _show_titlebar(dock: QDockWidget) -> None:
     """Restore a dock widget's default title bar."""
     current = cast("QWidget | None", dock.titleBarWidget())
-    current_height = current.maximumHeight() if current else "N/A"
-    _log.debug("_show_titlebar: dock=%r, current=%s, maxHeight=%s", dock.windowTitle(), type(current).__name__ if current else None, current_height)
-
-    # Check if we previously hid the title bar
-    if not dock.property("_qtpie_titlebar_hidden"):
-        _log.debug("  -> Was never hidden by us, no action")
-        return
-
-    # Clear the marker
-    dock.setProperty("_qtpie_titlebar_hidden", False)
-
-    # Delete the zero-height widget if present
-    if current is not None:
-        current.deleteLater()
-
-    # Restore default title bar
-    dock.setTitleBarWidget(None)  # type: ignore[arg-type]
-    _log.debug("  -> Restored default title bar (set to None)")
+    # Only restore if it's currently hidden (zero-height widget we created, check maximumHeight)
+    if current is not None and current.maximumHeight() == 0:
+        dock.setTitleBarWidget(None)  # type: ignore[arg-type]

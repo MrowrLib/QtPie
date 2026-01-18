@@ -40,6 +40,7 @@ class ForcWindow(Window):
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request_from_tab",
+        selectedItemChanged="on_item_changed",
     )
 
     ### Methods ###
@@ -64,3 +65,6 @@ class ForcWindow(Window):
         print("Selected request from tab changed:", self.selected_request_from_tab())
         print("Selected request index:", self.selected_request_index())
         print(f"Request: {request}")
+
+    def on_item_changed(self, request: Request | None) -> None:
+        print("Item changed to:", request)
