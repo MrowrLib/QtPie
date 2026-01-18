@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QWidget
 
+from .bindings.format_binding import create_item_formatter
 from .dock import Dock
 from .repeaters.utils import create_item_wrapper, rebind_child_widgets
 
@@ -85,8 +87,8 @@ class DockWidgetRepeater[T, W: QWidget]:
         # Track: (dock, item_wrapper, index_holder)
         self._items: list[tuple[Dock[W], Observable[Any] | ObservableProxy[Any], list[int]]] = []
 
-        # Store title subscriptions to prevent garbage collection
-        self._title_subscriptions: list[Any] = []
+        # Create title formatter using the real format binding system
+        self._title_formatter: Callable[[Any], str] = create_item_formatter(title)
 
         # Create initial docks for existing items
         for i, item in enumerate(observable_list):
@@ -111,82 +113,32 @@ class DockWidgetRepeater[T, W: QWidget]:
         }
         return area_map.get(self._dock_area, Qt.DockWidgetArea.RightDockWidgetArea)
 
-    def _resolve_title(self, item: T, wrapper: Observable[Any] | ObservableProxy[Any]) -> str:
-        """Resolve title expression for an item."""
-        title = self._title_expr
-
-        # Handle {#self} placeholder
-        if "{#self}" in title:
-            if isinstance(wrapper, Observable):
-                value = str(wrapper.get())
-            else:
-                value = str(wrapper.unwrap())
-            title = title.replace("{#self}", value)
-
-        # Handle {property} placeholders for object properties
-        if isinstance(wrapper, ObservableProxy):
-            import re
-
-            for match in re.finditer(r"\{(\w+)\}", title):
-                prop_name = match.group(1)
-                if prop_name.startswith("#"):
-                    continue  # Skip special placeholders
-                prop_obs: Observable[Any] | None = getattr(wrapper, prop_name, None)
-                if isinstance(prop_obs, Observable):
-                    title = title.replace(f"{{{prop_name}}}", str(prop_obs.get()))
-
-        return title
+    def _resolve_title(self, item: T) -> str:
+        """Resolve title expression for an item using the format binding system."""
+        return self._title_formatter(item)
 
     def _subscribe_to_title_changes(
         self,
+        item: T,
         wrapper: Observable[Any] | ObservableProxy[Any],
         dock_widget: QDockWidget,
     ) -> None:
-        """Subscribe to property changes that affect the title and update it reactively."""
-        import re
-
-        # For Observable (primitive), subscribe to the observable itself
+        """Subscribe to wrapper changes and update title reactively."""
+        # For Observable (primitive), subscribe directly
         if isinstance(wrapper, Observable):
-            if "{#self}" in self._title_expr:
 
-                def on_value_change(_: Any) -> None:
-                    new_title = self._resolve_title(wrapper.get(), wrapper)
-                    dock_widget.setWindowTitle(new_title)
-
-                wrapper.on_change(on_value_change)
-                self._title_subscriptions.append(on_value_change)
-            return
-
-        # For ObservableProxy, subscribe to each property mentioned in the title
-        for match in re.finditer(r"\{(\w+)\}", self._title_expr):
-            prop_name = match.group(1)
-            if prop_name.startswith("#"):
-                continue  # Skip special placeholders like {#self}
-            prop_obs: Observable[Any] | None = getattr(wrapper, prop_name, None)
-            if isinstance(prop_obs, Observable):
-                # Create a closure that captures the current wrapper
-                def make_callback(w: ObservableProxy[Any]) -> Any:
-                    def on_prop_change(_: Any) -> None:
-                        new_title = self._resolve_title(w.unwrap(), w)
-                        dock_widget.setWindowTitle(new_title)
-
-                    return on_prop_change
-
-                callback = make_callback(wrapper)
-                prop_obs.on_change(callback)
-                self._title_subscriptions.append(callback)
-
-        # Also handle {#self} for ObservableProxy - subscribe to all field changes
-        if "{#self}" in self._title_expr:
-            # For #self we need to update when any field changes
-            # Use on_change which fires for any field mutation
-            # Note: ObservableProxy.on_change takes Callable[[], None] (no args)
-            def on_any_change() -> None:
-                new_title = self._resolve_title(wrapper.unwrap(), wrapper)
+            def on_value_change(new_value: Any) -> None:
+                new_title = self._resolve_title(new_value)
                 dock_widget.setWindowTitle(new_title)
 
-            wrapper.on_change(on_any_change)
-            self._title_subscriptions.append(on_any_change)
+            wrapper.on_change(on_value_change)
+        else:
+            # For ObservableProxy, subscribe to any field change
+            def on_proxy_change() -> None:
+                new_title = self._resolve_title(wrapper.unwrap())
+                dock_widget.setWindowTitle(new_title)
+
+            wrapper.on_change(on_proxy_change)
 
     def _create_dock_features(self) -> QDockWidget.DockWidgetFeature:
         """Create dock widget features flags."""
@@ -231,7 +183,7 @@ class DockWidgetRepeater[T, W: QWidget]:
             rebind_child_widgets(widget)
 
         # Resolve title
-        title = self._resolve_title(item, wrapper)
+        title = self._resolve_title(item)
 
         # Create dock widget
         dock_widget = QDockWidget(title, self._window)
@@ -239,7 +191,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         dock_widget.setFeatures(self._create_dock_features())
 
         # Subscribe to title property changes for reactive updates
-        self._subscribe_to_title_changes(wrapper, dock_widget)
+        self._subscribe_to_title_changes(item, wrapper, dock_widget)
 
         # Add to window
         main_window: QMainWindow = self._window
@@ -335,7 +287,7 @@ class DockWidgetRepeater[T, W: QWidget]:
                 return
 
             # Update title
-            new_title = self._resolve_title(new_item, wrapper)
+            new_title = self._resolve_title(new_item)
             dock.dock_widget.setWindowTitle(new_title)
 
     def _on_clear(self, removed_items: list[T]) -> None:

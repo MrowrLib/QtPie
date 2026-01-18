@@ -35,7 +35,8 @@ class ForcWindow(Window):
     editors: Variable[list[Request], Dock[RequestWidget]] = new(
         group="requests",
         dock="right",
-        title="{name}",
+        # How do we do this? is_dirty ... #record.is_dirty ... #self.is_dirty ...
+        title="{name} {'DIRTY' if #record.is_dirty else 'clean'}",
         groupSelectedIndex="selected_request_index",
     )
 
