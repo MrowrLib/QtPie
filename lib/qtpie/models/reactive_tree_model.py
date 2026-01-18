@@ -295,3 +295,40 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         """Force a full model refresh."""
         self.beginResetModel()
         self.endResetModel()
+
+    def notify_item_changed(self, item: T) -> None:
+        """Notify that an item's data has changed (e.g., a property was modified).
+
+        This finds the item in the tree and emits dataChanged so the view updates.
+
+        Args:
+            item: The item whose data changed.
+        """
+        index = self._find_index_for_item(item)
+        if index.isValid():
+            self.dataChanged.emit(index, index)
+
+    def _find_index_for_item(self, item: T, parent: QModelIndex | None = None) -> QModelIndex:
+        """Find the QModelIndex for an item by searching the tree."""
+        if parent is None:
+            parent = _INVALID_INDEX
+
+        # Get items at this level
+        if not parent.isValid():
+            items = list(self._obs_list)
+        else:
+            parent_item = parent.internalPointer()
+            items = self._get_children(parent_item)
+
+        # Check each item at this level
+        for row, current_item in enumerate(items):
+            if current_item is item:
+                return self.index(row, 0, parent)
+
+            # Recurse into children
+            current_index = self.index(row, 0, parent)
+            found = self._find_index_for_item(item, current_index)
+            if found.isValid():
+                return found
+
+        return _INVALID_INDEX

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import weakref
 from collections.abc import Callable
 from typing import Any, cast, override
 
@@ -11,6 +12,84 @@ from .observable_dict import ObservableDict
 from .observable_list import ObservableList
 
 logger = logging.getLogger("qtpie.observant.proxy")
+
+# Global registry mapping raw object id -> list of weak refs to proxies wrapping them.
+# This allows finding proxies for a given raw object (e.g., to subscribe to changes).
+_proxy_registry: dict[int, list[weakref.ref[ObservableProxy[Any]]]] = {}
+
+# Callbacks to be notified when a new proxy is registered for any object.
+# Callback receives (target_object, proxy).
+_on_proxy_registered_callbacks: list[Callable[[Any, ObservableProxy[Any]], None]] = []
+
+
+def on_proxy_registered(callback: Callable[[Any, ObservableProxy[Any]], None]) -> None:
+    """Register a callback to be notified when any new proxy is created.
+
+    Args:
+        callback: Function that receives (target_object, proxy) when a proxy is registered.
+    """
+    if callback not in _on_proxy_registered_callbacks:
+        _on_proxy_registered_callbacks.append(callback)
+
+
+def get_proxies_for(obj: Any) -> list[ObservableProxy[Any]]:
+    """Get all active proxies that wrap a given object.
+
+    Args:
+        obj: The raw object to look up.
+
+    Returns:
+        List of ObservableProxy instances wrapping this object.
+        Returns empty list if no proxies found.
+    """
+    obj_id = id(obj)
+    if obj_id not in _proxy_registry:
+        return []
+
+    # Filter out dead refs and return live proxies
+    live_proxies: list[ObservableProxy[Any]] = []
+    dead_refs: list[weakref.ref[ObservableProxy[Any]]] = []
+
+    for ref in _proxy_registry[obj_id]:
+        proxy = ref()
+        if proxy is not None:
+            live_proxies.append(proxy)
+        else:
+            dead_refs.append(ref)
+
+    # Clean up dead refs
+    for ref in dead_refs:
+        _proxy_registry[obj_id].remove(ref)
+
+    # Remove entry if no proxies left
+    if not _proxy_registry[obj_id]:
+        del _proxy_registry[obj_id]
+
+    return live_proxies
+
+
+def _register_proxy(proxy: ObservableProxy[Any], target: Any) -> None:
+    """Register a proxy in the global registry."""
+    obj_id = id(target)
+    if obj_id not in _proxy_registry:
+        _proxy_registry[obj_id] = []
+
+    # Add weak ref to proxy
+    ref = weakref.ref(proxy)
+    _proxy_registry[obj_id].append(ref)
+    logger.debug(
+        "Registered proxy for %s (id=%d, total proxies=%d)",
+        type(target).__name__,
+        obj_id,
+        len(_proxy_registry[obj_id]),
+    )
+
+    # Notify all registered callbacks
+    for callback in _on_proxy_registered_callbacks:
+        try:
+            callback(target, proxy)
+        except Exception:
+            logger.exception("Error in on_proxy_registered callback")
 
 
 def _is_primitive(value: Any) -> bool:
@@ -51,6 +130,9 @@ class ObservableProxy[T]:
             object.__setattr__(self, "_validation_errors", None)
             object.__setattr__(self, "_validation_error_messages", None)
             object.__setattr__(self, "_is_valid", None)
+
+        # Register in global registry so others can find proxies for this target
+        _register_proxy(self, target)
 
     def _get_or_create_field_observable(self, name: str) -> Observable[Any]:
         """Get or create an Observable for a field."""

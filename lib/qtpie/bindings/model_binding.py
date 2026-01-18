@@ -5,13 +5,98 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+from observant import Observable, ObservableDict, ObservableList, ObservableProxy, get_proxies_for, on_proxy_registered
 from qtpy.QtWidgets import QWidget
 
 logger = logging.getLogger("qtpie.bindings")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from qtpie.models import ReactiveTreeModel
+
+
+def _setup_tree_proxy_watching(
+    model: ReactiveTreeModel[Any],
+    obs_list: ObservableList[Any],
+    children_attr: str,
+) -> None:
+    """Set up watching for proxy changes so tree updates when item properties change.
+
+    When items in the tree are edited through ObservableProxy (e.g., in a Widget[T]),
+    this ensures the tree model emits dataChanged so the view updates.
+
+    Args:
+        model: The ReactiveTreeModel to notify when items change.
+        obs_list: The ObservableList backing the model.
+        children_attr: Attribute name for accessing children.
+    """
+    # Track which (item_id, proxy_id) pairs we've subscribed to
+    subscribed_pairs: set[tuple[int, int]] = set()
+
+    # Collect all items in the tree (root + nested children)
+    def get_all_items() -> set[int]:
+        """Get ids of all items currently in the tree."""
+        all_ids: set[int] = set()
+
+        def collect(item: Any) -> None:
+            all_ids.add(id(item))
+            children = getattr(item, children_attr, None)
+            if children:
+                for child in children:
+                    collect(child)
+
+        for item in obs_list:
+            collect(item)
+        return all_ids
+
+    def subscribe_to_proxy(item: Any, proxy: ObservableProxy[Any]) -> None:
+        """Subscribe to a proxy's changes for a specific item."""
+        pair_key = (id(item), id(proxy))
+        if pair_key in subscribed_pairs:
+            return
+        subscribed_pairs.add(pair_key)
+
+        # Create a closure that captures the item
+        def on_proxy_change() -> None:
+            logger.debug("Proxy changed for %s, notifying tree model", type(item).__name__)
+            model.notify_item_changed(item)
+
+        proxy.on_change(on_proxy_change)
+        logger.debug("Subscribed tree model to proxy changes for %s", type(item).__name__)
+
+    def subscribe_to_item(item: Any) -> None:
+        """Subscribe to all existing proxies for an item."""
+        for proxy in get_proxies_for(item):
+            subscribe_to_proxy(item, proxy)
+
+        # Also subscribe to children recursively
+        children = getattr(item, children_attr, None)
+        if children:
+            for child in children:
+                subscribe_to_item(child)
+
+    # Subscribe to all existing items and their existing proxies
+    for item in obs_list:
+        subscribe_to_item(item)
+
+    # Subscribe to new items when they're added to the list
+    def on_insert(_index: int, item: Any) -> None:
+        subscribe_to_item(item)
+
+    obs_list.on_insert(on_insert)
+
+    # Register global callback to be notified when NEW proxies are created
+    # This handles the case where an item is opened in an editor AFTER the tree is created
+    def on_new_proxy(target: Any, proxy: ObservableProxy[Any]) -> None:
+        # Check if this target is one of our tree items
+        target_id = id(target)
+        all_item_ids = get_all_items()
+        if target_id in all_item_ids:
+            logger.debug("New proxy registered for tree item %s, subscribing", type(target).__name__)
+            subscribe_to_proxy(target, proxy)
+
+    on_proxy_registered(on_new_proxy)
 
 
 def _setup_embedded_widget(
@@ -551,6 +636,12 @@ def apply_model_binding(
 
             # Expand all immediately after model is set (defer to let model populate)
             QTimer.singleShot(0, widget_instance.expandAll)  # type: ignore[attr-defined]
+
+        # Set up proxy watching for format= bindings so tree updates when item properties change
+        if field_info.model_format is not None and not callable(field_info.model_format):
+            from qtpie.models import ReactiveTreeModel
+
+            _setup_tree_proxy_watching(cast("ReactiveTreeModel[Any]", model), obs_list, field_info.tree_children or "children")
 
     elif use_table_model:
         # QTableView-specific selection bindings
