@@ -3571,3 +3571,267 @@ class TestGroupSelectionChangedCallbacks:
         # Callback should have been called with _inspector dock
         assert len(callback_args) >= 1
         assert callback_args[-1] is instance._inspector
+
+
+# =============================================================================
+# selectedItem Dirty State Sharing
+# =============================================================================
+
+
+@dataclass
+class EditableItem:
+    """Item type with editable fields for dirty state testing."""
+
+    name: str = "Untitled"
+    content: str = ""
+
+
+@widget
+class EditableItemWidget(Widget[EditableItem]):
+    """Widget that edits an EditableItem record."""
+
+    name: QLineEdit = new()
+    content: QLineEdit = new()
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestSelectedItemDirtyStateSharing:
+    """Test that selectedItem Variable shares dirty/valid state with widget's record."""
+
+    def test_selected_item_shares_dirty_state_with_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItem Variable's is_dirty reflects the widget's record dirty state."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_item: Variable[EditableItem | None] = new(None)
+            _editors: Variable[list[EditableItem], Dock[EditableItemWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItem="_selected_item",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items (need 2 for tab bar to exist and trigger selection)
+        item1 = EditableItem(name="Test1", content="Initial")
+        item2 = EditableItem(name="Test2", content="")
+        instance._editors.append(item1)
+        qt.process_events()
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()
+
+        # Find tab bar and select first tab
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Test1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Get the widget from the dock
+        dock = instance._editors.widget[0]
+        widget_instance = dock.widget
+
+        # Verify initial state - both should be clean
+        assert not widget_instance.is_dirty.get(), "Widget should not be dirty initially"
+        assert instance._selected_item.value is not None, "Selected item should be set"
+        assert not instance._selected_item.is_dirty.get(), "Selected item should not be dirty initially"
+
+        # Modify the widget's record
+        widget_instance.record.name = "Modified"
+        qt.process_events()
+
+        # Both should now be dirty
+        assert widget_instance.is_dirty.get(), "Widget should be dirty after modification"
+        assert instance._selected_item.is_dirty.get(), "Selected item should share dirty state"
+
+    def test_selected_item_dirty_state_follows_tab_selection(self, base_class, decorator, qt: QtDriver) -> None:
+        """When switching tabs, selectedItem's dirty state reflects the newly selected widget."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_item: Variable[EditableItem | None] = new(None)
+            _editors: Variable[list[EditableItem], Dock[EditableItemWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItem="_selected_item",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+
+        # Add two items
+        item1 = EditableItem(name="Clean", content="")
+        item2 = EditableItem(name="Dirty", content="")
+        instance._editors.append(item1)
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()
+
+        # Make second widget dirty
+        dock2 = instance._editors.widget[1]
+        dock2.widget.record.name = "Modified"
+        qt.process_events()
+
+        # Find tab bar
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) in ("Clean", "Dirty", "Modified"):
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None, "Should find editor tab bar"
+
+        # Select first tab (clean widget)
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "Clean":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        assert not instance._selected_item.is_dirty.get(), "First item should be clean"
+
+        # Select second tab (dirty widget)
+        for i in range(editor_tab_bar.count()):
+            if editor_tab_bar.tabText(i) == "Modified":
+                editor_tab_bar.setCurrentIndex(i)
+                break
+        qt.process_events()
+        qt.process_events()
+
+        assert instance._selected_item.is_dirty.get(), "Second item should be dirty"
+
+    def test_selected_item_shares_same_observable_proxy(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedItem Variable shares the exact same ObservableProxy as the widget's record."""
+        from observant import ObservableProxy
+
+        @decorator
+        class TestClass(base_class):
+            _selected_item: Variable[EditableItem | None] = new(None)
+            _editors: Variable[list[EditableItem], Dock[EditableItemWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItem="_selected_item",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items (need 2 for tab bar to exist and trigger selection)
+        item1 = EditableItem(name="Test1", content="")
+        item2 = EditableItem(name="Test2", content="")
+        instance._editors.append(item1)
+        qt.process_events()
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()
+
+        # Find tab bar and select first tab
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Test1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Get widget's record proxy
+        dock = instance._editors.widget[0]
+        widget_proxy = dock.widget._qtpie.record_state.observable
+        assert isinstance(widget_proxy, ObservableProxy)
+
+        # Get selected item's proxy
+        selected_proxy = instance._selected_item.observable
+        assert isinstance(selected_proxy, ObservableProxy)
+
+        # They should be the SAME object (not just equal)
+        assert widget_proxy is selected_proxy, "Should share the exact same ObservableProxy instance"
+
+    def test_reset_dirty_on_selected_item_affects_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Calling reset_dirty() on selectedItem also resets the widget's dirty state."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_item: Variable[EditableItem | None] = new(None)
+            _editors: Variable[list[EditableItem], Dock[EditableItemWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItem="_selected_item",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items (need 2 for tab bar to exist and trigger selection)
+        item1 = EditableItem(name="Test1", content="")
+        item2 = EditableItem(name="Test2", content="")
+        instance._editors.append(item1)
+        qt.process_events()
+        instance._editors.append(item2)
+        qt.process_events()
+        qt.process_events()
+
+        # Find tab bar and select first tab
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Test1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None
+
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # Get widget and make it dirty
+        dock = instance._editors.widget[0]
+        widget_instance = dock.widget
+        widget_instance.record.name = "Modified"
+        qt.process_events()
+
+        # Verify both are dirty
+        assert widget_instance.is_dirty.get()
+        assert instance._selected_item.is_dirty.get()
+
+        # Reset dirty on selected item
+        instance._selected_item.reset_dirty()
+        qt.process_events()
+
+        # Both should now be clean
+        assert not instance._selected_item.is_dirty.get(), "Selected item should be clean after reset"
+        assert not widget_instance.is_dirty.get(), "Widget should also be clean (shared proxy)"
