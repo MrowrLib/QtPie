@@ -143,6 +143,7 @@ class Variable[T, W = None]:
             "_wrapper",
             "_widget_type",
             "_widget",
+            "_callbacks",
             "widget",
             "value",
             "observable",
@@ -156,11 +157,13 @@ class Variable[T, W = None]:
     _wrapper: AnyObservable[T]
     _widget_type: type | None
     _widget: Any  # Will be W | None where W is the widget type
+    _callbacks: list[Any]  # Callbacks registered via on_change, tracked for replace_wrapper
 
     def __init__(self, wrapper: AnyObservable[T], widget_type: type | None = None) -> None:
         object.__setattr__(self, "_wrapper", wrapper)
         object.__setattr__(self, "_widget_type", widget_type)
         object.__setattr__(self, "_widget", None)  # Populated later when widget is created
+        object.__setattr__(self, "_callbacks", [])  # Track callbacks for re-registration on replace_wrapper
 
     def __getattr__(  # pyright: ignore[reportUnknownParameterType]
         self, name: str
@@ -267,7 +270,12 @@ class Variable[T, W = None]:
         self._wrapper.reset_dirty()
 
     def on_change(self, callback: Any) -> None:
-        """Register a change callback on the underlying wrapper."""
+        """Register a change callback on the underlying wrapper.
+
+        Callbacks are tracked at the Variable level so they can be re-registered
+        when replace_wrapper() is called.
+        """
+        self._callbacks.append(callback)
         self._wrapper.on_change(callback)
 
     def replace_wrapper(self, new_wrapper: AnyObservable[T]) -> None:
@@ -276,10 +284,16 @@ class Variable[T, W = None]:
         This is used to share an ObservableProxy between multiple Variables,
         ensuring they share dirty state, validation state, etc.
 
+        All callbacks registered via on_change() are automatically re-registered
+        on the new wrapper.
+
         Args:
             new_wrapper: The new wrapper to use (must be same type as current).
         """
         object.__setattr__(self, "_wrapper", new_wrapper)
+        # Re-register all callbacks on the new wrapper
+        for callback in self._callbacks:
+            new_wrapper.on_change(callback)
 
     def __call__(self) -> T:
         """Shorthand for .value - allows my_var() instead of my_var.value."""
@@ -673,7 +687,9 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
         var_name: The exact Variable name to find
 
     Returns:
-        A new Variable sharing the parent's Observable, or None if not found.
+        The Variable found in the hierarchy, or None if not found.
+        Returns the SAME Variable object (not a copy) so that all widgets
+        in the hierarchy share one Variable instance.
     """
     from qtpy.QtWidgets import QApplication, QWidget
 
@@ -689,8 +705,8 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
         # Try to find Variable on parent
         var = _try_get_variable(parent, var_name)
         if var is not None:
-            # Share the Observable - create a new Variable wrapping the same Observable
-            return Variable(var.observable)
+            # Return the SAME Variable object so all hierarchy shares one instance
+            return var
 
         current = parent
 
@@ -699,7 +715,7 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
     if app is not None:
         var = _try_get_variable(app, var_name)
         if var is not None:
-            return Variable(var.observable)
+            return var
 
     return None
 

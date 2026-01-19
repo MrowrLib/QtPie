@@ -648,6 +648,48 @@ class TestVariableHierarchyResolution:
         assert_that(parent._child._name.value).is_equal_to("hello")
 
 
+class TestVariableIdentityAcrossHierarchy:
+    """Parent and child should share the SAME Variable object, not copies."""
+
+    def test_parent_and_child_share_same_variable_instance(self, qt: QtDriver) -> None:
+        """Bare Variable resolves to the SAME Variable object as parent."""
+        from qtpie import Widget, widget
+
+        @widget
+        class Child(Widget):
+            _count: Variable[int]  # Bare - should be SAME object as parent
+
+        @widget
+        class Parent(Widget):
+            _count: Variable[int] = new(0)
+            _child: Child = new()
+
+        parent = qt.track(Parent())
+        # The Variable objects should be IDENTICAL (same id), not just sharing an Observable
+        assert parent._count is parent._child._count, f"Parent and child should have the SAME Variable object, got parent id={id(parent._count)}, child id={id(parent._child._count)}"
+
+    def test_grandchild_shares_same_variable_as_grandparent(self, qt: QtDriver) -> None:
+        """Variable resolves to SAME object even through multiple levels."""
+        from qtpie import Widget, widget
+
+        @widget
+        class GrandChild(Widget):
+            _theme: Variable[str]
+
+        @widget
+        class Child(Widget):
+            _grandchild: GrandChild = new()
+
+        @widget
+        class GrandParent(Widget):
+            _theme: Variable[str] = new("dark")
+            _child: Child = new()
+
+        grandparent = qt.track(GrandParent())
+        # All three should be the SAME object
+        assert grandparent._theme is grandparent._child._grandchild._theme
+
+
 class TestVariableWithWidgetPropertyBindings:
     """Variable[T, W] with visible= and enabled= bindings on widget kwargs."""
 

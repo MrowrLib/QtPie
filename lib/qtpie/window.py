@@ -1256,9 +1256,7 @@ def _apply_dock_features(
         dock_widget.setFeatures(dock_widget.features() | QDockWidget.DockWidgetFeature.DockWidgetVerticalTitleBar)
 
     # Hide title bar completely (use setFixedHeight like _hide_titlebar does)
-    print(f"[DEBUG] _apply_dock_features: hide_title_bar={hide_title_bar}")
     if hide_title_bar is True:
-        print(f"[DEBUG] _apply_dock_features: HIDING title bar for {dock_widget.objectName()}")
         empty_widget = QWidget()
         empty_widget.setFixedHeight(0)
         dock_widget.setTitleBarWidget(empty_widget)

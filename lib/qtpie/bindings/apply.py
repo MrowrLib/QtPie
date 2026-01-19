@@ -198,35 +198,14 @@ def _resolve_or_create_variable(
     if isinstance(source, (Observable, ObservableProxy)):
         return source
 
-    # Check for bare Variable[T] annotation (using _RequiredBindingDescriptor)
     # Strip leading underscores for lookup
     lookup_name = path.lstrip("_")
     underscore_name = f"_{lookup_name}"
 
-    # Check both the exact name and underscore-prefixed name on host
-    for attr_name in [lookup_name, underscore_name]:
-        cls_attr = getattr(type(host), attr_name, None)
-        if isinstance(cls_attr, _RequiredBindingDescriptor):
-            # Found a required binding - create the Variable now
-            if not hasattr(host, "_qtpie"):
-                host._qtpie = QtPieState(host)  # type: ignore[attr-defined]
-
-            qtpie_state = host._qtpie  # type: ignore[attr-defined]
-
-            # For selection bindings, always use Observable(None)
-            # The value will be synced from the widget's current selection
-            # We can't use _create_observable_for_type because it tries to instantiate complex types
-            wrapper = Observable(None)
-            var: VarType[Any] = VarType(wrapper)
-            qtpie_state.register_variable(attr_name, var)  # pyright: ignore[reportUnknownMemberType]
-
-            return var
-
-    # Try to find Variable in parent hierarchy (for selection bindings to parent Variables)
-    # First check _logical_parent (set during widget creation, before Qt parenting)
+    # FIRST: Try to find Variable in parent hierarchy (for selection bindings to parent Variables)
+    # This must come BEFORE checking for bare annotations on host, otherwise we'd create
+    # a duplicate Variable on the child widget instead of using the parent's Variable.
     from qtpy.QtWidgets import QApplication
-
-    from qtpie.state import QtPieState
 
     current: Any = host
 
@@ -274,6 +253,27 @@ def _resolve_or_create_variable(
             found = _try_get_variable(app, attr_name)
             if found is not None:
                 return found
+
+    # LAST: Check for bare Variable[T] annotation on host (using _RequiredBindingDescriptor)
+    # Only create a new Variable if we didn't find one in the parent hierarchy.
+    # Check both the exact name and underscore-prefixed name on host
+    for attr_name in [lookup_name, underscore_name]:
+        cls_attr = getattr(type(host), attr_name, None)
+        if isinstance(cls_attr, _RequiredBindingDescriptor):
+            # Found a required binding - create the Variable now
+            if not hasattr(host, "_qtpie"):
+                host._qtpie = QtPieState(host)  # type: ignore[attr-defined]
+
+            qtpie_state = host._qtpie  # type: ignore[attr-defined]
+
+            # For selection bindings, always use Observable(None)
+            # The value will be synced from the widget's current selection
+            # We can't use _create_observable_for_type because it tries to instantiate complex types
+            wrapper = Observable(None)
+            var: VarType[Any] = VarType(wrapper)
+            qtpie_state.register_variable(attr_name, var)  # pyright: ignore[reportUnknownMemberType]
+
+            return var
 
     return None
 

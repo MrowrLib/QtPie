@@ -221,14 +221,14 @@ def _setup_selection_bindings_impl(
             return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
 
         def set_item_var_value(val: Any, idx: int = -1) -> None:
-            """Set the item variable value, using replace_wrapper if possible.
+            """Set the item variable value, using replace_wrapper for complex objects.
 
             For Variables with ObservableProxy wrappers AND complex object values
             (dataclasses, custom classes), we use replace_wrapper() with the model's
             cached proxy to enable per-item dirty state tracking.
 
-            For simple values (str, int, float, enum, etc.), we just set the value
-            directly because replace_wrapper would break the on_change callbacks.
+            Variable.replace_wrapper() preserves on_change callbacks by re-registering
+            them on the new wrapper.
             """
             from dataclasses import is_dataclass
             from enum import Enum
@@ -242,7 +242,6 @@ def _setup_selection_bindings_impl(
                 # Only use replace_wrapper if:
                 # 1. Variable uses an ObservableProxy wrapper
                 # 2. The value is a "complex object" (dataclass or custom class with __dict__)
-                # NOT for: str, int, float, enum, dict, list, etc. (these are simple values)
                 proxy = get_proxy_at_index(idx) if idx >= 0 else None
                 current_wrapper = getattr(current_item_var, "_wrapper", None)
 
@@ -254,13 +253,11 @@ def _setup_selection_bindings_impl(
                     is_enum = isinstance(val, Enum)
                     is_builtin = val_type.__module__ == "builtins"
                     has_dict = hasattr(val, "__dict__")
-                    # Complex = dataclass OR (has __dict__ AND not enum/builtin)
                     is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
 
                 if proxy is not None and is_complex_object and hasattr(current_item_var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
                     current_item_var.replace_wrapper(proxy)
                 else:
-                    # Simple values: set directly (preserves on_change callbacks)
                     current_item_var.value = val
 
         if item_var is not None:
@@ -371,14 +368,14 @@ def _setup_selection_bindings_impl(
             return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
 
         def set_item_var_value_view(val: Any, idx: int = -1) -> None:
-            """Set the item variable value, using replace_wrapper if possible.
+            """Set the item variable value, using replace_wrapper for complex objects.
 
             For Variables with ObservableProxy wrappers AND complex object values
             (dataclasses, custom classes), we use replace_wrapper() with the model's
             cached proxy to enable per-item dirty state tracking.
 
-            For simple values (str, int, float, enum, etc.), we just set the value
-            directly because replace_wrapper would break the on_change callbacks.
+            Variable.replace_wrapper() preserves on_change callbacks by re-registering
+            them on the new wrapper.
             """
             from dataclasses import is_dataclass
             from enum import Enum
@@ -389,13 +386,9 @@ def _setup_selection_bindings_impl(
             if binding_container["is_observable"]:
                 current_item_var.set(val)
             else:
-                # Only use replace_wrapper if:
-                # 1. Variable uses an ObservableProxy wrapper
-                # 2. The value is a "complex object" (dataclass or custom class with __dict__)
                 proxy = get_proxy_at_index(idx) if idx >= 0 else None
                 current_wrapper = getattr(current_item_var, "_wrapper", None)
 
-                # Check if the value is a "complex object" that benefits from proxy sharing
                 is_complex_object = False
                 if val is not None:
                     val_type = type(val)  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]

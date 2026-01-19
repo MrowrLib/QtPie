@@ -114,10 +114,8 @@ def _setup_table_selection_bindings_impl(
     items_var: Any | None,  # Variable[list[Any]] | None
 ) -> None:
     """Implementation of table selection bindings (called after Variables are resolved)."""
-    from observant import Observable, ObservableProxy
+    from observant import Observable
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
-
-    from qtpie.models.reactive_table_model import TABLE_PROXY_ROLE
 
     # Flag to prevent circular updates
     updating = {"flag": False}
@@ -151,24 +149,28 @@ def _setup_table_selection_bindings_impl(
 
     # Helper to set value on Variable or Observable
     def set_var_value(var: Any, value: Any, row: int = -1) -> None:
-        """Set value on Variable or Observable, using replace_wrapper if possible for item_var.
+        """Set value on Variable or Observable, using replace_wrapper for complex objects.
 
         For Variables with ObservableProxy wrappers AND complex object values
         (dataclasses, custom classes), we use replace_wrapper() with the model's
         cached proxy to enable per-item dirty state tracking.
 
-        For simple values (str, int, float, enum, etc.), we just set the value
-        directly because replace_wrapper would break the on_change callbacks.
+        Variable.replace_wrapper() preserves on_change callbacks by re-registering
+        them on the new wrapper.
         """
         from dataclasses import is_dataclass
         from enum import Enum
+
+        from observant import ObservableProxy
+
+        from qtpie.models.reactive_table_model import TABLE_PROXY_ROLE
 
         if var is None:
             return
         if is_observable(var):
             var.set(value)  # pyright: ignore[reportUnknownMemberType]
         else:
-            # For item_var, try to use replace_wrapper with the model's cached proxy
+            # For item_var, try to get the proxy from the model
             proxy: ObservableProxy[Any] | None = None
             if row >= 0 and var is container["item_var"]:
                 m = container["model"]
@@ -191,8 +193,6 @@ def _setup_table_selection_bindings_impl(
                 has_dict = hasattr(value, "__dict__")
                 is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
 
-            # Only use replace_wrapper if the Variable uses an ObservableProxy wrapper
-            # AND the value is a complex object (not primitives/enums)
             current_wrapper = getattr(var, "_wrapper", None)
             if proxy is not None and is_complex_object and hasattr(var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
                 var.replace_wrapper(proxy)
