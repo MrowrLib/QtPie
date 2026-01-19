@@ -29,7 +29,7 @@ class ForcApp(App):
     current_request: Variable[Request | None] = new(None)
 
     ### Window ###
-    main_window: ForcWindow = new()
+    main_window: ForcWindow
 
     ### Methods ###
     @override
@@ -49,4 +49,10 @@ class ForcApp(App):
 
     def _on_save(self) -> None:
         print("Signal: Save workspace.")
-        print("Current workspace item:", self.current_workspace_item())
+        request = self.current_request()
+        print(f"Current request to save: {request}")
+        workspace = self.workspace()
+        if request is not None and workspace is not None:
+            print(f"Saving request '{request.name}' to workspace '{workspace.name}'.")
+            self.workspace_service().save_request(request)
+            print("Request saved.")

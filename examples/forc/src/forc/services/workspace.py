@@ -139,6 +139,7 @@ class WorkspaceService:
             raise RuntimeError("No workspace path set")
 
         path = self._get_request_path(request)
+        print(f"Saving request '{request.name}' to path: {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
         self._format.save_request(request, path)
 
@@ -149,11 +150,11 @@ class WorkspaceService:
         if self._path is None:
             raise RuntimeError("No workspace path set")
 
-        # Build collection path parts
+        # Build collection path parts using folder (actual disk name) or fallback to slugified name
         parts: list[str] = []
         collection = request.collection
         while collection is not None:
-            parts.append(slugify(collection.name))
+            parts.append(collection.folder or slugify(collection.name))
             collection = collection.parent
         parts.reverse()
 

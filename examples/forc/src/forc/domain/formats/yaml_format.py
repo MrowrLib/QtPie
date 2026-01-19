@@ -195,7 +195,7 @@ class YamlFormat:
             elif item_path.suffix == self.extension:
                 items.append(self.load_request(item_path))
 
-        collection = Collection(name=name, items=items)
+        collection = Collection(name=name, items=items, folder=path.name)
         # Set parent references
         for item in items:
             if isinstance(item, Request):

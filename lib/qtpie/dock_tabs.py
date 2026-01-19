@@ -9,24 +9,12 @@ This module provides window-level dock tab features:
 - dockTabsDragToUndock: Drag tab outside tab bar to float dock
 """
 
-import logging
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, Protocol, cast, override
 
 from qtpy.QtCore import QEvent, QObject, QPoint, Qt, QTimer
 from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QTabBar, QTabWidget, QWidget
-
-# Set up file logging for dock debugging
-_log_file = Path(__file__).parent.parent.parent / "dock_debug.log"
-_log_file.unlink(missing_ok=True)  # Clear on startup
-_file_handler = logging.FileHandler(_log_file)
-_file_handler.setLevel(logging.DEBUG)
-_file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
-_log = logging.getLogger("dock_tabs")
-_log.setLevel(logging.DEBUG)
-_log.addHandler(_file_handler)
 
 
 class DockTabConfig(Protocol):
@@ -301,13 +289,10 @@ def _update_title_bar_for_dock(
     """
     # Check if this dock has hideTitleBar=True (hidden unless floating)
     always_hide = dock_overrides.get(dock, {}).get("hide_title_bar")
-    _log.debug(f"_update: obj={dock.objectName()!r} title={dock.windowTitle()!r} always_hide={always_hide} floating={dock.isFloating()} hidden={dock.property('_qtpie_titlebar_hidden')}")
     if always_hide is True:
         if dock.isFloating():
-            _log.debug("  -> SHOW titlebar (floating, always_hide=True)")
             _show_titlebar(dock)
         else:
-            _log.debug("  -> HIDE titlebar (docked, always_hide=True)")
             _hide_titlebar(dock)
         return
 
@@ -332,11 +317,8 @@ def _update_title_bar_for_dock(
 
 def _hide_titlebar(dock: QDockWidget) -> None:
     """Hide a dock widget's title bar by replacing it with a zero-height widget."""
-    _log.debug(f"_hide: obj={dock.objectName()!r} hidden={dock.property('_qtpie_titlebar_hidden')}")
     if dock.property("_qtpie_titlebar_hidden"):
-        _log.debug("  -> already hidden, skip")
         return  # Already hidden
-    _log.debug("  -> HIDING (setTitleBarWidget + prop=True)")
     hidden = QWidget()
     hidden.setFixedHeight(0)
     dock.setTitleBarWidget(hidden)
@@ -345,17 +327,13 @@ def _hide_titlebar(dock: QDockWidget) -> None:
 
 def _show_titlebar(dock: QDockWidget) -> None:
     """Restore a dock widget's default title bar."""
-    hidden_prop = dock.property("_qtpie_titlebar_hidden")
-    _log.debug(f"_show: obj={dock.objectName()!r} hidden={hidden_prop} floating={dock.isFloating()}")
-    if not hidden_prop:
-        _log.debug("  -> skip (not hidden)")
+    if not dock.property("_qtpie_titlebar_hidden"):
         return  # Not hidden by us
 
     # Set property first to prevent recursion
     dock.setProperty("_qtpie_titlebar_hidden", False)
 
     was_floating = dock.isFloating()
-    _log.debug(f"  -> SHOWING (was_floating={was_floating})")
 
     # If already floating, we must unfloat first - setTitleBarWidget(None) doesn't
     # restore the title bar properly when the dock is already floating.
@@ -363,16 +341,11 @@ def _show_titlebar(dock: QDockWidget) -> None:
     if was_floating:
         dock.blockSignals(True)
         dock.setFloating(False)
-        _log.debug("  -> temporarily unfloated")
 
     # Restore the default title bar
     dock.setTitleBarWidget(None)  # type: ignore[arg-type]
-    _log.debug(f"  -> setTitleBarWidget(None) called, titleBarWidget={dock.titleBarWidget()}")
 
     # Refloat if it was floating
     if was_floating:
         dock.setFloating(True)
         dock.blockSignals(False)
-        _log.debug("  -> refloated")
-
-    _log.debug(f"  -> done, titleBarWidget={dock.titleBarWidget()}")

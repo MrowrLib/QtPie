@@ -88,11 +88,16 @@ def _create_observable_for_type(
         except ImportError:
             pass
 
-    # Union types (e.g., str | None, int | None) → Observable if all members are primitives
+    # Union types (e.g., str | None, int | None, MyClass | None) → Observable
+    # Union types with None are typically used for nullable references, not field proxying
     if isinstance(inner_type, types.UnionType):
         type_args = get_args(inner_type)
         # Check if all args are primitive types (including None)
         if all(is_primitive_type(t) for t in type_args):
+            return Observable(None if no_default_provided else default)
+        # If None is one of the types, use Observable for reference tracking
+        # This handles cases like Variable[MyClass | None] = new(None)
+        if type(None) in type_args:
             return Observable(None if no_default_provided else default)
 
     # Complex types → ObservableProxy
@@ -1157,6 +1162,8 @@ def create_variable_descriptor(
 def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | None:  # pyright: ignore[reportUnusedFunction] - used in window.py
     """Get the Observable for a Variable by name.
 
+    Searches the object itself, then parent hierarchy, then QApplication.
+
     Args:
         obj: The widget instance (Window or Widget)
         binding: The Variable name (e.g., "_show_dock")
@@ -1164,21 +1171,58 @@ def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | Non
     Returns:
         The Observable if found, None otherwise
     """
-    # Get the Variable from the widget
-    var = getattr(obj, binding, None)
-    if var is None:
+    from qtpy.QtWidgets import QApplication
+
+    def _try_get_observable(target: object, name: str) -> Observable[Any] | None:
+        """Try to get an Observable from a target object."""
+        var = getattr(target, name, None)
+        if var is None:
+            return None
+
+        # If it's a Variable, get its observable (use public property)
+        if isinstance(var, Variable):
+            wrapper = cast(AnyObservable[Any], var.observable)  # pyright: ignore[reportUnknownMemberType] - Variable[T] has partially unknown T
+            # For Observable (primitive types and nullable references), return it directly
+            if isinstance(wrapper, Observable):
+                return wrapper
+            # ObservableProxy and other types not supported for selection binding
+            return None
+
+        # If it's an Observable directly
+        if isinstance(var, Observable):
+            return cast(Observable[Any], var)
+
         return None
 
-    # If it's a Variable, get its observable (use public property)
-    if isinstance(var, Variable):
-        wrapper = cast(AnyObservable[Any], var.observable)  # pyright: ignore[reportUnknownMemberType] - Variable[T] has partially unknown T
-        # For Observable (primitive types), return it directly
-        if isinstance(wrapper, Observable):
-            return wrapper
-        return None
+    # Try the object itself first
+    result = _try_get_observable(obj, binding)
+    if result is not None:
+        return result
 
-    # If it's an Observable directly
-    if isinstance(var, Observable):
-        return cast(Observable[Any], var)
+    # Search up the Qt parent hierarchy
+    current: Any = obj
+    while True:
+        if not hasattr(current, "parent") or not callable(current.parent):
+            break
+        try:
+            parent: Any = current.parent()
+        except RuntimeError:
+            # parent() can fail if __init__ hasn't completed yet
+            break
+        if parent is None:
+            break
+
+        result = _try_get_observable(parent, binding)
+        if result is not None:
+            return result
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        result = _try_get_observable(app, binding)
+        if result is not None:
+            return result
 
     return None

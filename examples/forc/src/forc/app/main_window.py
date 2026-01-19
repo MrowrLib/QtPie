@@ -23,10 +23,8 @@ class ForcWindow(Window):
 
     ### Variables ###
     # Ah, we should rename, current_workspace_item is just in the SIDEBAR selection, not e.g. the current tab! right?
-    current_workspace_item: Variable[Collection | Request | None]
+    current_workspace_item: Variable[Collection | Request | None]  # RENAME / move me
     selected_request_index: Variable[int]
-    #
-    selected_request_from_tab: Variable[Request | None]
 
     ### Menus ###
     file_menu: FileMenu
@@ -39,13 +37,8 @@ class ForcWindow(Window):
         dock="right",
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
-        selectedItem="selected_request_from_tab",
-        selectedItemChanged="on_item_changed",
+        selectedItem="current_request",
     )
-
-    ### Methods ###
-    # def __setup__(self) -> None:
-    #     self.selected_request_from_tab.observable.on_change(self._on_selected_request_from_tab_changed)
 
     def _on_current_workspace_item_changed(self) -> None:
         print("Signal: Current workspace item changed.")
@@ -55,16 +48,8 @@ class ForcWindow(Window):
             # If it's already added, then simply switch to that tab:
             for index, editor in enumerate(self.editors.value):
                 if editor is item:
-                    self.selected_request_index.value = index
+                    self.selected_request_index.value = index  # TODO remove .value
                     return
             # Otherwise, add a new tab:
             self.editors.append(item)
             self.selected_request_index.value = len(self.editors) - 1
-
-    def _on_selected_request_from_tab_changed(self, request: Request | None) -> None:
-        print("Selected request from tab changed:", self.selected_request_from_tab())
-        print("Selected request index:", self.selected_request_index())
-        print(f"Request: {request}")
-
-    def on_item_changed(self, request: Request | None) -> None:
-        print("Item changed to:", request)

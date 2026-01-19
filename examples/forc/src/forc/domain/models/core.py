@@ -64,6 +64,7 @@ class Collection:
     name: str
     items: ObservableList[Request | Collection] = field(default_factory=lambda: ObservableList[Request | Collection]())
     parent: Collection | None = field(default=None, repr=False)
+    folder: str | None = field(default=None, repr=False)  # Actual folder name on disk (set on load)
 
 
 @dataclass
