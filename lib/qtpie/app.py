@@ -2338,14 +2338,18 @@ def _create_variable_list_dock_field_for_app(
     # Resolve selection bindings
     # For list dock repeaters, groupSelectedIndex and selectedIndex work the same way
     # (both bind to the tab bar index, which corresponds to list index)
+    from qtpie.variable import _get_variable
+
     selected_index_obs = None
     selected_item_obs = None
+    selected_item_var = None
     selected_dock_obs = None
     index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
     if index_binding:
         selected_index_obs = _get_variable_observable(app, index_binding)
     if dock_info.get("selected_item"):
         selected_item_obs = _get_variable_observable(app, dock_info["selected_item"])
+        selected_item_var = _get_variable(app, dock_info["selected_item"])
     if dock_info.get("selected_dock"):
         selected_dock_obs = _get_variable_observable(app, dock_info["selected_dock"])
 
@@ -2381,6 +2385,7 @@ def _create_variable_list_dock_field_for_app(
         widget_kwargs={},
         selected_index_observable=selected_index_obs,
         selected_item_observable=selected_item_obs,
+        selected_item_variable=selected_item_var,
         selected_dock_observable=selected_dock_obs,
         selected_index_changed_callback=selected_index_changed_cb,
         selected_item_changed_callback=selected_item_changed_cb,

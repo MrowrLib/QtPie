@@ -270,6 +270,17 @@ class Variable[T, W = None]:
         """Register a change callback on the underlying wrapper."""
         self._wrapper.on_change(callback)
 
+    def replace_wrapper(self, new_wrapper: AnyObservable[T]) -> None:
+        """Replace the underlying wrapper with a different one.
+
+        This is used to share an ObservableProxy between multiple Variables,
+        ensuring they share dirty state, validation state, etc.
+
+        Args:
+            new_wrapper: The new wrapper to use (must be same type as current).
+        """
+        object.__setattr__(self, "_wrapper", new_wrapper)
+
     def __call__(self) -> T:
         """Shorthand for .value - allows my_var() instead of my_var.value."""
         return self.value
@@ -1219,6 +1230,58 @@ def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | Non
     app = QApplication.instance()
     if app is not None:
         result = _try_get_observable(app, binding)
+        if result is not None:
+            return result
+
+    return None
+
+
+def _get_variable(obj: object, binding: str) -> Variable[Any, Any] | None:  # pyright: ignore[reportUnusedFunction] - used in dock_widget_repeater.py
+    """Get a Variable by name.
+
+    Searches the object itself, then parent hierarchy, then QApplication.
+
+    Args:
+        obj: The widget instance (Window or Widget)
+        binding: The Variable name (e.g., "current_request")
+
+    Returns:
+        The Variable if found, None otherwise
+    """
+    from qtpy.QtWidgets import QApplication
+
+    def _try_get_variable(target: object, name: str) -> Variable[Any, Any] | None:
+        """Try to get a Variable from a target object."""
+        var = getattr(target, name, None)
+        if isinstance(var, Variable):
+            return cast(Variable[Any, Any], var)
+        return None
+
+    # Try the object itself first
+    result = _try_get_variable(obj, binding)
+    if result is not None:
+        return result
+
+    # Search up the Qt parent hierarchy
+    current: Any = obj
+    while hasattr(current, "parent") and callable(current.parent):
+        try:
+            parent: Any = current.parent()
+        except RuntimeError:
+            break
+        if parent is None:
+            break
+
+        result = _try_get_variable(parent, binding)
+        if result is not None:
+            return result
+
+        current = parent
+
+    # Fallback: check QApplication.instance()
+    app = QApplication.instance()
+    if app is not None:
+        result = _try_get_variable(app, binding)
         if result is not None:
             return result
 

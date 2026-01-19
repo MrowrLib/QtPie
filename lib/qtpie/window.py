@@ -1917,15 +1917,17 @@ def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             title_expr = "{#self}"
 
         # Resolve selection bindings
-        from .variable import _get_variable_observable
+        from .variable import _get_variable, _get_variable_observable
 
         selected_index_obs = None
         selected_item_obs = None
+        selected_item_var = None
         selected_dock_obs = None
         if field.selected_index:
             selected_index_obs = _get_variable_observable(window, field.selected_index)
         if field.selected_item:
             selected_item_obs = _get_variable_observable(window, field.selected_item)
+            selected_item_var = _get_variable(window, field.selected_item)
         if field.selected_dock:
             selected_dock_obs = _get_variable_observable(window, field.selected_dock)
 
@@ -1956,6 +1958,7 @@ def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             widget_kwargs=field.kwargs,
             selected_index_observable=selected_index_obs,
             selected_item_observable=selected_item_obs,
+            selected_item_variable=selected_item_var,
             selected_dock_observable=selected_dock_obs,
             selected_index_changed_callback=selected_index_changed_cb,
             selected_item_changed_callback=selected_item_changed_cb,
@@ -2014,14 +2017,18 @@ def _create_variable_list_dock_field(
     # Resolve selection bindings
     # For list dock repeaters, groupSelectedIndex and selectedIndex work the same way
     # (both bind to the tab bar index, which corresponds to list index)
+    from .variable import _get_variable
+
     selected_index_obs = None
     selected_item_obs = None
+    selected_item_var = None
     selected_dock_obs = None
     index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
     if index_binding:
         selected_index_obs = _get_variable_observable(window, index_binding)
     if dock_info.get("selected_item"):
         selected_item_obs = _get_variable_observable(window, dock_info["selected_item"])
+        selected_item_var = _get_variable(window, dock_info["selected_item"])
     if dock_info.get("selected_dock"):
         selected_dock_obs = _get_variable_observable(window, dock_info["selected_dock"])
 
@@ -2057,6 +2064,7 @@ def _create_variable_list_dock_field(
         widget_kwargs={},
         selected_index_observable=selected_index_obs,
         selected_item_observable=selected_item_obs,
+        selected_item_variable=selected_item_var,
         selected_dock_observable=selected_dock_obs,
         selected_index_changed_callback=selected_index_changed_cb,
         selected_item_changed_callback=selected_item_changed_cb,

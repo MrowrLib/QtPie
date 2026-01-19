@@ -23,7 +23,7 @@ class ForcWindow(Window):
 
     ### Variables ###
     # Ah, we should rename, current_workspace_item is just in the SIDEBAR selection, not e.g. the current tab! right?
-    current_workspace_item: Variable[Collection | Request | None]  # RENAME / move me
+    current_workspace_item: Variable[Collection | Request | None]  # TODO later: RENAME / move me
     selected_request_index: Variable[int]
 
     ### Menus ###
@@ -41,8 +41,6 @@ class ForcWindow(Window):
     )
 
     def _on_current_workspace_item_changed(self) -> None:
-        print("Signal: Current workspace item changed.")
-        print("Current workspace item changed:", self.current_workspace_item())
         item = self.current_workspace_item()
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:

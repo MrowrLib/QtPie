@@ -58,6 +58,7 @@ class ForcApp(App):
                     print(f"Saving request '{request.name}' to workspace '{workspace.name}'.")
                     self.workspace_service().save_request(request)
                     print("Request saved.")
+                    self.current_request.reset_dirty()
             else:
                 print("Current request is not dirty; no need to save.")
                 # weird. hmm... i DID make changes ... I even know because main_window shows the * ... hmm
