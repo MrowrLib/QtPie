@@ -103,7 +103,6 @@ def _setup_tree_selection_bindings_impl(
         Variable.replace_wrapper() preserves on_change callbacks by re-registering
         them on the new wrapper.
         """
-        import logging
         from dataclasses import is_dataclass
         from enum import Enum
 
@@ -111,14 +110,9 @@ def _setup_tree_selection_bindings_impl(
 
         from qtpie.models.reactive_tree_model import TREE_PROXY_ROLE
 
-        logger = logging.getLogger("qtpie.bindings")
-        logger.debug(f"set_var_value: var id={id(var)}, value={value}, index={index}")
-
         if var is None:
-            logger.debug("set_var_value: var is None, returning")
             return
         if is_observable(var):
-            logger.debug(f"set_var_value: var is Observable, calling set({value})")
             var.set(value)  # pyright: ignore[reportUnknownMemberType]
         else:
             # Try to get the proxy from the model
@@ -144,15 +138,10 @@ def _setup_tree_selection_bindings_impl(
                 is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
 
             current_wrapper = getattr(var, "_wrapper", None)
-            logger.debug(f"set_var_value: proxy={proxy}, is_complex={is_complex_object}, wrapper={type(current_wrapper).__name__ if current_wrapper else None}")
             if proxy is not None and is_complex_object and hasattr(var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
-                logger.debug("set_var_value: calling replace_wrapper(proxy)")
                 var.replace_wrapper(proxy)
-                logger.debug(f"set_var_value: after replace_wrapper, var.value={var.value}")
             else:
-                logger.debug(f"set_var_value: setting var.value = {value}")
                 var.value = value  # pyright: ignore[reportUnknownMemberType]
-                logger.debug(f"set_var_value: after set, var.value={var.value}")
 
     # Helper to get item at model index
     def get_item_at_index(index: QModelIndex) -> Any:

@@ -43,11 +43,7 @@ class ForcWindow(Window):
     )
 
     def _on_current_workspace_item_changed(self) -> None:
-        print("Signal: Current workspace item changed.")
-        var = self.var("current_workspace_item")
-        print(f"Variable id: {id(var)}, wrapper id: {id(var._wrapper) if hasattr(var, '_wrapper') else 'N/A'}")
         item = self.current_workspace_item()
-        print(f"Current workspace item: {item}")
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:
             for index, editor in enumerate(self.editors.value):
