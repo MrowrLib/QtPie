@@ -1,7 +1,9 @@
 """Shared signal connection logic for QtPie modules."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, override
+
+from qtpy.QtCore import QEvent, QObject
 
 from qtpie.utils import is_signal
 from qtpie.utils.common import resolve_signal_from_hierarchy
@@ -121,3 +123,126 @@ def connect_field_signals(
             continue
 
         connect_item_signals(context, instance, name, field.signal_connections, create_expression_handler)
+
+
+class _FocusEventFilter(QObject):
+    """Event filter that intercepts FocusIn/FocusOut events and calls handlers."""
+
+    def __init__(
+        self,
+        parent: QObject,
+        focus_in_handler: Callable[[], None] | None = None,
+        focus_out_handler: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._focus_in_handler = focus_in_handler
+        self._focus_out_handler = focus_out_handler
+
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.FocusIn and self._focus_in_handler:
+            self._focus_in_handler()
+        elif event.type() == QEvent.Type.FocusOut and self._focus_out_handler:
+            self._focus_out_handler()
+        return False  # Don't block the event
+
+
+def _resolve_focus_handler(
+    context: Any,
+    handler: str | Callable[..., Any],
+    item_name: str,
+    event_name: str,
+) -> Callable[[], None]:
+    """Resolve a focus handler to a callable.
+
+    Supports the same patterns as signal handlers:
+    - Direct callable (lambda, function)
+    - Method name on context
+    - Method/signal name on parent hierarchy
+    - Expression strings with {}
+    """
+    from qtpie.bindings import is_format_string
+    from qtpie.signals.expression_handler import create_signal_expression_handler
+
+    if callable(handler) and not isinstance(handler, str):
+        return handler  # type: ignore[return-value]
+
+    # handler is str at this point
+    if is_format_string(handler):
+        # Expression handler
+        return create_signal_expression_handler(context, handler, ["#widget"])
+
+    # Try to find on context first
+    target = getattr(context, handler, None)
+    if target is not None:
+        if is_signal(target):
+            return lambda t=target: t.emit()  # type: ignore[misc]
+        elif callable(target):
+            return target  # type: ignore[return-value]
+        else:
+            raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for {event_name}="{handler}"')
+
+    # Use lazy resolution for hierarchy lookup
+    def lazy_focus_handler(handler_name: str = handler) -> None:
+        resolved: Any = getattr(context, handler_name, None)
+        if resolved is None:
+            resolved = resolve_signal_from_hierarchy(context, handler_name)
+
+        if resolved is None:
+            raise AttributeError(f"{type(context).__name__} has no method or signal '{handler_name}' for {item_name}.{event_name}=\"{handler_name}\"")
+
+        if is_signal(resolved):
+            resolved.emit()
+        elif callable(resolved):
+            resolved()
+        else:
+            raise AttributeError(f'{type(context).__name__}.{handler_name} is not callable or a Signal for {event_name}="{handler_name}"')
+
+    return lazy_focus_handler
+
+
+def connect_focus_handlers(
+    context: Any,
+    widget: QObject,
+    widget_name: str,
+    on_focus: str | Callable[..., Any] | None,
+    on_blur: str | Callable[..., Any] | None,
+) -> None:
+    """Install event filter for onFocus/onBlur handlers on a widget.
+
+    Args:
+        context: The context object (Widget, Window, App instance).
+        widget: The widget to install the event filter on.
+        widget_name: Name of the widget (for error messages).
+        on_focus: Handler for onFocus event (method name, callable, or expression).
+        on_blur: Handler for onBlur event (method name, callable, or expression).
+    """
+    if on_focus is None and on_blur is None:
+        return
+
+    focus_in_handler = _resolve_focus_handler(context, on_focus, widget_name, "onFocus") if on_focus else None
+    focus_out_handler = _resolve_focus_handler(context, on_blur, widget_name, "onBlur") if on_blur else None
+
+    event_filter = _FocusEventFilter(widget, focus_in_handler, focus_out_handler)
+    widget.installEventFilter(event_filter)
+
+
+def connect_field_focus_handlers(
+    context: Any,
+    fields: dict[str, Any],
+) -> None:
+    """Connect onFocus/onBlur handlers declared in new() to widgets.
+
+    Args:
+        context: The context object (Widget, Window, App instance).
+        fields: Dictionary of field_name -> NewField from config.fields.
+    """
+    for name, field in fields.items():
+        if field.on_focus is None and field.on_blur is None:
+            continue
+
+        instance = getattr(context, name, None)
+        if instance is None:
+            continue
+
+        connect_focus_handlers(context, instance, name, field.on_focus, field.on_blur)

@@ -907,9 +907,10 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
         _apply_button_bindings(self, config)
 
         # Connect signals for fields
-        from qtpie.signals import connect_field_signals
+        from qtpie.signals import connect_field_focus_handlers, connect_field_signals
 
         connect_field_signals(self, config.fields, _create_dialog_signal_expression_handler)
+        connect_field_focus_handlers(self, config.fields)
 
         # Connect signals from decorator
         _connect_decorator_signals(self, config)

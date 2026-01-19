@@ -744,9 +744,10 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         _apply_app_widget_props(self, config)
 
         # Connect signals for fields
-        from qtpie.signals import connect_field_signals
+        from qtpie.signals import connect_field_focus_handlers, connect_field_signals
 
         connect_field_signals(self, config.fields, _create_app_signal_expression_handler)
+        connect_field_focus_handlers(self, config.fields)
 
         # Connect signals from decorator (e.g., @app(on_reload="_on_reload"))
         _connect_decorator_signals(self, config)

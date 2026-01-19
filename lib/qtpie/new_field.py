@@ -43,6 +43,9 @@ class NewField:
         self.exclude_from_layout = False
         self.bind: str | Any | None = None  # Extracted for QWidgets in __set_name__ (can be Translatable)
         self.signal_connections: dict[str, str | Callable[..., Any]] = {}  # signal_name -> method_name or callable
+        # Focus event handlers (not Qt signals, but handled similarly via event filter)
+        self.on_focus: str | Callable[..., Any] | None = None  # onFocus="_on_focus" or callable
+        self.on_blur: str | Callable[..., Any] | None = None  # onBlur="_on_blur" or callable
         self.widget_props: dict[str, Any] = {}  # propName -> value (becomes setPropName(value))
         # Layout params for form/grid layouts
         self.label: str | None = None  # For form layouts: new(label="Name")
@@ -855,6 +858,9 @@ class NewField:
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()
 
+            # Extract focus event handlers (focusIn/focusOut)
+            self._extract_focus_handlers()
+
             # Extract widget props (e.g., windowTitle="Foo" → setWindowTitle("Foo"))
             self._extract_widget_props()
 
@@ -869,6 +875,9 @@ class NewField:
 
             # Extract signal connections (e.g., triggered="on_triggered")
             self._extract_signal_connections()
+
+            # Extract focus event handlers (focusIn/focusOut) - may not apply to all QObjects
+            self._extract_focus_handlers()
 
             # Extract widget props (e.g., shortcut="Ctrl+N" → setShortcut)
             self._extract_widget_props()
@@ -1019,6 +1028,27 @@ class NewField:
 
         for key in to_remove:
             del self.kwargs[key]
+
+    def _extract_focus_handlers(self) -> None:
+        """Extract onFocus/onBlur handlers from kwargs.
+
+        These are pseudo-signals implemented via event filter since Qt
+        doesn't have actual signals for focus events.
+
+        Supports both callables and string method names:
+            onFocus=lambda: print("focused")
+            onFocus="_on_focus"
+            onBlur="on_blur"
+        """
+        if "onFocus" in self.kwargs:
+            value = self.kwargs.pop("onFocus")
+            if isinstance(value, str) or callable(value):
+                self.on_focus = value
+
+        if "onBlur" in self.kwargs:
+            value = self.kwargs.pop("onBlur")
+            if isinstance(value, str) or callable(value):
+                self.on_blur = value
 
     def _extract_signal_connections_for_type(self, target_type: type) -> None:
         """Extract signal=handler kwargs for a specific type (e.g., QAction for list[QAction]).
