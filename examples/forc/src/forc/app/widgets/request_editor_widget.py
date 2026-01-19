@@ -26,6 +26,7 @@ from qtpie import Stretch, Widget, new, widget
 
 @widget(title="Actions")
 class DeleteWidget(Widget[KeyValue]):
+    ### Widgets ###
     delete: QPushButton = new(
         "🗑️", clicked="{on_delete(record)}", styleSheet="background: none; border: none; padding: 0;"
     )
@@ -33,6 +34,7 @@ class DeleteWidget(Widget[KeyValue]):
 
 @widget(layout="horizontal")
 class RequestAddressBarWidget(Widget[Request]):
+    ### Widgets ###
     _method: QLabel = new(bind="method?.name")
     _url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
     _send: QPushButton = new("Send", clicked="{on_send_request(record)}")
@@ -59,13 +61,6 @@ class ParamsTabContent(Widget[Request]):
 @widget(title="Headers")
 class HeadersTabContent(Widget[Request]):
     _table: QTableView = new(bind="headers")  # , editable=True)
-
-
-# class AuthType(Enum):
-#     NONE = "none"
-#     BASIC = "basic"
-#     BEARER = "bearer"
-#     API_KEY = "api_key"
 
 
 @widget(title="Auth")
@@ -143,10 +138,17 @@ class BodyTabContent(Widget[Request]):
 @widget
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
-    _request_name: QLineEdit = new(bind="name", placeholderText="Request Name...", validator=filename_safe_validator)
+    _request_name: QLineEdit = new(
+        bind="name",
+        placeholderText="Request Name...",
+        validator=filename_safe_validator,
+        # something="_on_focus",
+        # something_else="_on_blur",
+    )
     _address_bar: RequestAddressBarWidget
     _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
 
+    ### Methods ###
     def get_tab[T: Widget[Request]](self, tab_type: type[T]) -> T | None:
         """Get a tab by its widget type."""
         for i in range(self._tabs.count()):

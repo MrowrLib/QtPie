@@ -88,16 +88,11 @@ def _create_observable_for_type(
         except ImportError:
             pass
 
-    # Union types (e.g., str | None, int | None, MyClass | None) → Observable
-    # Union types with None are typically used for nullable references, not field proxying
+    # Union types (e.g., str | None, int | None) → Observable if all members are primitives
     if isinstance(inner_type, types.UnionType):
         type_args = get_args(inner_type)
         # Check if all args are primitive types (including None)
         if all(is_primitive_type(t) for t in type_args):
-            return Observable(None if no_default_provided else default)
-        # If None is one of the types, use Observable for reference tracking
-        # This handles cases like Variable[MyClass | None] = new(None)
-        if type(None) in type_args:
             return Observable(None if no_default_provided else default)
 
     # Complex types → ObservableProxy
@@ -1182,10 +1177,14 @@ def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | Non
         # If it's a Variable, get its observable (use public property)
         if isinstance(var, Variable):
             wrapper = cast(AnyObservable[Any], var.observable)  # pyright: ignore[reportUnknownMemberType] - Variable[T] has partially unknown T
-            # For Observable (primitive types and nullable references), return it directly
+            # For Observable (primitive types), return it directly
             if isinstance(wrapper, Observable):
                 return wrapper
-            # ObservableProxy and other types not supported for selection binding
+            # For ObservableProxy (complex types), return its reference_observable
+            # This allows tracking when the whole object changes (e.g., None -> Request)
+            if isinstance(wrapper, ObservableProxy):
+                return wrapper.reference_observable
+            # Other types (ObservableList, etc.) not supported for selection binding
             return None
 
         # If it's an Observable directly
@@ -1201,9 +1200,7 @@ def _get_variable_observable(obj: object, binding: str) -> Observable[Any] | Non
 
     # Search up the Qt parent hierarchy
     current: Any = obj
-    while True:
-        if not hasattr(current, "parent") or not callable(current.parent):
-            break
+    while hasattr(current, "parent") and callable(current.parent):
         try:
             parent: Any = current.parent()
         except RuntimeError:

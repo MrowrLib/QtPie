@@ -119,6 +119,24 @@ class ObservableProxy[T]:
             "_is_dirty",
             Observable[bool](False, dirty_tracking=False, validation=False) if dirty_tracking else None,
         )
+        # Observable for tracking when the target reference itself changes (via replace_target)
+        # This is bidirectional: setting this observable also calls replace_target
+        ref_obs = Observable[T](target, dirty_tracking=False, validation=False)
+        object.__setattr__(self, "_reference_observable", ref_obs)
+        object.__setattr__(self, "_ref_obs_updating", False)
+
+        # Wire up bidirectional sync: when ref_obs is set externally, call replace_target
+        def on_ref_obs_set(new_value: T) -> None:
+            # Avoid infinite loop (replace_target also sets ref_obs)
+            if object.__getattribute__(self, "_ref_obs_updating"):
+                return
+            object.__setattr__(self, "_ref_obs_updating", True)
+            try:
+                self.replace_target(new_value)
+            finally:
+                object.__setattr__(self, "_ref_obs_updating", False)
+
+        ref_obs.on_change(on_ref_obs_set)
 
         # Validation
         object.__setattr__(self, "_validators", {})
@@ -564,6 +582,15 @@ class ObservableProxy[T]:
         """Get the underlying target object."""
         return object.__getattribute__(self, "_target")
 
+    @property
+    def reference_observable(self) -> Observable[T]:
+        """Get an Observable that tracks when the target reference changes.
+
+        This is useful for observing when the entire object is replaced via replace_target(),
+        as opposed to on_change() which fires for any field change.
+        """
+        return object.__getattribute__(self, "_reference_observable")
+
     def replace_target(self, new_target: T) -> None:
         """Replace the underlying target object and update all field observables.
 
@@ -574,6 +601,15 @@ class ObservableProxy[T]:
         """
         # Replace the target
         object.__setattr__(self, "_target", new_target)
+
+        # Update reference observable (for observers tracking when the whole object changes)
+        # Set flag to avoid infinite loop from bidirectional sync
+        object.__setattr__(self, "_ref_obs_updating", True)
+        try:
+            ref_obs: Observable[T] = object.__getattribute__(self, "_reference_observable")
+            ref_obs.set(new_target)
+        finally:
+            object.__setattr__(self, "_ref_obs_updating", False)
 
         # Update all existing field observables with new values
         field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")

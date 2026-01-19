@@ -48,11 +48,16 @@ class ForcApp(App):
         self.setQuitOnLastWindowClosed(True)
 
     def _on_save(self) -> None:
-        print("Signal: Save workspace.")
-        request = self.current_request()
-        print(f"Current request to save: {request}")
-        workspace = self.workspace()
-        if request is not None and workspace is not None:
-            print(f"Saving request '{request.name}' to workspace '{workspace.name}'.")
-            self.workspace_service().save_request(request)
-            print("Request saved.")
+        if self.current_request:
+            if self.current_request.is_dirty:
+                print("Signal: Save workspace.")
+                request = self.current_request()
+                print(f"Current request to save: {request}")
+                workspace = self.workspace()
+                if request is not None and workspace is not None:
+                    print(f"Saving request '{request.name}' to workspace '{workspace.name}'.")
+                    self.workspace_service().save_request(request)
+                    print("Request saved.")
+            else:
+                print("Current request is not dirty; no need to save.")
+                # weird. hmm... i DID make changes ... I even know because main_window shows the * ... hmm
