@@ -142,8 +142,8 @@ class RequestEditorWidget(Widget[Request]):
         bind="name",
         placeholderText="Request Name...",
         validator=filename_safe_validator,
-        # something="_on_focus",
-        # something_else="_on_blur",
+        onFocus="_on_focus_request_name",
+        onBlur="_on_blur_request_name",
     )
     _address_bar: RequestAddressBarWidget
     _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
@@ -156,3 +156,9 @@ class RequestEditorWidget(Widget[Request]):
             if isinstance(tab, tab_type):
                 return tab
         return None
+
+    def _on_focus_request_name(self) -> None:
+        print("Focused request name input.")
+
+    def _on_blur_request_name(self) -> None:
+        print("Blurred request name input.")

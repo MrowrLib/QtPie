@@ -1604,10 +1604,10 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
 
 def _connect_signals(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Connect signals declared in new() to handlers."""
-    from qtpie.signals import connect_field_focus_handlers, connect_field_signals
+    from qtpie.signals import connect_field_event_handlers, connect_field_signals
 
     connect_field_signals(widget, config.fields, _create_signal_expression_handler)
-    connect_field_focus_handlers(widget, config.fields)
+    connect_field_event_handlers(widget, config.fields)
 
     # Connect signals from decorator (e.g., @widget(on_reload="_on_reload"))
     _connect_decorator_signals(widget, config)

@@ -537,10 +537,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         )
 
         # Connect signals for fields
-        from qtpie.signals import connect_field_focus_handlers, connect_field_signals
+        from qtpie.signals import connect_field_event_handlers, connect_field_signals
 
         connect_field_signals(self, config.fields, _create_window_signal_expression_handler)
-        connect_field_focus_handlers(self, config.fields)
+        connect_field_event_handlers(self, config.fields)
 
         # Connect signals from decorator (e.g., @window(on_reload="_on_reload"))
         _connect_decorator_signals(self, config)
