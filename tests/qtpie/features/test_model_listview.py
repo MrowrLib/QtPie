@@ -1029,3 +1029,202 @@ class TestListViewSignalHandlerOrder:
         # Handler should fire once and see the UPDATED value (QUERY, not HEADER)
         assert_that(call_count["value"]).is_equal_to(1)
         assert_that(seen_values).is_equal_to([Location.QUERY])
+
+
+# =============================================================================
+# Issue Reproduction: selectedItem Dirty State and Model Data Propagation
+# =============================================================================
+
+
+@dataclass
+class EditablePerson:
+    """Dataclass for testing dirty state and model data propagation."""
+
+    name: str
+    age: int
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewSelectedItemDirtyState:
+    """Test that selectedItem Variable tracks dirty state properly.
+
+    ISSUE: When selectedItem is set by the selection binding, it copies the raw
+    item value into the Variable. If the Variable wraps it in an ObservableProxy,
+    that proxy is different from any proxy in the model - so dirty state is not
+    shared with the source data.
+    """
+
+    def test_selected_item_is_dirty_after_modification(self, base_class, decorator, qt: QtDriver) -> None:
+        """Modifying selectedItem.name should make is_dirty true."""
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[EditablePerson]] = new([EditablePerson("Alice", 30), EditablePerson("Bob", 25)])
+            _selected: Variable[EditablePerson | None] = new(None)
+            _list: QListView = new(bind="_people", format="{name}", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select first item - Variable should sync
+        assert_that(instance._selected.value).is_not_none()
+        assert_that(instance._selected.value.name).is_equal_to("Alice")
+
+        # Initially not dirty
+        assert_that(instance._selected.is_dirty.get()).is_false()
+
+        # Modify the selected item via the Variable
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+
+        # EXPECTED: Variable should be dirty after modification
+        assert_that(instance._selected.is_dirty.get()).is_true()
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewSelectedItemModelDataPropagation:
+    """Test that modifying selectedItem propagates back to model data.
+
+    ISSUE: When you modify the selectedItem Variable (e.g., _selected.name = "New"),
+    the change should propagate back to the original item in the list so the model
+    displays the updated value. Currently it does NOT - the model data is disconnected.
+    """
+
+    def test_modifying_selected_item_updates_model_display(self, base_class, decorator, qt: QtDriver) -> None:
+        """Modifying selectedItem.name should update the model's display text."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[EditablePerson]] = new([EditablePerson("Alice", 30), EditablePerson("Bob", 25)])
+            _selected: Variable[EditablePerson | None] = new(None)
+            _list: QListView = new(bind="_people", format="{name}", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._list.model()
+
+        # Verify initial display
+        assert_that(model.data(model.index(0, 0), Qt.ItemDataRole.DisplayRole)).is_equal_to("Alice")
+
+        # Select first item
+        assert_that(instance._selected.value).is_not_none()
+
+        # Modify the selected item via the Variable
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+
+        # EXPECTED: Model display should show updated name
+        # This test WILL FAIL if model data is disconnected from selectedItem
+        assert_that(model.data(model.index(0, 0), Qt.ItemDataRole.DisplayRole)).is_equal_to("Alice Modified")
+
+    def test_modifying_selected_item_updates_source_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """Modifying selectedItem.name should update the item in the source list."""
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[EditablePerson]] = new([EditablePerson("Alice", 30), EditablePerson("Bob", 25)])
+            _selected: Variable[EditablePerson | None] = new(None)
+            _list: QListView = new(bind="_people", format="{name}", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select first item
+        assert_that(instance._selected.value).is_not_none()
+
+        # Modify the selected item via the Variable
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+
+        # EXPECTED: Source list item should also be modified
+        # This test WILL FAIL if selectedItem is a copy rather than a reference
+        assert_that(instance._people.value[0].name).is_equal_to("Alice Modified")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewSelectedItemDirtyStateAcrossSelections:
+    """Test that dirty state is tracked correctly when selection changes.
+
+    The key scenario: if you have two items and you:
+    1. Select item 1
+    2. Modify item 1 via selectedItem (dirty = true)
+    3. Select item 2
+    4. What is _selected.is_dirty?
+
+    It SHOULD be false (item 2 is clean) but if dirty state is per-Variable
+    rather than per-proxy, it might incorrectly show dirty.
+    """
+
+    def test_dirty_state_resets_when_selecting_clean_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Switching selection to a clean item should show is_dirty=false."""
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[EditablePerson]] = new([EditablePerson("Alice", 30), EditablePerson("Bob", 25)])
+            _selected: Variable[EditablePerson | None] = new(None)
+            _list: QListView = new(bind="_people", format="{name}", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select first item
+        assert_that(instance._selected.value).is_not_none()
+        assert_that(instance._selected.value.name).is_equal_to("Alice")
+
+        # Modify the first item
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+
+        # Should be dirty now
+        assert_that(instance._selected.is_dirty.get()).is_true()
+
+        # Select second item (Bob, which is clean)
+        model = instance._list.model()
+        index = model.index(1, 0)
+        instance._list.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Now _selected points to Bob
+        assert_that(instance._selected.value.name).is_equal_to("Bob")
+
+        # EXPECTED: Since Bob is clean, is_dirty should be false
+        # This WILL FAIL if dirty state is tracked per-Variable rather than per-item
+        assert_that(instance._selected.is_dirty.get()).is_false()
+
+    def test_dirty_state_persists_for_modified_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """Going back to a modified item should show is_dirty=true."""
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[EditablePerson]] = new([EditablePerson("Alice", 30), EditablePerson("Bob", 25)])
+            _selected: Variable[EditablePerson | None] = new(None)
+            _list: QListView = new(bind="_people", format="{name}", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select and modify first item
+        assert_that(instance._selected.value.name).is_equal_to("Alice")
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+        assert_that(instance._selected.is_dirty.get()).is_true()
+
+        # Select second item
+        model = instance._list.model()
+        index = model.index(1, 0)
+        instance._list.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Select first item again
+        index = model.index(0, 0)
+        instance._list.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # EXPECTED: First item (Alice Modified) is still dirty
+        # This test checks if dirty state is remembered per-item
+        assert_that(instance._selected.value.name).is_equal_to("Alice Modified")
+        assert_that(instance._selected.is_dirty.get()).is_true()

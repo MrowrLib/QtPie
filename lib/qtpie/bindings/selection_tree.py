@@ -65,8 +65,10 @@ def _setup_tree_selection_bindings_impl(
     items_var: Any | None,  # Variable[list[Any]] | None
 ) -> None:
     """Implementation of tree selection bindings (called after Variables are resolved)."""
-    from observant import Observable
+    from observant import Observable, ObservableProxy
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
+
+    from qtpie.models.reactive_tree_model import TREE_PROXY_ROLE
 
     # Flag to prevent circular updates
     updating = {"flag": False}
@@ -93,13 +95,53 @@ def _setup_tree_selection_bindings_impl(
         return var.value  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to set value on Variable or Observable
-    def set_var_value(var: Any, value: Any) -> None:
+    def set_var_value(var: Any, value: Any, index: QModelIndex | None = None) -> None:
+        """Set value on Variable or Observable, using replace_wrapper if possible.
+
+        For Variables with ObservableProxy wrappers AND complex object values
+        (dataclasses, custom classes), we use replace_wrapper() with the model's
+        cached proxy to enable per-item dirty state tracking.
+
+        For simple values (str, int, float, enum, etc.), we just set the value
+        directly because replace_wrapper would break the on_change callbacks.
+        """
+        from dataclasses import is_dataclass
+        from enum import Enum
+
         if var is None:
             return
         if is_observable(var):
             var.set(value)  # pyright: ignore[reportUnknownMemberType]
         else:
-            var.value = value  # pyright: ignore[reportUnknownMemberType]
+            # Try to get the proxy from the model and share it
+            proxy: ObservableProxy[Any] | None = None
+            if index is not None and index.isValid():
+                m = container["model"]
+                if m is not None:
+                    try:
+                        proxy = m.data(index, TREE_PROXY_ROLE)
+                        if not isinstance(proxy, ObservableProxy):
+                            proxy = None
+                    except (RuntimeError, AttributeError):
+                        proxy = None
+
+            # Check if the value is a "complex object" that benefits from proxy sharing
+            is_complex_object = False
+            if value is not None:
+                val_type = type(value)  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]
+                is_dataclass_instance = is_dataclass(value) and not isinstance(value, type)
+                is_enum = isinstance(value, Enum)
+                is_builtin = val_type.__module__ == "builtins"
+                has_dict = hasattr(value, "__dict__")
+                is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
+
+            # Only use replace_wrapper if the Variable uses an ObservableProxy wrapper
+            # AND the value is a complex object (not primitives/enums)
+            current_wrapper = getattr(var, "_wrapper", None)
+            if proxy is not None and is_complex_object and hasattr(var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
+                var.replace_wrapper(proxy)
+            else:
+                var.value = value  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to get item at model index
     def get_item_at_index(index: QModelIndex) -> Any:
@@ -154,7 +196,7 @@ def _setup_tree_selection_bindings_impl(
         try:
             iv = container["item_var"]
             if iv is not None:
-                set_var_value(iv, get_item_at_index(current))
+                set_var_value(iv, get_item_at_index(current), current)
         finally:
             updating["flag"] = False
 

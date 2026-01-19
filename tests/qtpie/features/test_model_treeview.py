@@ -1137,3 +1137,121 @@ class TestTreeViewChildrenListUpdates:
 
         assert_that(model.rowCount(root_idx)).is_equal_to(1)
         assert_that(model.data(model.index(0, 0, root_idx))).is_equal_to("New Child")
+
+
+# =============================================================================
+# Issue Reproduction: selectedItem Dirty State Across Selections
+# =============================================================================
+
+
+@dataclass
+class EditableTreeNode:
+    """Editable tree node for dirty state testing."""
+
+    name: str
+    children: "list[EditableTreeNode]" = field(default_factory=list)  # noqa: UP037
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewSelectedItemDirtyStateAcrossSelections:
+    """Test that dirty state is tracked correctly when tree selection changes.
+
+    The key scenario: if you have two nodes and you:
+    1. Select node 1
+    2. Modify node 1 via selectedItem (dirty = true)
+    3. Select node 2
+    4. What is _selected.is_dirty?
+
+    It SHOULD be false (node 2 is clean) but if dirty state is per-Variable
+    rather than per-proxy, it might incorrectly show dirty.
+    """
+
+    def test_dirty_state_resets_when_selecting_clean_node(self, base_class, decorator, qt: QtDriver) -> None:
+        """Switching selection to a clean node should show is_dirty=false."""
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableTreeNode]] = new(
+                [
+                    EditableTreeNode("Alice"),
+                    EditableTreeNode("Bob"),
+                ]
+            )
+            _selected: Variable[EditableTreeNode | None] = new(None)
+            _tree: QTreeView = new(bind="_nodes", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select first item
+        model = instance._tree.model()
+        index = model.index(0, 0)
+        instance._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        assert_that(instance._selected.value).is_not_none()
+        assert_that(instance._selected.value.name).is_equal_to("Alice")
+
+        # Modify the first item
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+
+        # Should be dirty now
+        assert_that(instance._selected.is_dirty.get()).is_true()
+
+        # Select second item (Bob, which is clean)
+        index = model.index(1, 0)
+        instance._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Now _selected points to Bob
+        assert_that(instance._selected.value.name).is_equal_to("Bob")
+
+        # EXPECTED: Since Bob is clean, is_dirty should be false
+        # This WILL FAIL if dirty state is tracked per-Variable rather than per-item
+        assert_that(instance._selected.is_dirty.get()).is_false()
+
+    def test_dirty_state_persists_for_modified_node(self, base_class, decorator, qt: QtDriver) -> None:
+        """Going back to a modified node should show is_dirty=true."""
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableTreeNode]] = new(
+                [
+                    EditableTreeNode("Alice"),
+                    EditableTreeNode("Bob"),
+                ]
+            )
+            _selected: Variable[EditableTreeNode | None] = new(None)
+            _tree: QTreeView = new(bind="_nodes", selectedItem="_selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select and modify first item
+        model = instance._tree.model()
+        index = model.index(0, 0)
+        instance._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        assert_that(instance._selected.value.name).is_equal_to("Alice")
+        instance._selected.name = "Alice Modified"  # type: ignore[attr-defined]
+        qt.process_events()
+        assert_that(instance._selected.is_dirty.get()).is_true()
+
+        # Select second item
+        index = model.index(1, 0)
+        instance._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Select first item again
+        index = model.index(0, 0)
+        instance._tree.selectionModel().setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # EXPECTED: First item (Alice Modified) is still dirty
+        # This test checks if dirty state is remembered per-item
+        assert_that(instance._selected.value.name).is_equal_to("Alice Modified")
+        assert_that(instance._selected.is_dirty.get()).is_true()

@@ -30,6 +30,8 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
+    # TODO: Dock tabs should close on middle-click by default.
+    # TODO: and have a context menu with "Close other tabs", "Close tabs to the right", etc.
     ### Docks / Widgets ###
     sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
     editors: Variable[list[Request], Dock[RequestWidget]] = new(

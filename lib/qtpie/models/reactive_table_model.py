@@ -4,8 +4,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import fields, is_dataclass
 from typing import Any, cast, override
 
-from observant import ObservableDict, ObservableList
+from observant import ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtCore import QAbstractTableModel, QModelIndex, QObject, QPersistentModelIndex, Qt
+
+# Custom role for getting the ObservableProxy wrapper for an item
+# This enables dirty/valid state tracking per-item
+TABLE_PROXY_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 class ReactiveTableModel[T](QAbstractTableModel):
@@ -69,6 +73,10 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._checkable_columns: set[str] = self._resolve_checkable_columns()
         # Resolve editable columns
         self._editable_columns: set[str | int] = self._resolve_editable_columns()
+
+        # Cache of ObservableProxy per item (keyed by id(item))
+        # This enables per-item dirty/valid state tracking
+        self._item_proxies: dict[int, ObservableProxy[T]] = {}
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -206,6 +214,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access
             return item
+        elif role == TABLE_PROXY_ROLE:
+            # Return the ObservableProxy for this item (creates one if needed)
+            return self.proxy_for_item(item)
 
         return None
 
@@ -378,3 +389,37 @@ class ReactiveTableModel[T](QAbstractTableModel):
     def columns(self) -> list[str | int]:
         """Get the list of column names."""
         return self._columns.copy()
+
+    def proxy_for_item(self, item: T) -> ObservableProxy[T]:
+        """Get or create an ObservableProxy for an item.
+
+        This enables per-item dirty/valid state tracking. The proxy is cached
+        so the same proxy is returned for the same item (by identity).
+
+        When used with selectedItem binding, the Variable swaps its wrapper
+        to use this proxy, ensuring dirty state is tracked per-item.
+
+        Args:
+            item: The item to wrap.
+
+        Returns:
+            The ObservableProxy wrapping the item.
+        """
+        item_id = id(item)
+        if item_id not in self._item_proxies:
+            self._item_proxies[item_id] = ObservableProxy(item)
+        return self._item_proxies[item_id]
+
+    def proxy_at(self, row: int) -> ObservableProxy[T] | None:
+        """Get the ObservableProxy for the item at a given row.
+
+        Args:
+            row: The row index.
+
+        Returns:
+            The ObservableProxy for the item, or None if row is invalid.
+        """
+        item = self.item_at(row)
+        if item is None:
+            return None
+        return self.proxy_for_item(item)

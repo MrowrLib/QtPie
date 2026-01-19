@@ -4,8 +4,12 @@ from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from typing import Any, override
 
-from observant import ObservableList
+from observant import ObservableList, ObservableProxy
 from qtpy.QtCore import QAbstractListModel, QModelIndex, QObject, QPersistentModelIndex, Qt
+
+# Custom role for getting the ObservableProxy wrapper for an item
+# This enables dirty/valid state tracking per-item
+PROXY_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 class ReactiveListModel[T](QAbstractListModel):
@@ -48,6 +52,10 @@ class ReactiveListModel[T](QAbstractListModel):
         self._format_fn = format_fn
         self._checkable = checkable
         self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
+
+        # Cache of ObservableProxy per item (keyed by id(item))
+        # This enables per-item dirty/valid state tracking
+        self._item_proxies: dict[int, ObservableProxy[T]] = {}
 
         # Subscribe to granular callbacks
         observable_list.on_insert(self._on_insert)
@@ -142,6 +150,9 @@ class ReactiveListModel[T](QAbstractListModel):
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access
             return item
+        elif role == PROXY_ROLE:
+            # Return the ObservableProxy for this item (creates one if needed)
+            return self.proxy_for_item(item)
 
         return None
 
@@ -154,16 +165,26 @@ class ReactiveListModel[T](QAbstractListModel):
         """Handle item removal."""
         self.beginRemoveRows(QModelIndex(), index, index)
         self.endRemoveRows()
+        # Clean up proxy cache for removed item
+        item_id = id(item)
+        if item_id in self._item_proxies:
+            del self._item_proxies[item_id]
 
     def _on_replace(self, index: int, old_item: T, new_item: T) -> None:
         """Handle item replacement."""
         model_index = self.index(index, 0)
         self.dataChanged.emit(model_index, model_index)
+        # Clean up proxy cache for old item
+        old_id = id(old_item)
+        if old_id in self._item_proxies:
+            del self._item_proxies[old_id]
 
     def _on_clear(self, items: list[T]) -> None:
         """Handle list clear."""
         self.beginResetModel()
         self.endResetModel()
+        # Clean up all proxy caches
+        self._item_proxies.clear()
 
     # Convenience methods
 
@@ -192,3 +213,37 @@ class ReactiveListModel[T](QAbstractListModel):
         if idx >= 0:
             model_index = self.index(idx, 0)
             self.dataChanged.emit(model_index, model_index)
+
+    def proxy_for_item(self, item: T) -> ObservableProxy[T]:
+        """Get or create an ObservableProxy for an item.
+
+        This enables per-item dirty/valid state tracking. The proxy is cached
+        so the same proxy is returned for the same item (by identity).
+
+        When used with selectedItem binding, the Variable swaps its wrapper
+        to use this proxy, ensuring dirty state is tracked per-item.
+
+        Args:
+            item: The item to wrap.
+
+        Returns:
+            The ObservableProxy wrapping the item.
+        """
+        item_id = id(item)
+        if item_id not in self._item_proxies:
+            self._item_proxies[item_id] = ObservableProxy(item)
+        return self._item_proxies[item_id]
+
+    def proxy_at(self, index: int) -> ObservableProxy[T] | None:
+        """Get the ObservableProxy for the item at a given index.
+
+        Args:
+            index: The row index.
+
+        Returns:
+            The ObservableProxy for the item, or None if index is invalid.
+        """
+        item = self.item_at(index)
+        if item is None:
+            return None
+        return self.proxy_for_item(item)

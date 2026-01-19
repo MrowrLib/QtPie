@@ -86,7 +86,7 @@ def _setup_selection_bindings_impl(
     items_list_var: Any | None,  # Variable[list[Any]] | None
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
-    from observant import Observable
+    from observant import Observable, ObservableProxy
     from qtpy.QtCore import QModelIndex, Qt
     from qtpy.QtWidgets import QComboBox
 
@@ -142,6 +142,9 @@ def _setup_selection_bindings_impl(
         except RuntimeError:
             return False
 
+    # Import PROXY_ROLE for getting ObservableProxy from model
+    from qtpie.models.reactive_list_model import PROXY_ROLE
+
     # Helper to get item at index via model's UserRole
     def get_item_at_index(idx: int) -> Any:
         try:
@@ -152,6 +155,23 @@ def _setup_selection_bindings_impl(
             return current_model.data(model_index, Qt.ItemDataRole.UserRole)
         except RuntimeError:
             # Model was deleted
+            return None
+
+    # Helper to get ObservableProxy at index via model's PROXY_ROLE
+    def get_proxy_at_index(idx: int) -> ObservableProxy[Any] | None:
+        from typing import cast
+
+        try:
+            current_model = binding_container["model"]
+            if idx < 0 or idx >= current_model.rowCount():
+                return None
+            model_index = current_model.index(idx, 0)
+            proxy: Any = current_model.data(model_index, PROXY_ROLE)
+            if isinstance(proxy, ObservableProxy):
+                return cast(ObservableProxy[Any], proxy)
+            return None
+        except (RuntimeError, AttributeError):
+            # Model was deleted or doesn't support PROXY_ROLE
             return None
 
     # Helper to find index of item
@@ -200,14 +220,48 @@ def _setup_selection_bindings_impl(
                 return None
             return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
 
-        def set_item_var_value(val: Any) -> None:
+        def set_item_var_value(val: Any, idx: int = -1) -> None:
+            """Set the item variable value, using replace_wrapper if possible.
+
+            For Variables with ObservableProxy wrappers AND complex object values
+            (dataclasses, custom classes), we use replace_wrapper() with the model's
+            cached proxy to enable per-item dirty state tracking.
+
+            For simple values (str, int, float, enum, etc.), we just set the value
+            directly because replace_wrapper would break the on_change callbacks.
+            """
+            from dataclasses import is_dataclass
+            from enum import Enum
+
             current_item_var = binding_container["item_var"]
             if current_item_var is None:
                 return
             if binding_container["is_observable"]:
                 current_item_var.set(val)
             else:
-                current_item_var.value = val
+                # Only use replace_wrapper if:
+                # 1. Variable uses an ObservableProxy wrapper
+                # 2. The value is a "complex object" (dataclass or custom class with __dict__)
+                # NOT for: str, int, float, enum, dict, list, etc. (these are simple values)
+                proxy = get_proxy_at_index(idx) if idx >= 0 else None
+                current_wrapper = getattr(current_item_var, "_wrapper", None)
+
+                # Check if the value is a "complex object" that benefits from proxy sharing
+                is_complex_object = False
+                if val is not None:
+                    val_type = type(val)  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]
+                    is_dataclass_instance = is_dataclass(val) and not isinstance(val, type)
+                    is_enum = isinstance(val, Enum)
+                    is_builtin = val_type.__module__ == "builtins"
+                    has_dict = hasattr(val, "__dict__")
+                    # Complex = dataclass OR (has __dict__ AND not enum/builtin)
+                    is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
+
+                if proxy is not None and is_complex_object and hasattr(current_item_var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
+                    current_item_var.replace_wrapper(proxy)
+                else:
+                    # Simple values: set directly (preserves on_change callbacks)
+                    current_item_var.value = val
 
         if item_var is not None:
             initial_item = get_item_var_value()
@@ -220,7 +274,7 @@ def _setup_selection_bindings_impl(
             else:
                 # Sync Variable/Observable to widget's current selection
                 new_val = get_item_at_index(current_widget_idx)
-                set_item_var_value(new_val)
+                set_item_var_value(new_val, current_widget_idx)
 
         # Variable → Widget binding (and cross-update between index/item vars)
         if index_var is not None and set_current_index_fn is not None:
@@ -234,7 +288,7 @@ def _setup_selection_bindings_impl(
                 try:
                     set_current_index_fn(new_idx)
                     # Also update item_var if both bindings are present
-                    set_item_var_value(get_item_at_index(new_idx))
+                    set_item_var_value(get_item_at_index(new_idx), new_idx)
                 finally:
                     updating["flag"] = False
 
@@ -284,7 +338,7 @@ def _setup_selection_bindings_impl(
                 try:
                     if current_index_var is not None:
                         current_index_var.value = new_idx
-                    set_item_var_value(get_item_at_index(new_idx))
+                    set_item_var_value(get_item_at_index(new_idx), new_idx)
                 finally:
                     updating["flag"] = False
 
@@ -316,14 +370,45 @@ def _setup_selection_bindings_impl(
                 return None
             return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
 
-        def set_item_var_value_view(val: Any) -> None:
+        def set_item_var_value_view(val: Any, idx: int = -1) -> None:
+            """Set the item variable value, using replace_wrapper if possible.
+
+            For Variables with ObservableProxy wrappers AND complex object values
+            (dataclasses, custom classes), we use replace_wrapper() with the model's
+            cached proxy to enable per-item dirty state tracking.
+
+            For simple values (str, int, float, enum, etc.), we just set the value
+            directly because replace_wrapper would break the on_change callbacks.
+            """
+            from dataclasses import is_dataclass
+            from enum import Enum
+
             current_item_var = binding_container["item_var"]
             if current_item_var is None:
                 return
             if binding_container["is_observable"]:
                 current_item_var.set(val)
             else:
-                current_item_var.value = val
+                # Only use replace_wrapper if:
+                # 1. Variable uses an ObservableProxy wrapper
+                # 2. The value is a "complex object" (dataclass or custom class with __dict__)
+                proxy = get_proxy_at_index(idx) if idx >= 0 else None
+                current_wrapper = getattr(current_item_var, "_wrapper", None)
+
+                # Check if the value is a "complex object" that benefits from proxy sharing
+                is_complex_object = False
+                if val is not None:
+                    val_type = type(val)  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]
+                    is_dataclass_instance = is_dataclass(val) and not isinstance(val, type)
+                    is_enum = isinstance(val, Enum)
+                    is_builtin = val_type.__module__ == "builtins"
+                    has_dict = hasattr(val, "__dict__")
+                    is_complex_object = is_dataclass_instance or (has_dict and not is_enum and not is_builtin)
+
+                if proxy is not None and is_complex_object and hasattr(current_item_var, "replace_wrapper") and isinstance(current_wrapper, ObservableProxy):
+                    current_item_var.replace_wrapper(proxy)
+                else:
+                    current_item_var.value = val
 
         # Helper to set index via selection model
         def set_row_index(row: int) -> None:
@@ -369,7 +454,7 @@ def _setup_selection_bindings_impl(
             else:
                 # Sync item Variable to widget's current selection
                 effective_row = current_row if current_row >= 0 else 0
-                set_item_var_value_view(get_item_at_index(effective_row))
+                set_item_var_value_view(get_item_at_index(effective_row), effective_row)
 
         # Variable → Widget binding
         if index_var is not None:
@@ -385,7 +470,7 @@ def _setup_selection_bindings_impl(
                     # Also update item_var if both bindings are present
                     current_item_var = binding_container["item_var"]
                     if current_item_var is not None:
-                        set_item_var_value_view(get_item_at_index(new_idx))
+                        set_item_var_value_view(get_item_at_index(new_idx), new_idx)
                 finally:
                     updating["flag"] = False
 
@@ -432,7 +517,7 @@ def _setup_selection_bindings_impl(
                 if current_index_var is not None:
                     current_index_var.value = row
                 if current_item_var is not None:
-                    set_item_var_value_view(get_item_at_index(row) if row >= 0 else None)
+                    set_item_var_value_view(get_item_at_index(row) if row >= 0 else None, row)
             finally:
                 updating["flag"] = False
 
