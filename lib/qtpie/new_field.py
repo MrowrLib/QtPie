@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any, get_args, get_origin, get_type_hints
 
 from .layout import GridPosition, Stretch
+from .setting import Setting
 from .utils.common import is_signal_on_type
 from .utils.type_checks import (
     is_dock_generic,
@@ -315,17 +316,29 @@ class NewField:
         hints = get_type_hints(owner)
         self.field_type = hints.get(name)
 
-        # If it's a Variable, replace self with a Variable descriptor
+        # If it's a Variable or Setting, replace self with a Variable descriptor
         origin = get_origin(self.field_type)
-        if origin is Variable or self.field_type is Variable:
+        is_variable = origin is Variable or self.field_type is Variable
+        is_setting = origin is Setting or self.field_type is Setting
+        if is_variable or is_setting:
             default = self._get_variable_default()
-            # Extract inner type from Variable[T] and optional widget type from Variable[T, W]
+            # Extract inner type from Variable[T]/Setting[T] and optional widget type from Variable[T, W]/Setting[T, W]
             inner_type: type | None = None
             widget_type: type | None = None
-            if origin is Variable:
+            if origin is Variable or origin is Setting:
                 args = get_args(self.field_type)
                 inner_type = args[0] if args else None
                 widget_type = args[1] if len(args) > 1 else None
+
+            # For Setting[T], compute the persist_key
+            persist_key: str | None = None
+            if is_setting:
+                # Extract group= kwarg if provided, otherwise use owner class name
+                group = self.kwargs.pop("group", None)
+                if group is not None:
+                    persist_key = f"{group}:{name}"
+                else:
+                    persist_key = f"{owner.__name__}:{name}"
 
             # Check if widget_type is Dock[X] - Variable[T, Dock[W]] or Variable[list[T], Dock[W]]
             # If so, extract the inner content type X and mark as variable dock
@@ -469,6 +482,7 @@ class NewField:
                 dock_info,
                 target_layout,
                 inner_kwargs if inner_kwargs else None,
+                persist_key,
             )
             setattr(owner, name, descriptor)
             return

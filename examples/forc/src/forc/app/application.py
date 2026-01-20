@@ -24,6 +24,7 @@ class ForcApp(App):
     http_client_service: Variable[HttpClientService] = new(workspace_service=workspace_service)
 
     ### Variables ###
+    # settings: QSettings = new("forc", "forc")
     workspace: Variable[Workspace | None] = new(None)
     current_workspace_item: Variable[Collection | Request | None] = new(None)  # TODO rename!
     current_request: Variable[Request | None] = new(None)
@@ -38,6 +39,9 @@ class ForcApp(App):
 
     def __setup__(self) -> None:
         self.workspace = self.workspace_service().load(Path("fixtures/demo-api"))
+
+        # check if there was a value in settings for last opened workspace:
+        # last_workspace_path = self.settings.value("last_workspace_path", type=str)
 
     def _on_reload_window(self) -> None:
         """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""

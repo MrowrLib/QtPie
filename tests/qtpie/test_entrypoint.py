@@ -491,3 +491,41 @@ class TestEntrypointStylesheetConfig:
         # Should still work (stylesheet doesn't exist but that's fine)
         w = TestWidget()
         assert_that(w.label.text()).is_equal_to("Hello!")
+
+
+class TestOrgAndAppConfig:
+    """Tests for org= and app= parameters (QSettings support)."""
+
+    def test_org_stored_in_config(self) -> None:
+        """org= is stored in EntryConfig."""
+
+        @entrypoint(org="TestOrg")
+        @widget
+        class TestWidget(Widget):
+            label: QLabel = new("Hello")
+
+        config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
+        assert_that(config.org).is_equal_to("TestOrg")
+
+    def test_app_stored_in_config(self) -> None:
+        """app= is stored in EntryConfig."""
+
+        @entrypoint(app="TestApp")
+        @widget
+        class TestWidget(Widget):
+            label: QLabel = new("Hello")
+
+        config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
+        assert_that(config.app).is_equal_to("TestApp")
+
+    def test_org_and_app_together_in_config(self) -> None:
+        """org= and app= can be used together."""
+
+        @entrypoint(org="MyCompany", app="MyProduct")
+        @widget
+        class TestWidget(Widget):
+            label: QLabel = new("Hello")
+
+        config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
+        assert_that(config.org).is_equal_to("MyCompany")
+        assert_that(config.app).is_equal_to("MyProduct")

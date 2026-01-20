@@ -802,7 +802,7 @@ class _VariableDescriptor[T]:
         self,
         default: T,
         name: str,
-        inner_type: type | None = None,
+        inner_type: type | types.UnionType | None = None,
         widget_type: type | None = None,
         widget_args: tuple[Any, ...] = (),
         widget_kwargs: dict[str, Any] | None = None,
@@ -818,6 +818,8 @@ class _VariableDescriptor[T]:
         target_layout: str | None = None,
         # Constructor kwargs for inner type T (for Variable[T] without widget)
         inner_kwargs: dict[str, Any] | None = None,
+        # Setting[T] support - if set, creates Setting instead of Variable
+        persist_key: str | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -840,6 +842,8 @@ class _VariableDescriptor[T]:
         self.dock_info = dock_info
         # Constructor kwargs for inner type T (may contain string refs to other fields)
         self._inner_kwargs = inner_kwargs or {}
+        # Setting persistence key - if set, creates Setting instead of Variable
+        self._persist_key = persist_key
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -876,8 +880,24 @@ class _VariableDescriptor[T]:
                 else:
                     resolved_kwargs[k] = v
 
-            wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs)
-            var: Variable[T] = Variable(wrapper, widget_type=self._widget_type)
+            if self._persist_key is not None:
+                # Setting mode: load from QSettings, create Setting
+                from .setting import Setting
+                from .settings_backend import get_settings_backend
+
+                backend = get_settings_backend()
+                initial = backend.get(self._persist_key, self._default, self._inner_type)
+                wrapper = _create_observable_for_type(self._inner_type, initial, resolved_kwargs)
+                var: Variable[T] = Setting(
+                    wrapper,
+                    key=self._persist_key,
+                    type_hint=self._inner_type,
+                    widget_type=self._widget_type,
+                )
+            else:
+                # Normal Variable mode
+                wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs)
+                var = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
 
             # If widget_type is set, create the widget and bind it
@@ -1161,7 +1181,7 @@ class _VariableDescriptor[T]:
 def create_variable_descriptor(
     default: Any,
     name: str,
-    inner_type: type | None = None,
+    inner_type: type | types.UnionType | None = None,
     widget_type: type | None = None,
     widget_args: tuple[Any, ...] = (),
     widget_kwargs: dict[str, Any] | None = None,
@@ -1174,10 +1194,11 @@ def create_variable_descriptor(
     dock_info: dict[str, Any] | None = None,
     target_layout: str | None = None,
     inner_kwargs: dict[str, Any] | None = None,
+    persist_key: str | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
     return _VariableDescriptor(
-        default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout, inner_kwargs
+        default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout, inner_kwargs, persist_key
     )
 
 

@@ -1639,8 +1639,11 @@ def _create_signal_expression_handler(widget: Widget[Any], expression: str) -> C
 
 
 def _detect_required_bindings(cls: type[Widget[Any]]) -> None:
-    """Detect bare Variable[T] annotations as required bindings."""
+    """Detect bare Variable[T] and Setting[T] annotations as required bindings."""
+    from .setting import Setting
+
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
+    detect_required_bindings(cls, "_qtpie_config", Setting, _RequiredBindingDescriptor)
 
 
 def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) -> None:

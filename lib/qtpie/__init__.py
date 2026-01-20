@@ -17,6 +17,7 @@ from .new import new, none
 from .new_fields import new_fields
 from .ref import Ref, ref
 from .set_widget_repeater import SetWidgetRepeater
+from .setting import Setting
 from .slot import slot
 from .styles import (
     ColorScheme,
@@ -68,6 +69,7 @@ __all__ = [
     "Section",
     "Separator",
     "SetWidgetRepeater",
+    "Setting",
     "Translatable",
     "Variable",
     "Widget",

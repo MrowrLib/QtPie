@@ -62,6 +62,9 @@ class EntryConfig:
     theme: str | None = None  # Initial theme name
     watch_themes: bool = False  # Hot-reload themes
     themes_output: str | None = None  # Output path for compiled theme SCSS
+    # QSettings organization/application names
+    org: str | None = None  # QCoreApplication.setOrganizationName()
+    app: str | None = None  # QCoreApplication.setApplicationName()
 
 
 # Attribute name for storing entry config
@@ -244,8 +247,15 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
         return App(**app_kwargs)
 
     def setup_app(application: QApplication) -> None:
-        """Apply translations, themes, and stylesheet to app."""
+        """Apply org/app names, translations, themes, and stylesheet to app."""
         nonlocal _translation_watcher, _watcher, _theme_watcher
+
+        # Set organization/application names for QSettings (before any Settings are created)
+        if config.org is not None:
+            application.setOrganizationName(config.org)
+        if config.app is not None:
+            application.setApplicationName(config.app)
+
         _translation_watcher = _load_translations(application, config)
 
         # Themes take precedence over stylesheet
@@ -374,6 +384,8 @@ def entrypoint[T](
     theme: str | None = ...,
     watch_themes: bool = ...,
     themes_output: str | None = ...,
+    org: str | None = ...,
+    app: str | None = ...,
 ) -> type[T]: ...
 
 
@@ -397,6 +409,8 @@ def entrypoint[T](
     theme: str | None = ...,
     watch_themes: bool = ...,
     themes_output: str | None = ...,
+    org: str | None = ...,
+    app: str | None = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -420,6 +434,8 @@ def entrypoint[T](
     theme: str | None = ...,
     watch_themes: bool = ...,
     themes_output: str | None = ...,
+    org: str | None = ...,
+    app: str | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -442,6 +458,8 @@ def entrypoint(
     theme: str | None = None,
     watch_themes: bool = False,
     themes_output: str | None = None,
+    org: str | None = None,
+    app: str | None = None,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -544,6 +562,8 @@ def entrypoint(
         theme=theme,
         watch_themes=watch_themes,
         themes_output=themes_output,
+        org=org,
+        app=app,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:

@@ -84,6 +84,120 @@ def find_variable_in_hierarchy(context: Any, name: str) -> Any | None:
     return None
 
 
+def _try_get_setting_by_key(obj: Any, key: str) -> Any | None:
+    """Try to find a Setting on an object by its persist key."""
+    from qtpie.setting import Setting
+
+    # Iterate all attributes looking for Settings with matching key
+    for attr_name in dir(obj):
+        if attr_name.startswith("__"):
+            continue
+        try:
+            attr: Any = getattr(obj, attr_name)
+            if isinstance(attr, Setting) and attr.key == key:
+                return attr  # pyright: ignore[reportUnknownVariableType]
+        except Exception:  # noqa: BLE001
+            # Skip attributes that raise on access
+            continue
+    return None
+
+
+def find_setting_by_key(context: Any, key: str) -> Any | None:
+    """Find a Setting by its persist key in the widget hierarchy.
+
+    Searches in this order:
+    1. The context object itself
+    2. Logical parent chain (set during widget creation, before Qt parenting)
+    3. Parent widget hierarchy (walking up parent() chain)
+    4. QApplication.instance() for app-level Settings
+
+    Args:
+        context: The context object (Widget, Window, App, or Menu instance).
+        key: The Setting persist key to resolve (e.g., "MyApp:theme" or "window:width").
+
+    Returns:
+        The Setting object if found, None otherwise.
+    """
+    from qtpie.state import QtPieState
+
+    # Try on context itself
+    found = _try_get_setting_by_key(context, key)
+    if found is not None:
+        return found
+
+    current: Any = context
+
+    # Walk up the logical parent chain (set during widget creation, before Qt parenting)
+    logical_current = context
+    while True:
+        lp_state = getattr(logical_current, "_qtpie", None)
+        if not isinstance(lp_state, QtPieState) or lp_state._logical_parent is None:  # pyright: ignore[reportPrivateUsage]
+            break
+        logical_parent = lp_state._logical_parent  # pyright: ignore[reportPrivateUsage]
+        found = _try_get_setting_by_key(logical_parent, key)
+        if found is not None:
+            return found
+        # Move up the logical parent chain
+        logical_current = logical_parent
+        # Also update current for Qt parent traversal starting point
+        current = logical_parent
+
+    # Search Qt parent hierarchy
+    if hasattr(current, "parent") and callable(current.parent):
+        from qtpy.QtWidgets import QApplication
+
+        while True:
+            parent_obj: Any = current.parent() if hasattr(current, "parent") and callable(current.parent) else None
+            if parent_obj is None:
+                break
+
+            found = _try_get_setting_by_key(parent_obj, key)
+            if found is not None:
+                return found
+
+            current = parent_obj
+
+        # Check QApplication.instance() for app-level Settings
+        app_instance = QApplication.instance()
+        if app_instance is not None:
+            found = _try_get_setting_by_key(app_instance, key)
+            if found is not None:
+                return found
+
+    return None
+
+
+def resolve_setting(context: Any, key: str) -> Any:
+    """Resolve a Setting by its persist key from the binding context.
+
+    Searches in this order:
+    1. The context object itself
+    2. Logical parent chain (set during widget creation, before Qt parenting)
+    3. Parent widget hierarchy (walking up parent() chain)
+    4. QApplication.instance() for app-level Settings
+
+    Args:
+        context: The context object (Widget, Window, App, or Menu instance).
+        key: The Setting persist key to resolve (e.g., "MyApp:theme" or "window:width").
+
+    Returns:
+        The Setting object (not the value - returns the Setting itself for full access).
+
+    Raises:
+        AttributeError: If Setting not found in context or parent hierarchy.
+
+    Example:
+        # In a widget method:
+        theme = self.setting("MyApp:theme", str)  # Gets the Setting[str]
+        theme.value = "dark"  # Can modify it
+    """
+    found = find_setting_by_key(context, key)
+    if found is not None:
+        return found
+
+    raise AttributeError(f"Setting with key '{key}' not found on {type(context).__name__} or in parent hierarchy")
+
+
 def resolve_var(context: Any, name: str) -> Any:
     """Resolve a variable by name from the binding context.
 

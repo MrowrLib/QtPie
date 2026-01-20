@@ -1608,3 +1608,35 @@ class TestAppBaseTitle:
 
         instance = MyCustomApp()
         assert_that(instance._auto_window.windowTitle()).is_equal_to("MyCustomApp")
+
+
+class TestAppOrgAndAppName:
+    """Tests for org= and app_name= parameters (QSettings support)."""
+
+    def test_org_stored_in_config(self, qt: QtDriver) -> None:
+        """org= is stored in AppConfig."""
+
+        @app(show=False, org="TestOrg")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        assert_that(MyApp._qtpie_config.org).is_equal_to("TestOrg")
+
+    def test_app_name_stored_in_config(self, qt: QtDriver) -> None:
+        """app_name= is stored in AppConfig."""
+
+        @app(show=False, app_name="TestApp")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        assert_that(MyApp._qtpie_config.app_name).is_equal_to("TestApp")
+
+    def test_org_and_app_name_together_in_config(self, qt: QtDriver) -> None:
+        """org= and app_name= can be used together."""
+
+        @app(show=False, org="MyCompany", app_name="MyProduct")
+        class MyApp(AppBase):
+            _label: QLabel = new("Hello")
+
+        assert_that(MyApp._qtpie_config.org).is_equal_to("MyCompany")
+        assert_that(MyApp._qtpie_config.app_name).is_equal_to("MyProduct")

@@ -18,6 +18,7 @@ from qtpy.QtWidgets import QMenu
 
 from .new_field import NewField
 from .new_fields import new_fields
+from .setting import Setting
 from .signals import create_signal_expression_handler
 from .state import QtPieState
 from .utils.common import detect_required_bindings
@@ -414,6 +415,49 @@ class Menu[T = None](QMenu):
         from qtpie.bindings.expression import resolve_var
 
         return resolve_var(self, name)
+
+    # fmt: off
+    # setting() overloads for type inference
+    @overload
+    def setting(self, key: str) -> Any: ...
+    @overload
+    def setting[T1](self, key: str, t1: type[T1]) -> Setting[T1]: ...
+    @overload
+    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2]) -> Setting[T1 | T2]: ...
+    @overload
+    def setting[T1, T2, T3](self, key: str, t1: type[T1], t2: type[T2], t3: type[T3]) -> Setting[T1 | T2 | T3]: ...
+    # With None
+    @overload
+    def setting[T1](self, key: str, t1: type[T1], t2: None) -> Setting[T1 | None]: ...
+    @overload
+    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2], t3: None) -> Setting[T1 | T2 | None]: ...
+    # fmt: on
+    def setting(self, key: str, *types: type[Any] | None) -> Any:  # pyright: ignore[reportInconsistentOverload]
+        """Resolve a Setting by its persist key from the binding context.
+
+        Searches in this order:
+        1. This menu
+        2. Parent widget hierarchy (walking up parent() chain)
+        3. QApplication.instance() for app-level Settings
+
+        Args:
+            key: The Setting persist key (e.g., "MyApp:theme" or "window:width").
+            *types: Optional type(s) for type inference. Pass None as last arg for optional.
+
+        Returns:
+            The Setting object (not the value - returns the Setting for full access).
+
+        Raises:
+            AttributeError: If Setting not found in context or parent hierarchy.
+
+        Example:
+            s = self.setting("MyApp:theme")  # Returns Any
+            s = self.setting("MyApp:theme", str)  # Returns Setting[str]
+            s.value = "dark"  # Can modify it
+        """
+        from qtpie.bindings.expression import resolve_setting
+
+        return resolve_setting(self, key)
 
     # -------------------------------------------------------------------------
     # Dirty Tracking

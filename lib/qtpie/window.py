@@ -213,8 +213,11 @@ def _collect_fields(cls: type[Window[Any]]) -> None:
 
 
 def _detect_required_bindings_for_window(cls: type[Window[Any]]) -> None:
-    """Detect bare Variable[T] annotations as required bindings."""
+    """Detect bare Variable[T] and Setting[T] annotations as required bindings."""
+    from .setting import Setting
+
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
+    detect_required_bindings(cls, "_qtpie_config", Setting, _RequiredBindingDescriptor)
 
 
 @overload

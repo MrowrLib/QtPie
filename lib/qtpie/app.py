@@ -92,6 +92,10 @@ class AppConfig:
     # For AppBase: track if we're in a real QApplication context
     is_qapplication: bool = False
 
+    # QSettings organization/application names (for Setting persistence)
+    org: str | None = None  # QCoreApplication.setOrganizationName()
+    app_name: str | None = None  # QCoreApplication.setApplicationName()
+
 
 def run_app(app: QApplication) -> int:
     """
@@ -539,6 +543,9 @@ def app[A: AppBase[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     record: Any | None = None,
+    # QSettings organization/application names
+    org: str | None = None,
+    app_name: str | None = None,
     # Dock settings
     corners: dict[str, str] | None = None,
     docksLocked: str | None = None,
@@ -577,6 +584,9 @@ def app[A: AppBase[Any]](
     classes: list[str] | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
+    # QSettings organization/application names
+    org: str | None = None,
+    app_name: str | None = None,
     # Dock settings
     corners: dict[str, str] | None = None,
     docksLocked: str | None = None,
@@ -675,6 +685,8 @@ def app[A: AppBase[Any]](
         config.dock_tabs_drag_margin = dockTabsDragMargin
         config.size = size
         config.signal_connections = signal_connections
+        config.org = org
+        config.app_name = app_name
 
         # Wrap __init__
         _wrap_init_for_app(target)
@@ -705,6 +717,12 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
 
         # Call original __init__ (QApplication MUST be initialized first)
         original_init(self, *args, **kwargs)
+
+        # Set organization/application names for QSettings (before any Settings are created)
+        if config.org is not None:
+            self.setOrganizationName(config.org)  # type: ignore[attr-defined]
+        if config.app_name is not None:
+            self.setApplicationName(config.app_name)  # type: ignore[attr-defined]
 
         # Initialize state for dirty tracking and validation
         # _qtpie may already exist if _RecordDescriptor created it during new_fields
