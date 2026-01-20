@@ -338,3 +338,258 @@ class TestCombinedKeyShortcuts:
         assert_that(events).is_length(2)
         assert_that(events[0]).is_equal_to(("keypress", Qt.Key.Key_Return))
         assert_that(events[1]).is_equal_to(("enter", None))
+
+
+# =============================================================================
+# Event Consumption (return True to stop propagation)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestEventConsumption:
+    """Event consumption - handlers returning True stop propagation."""
+
+    def test_on_enter_key_return_true_consumes_event(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler returning True consumes the event."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> bool:
+                enter_count[0] += 1
+                return True  # Consume the event
+
+        instance = create_and_track(qt, TestClass, base_class)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance.line_edit, event)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+        # Event should be accepted (consumed)
+        assert_that(event.isAccepted()).is_true()
+
+    def test_on_enter_key_return_none_does_not_consume(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler returning None does not consume the event."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> None:
+                enter_count[0] += 1
+                # Return None (implicit) - don't consume
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_enter_key_return_false_does_not_consume(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler returning False does not consume the event."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> bool:
+                enter_count[0] += 1
+                return False  # Explicitly don't consume
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_key_press_return_true_consumes_event(self, base_class, decorator, qt: QtDriver) -> None:
+        """onKeyPress handler returning True consumes the event."""
+        press_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onKeyPress="on_key")
+
+            def on_key(self, event: QKeyEvent) -> bool:
+                press_count[0] += 1
+                return True  # Consume
+
+        instance = create_and_track(qt, TestClass, base_class)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_A, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance.line_edit, event)
+
+        assert_that(press_count[0]).is_equal_to(1)
+        assert_that(event.isAccepted()).is_true()
+
+    def test_on_key_press_consume_prevents_enter_key_handler(self, base_class, decorator, qt: QtDriver) -> None:
+        """When onKeyPress consumes the event, onEnterKey doesn't fire."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onKeyPress="on_key", onEnterKey="on_enter")
+
+            def on_key(self, event: QKeyEvent) -> bool:
+                events.append("keypress")
+                return True  # Consume - should prevent onEnterKey
+
+            def on_enter(self) -> None:
+                events.append("enter")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        # Only keypress should fire, enter should be blocked
+        assert_that(events).is_length(1)
+        assert_that(events[0]).is_equal_to("keypress")
+
+    def test_on_key_press_not_consume_allows_enter_key_handler(self, base_class, decorator, qt: QtDriver) -> None:
+        """When onKeyPress doesn't consume, onEnterKey also fires."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onKeyPress="on_key", onEnterKey="on_enter")
+
+            def on_key(self, event: QKeyEvent) -> bool:
+                events.append("keypress")
+                return False  # Don't consume
+
+            def on_enter(self) -> None:
+                events.append("enter")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        # Both should fire
+        assert_that(events).is_length(2)
+        assert_that(events[0]).is_equal_to("keypress")
+        assert_that(events[1]).is_equal_to("enter")
+
+    def test_on_delete_key_return_true_consumes(self, base_class, decorator, qt: QtDriver) -> None:
+        """onDeleteKey handler returning True consumes the event."""
+        delete_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onDeleteKey="on_delete")
+
+            def on_delete(self) -> bool:
+                delete_count[0] += 1
+                return True
+
+        instance = create_and_track(qt, TestClass, base_class)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Delete, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance.line_edit, event)
+
+        assert_that(delete_count[0]).is_equal_to(1)
+        assert_that(event.isAccepted()).is_true()
+
+
+# =============================================================================
+# Optional Event Parameter
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestOptionalEventParameter:
+    """Handlers can optionally accept the event as a parameter."""
+
+    def test_on_enter_key_with_event_parameter(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler can accept the event parameter."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self, event: QKeyEvent) -> None:
+                events.append(event.key())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(events).is_length(1)
+        assert_that(events[0]).is_equal_to(Qt.Key.Key_Return)
+
+    def test_on_enter_key_without_event_parameter(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler works without event parameter."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> None:
+                enter_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_delete_key_with_event_parameter(self, base_class, decorator, qt: QtDriver) -> None:
+        """onDeleteKey handler can accept the event parameter."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onDeleteKey="on_delete")
+
+            def on_delete(self, event: QKeyEvent) -> None:
+                events.append(event.key())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Delete)
+
+        assert_that(events).is_length(1)
+        assert_that(events[0]).is_equal_to(Qt.Key.Key_Delete)
+
+    def test_on_enter_key_with_event_and_return_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey handler can accept event AND return True to consume."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self, event: QKeyEvent) -> bool:
+                events.append(("enter", event.modifiers()))
+                return True  # Consume
+
+        instance = create_and_track(qt, TestClass, base_class)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+        QCoreApplication.sendEvent(instance.line_edit, event)
+
+        assert_that(events).is_length(1)
+        assert_that(events[0][0]).is_equal_to("enter")
+        assert_that(events[0][1]).is_equal_to(Qt.KeyboardModifier.ShiftModifier)
+        assert_that(event.isAccepted()).is_true()
+
+    def test_on_enter_key_lambda_with_event(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey lambda can accept the event parameter."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey=lambda e: events.append(e.key()))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Enter)
+
+        assert_that(events).is_length(1)
+        assert_that(events[0]).is_equal_to(Qt.Key.Key_Enter)
+
+    def test_on_enter_key_lambda_without_event(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey lambda works without event parameter."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey=lambda: enter_count.__setitem__(0, enter_count[0] + 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)

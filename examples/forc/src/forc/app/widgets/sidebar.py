@@ -55,15 +55,14 @@ class CollectionsTreeWidgetRow(Widget[Collection | Request]):
 
     ### Methods ###
     def start_editing(self) -> None:
-        print("Start editing")
         self.is_editing = True
         self.text_edit.setFocus()
 
-    def stop_editing(self) -> None:
-        print("Stop editing")
+    def stop_editing(self) -> bool:
         self.text_edit.clearFocus()
         self.is_editing = False
         self.emit_signal("on_rename", self.record_value, self.text_edit.text())
+        return True
 
 
 @widget(on_rename="_on_rename")
@@ -93,11 +92,9 @@ class CollectionsTreeWidget(Widget):
 
     ### Methods ###
     def _on_rename(self, item: Collection | Request, new_name: str) -> None:
-        print(f"Called rename for item '{item}' to new name '{new_name}'")
         self.workspace_service().rename_item(item, new_name)
 
     def _on_enter_key(self) -> None:
-        print("Tree: on enter")
         widget = self.current_tree_widget_row()
         if widget is not None:
             widget.start_editing()
