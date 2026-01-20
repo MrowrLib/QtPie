@@ -77,8 +77,8 @@ def _register_proxy(proxy: ObservableProxy[Any], target: Any) -> None:
     # Add weak ref to proxy
     ref = weakref.ref(proxy)
     _proxy_registry[obj_id].append(ref)
-    logger.debug(
-        "Registered proxy for %s (id=%d, total proxies=%d)",
+    logger.warning(
+        "DEBUG _register_proxy: target=%s (id=%d, total proxies=%d)",
         type(target).__name__,
         obj_id,
         len(_proxy_registry[obj_id]),
@@ -90,6 +90,27 @@ def _register_proxy(proxy: ObservableProxy[Any], target: Any) -> None:
             callback(target, proxy)
         except Exception:
             logger.exception("Error in on_proxy_registered callback")
+
+
+def _unregister_proxy(proxy: ObservableProxy[Any], old_target: Any) -> None:
+    """Unregister a proxy from the global registry for a specific target."""
+    obj_id = id(old_target)
+    if obj_id not in _proxy_registry:
+        return
+
+    # Find and remove the weak ref for this proxy
+    refs_to_remove: list[weakref.ref[ObservableProxy[Any]]] = []
+    for ref in _proxy_registry[obj_id]:
+        p = ref()
+        if p is None or p is proxy:
+            refs_to_remove.append(ref)
+
+    for ref in refs_to_remove:
+        _proxy_registry[obj_id].remove(ref)
+
+    # Remove entry if no proxies left
+    if not _proxy_registry[obj_id]:
+        del _proxy_registry[obj_id]
 
 
 def _is_primitive(value: Any) -> bool:
@@ -263,7 +284,8 @@ class ObservableProxy[T]:
             proxy = ObservableProxy[Any](value, dirty_tracking=dirty_tracking, validation=validation)
 
             # When nested proxy changes, propagate up
-            def on_nested_change() -> None:
+            def on_nested_change(field_name: str = name) -> None:
+                logger.warning("DEBUG on_nested_change: field=%s, notifying parent proxy", field_name)
                 self._update_dirty_state()  # Update dirty state first
                 self._validate()  # Re-run own validators
                 self._update_valid_state()  # Update valid state
@@ -289,9 +311,11 @@ class ObservableProxy[T]:
         callbacks: list[Callable[[], None]] = object.__getattribute__(self, "_callbacks")
         if callbacks:
             target = object.__getattribute__(self, "_target")
-            logger.debug(
-                "ObservableProxy._notify_change: target=%s, callbacks=%d",
+            logger.warning(
+                "ObservableProxy._notify_change: proxy=%d, target=%s (id=%d), callbacks=%d",
+                id(self),
                 type(target).__name__ if target else "None",
+                id(target) if target else 0,
                 len(callbacks),
             )
         for callback in callbacks:
@@ -309,22 +333,40 @@ class ObservableProxy[T]:
         object need to know so their bindings update too.
         """
         target = object.__getattribute__(self, "_target")
+        logger.warning(
+            "DEBUG _notify_sibling_proxies: target=%s (id=%d)",
+            type(target).__name__ if target else "None",
+            id(target) if target else 0,
+        )
         siblings = get_proxies_for(target)
+        logger.warning(
+            "DEBUG _notify_sibling_proxies: found %d siblings (including self)",
+            len(siblings),
+        )
         for sibling in siblings:
             if sibling is not self:
+                logger.warning("DEBUG _notify_sibling_proxies: notifying sibling proxy")
                 # Sync the sibling's field observables with the updated target values
                 sibling._sync_from_target()
                 # Notify the sibling's listeners (with flag to prevent infinite loop)
                 sibling._notify_change(_from_sibling=True)
 
     def _sync_from_target(self) -> None:
-        """Sync all field observables from the current target values.
+        """Sync all field observables and nested proxies from the current target values.
 
         Called when a sibling proxy modifies the shared target object.
         """
         target = object.__getattribute__(self, "_target")
-        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        logger.warning(
+            "DEBUG _sync_from_target: proxy=%d, target=%s (id=%d)",
+            id(self),
+            type(target).__name__ if target else "None",
+            id(target) if target else 0,
+        )
 
+        # Sync field observables
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        logger.warning("DEBUG _sync_from_target: field_observables=%s", list(field_observables.keys()))
         for name, obs in field_observables.items():
             if hasattr(target, name):
                 current_target_value = getattr(target, name)
@@ -335,6 +377,29 @@ class ObservableProxy[T]:
                     obs._value = current_target_value  # pyright: ignore[reportPrivateUsage]
                     # Notify this observable's listeners
                     obs._notify_observers()  # pyright: ignore[reportPrivateUsage]
+
+        # Sync nested proxies (e.g., for Enum fields accessed via getattr)
+        nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+        logger.warning("DEBUG _sync_from_target: nested_proxies=%s", list(nested_proxies.keys()))
+        for name, proxy in nested_proxies.items():
+            if hasattr(target, name):
+                current_target_value = getattr(target, name)
+                current_proxy_target = object.__getattribute__(proxy, "_target")
+                logger.warning(
+                    "DEBUG _sync_from_target: nested '%s' current=%s (id=%d), target=%s (id=%d), same=%s",
+                    name,
+                    current_proxy_target,
+                    id(current_proxy_target),
+                    current_target_value,
+                    id(current_target_value),
+                    current_proxy_target is current_target_value,
+                )
+                # Only update if different
+                if current_proxy_target is not current_target_value:
+                    logger.warning("DEBUG _sync_from_target: updating nested proxy '%s' target", name)
+                    object.__setattr__(proxy, "_target", current_target_value)
+                    # Notify the nested proxy's listeners so bindings recompute
+                    proxy._notify_change(_from_sibling=True)
 
     def _update_dirty_state(self) -> None:
         """Update aggregated dirty state from all fields."""
@@ -436,9 +501,11 @@ class ObservableProxy[T]:
         if callback not in callbacks:
             callbacks.append(callback)
             target = object.__getattribute__(self, "_target")
-            logger.debug(
-                "ObservableProxy.on_change: registered callback for target=%s (total=%d)",
+            logger.warning(
+                "DEBUG on_change: proxy=%d, target=%s (id=%d), total_callbacks=%d",
+                id(self),
                 type(target).__name__ if target else "None",
+                id(target) if target else 0,
                 len(callbacks),
             )
 
@@ -643,8 +710,25 @@ class ObservableProxy[T]:
         Args:
             new_target: The new object to wrap.
         """
+        # Get old target for registry update
+        old_target = object.__getattribute__(self, "_target")
+
+        logger.warning(
+            "DEBUG replace_target: proxy=%d, old_target=%s (id=%d), new_target=%s (id=%d)",
+            id(self),
+            type(old_target).__name__ if old_target else "None",
+            id(old_target) if old_target else 0,
+            type(new_target).__name__ if new_target else "None",
+            id(new_target) if new_target else 0,
+        )
+
         # Replace the target
         object.__setattr__(self, "_target", new_target)
+
+        # Re-register in global registry if target identity changed
+        if id(old_target) != id(new_target):
+            _unregister_proxy(self, old_target)
+            _register_proxy(self, new_target)
 
         # Update reference observable (for observers tracking when the whole object changes)
         # Set flag to avoid infinite loop from bidirectional sync

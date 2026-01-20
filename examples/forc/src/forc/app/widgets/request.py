@@ -27,6 +27,9 @@ class RequestWidget(Widget[Request]):
     response_viewer: ResponseViewerWidget = new(bind="response", splitter="splitter")
 
     ### Methods ###
+    def __setup__(self) -> None:
+        self.splitter.setSizes([1000, 1000])
+
     @slot
     async def _on_send_request(self, request: Request) -> None:
         self.is_sending = True

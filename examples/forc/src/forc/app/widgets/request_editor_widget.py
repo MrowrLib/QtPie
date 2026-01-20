@@ -20,6 +20,7 @@ from forc.domain.models import (
     KeyValue,
     Request,
 )
+from forc.domain.models.core import HttpMethod
 from qtpie import Stretch, Variable, Widget, new, widget
 
 
@@ -37,7 +38,10 @@ class RequestAddressBarWidget(Widget[Request]):
     is_sending: Variable[bool]
 
     ### Widgets ###
-    request_method: QLabel = new(bind="method?.name")
+    methods: QComboBox = new(bind=HttpMethod, selectedItem="method")  # ???'
+    # ^<=== why isn't this changing what shows up as method?.name below?
+    request_method1: QLabel = new(bind="method?.name")  # <--- TODO! DROPDOWN!
+    request_method2: QLabel = new(bind="method")  # <--- TODO! DROPDOWN!
     request_url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
     send_request_button: QPushButton = new("Send", clicked="{on_send_request(record)}", enabled="{not is_sending}")
 

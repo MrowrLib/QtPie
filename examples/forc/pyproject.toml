@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+  "keyring>=25.7.0",
   "poethepoet>=0.40.0",
 ]
 description = "Free Open-source Rest Client"

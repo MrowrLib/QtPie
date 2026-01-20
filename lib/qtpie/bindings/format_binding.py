@@ -3,11 +3,32 @@
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING, Any, cast
+import types
+from typing import TYPE_CHECKING, Any, cast, get_args, get_origin
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 
 from .path import BindingSource, resolve_binding_source
+
+
+def _get_all_annotations(record_type: type[Any]) -> dict[str, Any]:
+    """Get all annotations from a type, including Union members.
+
+    For simple types like `class Foo`, returns Foo.__annotations__.
+    For Union types like `Foo | Bar`, returns the merged annotations from all members.
+    """
+    # Check if it's a Union type (types.UnionType for X | Y, or typing.Union)
+    origin = get_origin(record_type)
+    if origin is types.UnionType:
+        # It's a Union type - merge annotations from all members
+        merged: dict[str, Any] = {}
+        for member_type in get_args(record_type):
+            member_annotations = getattr(member_type, "__annotations__", {})
+            merged.update(member_annotations)
+        return merged
+    # Regular type
+    return getattr(record_type, "__annotations__", {})
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -559,8 +580,8 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
             normalized = name.replace("?.", ".")
             root_name = normalized.split(".")[0]
             # Check if root_name could be a field on the record type
-            # Use __annotations__ to check for dataclass/typed fields
-            record_annotations = getattr(record_type, "__annotations__", {})
+            # Use _get_all_annotations to handle Union types (e.g., Collection | Request)
+            record_annotations = _get_all_annotations(record_type)
             if root_name in record_annotations or root_name.lstrip("_") in record_annotations:
                 # This name is a record field - subscribe to the record proxy
                 try:
@@ -569,6 +590,16 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                     # Add proxy if not already in result (avoid duplicates)
                     if proxy not in result:
                         result.append(proxy)
+                        import logging
+
+                        target = object.__getattribute__(proxy, "_target")
+                        logging.getLogger("qtpie.bindings").warning(
+                            "DEBUG _get_observables_for_name: subscribed to proxy=%d for name=%s, target=%s (id=%d)",
+                            id(proxy),
+                            name,
+                            type(target).__name__ if target else "None",
+                            id(target) if target else 0,
+                        )
                 except Exception:
                     pass
 
@@ -788,6 +819,20 @@ def create_format_binding(
                         if target is not None and hasattr(target, root_name):
                             # Access field on proxy - returns Observable, ObservableProxy, ObservableDict, or ObservableList
                             field_obs = getattr(proxy, root_name)
+                            # Debug: check if nested proxy was created
+                            import logging
+
+                            nested_proxies: dict[str, Any] = object.__getattribute__(proxy, "_nested_proxies")
+                            field_obs_dict: dict[str, Any] = object.__getattribute__(proxy, "_field_observables")
+                            logging.getLogger("qtpie.bindings").warning(
+                                "DEBUG format_binding compute: var=%s, proxy=%d, target=%d, nested_proxies=%s, field_obs=%s, value_type=%s",
+                                root_name,
+                                id(proxy),
+                                id(target),
+                                list(nested_proxies.keys()),
+                                list(field_obs_dict.keys()),
+                                type(field_obs).__name__,
+                            )
                             if isinstance(field_obs, Observable):
                                 context[root_name] = field_obs.get()
                                 continue

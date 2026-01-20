@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from observant import ObservableList
+from observant import Observable, ObservableList
 
 from .auth import Auth
 
@@ -71,15 +71,16 @@ class Collection:
 @dataclass
 class Environment:
     name: str
-    variables: list[KeyValue] = field(default_factory=lambda: [])
+    variables: ObservableList[KeyValue] = field(default_factory=lambda: ObservableList[KeyValue]())
+    filename: str | None = field(default=None, repr=False)  # Actual filename on disk (set on load)
 
 
 @dataclass
 class Workspace:
     name: str
     collections: ObservableList[Collection] = field(default_factory=lambda: ObservableList[Collection]())
-    environments: list[Environment] = field(default_factory=lambda: [])
-    active_environment: str | None = None
+    environments: ObservableList[Environment] = field(default_factory=lambda: ObservableList[Environment]())
+    active_environment: Observable[str | None] = field(default_factory=lambda: Observable[str | None](None))
 
 
 def validate_request_name(

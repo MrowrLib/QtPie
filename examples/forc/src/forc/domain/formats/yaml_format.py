@@ -124,6 +124,27 @@ def _create_converter() -> cattrs.Converter:
     converter.register_unstructure_hook(Request, unstructure_request)
     converter.register_unstructure_hook(Collection, unstructure_collection)
 
+    # Environment - handle ObservableList[KeyValue] for variables
+    def unstructure_environment(env: Environment) -> dict[str, Any]:
+        return {
+            "name": env.name,
+            "variables": [converter.unstructure(v) for v in env.variables],
+            # Exclude 'filename' - it's a runtime-only field
+        }
+
+    def structure_environment(data: dict[str, Any], _: type) -> Environment:
+        from forc.domain.models import KeyValue
+
+        name = str(data.get("name", ""))
+        variables_data = data.get("variables", [])
+        variables: ObservableList[KeyValue] = ObservableList()
+        for v in variables_data:
+            variables.append(converter.structure(v, KeyValue))
+        return Environment(name=name, variables=variables)
+
+    converter.register_unstructure_hook(Environment, unstructure_environment)
+    converter.register_structure_hook(Environment, structure_environment)
+
     return converter
 
 
@@ -157,7 +178,9 @@ class YamlFormat:
         """Load an environment from a YAML file."""
         with path.open() as f:
             data = _yaml_load(self._yaml, f)
-        return _converter.structure(data, Environment)
+        env = _converter.structure(data, Environment)
+        env.filename = path.stem  # Store filename without extension
+        return env
 
     def save_environment(self, environment: Environment, path: Path) -> None:
         """Save an environment to a YAML file."""
@@ -265,33 +288,39 @@ class YamlFormat:
                     collections.append(self.load_collection(coll_path))
 
         # Load environments
-        environments: list[Environment] = []
+        environments: ObservableList[Environment] = ObservableList()
         environments_path = path / "environments"
         if environments_path.exists():
             for env_path in sorted(environments_path.iterdir()):
                 if env_path.suffix == self.extension:
                     environments.append(self.load_environment(env_path))
 
-        return Workspace(
+        ws = Workspace(
             name=name,
             collections=collections,
             environments=environments,
-            active_environment=active_environment,
         )
+        ws.active_environment.set(active_environment)
+        return ws
+
+    def save_workspace_config(self, workspace: Workspace, path: Path) -> None:
+        """Save only the workspace config (forc.yaml), not collections or environments."""
+        config_path = path / "forc.yaml"
+        config: dict[str, Any] = {
+            "name": workspace.name,
+        }
+        active_env = workspace.active_environment.get()
+        if active_env:
+            config["active_environment"] = active_env
+        with config_path.open("w") as f:
+            _yaml_dump(self._yaml, config, f)
 
     def save_workspace(self, workspace: Workspace, path: Path) -> None:
         """Save a workspace to a directory."""
         path.mkdir(parents=True, exist_ok=True)
 
         # Save workspace config
-        config_path = path / "forc.yaml"
-        config: dict[str, Any] = {
-            "name": workspace.name,
-        }
-        if workspace.active_environment:
-            config["active_environment"] = workspace.active_environment
-        with config_path.open("w") as f:
-            _yaml_dump(self._yaml, config, f)
+        self.save_workspace_config(workspace, path)
 
         # Save collections
         collections_path = path / "collections"

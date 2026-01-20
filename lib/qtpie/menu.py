@@ -1009,13 +1009,16 @@ def _create_menu_expression_binding(
                 proxy = obj.observable
                 # Get the remaining path after "record"
                 remaining_path = ".".join(parts[i:])
-                nested_obs = proxy.observable_for_path(remaining_path)
-                if isinstance(nested_obs, Observable):
-                    if nested_obs not in observables:
-                        observables.append(cast(Observable[Any], nested_obs))
-                elif isinstance(nested_obs, (ObservableList, ObservableDict, ObservableProxy)):
-                    if nested_obs not in reactive_collections:
-                        reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], nested_obs))
+                try:
+                    nested_obs = proxy.observable_for_path(remaining_path)
+                    if isinstance(nested_obs, Observable):
+                        if nested_obs not in observables:
+                            observables.append(cast(Observable[Any], nested_obs))
+                    elif isinstance(nested_obs, (ObservableList, ObservableDict, ObservableProxy)):
+                        if nested_obs not in reactive_collections:
+                            reactive_collections.append(cast(ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any], nested_obs))
+                except ValueError:
+                    pass  # Can't traverse path through Observable
                 break
 
             obj = getattr(obj, part)

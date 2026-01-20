@@ -432,12 +432,13 @@ def apply_auto_bindings(
         # the existing record binding code path which handles optional chaining properly.
         is_nested_path = "." in bind_path.replace("?.", ".")
 
-        # Check if this is a record binding (Widget[T] with a record type)
-        has_record = hasattr(config, "record_type") and config.record_type is not None  # type: ignore[union-attr]
-
-        # For record bindings, only use format binding if it's explicitly a format string
-        # For non-record widgets, convert nested paths to format bindings for parent hierarchy lookup
-        use_format_binding = is_format_string(bind_path) or (is_nested_path and not has_record and not _is_model_widget(widget_instance))
+        # Use format binding when:
+        # 1. It's explicitly a format string (has {})
+        # 2. It's a nested path (has .) AND not a model widget (QComboBox, QListView, etc.)
+        # Note: We now use format bindings for nested record paths too, because ObservableProxy
+        # creates separate Observable chains for nested paths through atomic values (Enum, primitives).
+        # Format bindings properly subscribe to the base field Observable and re-evaluate on change.
+        use_format_binding = is_format_string(bind_path) or (is_nested_path and not _is_model_widget(widget_instance))
         format_template = bind_path if is_format_string(bind_path) else f"{{{bind_path}}}" if use_format_binding and is_nested_path else None
 
         if use_format_binding and (is_format_string(bind_path) or format_template is not None):

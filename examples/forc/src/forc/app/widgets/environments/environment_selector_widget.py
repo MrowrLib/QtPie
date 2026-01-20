@@ -1,17 +1,16 @@
 from qtpy.QtWidgets import QComboBox, QLabel, QSizePolicy, QToolButton
 
-from qtpie import Variable, Widget, new, widget
+from qtpie import Widget, new, widget
 
 
 @widget(layout="horizontal")
 class EnvironmentSelectorWidget(Widget):
-    ### Variables ###
-    test_list: Variable[list[str]] = new(["Env 1", "Env 2", "Env 3"])
-
     ### Widgets ###
     label: QLabel = new("Environment:")
     environments_chooser: QComboBox = new(
-        bind="test_list",
+        bind="workspace?.environments",
+        format="{name}",
+        selectedItem="workspace?.active_environment",
         sizePolicy=QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed),
     )
     settings_button: QToolButton = new(icon=":/settings-dark.svg", clicked="_on_test_clicked")

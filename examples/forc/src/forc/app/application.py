@@ -5,7 +5,7 @@ from qtpy.QtCore import Qt, Signal
 
 from forc.app import ForcWindow
 from forc.domain.models import Collection, Request, Workspace
-from forc.services import HttpClientService, WorkspaceService
+from forc.services import EnvironmentsService, HttpClientService, WorkspaceService
 from qtpie import App, Variable, app, new
 from qtpie.setting import Setting
 
@@ -27,7 +27,8 @@ class ForcApp(App):
     on_toggle_splitter_orientation = Signal()
 
     ### Services ###
-    workspace_service: Variable[WorkspaceService] = new()
+    environments_service: Variable[EnvironmentsService] = new()
+    workspace_service: Variable[WorkspaceService] = new(environments=environments_service)
     http_client_service: Variable[HttpClientService] = new(workspace_service=workspace_service)
 
     ### Settings ###

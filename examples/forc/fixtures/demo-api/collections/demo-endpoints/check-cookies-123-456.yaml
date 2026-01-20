@@ -1,5 +1,5 @@
 name: Check Cookies 123 456
-method: GET
+method: PATCH
 url: ${BASE_URL}/demo/cookies/check
 headers:
 - key: Accept

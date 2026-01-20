@@ -72,13 +72,19 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
                 # Nested path into Variable[ComplexType]
                 observable = attr.observable
                 if isinstance(observable, ObservableProxy):
-                    return observable.observable_for_path(nested_rest)
+                    try:
+                        return observable.observable_for_path(nested_rest)
+                    except ValueError:
+                        return None
             return attr
         # Handle Observable properties directly (e.g., is_dirty, is_valid)
         if isinstance(raw_attr, ObservableProxy):
             # If there's a nested path, resolve it on the proxy
             if nested_rest:
-                return raw_attr.observable_for_path(nested_rest)
+                try:
+                    return raw_attr.observable_for_path(nested_rest)
+                except ValueError:
+                    return None
             return cast(BindingSource, raw_attr)
         if isinstance(raw_attr, (Observable, ObservableList, ObservableDict, ObservableSet)):
             return cast(BindingSource, raw_attr)
@@ -146,7 +152,11 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
                     For simple paths like "body_type", use the record proxy directly.
                     For nested paths like "auth.type", find the parent proxy and get the field from there.
                     """
-                    result = parent_proxy.observable_for_path(path_str)
+                    try:
+                        result = parent_proxy.observable_for_path(path_str)
+                    except ValueError:
+                        # Can't traverse this path (e.g., path goes through an Observable)
+                        return None
                     if not isinstance(result, ObservableProxy):
                         return None
 
@@ -190,8 +200,9 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
                     # Not an enum, return the normal result
                     result = proxy.observable_for_path(original_path)
                     return cast(BindingSource, result)
-                except AttributeError:
-                    # Field not found on record, continue to fallback
+                except (AttributeError, ValueError):
+                    # AttributeError: Field not found on record
+                    # ValueError: Can't traverse path through Observable (e.g., nested path through atomic value)
                     pass
                 # If original path had underscore, also try stripped path on record
                 if has_leading_underscore:
@@ -202,7 +213,9 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
 
                         result = proxy.observable_for_path(lookup_path)
                         return cast(BindingSource, result)
-                    except AttributeError:
+                    except (AttributeError, ValueError):
+                        # AttributeError: Field not found on record
+                        # ValueError: Can't traverse path through Observable
                         pass
 
     # Underscore fallback on widget itself (e.g., 'name' -> widget._name)

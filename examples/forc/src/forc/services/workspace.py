@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from forc.domain.formats import YamlFormat
-from forc.domain.models import Collection, Environment, KeyValue, Request, Workspace
+from forc.domain.models import Collection, KeyValue, Request, Workspace
 
 from .environments import EnvironmentsService
 
@@ -18,7 +18,7 @@ class WorkspaceService:
         environments: EnvironmentsService | None = None,
     ) -> None:
         self._format = format_handler or YamlFormat()
-        self._environments = environments or EnvironmentsService()
+        self._environments = environments or EnvironmentsService(format_handler=self._format)
         self._workspace: Workspace | None = None
         self._path: Path | None = None
 
@@ -53,7 +53,13 @@ class WorkspaceService:
         """
         self._workspace = self._format.load_workspace(path)
         self._path = path.resolve()
-        self._environments.load(self._workspace.environments, self._workspace.active_environment)
+        self._environments.load(
+            self._workspace.environments,
+            self._path,
+            self._workspace,
+        )
+        # Auto-persist when active environment changes
+        self._workspace.active_environment.on_change(lambda _: self._save_config())
         return self._workspace
 
     def save(self, path: Path | None = None) -> None:
@@ -87,6 +93,11 @@ class WorkspaceService:
         """
         self._workspace = Workspace(name=name)
         self._path = path.resolve()
+        self._environments.load(
+            self._workspace.environments,
+            self._path,
+            self._workspace,
+        )
         self.save()
         return self._workspace
 
@@ -95,35 +106,6 @@ class WorkspaceService:
         self._workspace = None
         self._path = None
         self._environments.clear()
-
-    # Environment operations (delegate to EnvironmentsService)
-
-    def get_active_environment(self) -> Environment | None:
-        """Get the active environment."""
-        return self._environments.active
-
-    def set_active_environment(self, name: str | None) -> None:
-        """Set the active environment by name."""
-        if self._workspace is None:
-            raise RuntimeError("No workspace loaded")
-        self._environments.set_active(name)
-        self._workspace.active_environment = name
-
-    def add_environment(self, environment: Environment) -> None:
-        """Add an environment to the workspace."""
-        if self._workspace is None:
-            raise RuntimeError("No workspace loaded")
-        self._environments.add(environment)
-        self._workspace.environments.append(environment)
-
-    def remove_environment(self, name: str) -> None:
-        """Remove an environment by name."""
-        if self._workspace is None:
-            raise RuntimeError("No workspace loaded")
-        self._environments.remove(name)
-        self._workspace.environments = [e for e in self._workspace.environments if e.name != name]
-        if self._workspace.active_environment == name:
-            self._workspace.active_environment = None
 
     # Request operations
 
@@ -370,6 +352,12 @@ class WorkspaceService:
         meta_path = path / "_collection.yaml"
         self._format.save_collection_metadata(collection.name, meta_path)
 
+    def _save_config(self) -> None:
+        """Save workspace configuration (active environment, etc.)."""
+        if self._workspace is None or self._path is None:
+            return
+        self._format.save_workspace(self._workspace, self._path)
+
     # Variable resolution (delegate to EnvironmentsService)
 
     def resolve_variables(self, text: str) -> str:
@@ -379,7 +367,10 @@ class WorkspaceService:
         1. Active environment variables (includes secrets)
         2. System environment variables (fallback)
         """
-        return self._environments.resolve(text)
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        active = self._workspace.active_environment.get()
+        return self._environments.resolve(text, active)
 
     def resolve_request(self, request: Request) -> Request:
         """Create a copy of the request with all variables resolved."""

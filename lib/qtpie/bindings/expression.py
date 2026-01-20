@@ -394,8 +394,8 @@ def create_expression_binding(
                             # ObservableList, ObservableDict, or ObservableProxy
                             if field_obs not in reactive_collections:
                                 reactive_collections.append(field_obs)
-                    except AttributeError:
-                        pass  # Field doesn't exist on record, skip
+                    except (AttributeError, ValueError):
+                        pass  # Field doesn't exist or can't traverse path, skip
 
     # Search parent widget hierarchy for variables not found on context
     # This allows expressions like isinstance(collection_item, Request) where
@@ -518,9 +518,29 @@ def create_expression_binding(
             if record_proxy is not None:
                 target: Any = object.__getattribute__(record_proxy, "_target")
                 if target is not None and hasattr(target, var_name):
-                    # Get the actual value from the record (not the proxy)
-                    field_value = getattr(target, var_name)
-                    eval_context[var_name] = field_value
+                    # Get the value THROUGH the proxy so it creates field observables
+                    # This is critical for sibling proxy synchronization - when another
+                    # proxy for the same target changes a field, this proxy needs a
+                    # field observable to receive the update via _sync_from_target
+                    proxy_field_value: Any = getattr(record_proxy, var_name)
+                    # Debug: check if nested proxy was created
+                    nested_proxies: dict[str, Any] = object.__getattribute__(record_proxy, "_nested_proxies")
+                    field_obs: dict[str, Any] = object.__getattribute__(record_proxy, "_field_observables")
+                    import logging
+
+                    logging.getLogger("qtpie.bindings").warning(
+                        "DEBUG compute: var=%s, proxy_id=%d, nested_proxies=%s, field_obs=%s, value_type=%s",
+                        var_name,
+                        id(target),
+                        list(nested_proxies.keys()),
+                        list(field_obs.keys()),
+                        type(proxy_field_value).__name__,
+                    )
+                    # Unwrap ObservableProxy to get the actual value for eval context
+                    if isinstance(proxy_field_value, ObservableProxy):
+                        eval_context[var_name] = proxy_field_value.unwrap()
+                    else:
+                        eval_context[var_name] = proxy_field_value
                     continue
 
             # Try with underscore prefix first, then without on the context
@@ -618,7 +638,7 @@ def create_expression_binding(
                                     subscribe_to_observable(field_obs)
                                 else:
                                     subscribe_to_collection(field_obs)
-                            except AttributeError:
+                            except (AttributeError, ValueError):
                                 pass
 
                 # Recompute with new data

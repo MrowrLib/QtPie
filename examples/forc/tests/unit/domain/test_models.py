@@ -143,14 +143,11 @@ class TestEnvironment:
         assert_that(env.variables).is_empty()
 
     def test_create_with_variables(self):
-        env = Environment(
-            name="prod",
-            variables=[
-                KeyValue(key="API_URL", value="https://api.example.com"),
-                KeyValue(key="TIMEOUT", value="30"),
-            ],
-        )
-        assert_that(env.variables).is_length(2)
+        variables: ObservableList[KeyValue] = ObservableList()
+        variables.append(KeyValue(key="API_URL", value="https://api.example.com"))
+        variables.append(KeyValue(key="TIMEOUT", value="30"))
+        env = Environment(name="prod", variables=variables)
+        assert_that(list(env.variables)).is_length(2)
 
 
 class TestWorkspace:
@@ -159,18 +156,21 @@ class TestWorkspace:
         assert_that(ws.name).is_equal_to("My Workspace")
         assert_that(ws.collections).is_empty()
         assert_that(ws.environments).is_empty()
-        assert_that(ws.active_environment).is_none()
+        assert_that(ws.active_environment.get()).is_none()
 
     def test_create_full(self):
+        envs: ObservableList[Environment] = ObservableList()
+        envs.append(Environment(name="dev"))
+        envs.append(Environment(name="prod"))
         ws = Workspace(
             name="Project",
             collections=ObservableList([Collection(name="API")]),
-            environments=[Environment(name="dev"), Environment(name="prod")],
-            active_environment="dev",
+            environments=envs,
         )
-        assert_that(ws.collections).is_length(1)
-        assert_that(ws.environments).is_length(2)
-        assert_that(ws.active_environment).is_equal_to("dev")
+        ws.active_environment.set("dev")
+        assert_that(list(ws.collections)).is_length(1)
+        assert_that(list(ws.environments)).is_length(2)
+        assert_that(ws.active_environment.get()).is_equal_to("dev")
 
 
 class TestResponse:

@@ -118,20 +118,17 @@ class TestYamlFormatEnvironment:
         self.tmp_dir = tempfile.mkdtemp()
 
     def test_save_and_load_environment(self):
-        env = Environment(
-            name="development",
-            variables=[
-                KeyValue(key="API_URL", value="http://localhost:3000"),
-                KeyValue(key="DEBUG", value="true"),
-            ],
-        )
+        variables: ObservableList[KeyValue] = ObservableList()
+        variables.append(KeyValue(key="API_URL", value="http://localhost:3000"))
+        variables.append(KeyValue(key="DEBUG", value="true"))
+        env = Environment(name="development", variables=variables)
         path = Path(self.tmp_dir) / "dev.yaml"
 
         self.fmt.save_environment(env, path)
         loaded = self.fmt.load_environment(path)
 
         assert_that(loaded.name).is_equal_to("development")
-        assert_that(loaded.variables).is_length(2)
+        assert_that(list(loaded.variables)).is_length(2)
         assert_that(loaded.variables[0].key).is_equal_to("API_URL")
         assert_that(loaded.variables[1].key).is_equal_to("DEBUG")
 
@@ -212,27 +209,33 @@ class TestYamlFormatWorkspace:
         assert_that(loaded.name).is_equal_to("My Workspace")
         assert_that(loaded.collections).is_empty()
         assert_that(loaded.environments).is_empty()
-        assert_that(loaded.active_environment).is_none()
+        assert_that(loaded.active_environment.get()).is_none()
 
     def test_save_and_load_workspace_with_environments(self):
+        dev_vars: ObservableList[KeyValue] = ObservableList()
+        dev_vars.append(KeyValue(key="URL", value="localhost"))
+        prod_vars: ObservableList[KeyValue] = ObservableList()
+        prod_vars.append(KeyValue(key="URL", value="api.example.com"))
+        envs: ObservableList[Environment] = ObservableList()
+        envs.append(Environment(name="dev", variables=dev_vars))
+        envs.append(Environment(name="prod", variables=prod_vars))
         ws = Workspace(
             name="Project",
-            environments=[
-                Environment(name="dev", variables=[KeyValue(key="URL", value="localhost")]),
-                Environment(name="prod", variables=[KeyValue(key="URL", value="api.example.com")]),
-            ],
-            active_environment="dev",
+            environments=envs,
         )
+        ws.active_environment.set("dev")
         path = Path(self.tmp_dir) / "project"
 
         self.fmt.save_workspace(ws, path)
         loaded = self.fmt.load_workspace(path)
 
         assert_that(loaded.name).is_equal_to("Project")
-        assert_that(loaded.environments).is_length(2)
-        assert_that(loaded.active_environment).is_equal_to("dev")
+        assert_that(list(loaded.environments)).is_length(2)
+        assert_that(loaded.active_environment.get()).is_equal_to("dev")
 
     def test_save_and_load_full_workspace(self):
+        envs: ObservableList[Environment] = ObservableList()
+        envs.append(Environment(name="dev"))
         ws = Workspace(
             name="Full Project",
             collections=ObservableList(
@@ -248,11 +251,9 @@ class TestYamlFormatWorkspace:
                     ),
                 ]
             ),
-            environments=[
-                Environment(name="dev"),
-            ],
-            active_environment="dev",
+            environments=envs,
         )
+        ws.active_environment.set("dev")
         path = Path(self.tmp_dir) / "full-project"
 
         self.fmt.save_workspace(ws, path)
@@ -263,7 +264,7 @@ class TestYamlFormatWorkspace:
         assert_that(loaded.collections[0].name).is_equal_to("Users API")
         assert_that(loaded.collections[0].items).is_length(2)
         assert_that(loaded.environments).is_length(1)
-        assert_that(loaded.active_environment).is_equal_to("dev")
+        assert_that(loaded.active_environment.get()).is_equal_to("dev")
 
     def test_load_workspace_without_config(self):
         # Create a workspace directory without forc.yaml
