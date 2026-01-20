@@ -415,3 +415,48 @@ class TestWorkspaceServiceRename:
 
         with pytest.raises(RuntimeError, match="No workspace"):
             self.svc.rename_collection(coll, "New Name")
+
+    def test_new_collection_persists_name_in_metadata(self):
+        """New collections should save their name to _collection.yaml."""
+        coll = self.svc.add_collection("My Cool API")
+        req = self.svc.add_request("Get Users", coll)
+        self.svc.save_request(req)
+
+        # Reload workspace and verify the collection name comes back correctly
+        self.svc.close()
+        ws = self.svc.load(self.tmp_dir / "test")
+
+        assert_that(ws.collections).is_length(1)
+        assert_that(ws.collections[0].name).is_equal_to("My Cool API")
+
+    def test_renamed_collection_persists_name_in_metadata(self):
+        """Renaming a collection should update _collection.yaml with new name."""
+        coll = self.svc.add_collection("Old Name")
+        req = self.svc.add_request("Get Users", coll)
+        self.svc.save_request(req)
+
+        self.svc.rename_collection(coll, "New Name")
+
+        # Reload workspace and verify the NEW name is persisted
+        self.svc.close()
+        ws = self.svc.load(self.tmp_dir / "test")
+
+        assert_that(ws.collections).is_length(1)
+        assert_that(ws.collections[0].name).is_equal_to("New Name")
+
+    def test_renamed_nested_collection_persists_name_in_metadata(self):
+        """Renaming a nested collection should update its _collection.yaml."""
+        parent = self.svc.add_collection("Parent")
+        child = self.svc.add_collection("Old Child Name", parent=parent)
+        req = self.svc.add_request("Get User", child)
+        self.svc.save_request(req)
+
+        self.svc.rename_collection(child, "New Child Name")
+
+        # Reload and verify
+        self.svc.close()
+        ws = self.svc.load(self.tmp_dir / "test")
+
+        reloaded_child = ws.collections[0].items[0]
+        assert isinstance(reloaded_child, Collection)
+        assert_that(reloaded_child.name).is_equal_to("New Child Name")

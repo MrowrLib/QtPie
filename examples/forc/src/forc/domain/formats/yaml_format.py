@@ -206,14 +206,23 @@ class YamlFormat:
                 item.parent = collection
         return collection
 
+    def save_collection_metadata(self, name: str, path: Path) -> None:
+        """Save collection metadata (_collection.yaml) file.
+
+        Args:
+            name: The collection's display name
+            path: Path to the _collection.yaml file
+        """
+        with path.open("w") as f:
+            _yaml_dump(self._yaml, {"name": name}, f)
+
     def save_collection(self, collection: Collection, path: Path) -> None:
         """Save a collection to a directory."""
         path.mkdir(parents=True, exist_ok=True)
 
         # Save collection metadata
         meta_path = path / "_collection.yaml"
-        with meta_path.open("w") as f:
-            _yaml_dump(self._yaml, {"name": collection.name}, f)
+        self.save_collection_metadata(collection.name, meta_path)
 
         # Save items
         for item in collection.items:

@@ -184,6 +184,10 @@ class WorkspaceService:
             self._workspace.collections.append(collection)
         else:
             parent.items.append(collection)
+
+        # Write to disk immediately
+        self._save_collection_metadata(collection)
+
         return collection
 
     def add_request(self, name: str, collection: Collection) -> Request:
@@ -305,6 +309,9 @@ class WorkspaceService:
         if old_path.exists() and old_path != new_path:
             old_path.rename(new_path)
 
+        # Update _collection.yaml with the new name
+        self._save_collection_metadata(collection)
+
     def _get_collection_path(self, collection: Collection) -> Path:
         """Get the folder path for a collection based on its hierarchy."""
         from forc.domain.formats.yaml_format import slugify
@@ -323,6 +330,13 @@ class WorkspaceService:
         for part in parts:
             path = path / part
         return path
+
+    def _save_collection_metadata(self, collection: Collection) -> None:
+        """Save a collection's _collection.yaml metadata file."""
+        path = self._get_collection_path(collection)
+        path.mkdir(parents=True, exist_ok=True)
+        meta_path = path / "_collection.yaml"
+        self._format.save_collection_metadata(collection.name, meta_path)
 
     # Variable resolution (delegate to EnvironmentsService)
 
