@@ -144,6 +144,10 @@ class QtPieWidgetDelegate(QStyledItemDelegate):
             f"{self.widget_class.__name__}[{row}]",
         )
 
+        # Make the widget background transparent so selection highlighting shows through
+        widget.setAutoFillBackground(False)
+        widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
         return widget
 
     @override
@@ -229,9 +233,14 @@ class QtPieWidgetDelegate(QStyledItemDelegate):
         option: QStyleOptionViewItem,
         index: QModelIndex | QPersistentModelIndex,
     ) -> None:
-        """Don't paint anything - the embedded widget handles all rendering.
+        """Paint selection/hover background, then let the widget render on top.
 
-        Without this override, Qt draws the DisplayRole text underneath the widget.
+        The embedded widget should have transparent background to let the
+        selection highlight show through.
         """
-        # No-op - widget covers the entire cell
-        pass
+        # Let the style draw the item background (selection, hover, etc.)
+        # This paints underneath the embedded widget
+        from qtpy.QtWidgets import QApplication, QStyle
+
+        style: QStyle = option.widget.style() if option.widget else QApplication.style()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportAttributeAccessIssue]
+        style.drawPrimitive(QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget)  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType,reportAttributeAccessIssue]

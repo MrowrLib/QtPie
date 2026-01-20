@@ -29,6 +29,19 @@
     font-size: 13px;
 }
 
+// Embedded widget in tree items - ensure background shows through
+#CollectionsTreeWidgetRow {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidgetRow QLabel {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidgetRow QLineEdit {
+    background-color: $bg-tertiary;
+}
+
 // Cookie manager button
 #SidebarWidget QPushButton#_cookie_manager_button {
     border-style: solid;
