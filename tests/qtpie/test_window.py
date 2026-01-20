@@ -2483,3 +2483,128 @@ class TestWindowRefWithRequiredBinding:
         w = qt.track(MainWindow())
         # The ref should resolve with literal text preserved
         assert_that(w.dog_display.name_label.text()).is_equal_to("Dog name: Max")
+
+
+# =============================================================================
+# Status bar support
+# =============================================================================
+
+
+class TestWindowStatusBar:
+    """Test status_bar field for declarative status bar widgets."""
+
+    def test_status_bar_field(self, qt: QtDriver) -> None:
+        """status_bar field is added to the status bar."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            label: QLabel = new("Main content")
+            status_bar: QLabel = new("Ready")
+
+        w = qt.track(MainWindow())
+
+        # Status bar should exist and contain the widget
+        sb = w.statusBar()
+        assert_that(sb).is_not_none()
+
+        # The status_bar widget should be accessible
+        assert_that(w.status_bar.text()).is_equal_to("Ready")
+
+        # The label should be in the status bar (as permanent widget)
+        # Check by finding our label in statusBar's children
+        found = w.status_bar in sb.findChildren(QLabel)
+        assert_that(found).is_true()
+
+    def test_underscore_status_bar_field(self, qt: QtDriver) -> None:
+        """_status_bar field is added to the status bar."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            label: QLabel = new("Main content")
+            _status_bar: QLabel = new("Status: OK")
+
+        w = qt.track(MainWindow())
+
+        # The _status_bar widget should be accessible
+        assert_that(w._status_bar.text()).is_equal_to("Status: OK")
+
+        # The label should be in the status bar
+        sb = w.statusBar()
+        found = w._status_bar in sb.findChildren(QLabel)
+        assert_that(found).is_true()
+
+    def test_status_bar_not_in_central_widget(self, qt: QtDriver) -> None:
+        """status_bar field is NOT added to central widget layout."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            label: QLabel = new("Main content")
+            status_bar: QLabel = new("Ready")
+
+        w = qt.track(MainWindow())
+
+        # Central widget should only have the label, not status_bar
+        central = w.centralWidget()
+        layout = central.layout()
+        assert_that(layout.count()).is_equal_to(1)
+        assert_that(layout.itemAt(0).widget()).is_equal_to(w.label)
+
+    def test_status_bar_with_custom_widget(self, qt: QtDriver) -> None:
+        """status_bar can be a custom Widget subclass."""
+
+        @widget
+        class StatusWidget(Widget):
+            _message: Variable[str] = new("Ready")
+            label: QLabel = new(bind="{_message}")
+
+        @window(title="Test")
+        class MainWindow(Window):
+            label: QLabel = new("Main")
+            status_bar: StatusWidget = new()
+
+        w = qt.track(MainWindow())
+
+        # Custom widget in status bar
+        assert_that(w.status_bar.label.text()).is_equal_to("Ready")
+
+        # Reactive updates work
+        w.status_bar._message.value = "Processing..."
+        assert_that(w.status_bar.label.text()).is_equal_to("Processing...")
+
+    def test_status_bar_variable_with_widget(self, qt: QtDriver) -> None:
+        """status_bar: Variable[T, W] works."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            label: QLabel = new("Main")
+            status_bar: Variable[str, QLabel] = new("Initial")(bind="{#self}")
+
+        w = qt.track(MainWindow())
+
+        # Variable accessible
+        assert_that(w.status_bar.value).is_equal_to("Initial")
+        assert_that(w.status_bar.widget.text()).is_equal_to("Initial")
+
+        # Reactive updates
+        w.status_bar.value = "Updated"
+        assert_that(w.status_bar.widget.text()).is_equal_to("Updated")
+
+        # Widget is in status bar
+        sb = w.statusBar()
+        found = w.status_bar.widget in sb.findChildren(QLabel)
+        assert_that(found).is_true()
+
+    def test_status_bar_with_reactive_binding(self, qt: QtDriver) -> None:
+        """status_bar widget can use reactive bindings."""
+
+        @window(title="Test")
+        class MainWindow(Window):
+            _count: Variable[int] = new(0)
+            label: QLabel = new("Main")
+            status_bar: QLabel = new(bind="Count: {_count}")
+
+        w = qt.track(MainWindow())
+        assert_that(w.status_bar.text()).is_equal_to("Count: 0")
+
+        w._count.value = 42
+        assert_that(w.status_bar.text()).is_equal_to("Count: 42")

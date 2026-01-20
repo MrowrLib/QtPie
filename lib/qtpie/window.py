@@ -393,8 +393,8 @@ def _has_layout_items(
         # Skip dock fields
         if name in dock_field_names or name in variable_dock_field_names:
             continue
-        # Skip central_widget (handled separately)
-        if name in ("central_widget", "_central_widget"):
+        # Skip central_widget and status_bar (handled separately)
+        if name in ("central_widget", "_central_widget", "status_bar", "_status_bar"):
             continue
 
         # Check if it's a field we handle
@@ -631,7 +631,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 for name in getattr(cls, "__annotations__", {}):
                     if name in dock_field_names or name in variable_dock_field_names:
                         continue
-                    if name in ("central_widget", "_central_widget"):
+                    if name in ("central_widget", "_central_widget", "status_bar", "_status_bar"):
                         continue
 
                     annotation = getattr(cls, "__annotations__", {}).get(name)
@@ -768,6 +768,17 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                 _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
 
             self.setCentralWidget(central)
+
+        # Set up status bar widget if defined (status_bar or _status_bar field)
+        # Note: Use `is None` check because Variable can be falsy (empty value)
+        status_bar_widget = getattr(self, "status_bar", None)
+        if status_bar_widget is None:
+            status_bar_widget = getattr(self, "_status_bar", None)
+        # Handle Variable[T, W] as status_bar
+        if isinstance(status_bar_widget, Variable) and status_bar_widget.widget is not None:
+            status_bar_widget = status_bar_widget.widget
+        if status_bar_widget is not None and isinstance(status_bar_widget, QWidget):
+            self.statusBar().addPermanentWidget(status_bar_widget, 1)  # stretch=1 to fill
 
         # Ensure QtPieState exists BEFORE bindings run (binding code checks hasattr)
         if not hasattr(self, "_qtpie"):

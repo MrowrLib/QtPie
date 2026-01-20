@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import override
 
-from qtpy.QtCore import Signal
+from qtpy.QtCore import Qt, Signal
 
 from forc.app import ForcWindow
 from forc.domain.models import Collection, Request, Workspace
@@ -15,12 +15,14 @@ from qtpie.setting import Setting
     on_reload_window="_on_reload_window",
     on_save="_on_save",
     on_load_workspace="_on_load_workspace",
+    on_toggle_splitter_orientation="_on_toggle_splitter_orientation",
 )
 class ForcApp(App):
     ### Signals ###
     on_reload_window = Signal()
     on_save = Signal()  # saves current request if dirty
     on_load_workspace = Signal(str)
+    on_toggle_splitter_orientation = Signal()
 
     ### Services ###
     workspace_service: Variable[WorkspaceService] = new()
@@ -33,6 +35,7 @@ class ForcApp(App):
     workspace: Variable[Workspace | None] = new(None)
     current_workspace_item: Variable[Collection | Request | None] = new(None)  # TODO rename!
     current_request: Variable[Request | None] = new(None)
+    orientation: Variable[Qt.Orientation] = new(Qt.Orientation.Horizontal)  # TODO rename!
 
     ### Window ###
     main_window: ForcWindow
@@ -74,3 +77,9 @@ class ForcApp(App):
         self.workspace = workspace
         self.loaded_workspace_path = workspace_path
         print(f"Workspace changed to '{workspace.name}'.")
+
+    def _on_toggle_splitter_orientation(self) -> None:
+        if self.orientation() == Qt.Orientation.Horizontal:
+            self.orientation = Qt.Orientation.Vertical
+        else:
+            self.orientation = Qt.Orientation.Horizontal

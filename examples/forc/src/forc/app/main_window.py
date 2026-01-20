@@ -1,10 +1,20 @@
 from qtpy.QtCore import Signal
+from qtpy.QtWidgets import QLabel, QPushButton
 
 from forc.app.menus import FileMenu, ViewMenu
 from forc.app.widgets import RequestWidget, SidebarWidget
 from forc.domain.models import Collection, Request
-from qtpie import Dock, Window, new, window
-from qtpie.variable import Variable
+from qtpie import Dock, Stretch, Variable, Widget, Window, new, widget, window
+
+
+@widget(layout="horizontal")
+class TestStatusBar(Widget):
+    label1: QLabel = new("Status: Ready")
+    stretch: Stretch
+    toggle_request_splitter_orientation_button: QPushButton = new(
+        "Toggle Splitter Orientation", clicked="on_toggle_splitter_orientation"
+    )
+    label2: QLabel = new("Line 1, Col 1")
 
 
 @window(
@@ -25,6 +35,9 @@ class ForcWindow(Window):
     # Ah, we should rename, current_workspace_item is just in the SIDEBAR selection, not e.g. the current tab! right?
     current_workspace_item: Variable[Collection | Request | None]  # TODO later: RENAME / move me
     selected_request_index: Variable[int]
+
+    ### Status Bar ###
+    status_bar: TestStatusBar = new()
 
     ### Menus ###
     file_menu: FileMenu
