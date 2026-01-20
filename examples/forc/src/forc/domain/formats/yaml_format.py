@@ -193,7 +193,9 @@ class YamlFormat:
             if item_path.is_dir():
                 items.append(self.load_collection(item_path))
             elif item_path.suffix == self.extension:
-                items.append(self.load_request(item_path))
+                request = self.load_request(item_path)
+                request.filename = item_path.stem  # Store filename without extension
+                items.append(request)
 
         collection = Collection(name=name, items=items, folder=path.name)
         # Set parent references

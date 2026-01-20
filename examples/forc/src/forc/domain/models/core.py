@@ -57,6 +57,7 @@ class Request:
     body_type: BodyType = BodyType.NONE
     auth: Auth | None = None
     collection: Collection | None = field(default=None, repr=False)
+    filename: str | None = field(default=None, repr=False)  # Actual filename on disk (set on load)
 
 
 @dataclass

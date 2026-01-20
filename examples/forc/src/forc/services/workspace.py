@@ -51,7 +51,7 @@ class WorkspaceService:
             The loaded workspace
         """
         self._workspace = self._format.load_workspace(path)
-        self._path = path
+        self._path = path.resolve()
         self._environments.load(self._workspace.environments, self._workspace.active_environment)
         return self._workspace
 
@@ -85,7 +85,7 @@ class WorkspaceService:
             The created workspace
         """
         self._workspace = Workspace(name=name)
-        self._path = path
+        self._path = path.resolve()
         self.save()
         return self._workspace
 
@@ -162,7 +162,8 @@ class WorkspaceService:
         path = self._path / "collections"
         for part in parts:
             path = path / part
-        return path / f"{slugify(request.name)}.yaml"
+        filename = request.filename or slugify(request.name)
+        return path / f"{filename}.yaml"
 
     # Collection operations
 
@@ -254,13 +255,20 @@ class WorkspaceService:
         Raises:
             RuntimeError: If no workspace is loaded or no path set
         """
+        from forc.domain.formats.yaml_format import slugify
+
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
         if self._path is None:
             raise RuntimeError("No workspace path set")
 
+        # Get old path using current filename (preserves actual disk name)
         old_path = self._get_request_path(request)
+
+        # Update name and filename
         request.name = new_name
+        request.filename = slugify(new_name)
+
         new_path = self._get_request_path(request)
 
         if old_path.exists() and old_path != new_path:
@@ -285,9 +293,13 @@ class WorkspaceService:
         if self._path is None:
             raise RuntimeError("No workspace path set")
 
+        # Get old path using current folder (preserves actual disk name)
         old_path = self._get_collection_path(collection)
+
+        # Update name and folder
         collection.name = new_name
         collection.folder = slugify(new_name)
+
         new_path = self._get_collection_path(collection)
 
         if old_path.exists() and old_path != new_path:
