@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 from assertpy import assert_that
-from forc.domain.models import Environment, HttpMethod, KeyValue, Request
+from forc.domain.models import Collection, Environment, HttpMethod, KeyValue, Request
 from forc.services.workspace import WorkspaceService
 
 
@@ -292,3 +292,126 @@ class TestWorkspaceServicePersistence:
         assert_that(ws.collections).is_length(1)
         assert_that(ws.collections[0].items).is_length(2)
         assert_that(ws.active_environment).is_equal_to("dev")
+
+
+class TestWorkspaceServiceRename:
+    def setup_method(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.svc = WorkspaceService()
+        self.svc.create("Test", self.tmp_dir / "test")
+
+    def test_rename_request(self):
+        coll = self.svc.add_collection("API")
+        req = self.svc.add_request("Get Users", coll)
+        req.url = "https://example.com/users"
+        self.svc.save_request(req)
+
+        old_path = self.tmp_dir / "test" / "collections" / "api" / "get-users.yaml"
+        assert_that(old_path.exists()).is_true()
+
+        self.svc.rename_request(req, "List Users")
+
+        assert_that(req.name).is_equal_to("List Users")
+        new_path = self.tmp_dir / "test" / "collections" / "api" / "list-users.yaml"
+        assert_that(new_path.exists()).is_true()
+        assert_that(old_path.exists()).is_false()
+
+    def test_rename_request_preserves_content(self):
+        coll = self.svc.add_collection("API")
+        req = self.svc.add_request("Get Users", coll)
+        req.url = "https://example.com/users"
+        req.method = HttpMethod.POST
+        self.svc.save_request(req)
+
+        self.svc.rename_request(req, "List Users")
+
+        # Reload and verify content preserved
+        self.svc.close()
+        ws = self.svc.load(self.tmp_dir / "test")
+        reloaded_req = ws.collections[0].items[0]
+        assert isinstance(reloaded_req, Request)
+        assert_that(reloaded_req.name).is_equal_to("List Users")
+        assert_that(reloaded_req.url).is_equal_to("https://example.com/users")
+        assert_that(reloaded_req.method).is_equal_to(HttpMethod.POST)
+
+    def test_rename_collection(self):
+        coll = self.svc.add_collection("Users API")
+        req = self.svc.add_request("Get Users", coll)
+        self.svc.save_request(req)
+
+        old_path = self.tmp_dir / "test" / "collections" / "users-api"
+        assert_that(old_path.exists()).is_true()
+
+        self.svc.rename_collection(coll, "People API")
+
+        assert_that(coll.name).is_equal_to("People API")
+        assert_that(coll.folder).is_equal_to("people-api")
+        new_path = self.tmp_dir / "test" / "collections" / "people-api"
+        assert_that(new_path.exists()).is_true()
+        assert_that(old_path.exists()).is_false()
+
+    def test_rename_collection_preserves_contents(self):
+        coll = self.svc.add_collection("Users API")
+        req = self.svc.add_request("Get Users", coll)
+        req.url = "https://example.com/users"
+        self.svc.save_request(req)
+
+        self.svc.rename_collection(coll, "People API")
+
+        # Verify request file still exists in new location
+        req_path = self.tmp_dir / "test" / "collections" / "people-api" / "get-users.yaml"
+        assert_that(req_path.exists()).is_true()
+
+    def test_rename_nested_collection(self):
+        parent = self.svc.add_collection("API")
+        child = self.svc.add_collection("Users", parent=parent)
+        req = self.svc.add_request("Get User", child)
+        self.svc.save_request(req)
+
+        old_path = self.tmp_dir / "test" / "collections" / "api" / "users"
+        assert_that(old_path.exists()).is_true()
+
+        self.svc.rename_collection(child, "People")
+
+        assert_that(child.name).is_equal_to("People")
+        assert_that(child.folder).is_equal_to("people")
+        new_path = self.tmp_dir / "test" / "collections" / "api" / "people"
+        assert_that(new_path.exists()).is_true()
+        assert_that(old_path.exists()).is_false()
+
+    def test_rename_item_request(self):
+        coll = self.svc.add_collection("API")
+        req = self.svc.add_request("Get Users", coll)
+        self.svc.save_request(req)
+
+        self.svc.rename_item(req, "List Users")
+
+        assert_that(req.name).is_equal_to("List Users")
+
+    def test_rename_item_collection(self):
+        coll = self.svc.add_collection("Users API")
+        req = self.svc.add_request("Get Users", coll)
+        self.svc.save_request(req)
+
+        self.svc.rename_item(coll, "People API")
+
+        assert_that(coll.name).is_equal_to("People API")
+        assert_that(coll.folder).is_equal_to("people-api")
+
+    def test_rename_request_no_workspace_raises(self):
+        import pytest
+
+        self.svc.close()
+        req = Request(name="Test")
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.rename_request(req, "New Name")
+
+    def test_rename_collection_no_workspace_raises(self):
+        import pytest
+
+        self.svc.close()
+        coll = Collection(name="Test")
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.rename_collection(coll, "New Name")

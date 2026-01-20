@@ -33,6 +33,10 @@ class AddCollectionDialog(Dialog):
 
 @widget
 class CollectionsTreeWidget(Widget):
+    ### Services ###
+    workspace_service: Variable[WorkspaceService]
+
+    ### Widgets ###
     header: QLabel = new(bind="{workspace?.name}")
     treeview: QTreeView = new(
         bind="workspace.collections",
@@ -47,8 +51,11 @@ class CollectionsTreeWidget(Widget):
         clicked="{on_current_workspace_item_changed()}",
     )
 
+    ### Methods ###
     def _on_rename(self, item: Collection | Request, old_name: str, new_name: str) -> None:
         print(f"Renaming item from '{old_name}' to '{new_name}'")
+        self.workspace_service().rename_item(item, new_name)
+        print("Item renamed.")
 
 
 @widget

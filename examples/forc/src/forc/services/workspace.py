@@ -229,6 +229,89 @@ class WorkspaceService:
                 # Top-level collection
                 self._workspace.collections.remove(item)
 
+    def rename_item(self, item: Request | Collection, new_name: str) -> None:
+        """Rename a request or collection and its file/folder on disk.
+
+        Args:
+            item: The request or collection to rename
+            new_name: The new name
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
+        """
+        if isinstance(item, Request):
+            self.rename_request(item, new_name)
+        else:
+            self.rename_collection(item, new_name)
+
+    def rename_request(self, request: Request, new_name: str) -> None:
+        """Rename a request and its file on disk.
+
+        Args:
+            request: The request to rename
+            new_name: The new name for the request
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
+        """
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        old_path = self._get_request_path(request)
+        request.name = new_name
+        new_path = self._get_request_path(request)
+
+        if old_path.exists() and old_path != new_path:
+            old_path.rename(new_path)
+
+        self.save_request(request)
+
+    def rename_collection(self, collection: Collection, new_name: str) -> None:
+        """Rename a collection and its folder on disk.
+
+        Args:
+            collection: The collection to rename
+            new_name: The new name for the collection
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
+        """
+        from forc.domain.formats.yaml_format import slugify
+
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        old_path = self._get_collection_path(collection)
+        collection.name = new_name
+        collection.folder = slugify(new_name)
+        new_path = self._get_collection_path(collection)
+
+        if old_path.exists() and old_path != new_path:
+            old_path.rename(new_path)
+
+    def _get_collection_path(self, collection: Collection) -> Path:
+        """Get the folder path for a collection based on its hierarchy."""
+        from forc.domain.formats.yaml_format import slugify
+
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        parts: list[str] = []
+        current: Collection | None = collection
+        while current is not None:
+            parts.append(current.folder or slugify(current.name))
+            current = current.parent
+        parts.reverse()
+
+        path = self._path / "collections"
+        for part in parts:
+            path = path / part
+        return path
+
     # Variable resolution (delegate to EnvironmentsService)
 
     def resolve_variables(self, text: str) -> str:
