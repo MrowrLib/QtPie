@@ -15,7 +15,7 @@ This mixin provides the common API for:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
 from observant import Observable
 
@@ -166,7 +166,27 @@ class QtPieComponentBase:
     # Variable Resolution
     # -------------------------------------------------------------------------
 
-    def var(self, name: str) -> Any:
+    # fmt: off
+    # var() overloads for type inference
+    @overload
+    def var(self, name: str) -> Any: ...
+    @overload
+    def var[T1](self, name: str, t1: type[T1]) -> T1: ...
+    @overload
+    def var[T1, T2](self, name: str, t1: type[T1], t2: type[T2]) -> T1 | T2: ...
+    @overload
+    def var[T1, T2, T3](self, name: str, t1: type[T1], t2: type[T2], t3: type[T3]) -> T1 | T2 | T3: ...
+    @overload
+    def var[T1, T2, T3, T4](self, name: str, t1: type[T1], t2: type[T2], t3: type[T3], t4: type[T4]) -> T1 | T2 | T3 | T4: ...
+    # With None
+    @overload
+    def var[T1](self, name: str, t1: type[T1], t2: None) -> T1 | None: ...
+    @overload
+    def var[T1, T2](self, name: str, t1: type[T1], t2: type[T2], t3: None) -> T1 | T2 | None: ...
+    @overload
+    def var[T1, T2, T3](self, name: str, t1: type[T1], t2: type[T2], t3: type[T3], t4: None) -> T1 | T2 | T3 | None: ...
+    # fmt: on
+    def var(self, name: str, *types: type[Any] | None) -> Any:  # pyright: ignore[reportInconsistentOverload]
         """Resolve a variable by name from the binding context.
 
         Searches in this order:
@@ -176,6 +196,7 @@ class QtPieComponentBase:
 
         Args:
             name: The variable name to resolve (e.g., "count" or "_count").
+            *types: Optional type(s) for type inference. Pass None as last arg for optional.
 
         Returns:
             The resolved value (unwrapped from Variable if applicable).
@@ -184,8 +205,10 @@ class QtPieComponentBase:
             AttributeError: If variable not found in context or parent hierarchy.
 
         Example:
-            count = self.var("count")  # Gets current value of _count Variable
-            item = self.var("selected_item")  # May resolve from parent widget
+            x = self.var("count")  # Returns Any
+            x = self.var("count", int)  # Returns int
+            x = self.var("pet", Dog, Cat)  # Returns Dog | Cat
+            x = self.var("pet", Dog, None)  # Returns Dog | None
         """
         from qtpie.bindings.expression import resolve_var
 

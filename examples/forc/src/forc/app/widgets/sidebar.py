@@ -1,5 +1,3 @@
-from typing import cast
-
 from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
 
 from forc.app.helpers import filename_safe_validator
@@ -84,7 +82,7 @@ class SidebarWidget(Widget):
         CookieManagerDialog.show_dialog()
 
     def _on_new_collection(self):
-        selected_item = cast(Collection | Request | None, self.var("current_workspace_item"))
+        selected_item = self.var("current_workspace_item", Collection, Request, None)
         if selected_item is None:
             return
         collection = selected_item if isinstance(selected_item, Collection) else selected_item.collection
@@ -95,7 +93,7 @@ class SidebarWidget(Widget):
             self.workspace_service().add_collection(name=collection_name)
 
     def _on_new_request(self):
-        selected_item = cast(Collection | Request | None, self.var("current_workspace_item"))
+        selected_item = self.var("current_workspace_item", Collection, Request, None)
         if selected_item is None:
             return
         collection = selected_item if isinstance(selected_item, Collection) else selected_item.collection

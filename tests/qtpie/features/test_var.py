@@ -37,7 +37,7 @@ class TestVarSelf:
             _count: Variable[int] = new(42)
 
         instance = create_and_track(qt, TestClass, base_class)
-        result = instance.var("count")
+        result = instance.var("count", int)
 
         assert_that(result).is_equal_to(42)
 
@@ -49,7 +49,7 @@ class TestVarSelf:
             _count: Variable[int] = new(99)
 
         instance = create_and_track(qt, TestClass, base_class)
-        result = instance.var("_count")
+        result = instance.var("_count", int)
 
         assert_that(result).is_equal_to(99)
 
@@ -61,7 +61,7 @@ class TestVarSelf:
             my_value: int = 123
 
         instance = create_and_track(qt, TestClass, base_class)
-        result = instance.var("my_value")
+        result = instance.var("my_value", int)
 
         assert_that(result).is_equal_to(123)
 
@@ -75,7 +75,7 @@ class TestVarSelf:
         instance = create_and_track(qt, TestClass, base_class)
 
         with pytest.raises(AttributeError, match="nonexistent"):
-            instance.var("nonexistent")
+            instance.var("nonexistent", int)
 
 
 # =============================================================================
@@ -95,7 +95,7 @@ class TestVarParentHierarchy:
             label: QLabel = new("child")
 
             def get_parent_count(self) -> int:
-                return self.var("count")
+                return self.var("count", int)
 
         @decorator
         class Parent(base_class):
@@ -115,7 +115,7 @@ class TestVarParentHierarchy:
             label: QLabel = new("grandchild")
 
             def get_root_value(self) -> str:
-                return self.var("root_value")
+                return self.var("root_value", str)
 
         @widget
         class Child(Widget):
@@ -139,7 +139,7 @@ class TestVarParentHierarchy:
             label: QLabel = new("grandchild")
 
             def get_count(self) -> int:
-                return self.var("count")
+                return self.var("count", int)
 
         @widget
         class Child(Widget):
@@ -164,7 +164,7 @@ class TestVarParentHierarchy:
             _count: Variable[int] = new(999)
 
             def get_count(self) -> int:
-                return self.var("count")
+                return self.var("count", int)
 
         @decorator
         class Parent(base_class):
@@ -195,11 +195,11 @@ class TestVarReactivity:
 
         instance = create_and_track(qt, TestClass, base_class)
 
-        assert_that(instance.var("count")).is_equal_to(0)
+        assert_that(instance.var("count", int)).is_equal_to(0)
 
         instance._count.value = 42
 
-        assert_that(instance.var("count")).is_equal_to(42)
+        assert_that(instance.var("count", int)).is_equal_to(42)
 
 
 @pytest.mark.parametrize("base_class,decorator", QWIDGET_CLASS_TYPES)
@@ -214,7 +214,7 @@ class TestVarParentReactivity:
             label: QLabel = new("child")
 
             def get_parent_count(self) -> int:
-                return self.var("count")
+                return self.var("count", int)
 
         @decorator
         class Parent(base_class):
