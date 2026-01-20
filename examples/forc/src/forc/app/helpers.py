@@ -7,5 +7,5 @@ def filename_safe_validator(value: str) -> bool:
     """
     # Only allow: letters, numbers, spaces, hyphens, underscores
     # No: /\?%*:|"<>()[]{}!@#$^&+=`~;',. etc
-    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_")
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789() -_")
     return all(char in allowed for char in value)

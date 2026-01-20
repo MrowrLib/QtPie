@@ -1,7 +1,7 @@
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtWidgets import QSplitter
 
-from forc.app.widgets.response_viewer_widget import ResponseViewerWidget
+from forc.app.widgets.response_viewer import ResponseViewerWidget
 from forc.domain.models import Request, Response
 from forc.services import HttpClientService
 from qtpie import Variable, Widget, new, widget

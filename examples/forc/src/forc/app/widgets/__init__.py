@@ -1,7 +1,7 @@
 from .environments import EnvironmentSelectorWidget
+from .request import RequestWidget
 from .request_editor_widget import RequestAddressBarWidget, RequestEditorWidget
-from .request_widget import RequestWidget
-from .response_viewer_widget import (
+from .response_viewer import (
     ResponseBodyTabContent,
     ResponseCookiesTabContent,
     ResponseHeadersTabContent,

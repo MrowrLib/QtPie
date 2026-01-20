@@ -1,4 +1,4 @@
-name: Custom Headers
+name: Custom Headers (hello)
 method: GET
 url: ${BASE_URL}/demo/headers
 headers:
