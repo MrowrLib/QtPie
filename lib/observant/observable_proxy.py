@@ -398,8 +398,10 @@ class ObservableProxy[T]:
                 if current_proxy_target is not current_target_value:
                     logger.warning("DEBUG _sync_from_target: updating nested proxy '%s' target", name)
                     object.__setattr__(proxy, "_target", current_target_value)
-                    # Notify the nested proxy's listeners so bindings recompute
-                    proxy._notify_change(_from_sibling=True)
+                    # Don't call proxy._notify_change() here - the parent's _notify_change(_from_sibling=True)
+                    # already happens after _sync_from_target, and that will trigger binding recomputation.
+                    # Calling it here would cause on_nested_change to fire, which calls parent._notify_change()
+                    # without _from_sibling=True, causing an infinite sibling notification loop.
 
     def _update_dirty_state(self) -> None:
         """Update aggregated dirty state from all fields."""

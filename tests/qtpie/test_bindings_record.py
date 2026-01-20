@@ -1,5 +1,6 @@
 # pyright: reportMissingTypeArgument=false, reportUnknownMemberType=false
 # pyright: reportPrivateUsage=false, reportAttributeAccessIssue=false
+# pyright: reportUnknownVariableType=false
 """Tests for auto-binding to record fields."""
 
 from dataclasses import dataclass
@@ -413,3 +414,72 @@ class TestBindingResolutionOrder:
         # record.dogs has 1 item, _dogs Variable has 3 items
         # The label should show count of LOCAL _dogs (3), not record.dogs (1)
         assert_that(w.count_label.text()).is_equal_to("Count: 3")
+
+
+class TestUnionTypeRecordBinding:
+    """Test binding to fields on Union type records (e.g., Widget[Foo | Bar])."""
+
+    def test_format_binding_on_union_type_record(self, qt: QtDriver) -> None:
+        """Format binding works when record type is a Union.
+
+        Bug reproduction: Widget[Collection | Request] couldn't bind to 'method'
+        because Union types don't have __annotations__ directly.
+        """
+        from enum import Enum
+
+        class HttpMethod(Enum):
+            GET = "GET"
+            POST = "POST"
+
+        @dataclass
+        class Collection:
+            name: str = ""
+
+        @dataclass
+        class Request:
+            name: str = ""
+            method: HttpMethod = HttpMethod.GET
+
+        @widget
+        class UnionEditor(Widget[Collection | Request]):
+            method_display: QLabel = new(bind="{method?.value}")
+            name_display: QLabel = new(bind="{name}")
+
+        # Test with Request (has method field)
+        w = qt.track(UnionEditor())
+        w.record = Request(name="test", method=HttpMethod.POST)
+
+        assert_that(w.method_display.text()).is_equal_to("POST")
+        assert_that(w.name_display.text()).is_equal_to("test")
+
+    def test_union_type_record_binding_updates_reactively(self, qt: QtDriver) -> None:
+        """Record field changes trigger reactive updates on Union type widgets."""
+        from enum import Enum
+
+        class HttpMethod(Enum):
+            GET = "GET"
+            POST = "POST"
+            DELETE = "DELETE"
+
+        @dataclass
+        class Collection:
+            name: str = ""
+
+        @dataclass
+        class Request:
+            name: str = ""
+            method: HttpMethod = HttpMethod.GET
+
+        @widget
+        class UnionEditor(Widget[Collection | Request]):
+            method_display: QLabel = new(bind="{method?.value}")
+
+        w = qt.track(UnionEditor())
+        w.record = Request(name="test", method=HttpMethod.GET)
+
+        assert_that(w.method_display.text()).is_equal_to("GET")
+
+        # Change method via proxy - use replace_target for nested proxy
+        method_proxy = w._qtpie.record_state.observable.method
+        method_proxy.replace_target(HttpMethod.DELETE)
+        assert_that(w.method_display.text()).is_equal_to("DELETE")
