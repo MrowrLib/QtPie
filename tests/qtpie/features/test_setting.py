@@ -330,16 +330,13 @@ class TestSettingHierarchy:
         assert p.theme.value == "dark"
 
     def test_setting_lookup_by_key(self) -> None:
-        """self.setting() looks up Setting by persist key in hierarchy."""
+        """self.setting() looks up Setting value by persist key in hierarchy."""
 
         @widget
         class DeepChild(Widget):
             def get_theme(self) -> str:
-                # Look up by key, not by attribute name
-                return self.setting("SettingLookupParent:theme", str).value
-
-            def set_theme(self, value: str) -> None:
-                self.setting("SettingLookupParent:theme", str).value = value
+                # Look up by key - returns value directly (like self.var())
+                return self.setting("SettingLookupParent:theme", str)
 
         @widget
         class MiddleChild(Widget):
@@ -352,12 +349,12 @@ class TestSettingHierarchy:
 
         p = SettingLookupParent()
 
-        # Deep child can look up Setting by key
+        # Deep child can look up Setting value by key
         assert p.middle.deep.get_theme() == "light"
 
-        # Can modify through the looked-up Setting
-        p.middle.deep.set_theme("dark")
-        assert p.theme.value == "dark"
+        # Modify through the parent's Setting attribute
+        p.theme.value = "dark"
+        assert p.middle.deep.get_theme() == "dark"
 
     def test_setting_lookup_with_explicit_group(self) -> None:
         """self.setting() works with explicit group keys."""
@@ -365,7 +362,8 @@ class TestSettingHierarchy:
         @widget
         class AppChild(Widget):
             def get_setting_value(self) -> int:
-                return self.setting("app:window_width", int).value
+                # Returns value directly
+                return self.setting("app:window_width", int)
 
         @widget
         class AppParent(Widget):
@@ -374,6 +372,25 @@ class TestSettingHierarchy:
 
         p = AppParent()
         assert p.child.get_setting_value() == 800
+
+    def test_setting_lookup_by_attr_name_only(self) -> None:
+        """self.setting() can look up by attribute name without class prefix."""
+
+        @widget
+        class ChildWidget(Widget):
+            def get_theme(self) -> str:
+                # Look up by just "theme" - no class prefix needed
+                return self.setting("theme", str)
+
+        @widget
+        class ParentWithSetting(Widget):
+            theme: Setting[str] = new("dark")  # Key is "ParentWithSetting:theme"
+            child: ChildWidget = new()
+
+        p = ParentWithSetting()
+
+        # Should find it by just the attribute name
+        assert p.child.get_theme() == "dark"
 
     def test_setting_lookup_not_found_raises(self) -> None:
         """self.setting() raises AttributeError if key not found."""

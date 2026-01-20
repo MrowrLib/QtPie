@@ -4,7 +4,7 @@ from qtpy.QtWidgets import QSplitter
 from forc.app.widgets.response_viewer import ResponseViewerWidget
 from forc.domain.models import Request, Response
 from forc.services import HttpClientService
-from qtpie import Variable, Widget, new, widget
+from qtpie import Variable, Widget, new, slot, widget
 
 from .request_editor_widget import RequestEditorWidget
 
@@ -19,6 +19,7 @@ class RequestWidget(Widget[Request]):
 
     ### Variables ###
     response: Variable[Response | None] = new(None)
+    is_sending: Variable[bool] = new(False)
 
     ### Widgets ###
     _splitter: QSplitter = new(Qt.Orientation.Horizontal)
@@ -29,5 +30,10 @@ class RequestWidget(Widget[Request]):
     def __setup__(self) -> None:
         self._splitter.setSizes([1000, 1000])
 
-    def _on_send_request(self, request: Request) -> None:
-        self.response = self.http_client_service.value.send(request)
+    @slot
+    async def _on_send_request(self, request: Request) -> None:
+        self.is_sending = True
+        try:
+            self.response = await self.http_client_service.value.send(request)
+        finally:
+            self.is_sending = False

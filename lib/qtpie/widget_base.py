@@ -8,9 +8,6 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, get_args, get_origin, over
 
 from observant import Observable
 
-if TYPE_CHECKING:
-    from .setting import Setting
-
 from .new_field import NewField
 from .new_fields import new_fields
 from .qtpie_config import _QtPieConfig
@@ -363,23 +360,23 @@ class WidgetBase[T = None]:
         return resolve_var(self, name)
 
     # fmt: off
-    # setting() overloads for type inference
+    # setting() overloads for type inference - returns VALUE (like var())
     @overload
     def setting(self, key: str) -> Any: ...
     @overload
-    def setting[T1](self, key: str, t1: type[T1]) -> Setting[T1]: ...
+    def setting[T1](self, key: str, t1: type[T1]) -> T1: ...
     @overload
-    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2]) -> Setting[T1 | T2]: ...
+    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2]) -> T1 | T2: ...
     @overload
-    def setting[T1, T2, T3](self, key: str, t1: type[T1], t2: type[T2], t3: type[T3]) -> Setting[T1 | T2 | T3]: ...
+    def setting[T1, T2, T3](self, key: str, t1: type[T1], t2: type[T2], t3: type[T3]) -> T1 | T2 | T3: ...
     # With None
     @overload
-    def setting[T1](self, key: str, t1: type[T1], t2: None) -> Setting[T1 | None]: ...
+    def setting[T1](self, key: str, t1: type[T1], t2: None) -> T1 | None: ...
     @overload
-    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2], t3: None) -> Setting[T1 | T2 | None]: ...
+    def setting[T1, T2](self, key: str, t1: type[T1], t2: type[T2], t3: None) -> T1 | T2 | None: ...
     # fmt: on
     def setting(self, key: str, *types: type[Any] | None) -> Any:  # pyright: ignore[reportInconsistentOverload]
-        """Resolve a Setting by its persist key from the binding context.
+        """Resolve a Setting's value by its persist key from the binding context.
 
         Searches in this order:
         1. This widget
@@ -391,15 +388,15 @@ class WidgetBase[T = None]:
             *types: Optional type(s) for type inference. Pass None as last arg for optional.
 
         Returns:
-            The Setting object (not the value - returns the Setting for full access).
+            The Setting's current value (unwrapped, like self.var()).
 
         Raises:
             AttributeError: If Setting not found in context or parent hierarchy.
 
         Example:
-            s = self.setting("MyApp:theme")  # Returns Any
-            s = self.setting("MyApp:theme", str)  # Returns Setting[str]
-            s.value = "dark"  # Can modify it
+            theme = self.setting("MyApp:theme")  # Returns Any
+            theme = self.setting("MyApp:theme", str)  # Returns str
+            path = self.setting("MyApp:path", str, None)  # Returns str | None
         """
         from qtpie.bindings.expression import resolve_setting
 

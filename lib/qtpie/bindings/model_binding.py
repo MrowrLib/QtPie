@@ -311,34 +311,51 @@ def _setup_embedded_widget(
         _open_all_persistent_editors(view, model, is_tree=is_tree)
 
     # Open editors immediately (deferred to let model populate)
-    from qtpy.QtCore import QTimer
+    from qtpy.QtCore import QModelIndex, QTimer
 
     QTimer.singleShot(0, open_editors_for_all)
 
-    # Subscribe to list changes to manage persistent editors
-    def on_insert(index: int, _item: Any) -> None:
-        # Open persistent editor for the new row
-        model_index = model.index(index, 0)
-        view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+    # For tree views, use the model's rowsInserted signal to handle ALL row insertions
+    # (including nested children). The ObservableList callbacks only fire for root-level changes.
+    if is_tree:
+        # Connect to model's rowsInserted signal to open persistent editors for new rows at ANY level
+        def on_rows_inserted(parent: QModelIndex, first: int, last: int) -> None:
+            for row in range(first, last + 1):
+                index = model.index(row, 0, parent)
+                view.openPersistentEditor(index)  # type: ignore[attr-defined]
 
-    def on_remove(_index: int, _item: Any) -> None:
-        # Qt automatically closes the editor when the row is removed
-        pass
+        model.rowsInserted.connect(on_rows_inserted)
 
-    def on_replace(index: int, _old: Any, _new: Any) -> None:
-        # Close and reopen editor for replaced item
-        model_index = model.index(index, 0)
-        view.closePersistentEditor(model_index)  # type: ignore[attr-defined]
-        view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+        # Also handle model reset (e.g., when workspace changes completely)
+        def on_model_reset() -> None:
+            # Defer to allow model to fully populate
+            QTimer.singleShot(0, open_editors_for_all)
 
-    def on_clear(_items: list[Any]) -> None:
-        # All editors automatically closed when model is cleared
-        pass
+        model.modelReset.connect(on_model_reset)
+    else:
+        # For flat lists, use ObservableList callbacks (simpler, no nesting)
+        def on_insert(index: int, _item: Any) -> None:
+            model_index = model.index(index, 0)
+            view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
 
-    obs_list.on_insert(on_insert)
-    obs_list.on_remove(on_remove)
-    obs_list.on_replace(on_replace)
-    obs_list.on_clear(on_clear)
+        def on_remove(_index: int, _item: Any) -> None:
+            # Qt automatically closes the editor when the row is removed
+            pass
+
+        def on_replace(index: int, _old: Any, _new: Any) -> None:
+            # Close and reopen editor for replaced item
+            model_index = model.index(index, 0)
+            view.closePersistentEditor(model_index)  # type: ignore[attr-defined]
+            view.openPersistentEditor(model_index)  # type: ignore[attr-defined]
+
+        def on_clear(_items: list[Any]) -> None:
+            # All editors automatically closed when model is cleared
+            pass
+
+        obs_list.on_insert(on_insert)
+        obs_list.on_remove(on_remove)
+        obs_list.on_replace(on_replace)
+        obs_list.on_clear(on_clear)
 
 
 def _setup_table_widget_columns(
@@ -478,6 +495,10 @@ def apply_model_binding(
         bind_path,
         type(widget_instance).__name__,
     )
+
+    # DEBUG: trace tree_expand
+    _te = getattr(field_info, "tree_expand", "N/A")
+    print(f"DEBUG apply_model_binding: field_info.tree_expand={_te}, bind_path={bind_path}")
 
     obs_list: ObservableList[Any] | None = None
     root_variable: VarType[Any] | None = None
@@ -818,6 +839,7 @@ def apply_model_binding(
 
             def on_root_change(*_: Any) -> None:
                 nonlocal syncing
+                print(f"DEBUG on_root_change: path={path}, expand_on_change={expand_on_change}, tree_widget={tree_widget}")
                 if syncing:
                     logger.debug("on_root_change: skipped (syncing=True) for path=%s", path)
                     return
@@ -865,18 +887,20 @@ def apply_model_binding(
                         # Subscribe to the nested ObservableList so future changes sync
                         if isinstance(nested_val, ObservableList):
                             subscribe_to_nested_list(cast(ObservableList[Any], nested_val))
+
+                        # Expand all if requested (QTreeView with expand=True)
+                        # This fires when data is loaded/replaced (e.g., new workspace)
+                        if expand_on_change and tree_widget is not None:
+                            from qtpy.QtCore import QTimer
+
+                            # Defer expandAll to after model updates
+                            QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
                     else:
                         logger.debug(
                             "on_root_change: same list identity for path=%s (id=%d), skipping sync",
                             path,
                             nested_id,
                         )
-                        # Expand all if requested (QTreeView with expand=True)
-                        if expand_on_change and tree_widget is not None:
-                            from qtpy.QtCore import QTimer
-
-                            # Defer expandAll to after model updates
-                            QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
                 elif isinstance(nested_val, dict):
                     # Handle dict -> list[(key, value)] conversion for QTableView
                     nested_id = id(cast(dict[Any, Any], nested_val))

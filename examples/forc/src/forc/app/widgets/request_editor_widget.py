@@ -20,7 +20,7 @@ from forc.domain.models import (
     KeyValue,
     Request,
 )
-from qtpie import Stretch, Widget, new, widget
+from qtpie import Stretch, Variable, Widget, new, widget
 
 
 @widget(title="Actions")
@@ -33,10 +33,13 @@ class DeleteWidget(Widget[KeyValue]):
 
 @widget(layout="horizontal")
 class RequestAddressBarWidget(Widget[Request]):
+    ### Variables ###
+    is_sending: Variable[bool]
+
     ### Widgets ###
     _method: QLabel = new(bind="method?.name")
     _url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
-    _send: QPushButton = new("Send", clicked="{on_send_request(record)}")
+    _send: QPushButton = new("Send", clicked="{on_send_request(record)}", enabled="{not is_sending}")
 
 
 @widget(title="Params", on_delete="_on_delete")

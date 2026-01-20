@@ -85,7 +85,12 @@ def find_variable_in_hierarchy(context: Any, name: str) -> Any | None:
 
 
 def _try_get_setting_by_key(obj: Any, key: str) -> Any | None:
-    """Try to find a Setting on an object by its persist key."""
+    """Try to find a Setting on an object by its persist key or attribute name.
+
+    Matches if:
+    - key exactly matches the Setting's persist key (e.g., "ForcApp:theme")
+    - key matches the attribute name portion of the persist key (e.g., "theme" matches "ForcApp:theme")
+    """
     from qtpie.setting import Setting
 
     # Iterate all attributes looking for Settings with matching key
@@ -94,8 +99,14 @@ def _try_get_setting_by_key(obj: Any, key: str) -> Any | None:
             continue
         try:
             attr: Any = getattr(obj, attr_name)
-            if isinstance(attr, Setting) and attr.key == key:
-                return attr  # pyright: ignore[reportUnknownVariableType]
+            if isinstance(attr, Setting):
+                # Match by exact key or by attribute name portion
+                persist_key: str = attr.key
+                if persist_key == key:
+                    return attr  # pyright: ignore[reportUnknownVariableType]
+                # Also match if key is just the attr name (after the colon)
+                if ":" in persist_key and persist_key.split(":")[-1] == key:
+                    return attr  # pyright: ignore[reportUnknownVariableType]
         except Exception:  # noqa: BLE001
             # Skip attributes that raise on access
             continue
@@ -168,7 +179,7 @@ def find_setting_by_key(context: Any, key: str) -> Any | None:
 
 
 def resolve_setting(context: Any, key: str) -> Any:
-    """Resolve a Setting by its persist key from the binding context.
+    """Resolve a Setting's value by its persist key from the binding context.
 
     Searches in this order:
     1. The context object itself
@@ -181,19 +192,18 @@ def resolve_setting(context: Any, key: str) -> Any:
         key: The Setting persist key to resolve (e.g., "MyApp:theme" or "window:width").
 
     Returns:
-        The Setting object (not the value - returns the Setting itself for full access).
+        The Setting's current value (unwrapped, like self.var()).
 
     Raises:
         AttributeError: If Setting not found in context or parent hierarchy.
 
     Example:
         # In a widget method:
-        theme = self.setting("MyApp:theme", str)  # Gets the Setting[str]
-        theme.value = "dark"  # Can modify it
+        theme = self.setting("MyApp:theme", str)  # Gets "light" (the value)
     """
     found = find_setting_by_key(context, key)
     if found is not None:
-        return found
+        return found.value  # pyright: ignore[reportUnknownMemberType]
 
     raise AttributeError(f"Setting with key '{key}' not found on {type(context).__name__} or in parent hierarchy")
 

@@ -29,23 +29,23 @@ class HttpClientService:
     def __init__(
         self,
         workspace_service: WorkspaceService | None = None,
-        client: httpx.Client | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
         """Initialize with workspace service for variable resolution.
 
         Args:
             workspace_service: Service for resolving ${VAR} placeholders
-            client: Optional httpx client (for testing)
+            client: Optional httpx async client (for testing)
         """
         self._workspace = workspace_service
         self._client = client
         self._owns_client = client is None
         self.cookies: ObservableList[Cookie] = ObservableList([])
 
-    def _get_client(self) -> httpx.Client:
+    def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client."""
         if self._client is None:
-            self._client = httpx.Client()
+            self._client = httpx.AsyncClient()
         return self._client
 
     def _resolve(self, text: str) -> str:
@@ -54,10 +54,10 @@ class HttpClientService:
             return text  # No workspace = no variable resolution
         return self._workspace.resolve_variables(text)
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the client if we own it."""
         if self._owns_client and self._client is not None:
-            self._client.close()
+            await self._client.aclose()
             self._client = None
 
     def clear_cookies(self) -> None:
@@ -102,7 +102,7 @@ class HttpClientService:
             else:
                 self.cookies.append(new_cookie)
 
-    def send(self, request: Request, base_url: str = "") -> Response:
+    async def send(self, request: Request, base_url: str = "") -> Response:
         """Send an HTTP request and return the response.
 
         Args:
@@ -176,7 +176,7 @@ class HttpClientService:
         # Send request with timing (set cookies on client, not per-request)
         client.cookies = self._build_httpx_cookies()
         start = time.perf_counter()
-        httpx_response = client.request(
+        httpx_response = await client.request(
             method=request.method.value,
             url=url,
             headers=headers,

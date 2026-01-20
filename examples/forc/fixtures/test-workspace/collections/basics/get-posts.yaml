@@ -1,0 +1,6 @@
+name: Get Posts
+method: GET
+url: ${BASE_URL}/posts
+headers:
+  - key: Accept
+    value: application/json

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 
 import pytest
 from assertpy import assert_that
+from observant import ObservableList
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLabel, QPushButton, QTreeView
 
@@ -40,10 +41,30 @@ class TreeNode:
     children: list[TreeNode] = field(default_factory=list)
 
 
+@dataclass
+class ObservableTreeNode:
+    """Test dataclass for tree node with ObservableList children.
+
+    Used for testing dynamic child insertion scenarios where the model
+    needs to be notified of nested changes.
+    """
+
+    name: str
+    children: ObservableList[ObservableTreeNode] = field(default_factory=ObservableList)
+
+
 # Simple embedded widget for tree nodes
 @widget
 class NodeLabel(Widget[TreeNode]):
     """A simple widget that displays node info."""
+
+    _label: QLabel = new(bind="{record.name}")
+
+
+# Embedded widget for observable tree nodes
+@widget
+class ObservableNodeLabel(Widget[ObservableTreeNode]):
+    """A simple widget that displays observable tree node info."""
 
     _label: QLabel = new(bind="{record.name}")
 
@@ -243,6 +264,91 @@ class TestTreeViewLifecycle:
         qt.process_events()
 
         assert_that(model.rowCount()).is_equal_to(2)
+
+    def test_widget_created_on_nested_child_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget created when child node appended to existing parent.
+
+        Regression test: Previously persistent editors were only opened for root-level
+        insertions. This test ensures nested children also get their embedded widgets.
+
+        Uses ObservableTreeNode with ObservableList children so the model gets notified
+        of nested insertions via the rowsInserted signal.
+        """
+        # Start with a root node that has no children (using ObservableList for children)
+        root_node = ObservableTreeNode("Root")
+        nodes = [root_node]
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new(nodes)
+            _tree: QTreeView = new(bind="_nodes", children="children", widget=ObservableNodeLabel, expand=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._tree.model()
+        root_index = model.index(0, 0)
+
+        # Root should have embedded widget
+        root_widget = instance._tree.indexWidget(root_index)
+        assert_that(root_widget).is_not_none()
+        assert_that(root_widget).is_instance_of(ObservableNodeLabel)
+
+        # No children yet
+        assert_that(model.rowCount(root_index)).is_equal_to(0)
+
+        # Now add a child to the root node (ObservableList.append triggers model notification)
+        root_node.children.append(ObservableTreeNode("Child 1"))
+        qt.process_events()
+
+        # Child should exist
+        assert_that(model.rowCount(root_index)).is_equal_to(1)
+
+        # Child should have embedded widget (this was the bug!)
+        child_index = model.index(0, 0, root_index)
+        child_widget = instance._tree.indexWidget(child_index)
+        assert_that(child_widget).is_not_none()
+        assert_that(child_widget).is_instance_of(ObservableNodeLabel)
+
+    def test_widget_created_on_deeply_nested_child_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget created when deeply nested child is appended.
+
+        Regression test: Ensures rowsInserted signal handles deeply nested insertions.
+
+        Uses ObservableTreeNode with ObservableList children so the model gets notified
+        of nested insertions via the rowsInserted signal.
+        """
+        # Start with root -> child structure (using ObservableList for children)
+        child_node = ObservableTreeNode("Child")
+        root_node = ObservableTreeNode("Root", children=ObservableList([child_node]))
+        nodes = [root_node]
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[ObservableTreeNode]] = new(nodes)
+            _tree: QTreeView = new(bind="_nodes", children="children", widget=ObservableNodeLabel, expand=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._tree.model()
+        root_index = model.index(0, 0)
+        child_index = model.index(0, 0, root_index)
+
+        # Both root and child should have widgets
+        assert_that(instance._tree.indexWidget(root_index)).is_not_none()
+        assert_that(instance._tree.indexWidget(child_index)).is_not_none()
+
+        # Now add a grandchild (ObservableList.append triggers model notification)
+        child_node.children.append(ObservableTreeNode("Grandchild"))
+        qt.process_events()
+
+        # Grandchild should exist and have widget
+        assert_that(model.rowCount(child_index)).is_equal_to(1)
+        grandchild_index = model.index(0, 0, child_index)
+        grandchild_widget = instance._tree.indexWidget(grandchild_index)
+        assert_that(grandchild_widget).is_not_none()
+        assert_that(grandchild_widget).is_instance_of(ObservableNodeLabel)
 
     def test_widget_removed_on_node_remove(self, base_class, decorator, qt: QtDriver) -> None:
         """Widget removed when node removed."""

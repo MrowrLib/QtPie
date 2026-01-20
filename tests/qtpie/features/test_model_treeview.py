@@ -2010,3 +2010,118 @@ class TestTreeViewOnEdited:
         assert_that(callback_calls).is_length(1)
         assert_that(callback_calls[0][1]).is_equal_to("Original")
         assert_that(callback_calls[0][2]).is_equal_to("Modified")
+
+
+# =============================================================================
+# QTreeView expand=True Auto-Expand on Data Change Tests
+# =============================================================================
+
+
+@dataclass
+class Workspace:
+    """Workspace container with a collections list."""
+
+    name: str
+    collections: list[TreeNode] = field(default_factory=list)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewExpandOnDataChange:
+    """Test QTreeView expand=True auto-expands when nested path data changes.
+
+    Regression test: Previously expand=True only called expandAll when the list
+    identity was the SAME (no change), not when it CHANGED (new workspace loaded).
+    This caused trees to not auto-expand when loading new data.
+    """
+
+    def test_expand_true_auto_expands_on_nested_data_change(self, base_class, decorator, qt: QtDriver) -> None:
+        """expand=True auto-expands tree when nested path data (workspace.collections) changes.
+
+        This is the key scenario: binding to a nested path like "workspace.collections"
+        and then replacing the workspace entirely should trigger expandAll.
+        """
+        # Initial workspace with nested tree structure
+        initial_workspace = Workspace(
+            name="Initial",
+            collections=[
+                TreeNode("Root 1", children=[TreeNode("Child 1.1"), TreeNode("Child 1.2")]),
+                TreeNode("Root 2", children=[TreeNode("Child 2.1")]),
+            ],
+        )
+
+        @decorator
+        class TestClass(base_class):
+            _workspace: Variable[Workspace] = new(initial_workspace)
+            _tree: QTreeView = new(bind="_workspace.collections", expand=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._tree.model()
+
+        # Verify initial structure
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Check that tree is expanded (children visible when expanded)
+        root1_idx = model.index(0, 0)
+        assert_that(instance._tree.isExpanded(root1_idx)).is_true()
+
+        # Now replace the workspace entirely (simulating loading a new workspace)
+        new_workspace = Workspace(
+            name="New",
+            collections=[
+                TreeNode("New Root", children=[TreeNode("New Child 1"), TreeNode("New Child 2"), TreeNode("New Child 3")]),
+            ],
+        )
+        instance._workspace.value = new_workspace
+        # Process events twice: once for data change, once for deferred QTimer.singleShot(0, expandAll)
+        qt.process_events()
+        qt.process_events()
+
+        # Verify new structure
+        assert_that(model.rowCount()).is_equal_to(1)
+        new_root_idx = model.index(0, 0)
+        assert_that(model.data(new_root_idx)).is_equal_to("New Root")
+
+        # REGRESSION TEST: Tree should auto-expand after data change
+        # This was the bug - expandAll was only called when list identity was SAME, not CHANGED
+        assert_that(instance._tree.isExpanded(new_root_idx)).is_true()
+
+    def test_expand_true_auto_expands_on_record_change(self, base_class, decorator, qt: QtDriver) -> None:
+        """expand=True auto-expands tree when record (Widget[T]) changes entirely."""
+        from qtpie import Widget, widget
+
+        initial_workspace = Workspace(
+            name="Initial",
+            collections=[TreeNode("Root", children=[TreeNode("Child")])],
+        )
+
+        @widget(record=initial_workspace)
+        class WorkspaceWidget(Widget[Workspace]):
+            _tree: QTreeView = new(bind="collections", expand=True)
+
+        instance = WorkspaceWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        model = instance._tree.model()
+        root_idx = model.index(0, 0)
+
+        # Initial tree should be expanded
+        assert_that(instance._tree.isExpanded(root_idx)).is_true()
+
+        # Replace record entirely
+        new_workspace = Workspace(
+            name="New",
+            collections=[TreeNode("New Root", children=[TreeNode("New Child")])],
+        )
+        instance.record = new_workspace
+        # Process events twice: once for data change, once for deferred QTimer.singleShot(0, expandAll)
+        qt.process_events()
+        qt.process_events()
+
+        # New tree should also be expanded
+        new_root_idx = model.index(0, 0)
+        assert_that(model.data(new_root_idx)).is_equal_to("New Root")
+        assert_that(instance._tree.isExpanded(new_root_idx)).is_true()

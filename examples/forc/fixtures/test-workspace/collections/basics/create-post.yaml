@@ -1,0 +1,15 @@
+name: Create Post
+method: POST
+url: ${BASE_URL}/posts
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body: |
+  {
+    "title": "Test Post",
+    "body": "This is a test post.",
+    "userId": 1
+  }
+body_type: json

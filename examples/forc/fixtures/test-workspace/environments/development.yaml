@@ -1,0 +1,7 @@
+name: Development
+variables:
+  - key: BASE_URL
+    value: http://localhost:8000
+  - key: API_KEY
+    value: test_key_123
+    secret: true

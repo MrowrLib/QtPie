@@ -1,0 +1,9 @@
+name: Echo Test
+method: GET
+url: ${BASE_URL}/demo/echo
+query_params:
+  - key: message
+    value: hello
+headers:
+  - key: Accept
+    value: application/json
