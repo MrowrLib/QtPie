@@ -11,6 +11,8 @@ from qtpie.setting import Setting
 
 
 @app(
+    app_name="Forc",
+    org="MrowrPurr",
     title="Forc - Free Open-source Rest Client",
     on_reload_window="_on_reload_window",
     on_save="_on_save",
