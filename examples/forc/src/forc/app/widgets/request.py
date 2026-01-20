@@ -22,14 +22,11 @@ class RequestWidget(Widget[Request]):
     is_sending: Variable[bool] = new(False)
 
     ### Widgets ###
-    _splitter: QSplitter = new(Qt.Orientation.Horizontal)
+    splitter: QSplitter = new(Qt.Orientation.Horizontal)
     request_editor: RequestEditorWidget = new(splitter="_splitter")
     response_viewer: ResponseViewerWidget = new(bind="response", splitter="_splitter")
 
     ### Methods ###
-    def __setup__(self) -> None:
-        self._splitter.setSizes([1000, 1000])
-
     @slot
     async def _on_send_request(self, request: Request) -> None:
         self.is_sending = True

@@ -1,9 +1,13 @@
 """QtDriver - A strongly-typed, modern wrapper around pytest-qt."""
 
+from typing import Any
+
 from pytestqt.qtbot import QtBot
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QElapsedTimer, Qt
 from qtpy.QtTest import QTest
 from qtpy.QtWidgets import QApplication, QWidget
+
+from qtpie.variable import Variable
 
 
 class QtDriver:
@@ -72,3 +76,48 @@ class QtDriver:
         app = QApplication.instance()
         if app is not None:
             app.processEvents()
+
+    def wait_for_change(
+        self,
+        variable: Variable[Any],
+        *,
+        timeout_ms: int = 5000,
+    ) -> bool:
+        """
+        Wait for a Variable's value to change.
+
+        Processes Qt events (including qasync async tasks) while waiting for
+        the Variable's on_change callback to fire. Useful for testing async
+        operations that update Variables.
+
+        Args:
+            variable: The Variable to wait on.
+            timeout_ms: Maximum time to wait in milliseconds (default: 5000).
+
+        Returns:
+            True if the Variable changed, False if timeout was reached.
+
+        Example:
+            request_widget.on_send_request.emit(request)
+            assert qt.wait_for_change(request_widget.response)
+            assert request_widget.response.value is not None
+        """
+        changed = False
+
+        def on_changed(*_: Any) -> None:
+            nonlocal changed
+            changed = True
+
+        variable.on_change(on_changed)
+
+        timer = QElapsedTimer()
+        timer.start()
+
+        # Use processEvents() to drive both Qt events and qasync tasks
+        # This is the same pattern qasync uses in asyncClose
+        app = QApplication.instance()
+        while not changed and timer.elapsed() < timeout_ms:
+            if app is not None:
+                app.processEvents()
+
+        return changed

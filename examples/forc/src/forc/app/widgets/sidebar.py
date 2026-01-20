@@ -54,9 +54,6 @@ class CollectionsTreeWidgetRow(Widget[Collection | Request]):
     )
 
     ### Methods ###
-    def __setup__(self) -> None:
-        print("My objectName is:", self.objectName())
-
     def start_editing(self) -> None:
         self.is_editing = True
         self.text_edit.setFocus()

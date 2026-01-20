@@ -1,10 +1,12 @@
 """Pytest configuration for Forc integration tests."""
 
+import asyncio
 import os
 import sys
 from pathlib import Path
 
 import pytest
+import qasync  # type: ignore[import-untyped]
 
 # Use offscreen platform by default
 if "--onscreen" not in sys.argv:
@@ -29,6 +31,11 @@ def qapp() -> App:
 
     # Create the app
     app = ForcApp()
+
+    # Set up qasync event loop for async slot support
+    # already_running=True marks the loop as running so anyio recognizes it
+    loop = qasync.QEventLoop(app, already_running=True)
+    asyncio.set_event_loop(loop)
 
     # ForcApp.__setup__ uses relative path that only works from examples/forc/
     # Re-load with absolute path for tests

@@ -34,8 +34,11 @@ We use `qtpy` for Qt abstraction so it works with PySide6 or PyQt6.
 **Run tests frequently!**
 
 ```bash
-# Run all tests
+# Run main tests (qtpie library)
 uv run pytest tests/ -v
+
+# Run Forc example app tests (separate from main tests)
+uv run pytest examples/forc/tests/ -v
 
 # Type check - ENTIRE PROJECT (no path args!)
 uv run pyright
@@ -46,6 +49,16 @@ uv run ruff check lib/ tests/
 # Format
 uv run ruff format lib/ tests/
 ```
+
+### Forc Tests Note
+
+The Forc integration tests require a test API server running at `localhost:8000`. Start it with:
+
+```bash
+cd examples/forc/test-apis && uv run uvicorn main:app --reload
+```
+
+The Forc tests use `pytest_collection_modifyitems` in `examples/forc/tests/conftest.py` to ensure unit tests run before integration tests (required for proper pytest-asyncio/qasync isolation).
 
 ---
 

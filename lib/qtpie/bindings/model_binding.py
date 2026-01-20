@@ -496,10 +496,6 @@ def apply_model_binding(
         type(widget_instance).__name__,
     )
 
-    # DEBUG: trace tree_expand
-    _te = getattr(field_info, "tree_expand", "N/A")
-    print(f"DEBUG apply_model_binding: field_info.tree_expand={_te}, bind_path={bind_path}")
-
     obs_list: ObservableList[Any] | None = None
     root_variable: VarType[Any] | None = None
 
@@ -839,7 +835,6 @@ def apply_model_binding(
 
             def on_root_change(*_: Any) -> None:
                 nonlocal syncing
-                print(f"DEBUG on_root_change: path={path}, expand_on_change={expand_on_change}, tree_widget={tree_widget}")
                 if syncing:
                     logger.debug("on_root_change: skipped (syncing=True) for path=%s", path)
                     return

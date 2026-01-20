@@ -66,9 +66,9 @@ class TestSendRequest:
         request_widget = get_request_widget(main_window)
         assert request_widget is not None, "RequestWidget not found"
 
-        # Send the request by emitting the signal
+        # Send the request by emitting the signal and wait for response
         request_widget.on_send_request.emit(request)
-        qt.process_events()
+        assert qt.wait_for_change(request_widget.response), "Timeout waiting for response"
 
         # Check the response
         response = request_widget.response.value
@@ -92,7 +92,7 @@ class TestSendRequest:
         assert request_widget is not None
 
         request_widget.on_send_request.emit(request)
-        qt.process_events()
+        assert qt.wait_for_change(request_widget.response), "Timeout waiting for response"
 
         response = request_widget.response.value
         assert response is not None
@@ -115,7 +115,7 @@ class TestSendRequest:
         assert request_widget is not None
 
         request_widget.on_send_request.emit(request)
-        qt.process_events()
+        assert qt.wait_for_change(request_widget.response), "Timeout waiting for response"
 
         # Get the response viewer and check the body text widget
         body_tab = request_widget.response_viewer.get_tab(ResponseBodyTabContent)

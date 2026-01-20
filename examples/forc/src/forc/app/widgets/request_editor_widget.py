@@ -37,9 +37,9 @@ class RequestAddressBarWidget(Widget[Request]):
     is_sending: Variable[bool]
 
     ### Widgets ###
-    _method: QLabel = new(bind="method?.name")
-    _url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
-    _send: QPushButton = new("Send", clicked="{on_send_request(record)}", enabled="{not is_sending}")
+    request_method: QLabel = new(bind="method?.name")
+    request_url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
+    send_request_button: QPushButton = new("Send", clicked="{on_send_request(record)}", enabled="{not is_sending}")
 
 
 @widget(title="Params", on_delete="_on_delete")
