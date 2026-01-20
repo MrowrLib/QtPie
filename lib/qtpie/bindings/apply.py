@@ -471,6 +471,31 @@ def apply_auto_bindings(
                         host,  # type: ignore[arg-type]
                         widget_setter,
                     )
+
+                # Two-way binding for format bindings with simple nested paths (e.g., "config?.name")
+                # This is needed so that widget changes update the record BEFORE user signal handlers run.
+                if is_nested_path and not is_format_string(bind_path) and adapter.signal_name is not None and adapter.getter is not None:
+                    signal = getattr(widget_instance, adapter.signal_name, None)
+                    getter = adapter.getter
+                    updating: dict[str, bool] = {"flag": False}
+
+                    def make_format_two_way(h: QWidget, bp: str, g: Callable[[Any], Any], w: QWidget, upd: dict[str, bool]) -> Callable[[], None]:
+                        def on_widget_change() -> None:
+                            if upd["flag"]:
+                                return
+                            resolved = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if resolved is None or not isinstance(resolved, Observable):
+                                return
+                            upd["flag"] = True
+                            try:
+                                resolved.set(g(w))
+                            finally:
+                                upd["flag"] = False
+
+                        return on_widget_change
+
+                    if signal is not None:
+                        signal.connect(make_format_two_way(host, bind_path, getter, widget_instance, updating))
             continue
 
         # Resolve the binding source

@@ -176,7 +176,7 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         BindingKey(QSpinBox, "value"),
         BindingAdapter(
             getter=lambda w: w.value(),
-            setter=lambda w, v: w.setValue(int(v) if v is not None else 0),
+            setter=lambda w, v: w.setValue(int(v) if v not in (None, "") else 0),
             signal_name="valueChanged",
         ),
     )
@@ -187,18 +187,28 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         BindingKey(QDoubleSpinBox, "value"),
         BindingAdapter(
             getter=lambda w: w.value(),
-            setter=lambda w, v: w.setValue(float(v) if v is not None else 0.0),
+            setter=lambda w, v: w.setValue(float(v) if v not in (None, "") else 0.0),
             signal_name="valueChanged",
         ),
     )
     registry.set_default_prop(QDoubleSpinBox, "value")
 
     # QCheckBox - checked
+    def _parse_bool(v: Any) -> bool:
+        """Parse a bool from various formats (bool, str, None)."""
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower() not in ("false", "0", "no", "")
+        return bool(v)
+
     registry.add(
         BindingKey(QCheckBox, "checked"),
         BindingAdapter(
             getter=lambda w: w.isChecked(),
-            setter=lambda w, v: w.setChecked(bool(v) if v is not None else False),
+            setter=lambda w, v: w.setChecked(_parse_bool(v)),
             signal_name="checkStateChanged",
         ),
     )
@@ -231,7 +241,7 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         BindingKey(QSlider, "value"),
         BindingAdapter(
             getter=lambda w: w.value(),
-            setter=lambda w, v: w.setValue(int(v) if v is not None else 0),
+            setter=lambda w, v: w.setValue(int(v) if v not in (None, "") else 0),
             signal_name="valueChanged",
         ),
     )
@@ -242,7 +252,7 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         BindingKey(QProgressBar, "value"),
         BindingAdapter(
             getter=lambda w: w.value(),
-            setter=lambda w, v: w.setValue(int(v) if v is not None else 0),
+            setter=lambda w, v: w.setValue(int(v) if v not in (None, "") else 0),
             signal_name=None,
         ),
     )
