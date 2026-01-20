@@ -58,8 +58,6 @@ QTreeView {
 
 QTreeView::item {
     padding: 6px 8px;
-    border-radius: 4px;
-    margin: 1px 4px;
 }
 
 QTreeView::item:hover {
@@ -77,17 +75,31 @@ QTreeView::item:selected:active {
 
 // Branch indicators (expand/collapse arrows and tree lines)
 QTreeView::branch {
-    background-color: $bg-primary;
-    border: none;
-    border-image: none;
-}
-
-QTreeView::branch:selected {
-    background-color: $bg-primary;
+    background-color: transparent;
 }
 
 QTreeView::branch:hover {
-    background-color: $bg-primary;
+    background-color: $bg-hover;
+}
+
+QTreeView::branch:selected {
+    background-color: $bg-selected;
+}
+
+QTreeView::branch:selected:active {
+    background-color: $accent-muted;
+}
+
+// Closed arrow (▶) - has children but not expanded
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:has-children:has-siblings:closed {
+    image: url(:/arrow-right.svg);
+}
+
+// Open arrow (▼) - has children and expanded
+QTreeView::branch:has-children:!has-siblings:open,
+QTreeView::branch:has-children:has-siblings:open {
+    image: url(:/arrow-down.svg);
 }
 
 // Inline editor (QLineEdit spawned when editing tree items)

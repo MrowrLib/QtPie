@@ -3,5 +3,7 @@
   <qresource prefix="/">
     <file alias="styles.qss">styles.qss</file>
     <file alias="icon.png">images/icon_transparent_256.png</file>
+    <file alias="arrow-right.svg">images/arrows/arrow-right.svg</file>
+    <file alias="arrow-down.svg">images/arrows/arrow-down.svg</file>
   </qresource>
 </RCC>
