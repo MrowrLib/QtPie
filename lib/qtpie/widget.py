@@ -1644,13 +1644,15 @@ def _detect_required_bindings(cls: type[Widget[Any]]) -> None:
 
 
 def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) -> None:
-    """Apply model bindings for QTableView/QListView/etc when record is set.
+    """Apply bindings when record is set after initial widget creation.
 
-    Called when the record is set after initial widget creation. Model bindings
+    Called when the record is set after initial widget creation. Bindings
     may have failed during init because record was None - retry them now.
+    This handles both model widgets (QTableView, etc.) and regular text widgets (QLineEdit, etc.).
     """
-    from qtpy.QtWidgets import QComboBox, QListView, QTableView, QTreeView
+    from qtpy.QtWidgets import QComboBox, QLineEdit, QListView, QTableView, QTreeView
 
+    from .bindings import bind, is_format_string
     from .bindings.model_binding import apply_model_binding
     from .bindings.path import resolve_binding_source
 
@@ -1683,31 +1685,93 @@ def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) 
         if widget_instance is None:
             continue
 
-        # Check if this is a model widget that needs binding
-        if not isinstance(widget_instance, (QComboBox, QListView, QTableView, QTreeView)):
-            continue
+        # Handle model widgets (QTableView, QListView, QTreeView, QComboBox)
+        if isinstance(widget_instance, (QComboBox, QListView, QTableView, QTreeView)):
+            # Check if model is already set
+            existing_model = widget_instance.model() if hasattr(widget_instance, "model") else None
+            if existing_model is not None:
+                continue
 
-        # Check if model is already set
-        existing_model = widget_instance.model() if hasattr(widget_instance, "model") else None
-        if existing_model is not None:
-            continue
+            # Try to resolve the binding source
+            source = resolve_binding_source(widget, field.bind)
+            if source is None:
+                continue
 
-        # Try to resolve the binding source
-        source = resolve_binding_source(widget, field.bind)
-        if source is None:
-            continue
+            # Apply the model binding
+            apply_model_binding(
+                widget,
+                widget_instance,
+                source,
+                field.bind,
+                field,
+                is_table_view_fn=is_table_view,
+                is_tree_view_fn=is_tree_view,
+                resolve_or_create_variable_fn=resolve_or_create_variable,
+            )
+        # Handle regular text widgets (QLineEdit, etc.) with two-way bindings
+        elif isinstance(widget_instance, QLineEdit) and not is_format_string(field.bind):
+            # Two-way binding for QLineEdit to record field
+            source = resolve_binding_source(widget, field.bind)
+            if source is None:
+                continue
 
-        # Apply the model binding
-        apply_model_binding(
-            widget,
-            widget_instance,
-            source,
-            field.bind,
-            field,
-            is_table_view_fn=is_table_view,
-            is_tree_view_fn=is_tree_view,
-            resolve_or_create_variable_fn=resolve_or_create_variable,
-        )
+            # Use the bind function for two-way binding
+            if isinstance(source, Variable):
+                bind(source).to(widget_instance)
+            elif isinstance(source, (Observable, ObservableProxy)):
+                # For ObservableProxy (record field), set up two-way binding manually
+                from .bindings.registry import get_binding_registry
+
+                registry = get_binding_registry()
+                default_prop = registry.get_default_prop(widget_instance)
+                adapter = registry.get(widget_instance, default_prop)
+                if adapter is None or adapter.setter is None:
+                    continue
+
+                # Set initial value
+                if isinstance(source, ObservableProxy):
+                    initial_value = object.__getattribute__(source, "_target")
+                else:
+                    initial_value = source.get()
+                adapter.setter(widget_instance, initial_value)
+
+                # Subscribe to source changes -> update widget
+                def make_on_source_change(s: Any, a: Any, w: QLineEdit) -> Any:
+                    def on_change(_: Any = None) -> None:
+                        if isinstance(s, ObservableProxy):
+                            val = object.__getattribute__(s, "_target")  # pyright: ignore[reportUnknownArgumentType]
+                        else:
+                            val = s.get()
+                        a.setter(w, val)
+
+                    return on_change
+
+                source.on_change(make_on_source_change(source, adapter, widget_instance))  # pyright: ignore[reportUnknownMemberType]
+
+                # Two-way: widget changes -> update source
+                if adapter.signal_name is not None:
+                    signal = getattr(widget_instance, adapter.signal_name, None)
+                    if signal is not None:
+                        updating = {"active": False}
+
+                        def make_on_widget_change(s: Any, a: Any, w: QLineEdit, upd: dict[str, bool]) -> Any:
+                            def on_change(*args: Any) -> None:
+                                if upd["active"]:
+                                    return
+                                if a.getter is not None:
+                                    upd["active"] = True
+                                    try:
+                                        new_val = a.getter(w)
+                                        if isinstance(s, ObservableProxy):
+                                            s.set(new_val)  # pyright: ignore[reportUnknownMemberType, reportCallIssue]
+                                        else:
+                                            s.set(new_val)  # pyright: ignore[reportCallIssue]
+                                    finally:
+                                        upd["active"] = False
+
+                            return on_change
+
+                        signal.connect(make_on_widget_change(source, adapter, widget_instance, updating))
 
 
 def _add_repeater_to_layout(widget: Widget[Any], repeater: QWidget, field_name: str, field: NewField) -> None:

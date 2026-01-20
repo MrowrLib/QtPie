@@ -1090,6 +1090,8 @@ class NewField:
             # Keyboard events
             "onKeyPress",
             "onKeyRelease",
+            "onEnterKey",
+            "onDeleteKey",
             # Widget events
             "onShow",
             "onHide",

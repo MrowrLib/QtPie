@@ -33,13 +33,31 @@ class AddCollectionDialog(Dialog):
 
 @widget(layout="horizontal", margins=0)
 class CollectionsTreeWidgetRow(Widget[Collection | Request]):
+    ### Variables ###
+    is_editing: Variable[bool] = new(False)
+
     ### Widgets ###
     method_chip: QLabel = new(
         bind="{method?.value}",
         classes=["method-badge", "method-{method?.value}"],
         visible="{record?.method is not None}",
     )
-    text_label: QLabel = new(bind="{name}")
+    text_label: QLabel = new(bind="{name}", visible="{not is_editing}", onMouseDoubleClick="{_on_start_editing()}")
+    text_edit: QLineEdit = new(
+        bind="name",
+        visible="{is_editing}",
+        validator=filename_safe_validator,
+        onBlur="_on_stop_editing",
+        onEnterKey="_on_stop_editing",
+    )
+
+    ### Methods ###
+    def _on_start_editing(self) -> None:
+        self.is_editing = True
+        self.text_edit.setFocus()
+
+    def _on_stop_editing(self) -> None:
+        self.is_editing = False
 
 
 @widget

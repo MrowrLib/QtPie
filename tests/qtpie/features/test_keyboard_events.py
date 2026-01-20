@@ -10,7 +10,7 @@
 # pyright: reportUnknownVariableType=false
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportUnknownLambdaType=false
-"""Tests for keyboard event handlers (onKeyPress, onKeyRelease).
+"""Tests for keyboard event handlers (onKeyPress, onKeyRelease, onEnterKey, onDeleteKey).
 
 These are pseudo-signals that trigger on keyboard events via event filters.
 """
@@ -154,3 +154,187 @@ class TestKeyPressAndRelease:
         assert_that(events).is_length(2)
         assert_that(events[0]).is_equal_to(("press", Qt.Key.Key_Space))
         assert_that(events[1]).is_equal_to(("release", Qt.Key.Key_Space))
+
+
+# =============================================================================
+# onEnterKey Event (Key_Return and Key_Enter)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestEnterKeyEvent:
+    """Enter key shortcut event handlers."""
+
+    def test_on_enter_key_calls_method_on_return(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey='method_name' calls method when Return key is pressed."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> None:
+                enter_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_enter_key_calls_method_on_enter(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey='method_name' calls method when Enter key (numpad) is pressed."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> None:
+                enter_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Enter)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_enter_key_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey=lambda works without event parameter."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey=lambda: enter_count.__setitem__(0, enter_count[0] + 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(enter_count[0]).is_equal_to(1)
+
+    def test_on_enter_key_does_not_fire_on_other_keys(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEnterKey does not fire when other keys are pressed."""
+        enter_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter")
+
+            def on_enter(self) -> None:
+                enter_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_A)
+        send_key_press(instance.line_edit, Qt.Key.Key_Space)
+        send_key_press(instance.line_edit, Qt.Key.Key_Escape)
+
+        assert_that(enter_count[0]).is_equal_to(0)
+
+
+# =============================================================================
+# onDeleteKey Event
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestDeleteKeyEvent:
+    """Delete key shortcut event handlers."""
+
+    def test_on_delete_key_calls_method(self, base_class, decorator, qt: QtDriver) -> None:
+        """onDeleteKey='method_name' calls method when Delete key is pressed."""
+        delete_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onDeleteKey="on_delete")
+
+            def on_delete(self) -> None:
+                delete_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Delete)
+
+        assert_that(delete_count[0]).is_equal_to(1)
+
+    def test_on_delete_key_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """onDeleteKey=lambda works without event parameter."""
+        delete_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onDeleteKey=lambda: delete_count.__setitem__(0, delete_count[0] + 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Delete)
+
+        assert_that(delete_count[0]).is_equal_to(1)
+
+    def test_on_delete_key_does_not_fire_on_other_keys(self, base_class, decorator, qt: QtDriver) -> None:
+        """onDeleteKey does not fire when other keys are pressed."""
+        delete_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onDeleteKey="on_delete")
+
+            def on_delete(self) -> None:
+                delete_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Backspace)
+        send_key_press(instance.line_edit, Qt.Key.Key_A)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        assert_that(delete_count[0]).is_equal_to(0)
+
+
+# =============================================================================
+# Combined Key Shortcuts
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestCombinedKeyShortcuts:
+    """Combined key shortcut handlers."""
+
+    def test_enter_and_delete_on_same_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Both onEnterKey and onDeleteKey can be set on the same widget."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEnterKey="on_enter", onDeleteKey="on_delete")
+
+            def on_enter(self) -> None:
+                events.append("enter")
+
+            def on_delete(self) -> None:
+                events.append("delete")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+        send_key_press(instance.line_edit, Qt.Key.Key_Delete)
+
+        assert_that(events).is_length(2)
+        assert_that(events[0]).is_equal_to("enter")
+        assert_that(events[1]).is_equal_to("delete")
+
+    def test_key_shortcuts_with_key_press(self, base_class, decorator, qt: QtDriver) -> None:
+        """Key shortcuts work alongside onKeyPress handler."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onKeyPress="on_key", onEnterKey="on_enter")
+
+            def on_key(self, event: QKeyEvent) -> None:
+                events.append(("keypress", event.key()))
+
+            def on_enter(self) -> None:
+                events.append(("enter", None))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+
+        # Both handlers should fire for Enter key
+        assert_that(events).is_length(2)
+        assert_that(events[0]).is_equal_to(("keypress", Qt.Key.Key_Return))
+        assert_that(events[1]).is_equal_to(("enter", None))

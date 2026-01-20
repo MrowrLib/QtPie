@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any, override
 
-from qtpy.QtCore import QEvent, QObject
+from qtpy.QtCore import QEvent, QObject, Qt
 
 from qtpie.utils import is_signal
 from qtpie.utils.common import resolve_signal_from_hierarchy
@@ -148,6 +148,8 @@ class _WidgetEventFilter(QObject):
         # Keyboard events
         self.on_key_press: Callable[[QEvent], None] | None = None
         self.on_key_release: Callable[[QEvent], None] | None = None
+        self.on_enter_key: Callable[[], None] | None = None
+        self.on_delete_key: Callable[[], None] | None = None
         # Widget events
         self.on_show: Callable[[], None] | None = None
         self.on_hide: Callable[[], None] | None = None
@@ -187,8 +189,15 @@ class _WidgetEventFilter(QObject):
             self.on_wheel(event)
 
         # Keyboard events
-        elif t == QEvent.Type.KeyPress and self.on_key_press:
-            self.on_key_press(event)
+        elif t == QEvent.Type.KeyPress:
+            if self.on_key_press:
+                self.on_key_press(event)
+            # Specific key shortcuts
+            key = event.key()  # type: ignore[union-attr]
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and self.on_enter_key:
+                self.on_enter_key()
+            elif key == Qt.Key.Key_Delete and self.on_delete_key:
+                self.on_delete_key()
         elif t == QEvent.Type.KeyRelease and self.on_key_release:
             self.on_key_release(event)
 
@@ -299,6 +308,8 @@ _EVENT_MAPPINGS: dict[str, tuple[str, bool]] = {
     # Keyboard
     "onKeyPress": ("on_key_press", True),
     "onKeyRelease": ("on_key_release", True),
+    "onEnterKey": ("on_enter_key", False),
+    "onDeleteKey": ("on_delete_key", False),
     # Widget
     "onShow": ("on_show", False),
     "onHide": ("on_hide", False),
