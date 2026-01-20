@@ -610,3 +610,93 @@ class TestObservableProxyWithObservableFields:
 
         # Should receive notification
         assert_that(notifications).is_equal_to(["changed"])
+
+
+class TestSiblingProxyNotifications:
+    """Test that multiple proxies wrapping the same object stay in sync."""
+
+    def test_sibling_proxy_receives_notification(self) -> None:
+        """When one proxy updates a field, sibling proxies are notified."""
+        person = Person("Alice", 30)
+        proxy1 = ObservableProxy(person)
+        proxy2 = ObservableProxy(person)
+
+        notifications: list[str] = []
+        proxy2.on_change(lambda: notifications.append("proxy2_changed"))
+
+        # Update through proxy1
+        proxy1.name.set("Bob")
+
+        # proxy2 should be notified
+        assert_that(notifications).contains("proxy2_changed")
+
+    def test_sibling_proxy_field_observable_updated(self) -> None:
+        """When one proxy updates a field, sibling proxy's Observable gets new value."""
+        person = Person("Alice", 30)
+        proxy1 = ObservableProxy(person)
+        proxy2 = ObservableProxy(person)
+
+        # Access name on proxy2 to create its Observable
+        _ = proxy2.name.get()
+
+        # Update through proxy1
+        proxy1.name.set("Bob")
+
+        # proxy2's observable should have the new value
+        assert_that(proxy2.name.get()).is_equal_to("Bob")
+
+    def test_sibling_proxy_field_callbacks_triggered(self) -> None:
+        """When one proxy updates a field, sibling proxy's field callbacks fire."""
+        person = Person("Alice", 30)
+        proxy1 = ObservableProxy(person)
+        proxy2 = ObservableProxy(person)
+
+        field_notifications: list[str] = []
+        proxy2.name.on_change(lambda v: field_notifications.append(f"name={v}"))
+
+        # Update through proxy1
+        proxy1.name.set("Bob")
+
+        # proxy2's field callback should fire
+        assert_that(field_notifications).contains("name=Bob")
+
+    def test_no_infinite_loop_with_siblings(self) -> None:
+        """Sibling notifications don't cause infinite loops."""
+        person = Person("Alice", 30)
+        proxy1 = ObservableProxy(person)
+        proxy2 = ObservableProxy(person)
+
+        count = [0]
+
+        def on_change() -> None:
+            count[0] += 1
+
+        proxy1.on_change(on_change)
+        proxy2.on_change(on_change)
+
+        # Update through proxy1
+        proxy1.name.set("Bob")
+
+        # Should notify each once (proxy1 for its own change, proxy2 as sibling)
+        # Not infinite
+        assert_that(count[0]).is_equal_to(2)
+
+    def test_three_proxies_all_notified(self) -> None:
+        """Multiple sibling proxies all receive notifications."""
+        person = Person("Alice", 30)
+        proxy1 = ObservableProxy(person)
+        proxy2 = ObservableProxy(person)
+        proxy3 = ObservableProxy(person)
+
+        notifications: list[int] = []
+        proxy1.on_change(lambda: notifications.append(1))
+        proxy2.on_change(lambda: notifications.append(2))
+        proxy3.on_change(lambda: notifications.append(3))
+
+        # Update through proxy1
+        proxy1.name.set("Bob")
+
+        # All should be notified
+        assert_that(notifications).contains(1)
+        assert_that(notifications).contains(2)
+        assert_that(notifications).contains(3)

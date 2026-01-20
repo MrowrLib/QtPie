@@ -37,6 +37,10 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             - None/False: no checkboxes (default)
             - str without braces: two-way binding to bool field name
             - str with braces "{expr}": one-way expression (read-only checkbox)
+        editable: Inline editing support for tree nodes.
+            - None/False: no editing (default)
+            - str: field name to edit (supports nested paths like "info.title")
+            - True: edit the item itself (for simple types like str)
     """
 
     def __init__(
@@ -47,6 +51,7 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         children_attr: str = "children",
         format_fn: Callable[[T], str] | None = None,
         checkable: str | bool | None = None,
+        editable: str | bool | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
@@ -54,6 +59,7 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         self._format_fn = format_fn
         self._checkable = checkable
         self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
+        self._editable = editable
 
         # Cache of ObservableProxy per item (keyed by id(item))
         # This enables per-item dirty/valid state tracking
@@ -198,6 +204,15 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             if self._format_fn is not None:
                 return self._format_fn(item)
             return str(item)
+        elif role == Qt.ItemDataRole.EditRole:
+            # Return the editable value for pre-populating the editor
+            if self._editable is True:
+                # Simple type - return the item itself
+                return item
+            elif isinstance(self._editable, str):
+                # Field name - return the field value (supports nested paths)
+                return self._get_nested_attr(item, self._editable)
+            return None
         elif role == Qt.ItemDataRole.CheckStateRole:
             # Return check state for checkable nodes
             if isinstance(self._checkable, str):
@@ -229,9 +244,15 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         if not index.isValid():
             return base_flags
 
+        result_flags = base_flags
+
         if isinstance(self._checkable, str):
-            return base_flags | Qt.ItemFlag.ItemIsUserCheckable
-        return base_flags
+            result_flags = result_flags | Qt.ItemFlag.ItemIsUserCheckable
+
+        if self._editable is True or isinstance(self._editable, str):
+            result_flags = result_flags | Qt.ItemFlag.ItemIsEditable
+
+        return result_flags
 
     @override
     def setData(
@@ -240,20 +261,47 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         value: Any,
         role: int = Qt.ItemDataRole.EditRole,
     ) -> bool:
-        """Set data for the given index (handles checkbox state changes)."""
+        """Set data for the given index (handles checkbox and edit changes)."""
         if not index.isValid():
+            return False
+
+        item = index.internalPointer()
+        if item is None:
+            return False
+
+        if role == Qt.ItemDataRole.EditRole:
+            if self._editable is True:
+                # Simple type - replace item in list
+                row = index.row()
+                parent_index = self.parent(index)
+                if parent_index.isValid():
+                    # Child item - find parent's children list
+                    parent_item = parent_index.internalPointer()
+                    children = getattr(parent_item, self._children_attr, None)
+                    if children is not None and 0 <= row < len(children):
+                        children[row] = value
+                        self.dataChanged.emit(index, index, [role])
+                        return True
+                else:
+                    # Root item
+                    if 0 <= row < len(self._obs_list):
+                        self._obs_list[row] = value
+                        self.dataChanged.emit(index, index, [role])
+                        return True
+            elif isinstance(self._editable, str):
+                # Field name - set the field value (supports nested paths)
+                if self._set_nested_attr(item, self._editable, value):
+                    self.dataChanged.emit(index, index, [role])
+                    return True
             return False
 
         if role == Qt.ItemDataRole.CheckStateRole:
             # Only allow editing for field names (not expressions)
             if isinstance(self._checkable, str) and not self._checkable_is_expression:
-                item = index.internalPointer()
-                if item is None:
-                    return False
                 new_value = value == Qt.CheckState.Checked.value
-                setattr(item, self._checkable, new_value)
-                self.dataChanged.emit(index, index, [role])
-                return True
+                if self._set_nested_attr(item, self._checkable, new_value):
+                    self.dataChanged.emit(index, index, [role])
+                    return True
         return False
 
     def _evaluate_checkable(self, item: T) -> bool:
@@ -276,8 +324,35 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             except Exception:
                 return False
         else:
-            # Field name: get attribute
-            return bool(getattr(item, self._checkable, False))
+            # Field name: get attribute (supports nested paths)
+            return bool(self._get_nested_attr(item, self._checkable, False))
+
+    def _get_nested_attr(self, obj: Any, path: str, default: Any = None) -> Any:
+        """Get nested attribute value supporting dotted paths like 'info.title'."""
+        current = obj
+        for part in path.split("."):
+            if current is None:
+                return default
+            current = getattr(current, part, None)
+        return current if current is not None else default
+
+    def _set_nested_attr(self, obj: Any, path: str, value: Any) -> bool:
+        """Set nested attribute value supporting dotted paths like 'info.title'.
+
+        Uses ObservableProxy to ensure reactive updates propagate to all bindings.
+        """
+        # Get or create proxy for the item to ensure reactive updates
+        proxy = self.proxy_for_item(obj)
+
+        parts = path.split(".")
+        current: Any = proxy
+        for part in parts[:-1]:
+            current = getattr(current, part, None)
+            if current is None:
+                return False
+        # Setting through the proxy triggers reactive notifications
+        setattr(current, parts[-1], value)
+        return True
 
     # Children list subscription
 

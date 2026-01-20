@@ -16,6 +16,45 @@ if TYPE_CHECKING:
     from qtpie.models import ReactiveListModel, ReactiveTreeModel
 
 
+def _apply_edit_triggers(
+    view: QWidget,
+    edit_on_double_click: bool | None,
+    edit_on_select: bool | None,
+    edit_on_edit_key: bool | None,
+) -> None:
+    """Apply edit trigger configuration to a QAbstractItemView.
+
+    Args:
+        view: The QListView/QTreeView widget
+        edit_on_double_click: Enable double-click editing (default: True)
+        edit_on_select: Enable click-selected-item editing (default: False)
+        edit_on_edit_key: Enable F2/Enter key editing (default: True)
+    """
+    from qtpy.QtWidgets import QAbstractItemView
+
+    if not isinstance(view, QAbstractItemView):
+        return
+
+    # Apply defaults
+    if edit_on_double_click is None:
+        edit_on_double_click = True
+    if edit_on_select is None:
+        edit_on_select = False
+    if edit_on_edit_key is None:
+        edit_on_edit_key = True
+
+    # Build trigger flags
+    triggers = QAbstractItemView.EditTrigger.NoEditTriggers
+    if edit_on_double_click:
+        triggers = triggers | QAbstractItemView.EditTrigger.DoubleClicked
+    if edit_on_select:
+        triggers = triggers | QAbstractItemView.EditTrigger.SelectedClicked
+    if edit_on_edit_key:
+        triggers = triggers | QAbstractItemView.EditTrigger.EditKeyPressed
+
+    view.setEditTriggers(triggers)
+
+
 def _setup_tree_proxy_watching(
     model: ReactiveTreeModel[Any],
     obs_list: ObservableList[Any],
@@ -542,7 +581,24 @@ def apply_model_binding(
             children_attr=children_attr,
             format_fn=format_fn,
             checkable=field_info.tree_checkable,
+            editable=field_info.tree_editable,
         )
+
+        # Set edit triggers if editable is enabled
+        if field_info.tree_editable is not None and field_info.tree_editable is not False:
+            _apply_edit_triggers(
+                widget_instance,
+                field_info.edit_on_double_click,
+                field_info.edit_on_select,
+                field_info.edit_on_edit_key,
+            )
+
+            # Apply validator delegate if validator= is specified
+            if field_info.tree_validator is not None:
+                from qtpie.delegates import ValidatorItemDelegate
+
+                validator_delegate = ValidatorItemDelegate(field_info.tree_validator, parent=widget_instance)
+                widget_instance.setItemDelegate(validator_delegate)  # type: ignore[attr-defined]
     elif use_table_model:
         # Create ReactiveTableModel for QTableView
         from qtpie.models import ReactiveTableModel
@@ -606,7 +662,24 @@ def apply_model_binding(
             parent=widget_instance,
             format_fn=format_fn,
             checkable=field_info.list_checkable,
+            editable=field_info.list_editable,
         )
+
+        # Set edit triggers if editable is enabled (for QListView only, not QComboBox)
+        if field_info.list_editable is not None and field_info.list_editable is not False:
+            _apply_edit_triggers(
+                widget_instance,
+                field_info.edit_on_double_click,
+                field_info.edit_on_select,
+                field_info.edit_on_edit_key,
+            )
+
+            # Apply validator delegate if validator= is specified
+            if field_info.list_validator is not None:
+                from qtpie.delegates import ValidatorItemDelegate
+
+                validator_delegate = ValidatorItemDelegate(field_info.list_validator, parent=widget_instance)
+                widget_instance.setItemDelegate(validator_delegate)  # type: ignore[attr-defined]
 
     # Wrap in filter/sort proxy if filter= or sort= is specified
     if field_info.model_filter is not None or field_info.model_sort is not None:

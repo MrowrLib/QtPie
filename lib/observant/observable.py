@@ -55,6 +55,14 @@ class Observable[T]:
         if callback not in self._callbacks:
             self._callbacks.append(callback)
 
+    def _notify_observers(self) -> None:
+        """Notify all callbacks with the current value.
+
+        Used internally when value is updated externally (e.g., by sibling proxy sync).
+        """
+        for callback in self._callbacks:
+            callback(self._value)
+
     @property
     def is_dirty(self) -> Observable[bool]:
         """Dirty state - usable as bool or Observable."""

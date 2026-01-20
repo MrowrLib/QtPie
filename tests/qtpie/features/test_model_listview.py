@@ -11,13 +11,15 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportImplicitOverride=false
+# pyright: reportUnknownLambdaType=false
 """Tests for QListView model binding with bind=.
 
 Tests that QListView bound to Variable[list] uses ReactiveListModel
 and updates reactively when the list changes, with proper selection bindings.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 from assertpy import assert_that
@@ -1228,3 +1230,578 @@ class TestListViewSelectedItemDirtyStateAcrossSelections:
         # This test checks if dirty state is remembered per-item
         assert_that(instance._selected.value.name).is_equal_to("Alice Modified")
         assert_that(instance._selected.is_dirty.get()).is_true()
+
+
+# =============================================================================
+# QListView Editable Tests
+# =============================================================================
+
+
+@dataclass
+class EditableItem:
+    """Item for editable tests."""
+
+    name: str
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclass
+class NestedData:
+    """Nested object for nested path tests."""
+
+    title: str
+
+
+@dataclass
+class ItemWithNested:
+    """Item with nested object for nested path tests."""
+
+    info: NestedData
+
+    def __str__(self) -> str:
+        return self.info.title
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewEditable:
+    """Test QListView with editable= for inline text editing."""
+
+    def test_editable_field_enables_editing(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable='field_name' adds ItemIsEditable flag."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new(
+                [
+                    EditableItem("A"),
+                    EditableItem("B"),
+                ]
+            )
+            _list: QListView = new(bind="_items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        idx_a = model.index(0, 0)
+        idx_b = model.index(1, 0)
+        assert_that(model.flags(idx_a) & Qt.ItemFlag.ItemIsEditable).is_true()
+        assert_that(model.flags(idx_b) & Qt.ItemFlag.ItemIsEditable).is_true()
+
+    def test_editable_field_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable='field_name' provides two-way binding via setData EditRole."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new(
+                [
+                    EditableItem("Original"),
+                ]
+            )
+            _list: QListView = new(bind="_items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Initial value
+        assert_that(instance._items.value[0].name).is_equal_to("Original")
+
+        # Edit via model
+        success = model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Underlying data should be updated
+        assert_that(instance._items.value[0].name).is_equal_to("Modified")
+
+    def test_editable_true_for_simple_types(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable=True allows editing simple types like str."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[str]] = new(["Apple", "Banana"])
+            _list: QListView = new(bind="_items", editable=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Should be editable
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsEditable).is_true()
+
+        # Edit via model
+        success = model.setData(idx, "Orange", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Underlying list should be updated
+        assert_that(instance._items.value[0]).is_equal_to("Orange")
+
+    def test_editable_false_disables_editing(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable=False explicitly disables editing."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items", editable=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsEditable).is_false()
+
+    def test_editable_default_not_editable(self, base_class, decorator, qt: QtDriver) -> None:
+        """No editable= parameter means not editable (default)."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items")  # No editable=
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsEditable).is_false()
+
+    def test_editable_nested_path(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable='nested.field' supports nested paths."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ItemWithNested]] = new(
+                [
+                    ItemWithNested(info=NestedData(title="Original")),
+                ]
+            )
+            _list: QListView = new(bind="_items", editable="info.title")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Should be editable
+        assert_that(model.flags(idx) & Qt.ItemFlag.ItemIsEditable).is_true()
+
+        # Edit via model
+        success = model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Nested field should be updated
+        assert_that(instance._items.value[0].info.title).is_equal_to("Modified")
+
+    def test_editable_with_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable= and format= work together."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test")])
+            _list: QListView = new(bind="_items", format="[{name}]", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Display should use format
+        assert_that(model.data(idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("[Test]")
+
+        # Edit should work on raw field
+        success = model.setData(idx, "New", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+        assert_that(instance._items.value[0].name).is_equal_to("New")
+
+        # Display should update
+        assert_that(model.data(idx, Qt.ItemDataRole.DisplayRole)).is_equal_to("[New]")
+
+    def test_edit_role_returns_current_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """EditRole returns current field value for pre-populating editor."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test Value")])
+            _list: QListView = new(bind="_items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # EditRole should return the raw field value (not formatted)
+        edit_value = model.data(idx, Qt.ItemDataRole.EditRole)
+        assert_that(edit_value).is_equal_to("Test Value")
+
+    def test_editable_and_checkable_together(self, base_class, decorator, qt: QtDriver) -> None:
+        """editable= and checkable= can be used together."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new(
+                [
+                    Task("Test", done=False),
+                ]
+            )
+            _list: QListView = new(bind="_tasks", editable="title", checkable="done")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Both flags should be set
+        flags = model.flags(idx)
+        assert_that(flags & Qt.ItemFlag.ItemIsEditable).is_true()
+        assert_that(flags & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+
+        # Both should work
+        model.setData(idx, "New Title", Qt.ItemDataRole.EditRole)
+        model.setData(idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+
+        assert_that(instance._tasks.value[0].title).is_equal_to("New Title")
+        assert_that(instance._tasks.value[0].done).is_true()
+
+    def test_editable_triggers_reactive_callback(self, base_class, decorator, qt: QtDriver) -> None:
+        """Editing via setData triggers reactive callbacks on ObservableProxy."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Original")])
+            _list: QListView = new(bind="_items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Get the proxy for the item and track changes
+        proxy = model.proxy_for_item(instance._items.value[0])
+        callback_count = [0]
+
+        def on_change() -> None:
+            callback_count[0] += 1
+
+        proxy.on_change(on_change)
+
+        # Edit via model
+        model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+
+        # Callback should have been triggered
+        assert_that(callback_count[0]).is_greater_than(0)
+
+    def test_editable_nested_path_triggers_reactive_callback(self, base_class, decorator, qt: QtDriver) -> None:
+        """Editing nested path via setData triggers reactive callbacks."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ItemWithNested]] = new([ItemWithNested(info=NestedData(title="Original"))])
+            _list: QListView = new(bind="_items", editable="info.title")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Get the proxy for the item and track changes
+        proxy = model.proxy_for_item(instance._items.value[0])
+        callback_count = [0]
+
+        def on_change() -> None:
+            callback_count[0] += 1
+
+        proxy.on_change(on_change)
+
+        # Edit via model
+        model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+
+        # Callback should have been triggered
+        assert_that(callback_count[0]).is_greater_than(0)
+
+    def test_checkable_triggers_reactive_callback(self, base_class, decorator, qt: QtDriver) -> None:
+        """Toggling checkbox via setData triggers reactive callbacks."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _tasks: Variable[list[Task]] = new([Task("Test", done=False)])
+            _list: QListView = new(bind="_tasks", checkable="done")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Get the proxy for the item and track changes
+        proxy = model.proxy_for_item(instance._tasks.value[0])
+        callback_count = [0]
+
+        def on_change() -> None:
+            callback_count[0] += 1
+
+        proxy.on_change(on_change)
+
+        # Toggle checkbox via model
+        model.setData(idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+
+        # Callback should have been triggered
+        assert_that(callback_count[0]).is_greater_than(0)
+
+
+@dataclass
+class NestedState:
+    """Nested state for checkable nested path tests."""
+
+    selected: bool = False
+
+
+@dataclass
+class ItemWithNestedState:
+    """Item with nested state for checkable nested path tests."""
+
+    name: str
+    state: NestedState = field(default_factory=NestedState)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewCheckableNestedPath:
+    """Test QListView checkable= with nested paths like 'state.selected'."""
+
+    def test_checkable_nested_path_shows_checkbox(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='nested.field' enables checkboxes using nested path."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ItemWithNestedState]] = new(
+                [
+                    ItemWithNestedState("A", state=NestedState(selected=True)),
+                    ItemWithNestedState("B", state=NestedState(selected=False)),
+                ]
+            )
+            _list: QListView = new(bind="_items", checkable="state.selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        idx_a = model.index(0, 0)
+        idx_b = model.index(1, 0)
+
+        # Both should have checkbox flag
+        assert_that(model.flags(idx_a) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+        assert_that(model.flags(idx_b) & Qt.ItemFlag.ItemIsUserCheckable).is_true()
+
+        # Check states match the nested bool field
+        assert_that(model.data(idx_a, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(idx_b, Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Unchecked)
+
+    def test_checkable_nested_path_two_way_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """checkable='nested.field' provides two-way binding to nested bool field."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ItemWithNestedState]] = new(
+                [
+                    ItemWithNestedState("A", state=NestedState(selected=False)),
+                ]
+            )
+            _list: QListView = new(bind="_items", checkable="state.selected")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+        idx = model.index(0, 0)
+
+        # Initially unchecked
+        assert_that(instance._items.value[0].state.selected).is_false()
+
+        # Set via model (simulating checkbox click)
+        model.setData(idx, Qt.CheckState.Checked.value, Qt.ItemDataRole.CheckStateRole)
+
+        # Nested field should be updated
+        assert_that(instance._items.value[0].state.selected).is_true()
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewEditTriggers:
+    """Test QListView edit trigger configuration."""
+
+    def test_edit_triggers_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """Default edit triggers include DoubleClicked and EditKeyPressed."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        # Default should include DoubleClicked and EditKeyPressed
+        assert_that(triggers & QAbstractItemView.EditTrigger.DoubleClicked).is_true()
+        assert_that(triggers & QAbstractItemView.EditTrigger.EditKeyPressed).is_true()
+        # But not SelectedClicked
+        assert_that(triggers & QAbstractItemView.EditTrigger.SelectedClicked).is_false()
+
+    def test_edit_on_double_click_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """editOnDoubleClick=False disables double-click editing."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items", editable="name", editOnDoubleClick=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        assert_that(triggers & QAbstractItemView.EditTrigger.DoubleClicked).is_false()
+
+    def test_edit_on_select_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """editOnSelect=True enables click-selected-item editing."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items", editable="name", editOnSelect=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        assert_that(triggers & QAbstractItemView.EditTrigger.SelectedClicked).is_true()
+
+    def test_edit_on_edit_key_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """editOnEditKey=False disables F2/Enter key editing."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(bind="_items", editable="name", editOnEditKey=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        assert_that(triggers & QAbstractItemView.EditTrigger.EditKeyPressed).is_false()
+
+    def test_edit_triggers_all_disabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """All edit triggers can be disabled."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(
+                bind="_items",
+                editable="name",
+                editOnDoubleClick=False,
+                editOnSelect=False,
+                editOnEditKey=False,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        assert_that(triggers).is_equal_to(QAbstractItemView.EditTrigger.NoEditTriggers)
+
+    def test_edit_triggers_all_enabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """All edit triggers can be enabled."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("A")])
+            _list: QListView = new(
+                bind="_items",
+                editable="name",
+                editOnDoubleClick=True,
+                editOnSelect=True,
+                editOnEditKey=True,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        triggers = instance._list.editTriggers()
+
+        assert_that(triggers & QAbstractItemView.EditTrigger.DoubleClicked).is_true()
+        assert_that(triggers & QAbstractItemView.EditTrigger.SelectedClicked).is_true()
+        assert_that(triggers & QAbstractItemView.EditTrigger.EditKeyPressed).is_true()
+
+
+# =============================================================================
+# QListView Validator Tests
+# =============================================================================
+
+
+def alphanumeric_validator(text: str) -> bool:
+    """Validator that only allows alphanumeric characters."""
+    return text.isalnum() or text == ""
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewEditableValidator:
+    """Test QListView editable= with validator= support."""
+
+    def test_validator_sets_delegate(self, base_class, decorator, qt: QtDriver) -> None:
+        """validator= sets a ValidatorItemDelegate on the list view."""
+        from qtpie.delegates import ValidatorItemDelegate
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test")])
+            _list: QListView = new(bind="_items", editable="name", validator=alphanumeric_validator)
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Check that delegate is set
+        delegate = instance._list.itemDelegate()
+        assert_that(delegate).is_instance_of(ValidatorItemDelegate)
+
+    def test_validator_with_callable(self, base_class, decorator, qt: QtDriver) -> None:
+        """validator= accepts a callable predicate."""
+        from qtpie.delegates import ValidatorItemDelegate
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test")])
+            _list: QListView = new(bind="_items", editable="name", validator=lambda s: len(str(s)) <= 10)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        delegate = instance._list.itemDelegate()
+        assert_that(delegate).is_instance_of(ValidatorItemDelegate)
+
+    def test_validator_with_regex(self, base_class, decorator, qt: QtDriver) -> None:
+        """validator= accepts a regex pattern string."""
+        from qtpie.delegates import ValidatorItemDelegate
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test")])
+            _list: QListView = new(bind="_items", editable="name", validator=r"^[A-Za-z]+$")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        delegate = instance._list.itemDelegate()
+        assert_that(delegate).is_instance_of(ValidatorItemDelegate)
+
+    def test_no_validator_uses_default_delegate(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without validator=, the default QStyledItemDelegate is used."""
+        from qtpie.delegates import ValidatorItemDelegate
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[EditableItem]] = new([EditableItem("Test")])
+            _list: QListView = new(bind="_items", editable="name")  # No validator
+
+        instance = create_and_track(qt, TestClass, base_class)
+        delegate = instance._list.itemDelegate()
+
+        # Should NOT be our custom delegate
+        assert_that(isinstance(delegate, ValidatorItemDelegate)).is_false()

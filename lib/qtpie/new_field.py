@@ -114,8 +114,22 @@ class NewField:
         # - str without braces: two-way binding to bool field name
         # - str with braces "{expr}": one-way expression (read-only checkbox)
         self.tree_checkable: str | bool | None = None
+        # QTreeView editable: inline editing support for tree nodes
+        # - None/False: no editing (default)
+        # - str: field name to edit (supports nested paths like "info.title")
+        # - True: edit the item itself (for simple types like str)
+        self.tree_editable: str | bool | None = None
         # QListView checkable: checkbox support for list items (same semantics as tree)
         self.list_checkable: str | bool | None = None
+        # QListView editable: inline editing support for list items (same semantics as tree)
+        self.list_editable: str | bool | None = None
+        # Edit triggers for QTreeView/QListView (defaults: doubleClick=True, select=False, editKey=True)
+        self.edit_on_double_click: bool | None = None
+        self.edit_on_select: bool | None = None
+        self.edit_on_edit_key: bool | None = None
+        # Validator for tree/list inline editing (same format as QLineEdit validator=)
+        self.tree_validator: str | Callable[..., Any] | None = None
+        self.list_validator: str | Callable[..., Any] | None = None
         # Filter for model widgets: "{_search} in {name}", "method_name", or callable
         self.model_filter: str | Callable[[Any], bool] | None = None
         # Filter dependencies: Variable names to watch for callable/method filters
@@ -757,6 +771,17 @@ class NewField:
                     # - str without braces: two-way binding to bool field name
                     # - str with braces "{expr}": one-way expression (read-only)
                     self.list_checkable = self.kwargs.pop("checkable", None)
+                    # editable= specifies inline editing for list items
+                    # - None/False: no editing (default)
+                    # - str: field name to edit (supports nested paths)
+                    # - True: edit the item itself (for simple types)
+                    self.list_editable = self.kwargs.pop("editable", None)
+                    # Edit triggers (defaults: doubleClick=True, select=False, editKey=True)
+                    self.edit_on_double_click = self.kwargs.pop("editOnDoubleClick", None)
+                    self.edit_on_select = self.kwargs.pop("editOnSelect", None)
+                    self.edit_on_edit_key = self.kwargs.pop("editOnEditKey", None)
+                    # validator= for inline editing (same format as QLineEdit validator=)
+                    self.list_validator = self.kwargs.pop("validator", None)
                     # QListView-specific selection bindings (multi)
                     self.selected_indexes = self.kwargs.pop("selectedIndexes", None)
                     self.selected_items_list = self.kwargs.pop("selectedItems", None)
@@ -773,6 +798,17 @@ class NewField:
                     # - str without braces: two-way binding to bool field name
                     # - str with braces "{expr}": one-way expression (read-only)
                     self.tree_checkable = self.kwargs.pop("checkable", None)
+                    # editable= specifies inline editing for tree nodes
+                    # - None/False: no editing (default)
+                    # - str: field name to edit (supports nested paths)
+                    # - True: edit the item itself (for simple types)
+                    self.tree_editable = self.kwargs.pop("editable", None)
+                    # Edit triggers (defaults: doubleClick=True, select=False, editKey=True)
+                    self.edit_on_double_click = self.kwargs.pop("editOnDoubleClick", None)
+                    self.edit_on_select = self.kwargs.pop("editOnSelect", None)
+                    self.edit_on_edit_key = self.kwargs.pop("editOnEditKey", None)
+                    # validator= for inline editing (same format as QLineEdit validator=)
+                    self.tree_validator = self.kwargs.pop("validator", None)
                     # QTreeView selection bindings (multi)
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)

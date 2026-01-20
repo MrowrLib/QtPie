@@ -279,8 +279,13 @@ class ObservableProxy[T]:
 
         return nested_proxies[name]
 
-    def _notify_change(self) -> None:
-        """Notify all change listeners."""
+    def _notify_change(self, *, _from_sibling: bool = False) -> None:
+        """Notify all change listeners.
+
+        Args:
+            _from_sibling: If True, this notification came from a sibling proxy.
+                           We skip notifying other siblings to prevent infinite loops.
+        """
         callbacks: list[Callable[[], None]] = object.__getattribute__(self, "_callbacks")
         if callbacks:
             target = object.__getattribute__(self, "_target")
@@ -291,6 +296,45 @@ class ObservableProxy[T]:
             )
         for callback in callbacks:
             callback()
+
+        # Notify sibling proxies (other proxies wrapping the same object)
+        # Only do this for the originating change, not for sibling notifications
+        if not _from_sibling:
+            self._notify_sibling_proxies()
+
+    def _notify_sibling_proxies(self) -> None:
+        """Notify other proxies wrapping the same target object.
+
+        When one proxy updates a field, all other proxies wrapping the same
+        object need to know so their bindings update too.
+        """
+        target = object.__getattribute__(self, "_target")
+        siblings = get_proxies_for(target)
+        for sibling in siblings:
+            if sibling is not self:
+                # Sync the sibling's field observables with the updated target values
+                sibling._sync_from_target()
+                # Notify the sibling's listeners (with flag to prevent infinite loop)
+                sibling._notify_change(_from_sibling=True)
+
+    def _sync_from_target(self) -> None:
+        """Sync all field observables from the current target values.
+
+        Called when a sibling proxy modifies the shared target object.
+        """
+        target = object.__getattribute__(self, "_target")
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+
+        for name, obs in field_observables.items():
+            if hasattr(target, name):
+                current_target_value = getattr(target, name)
+                # Only update if different to avoid unnecessary notifications
+                if obs.get() != current_target_value:
+                    # Use internal set to avoid triggering another round of sibling notifications
+                    # pyright: ignore - internal cross-class access within observant package
+                    obs._value = current_target_value  # pyright: ignore[reportPrivateUsage]
+                    # Notify this observable's listeners
+                    obs._notify_observers()  # pyright: ignore[reportPrivateUsage]
 
     def _update_dirty_state(self) -> None:
         """Update aggregated dirty state from all fields."""

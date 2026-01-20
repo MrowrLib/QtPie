@@ -40,9 +40,11 @@ class CollectionsTreeWidget(Widget):
         bind="workspace.collections",
         children="items",
         format="{name}",
+        editable="name",
         selectedItem="current_workspace_item",
         expand=True,
         headerHidden=True,
+        validator=filename_safe_validator,
         clicked="{on_current_workspace_item_changed()}",
     )
 

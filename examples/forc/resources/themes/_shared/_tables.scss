@@ -90,6 +90,13 @@ QTreeView::branch:hover {
     background-color: $bg-primary;
 }
 
+// Inline editor (QLineEdit spawned when editing tree items)
+QTreeView QLineEdit {
+    padding: 2px 4px;
+    margin: 0px;
+    min-height: 20px;
+}
+
 // List view
 QListView {
     background-color: $bg-primary;
