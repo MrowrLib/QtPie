@@ -1,3 +1,4 @@
+from PySide6.QtCore import Signal
 from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
 
 from forc.app.helpers import filename_safe_validator
@@ -41,50 +42,65 @@ class CollectionsTreeWidgetRow(Widget[Collection | Request]):
         bind="{method?.value}",
         classes=["method-badge", "method-{method?.value}"],
         visible="{record?.method is not None}",
+        onEnterKey="start_editing",  # <--- this does not trigger, probably consumed by the qtreeview
     )
-    text_label: QLabel = new(bind="{name}", visible="{not is_editing}", onMouseDoubleClick="{_on_start_editing()}")
+    text_label: QLabel = new(bind="{name}", visible="{not is_editing}", onMouseDoubleClick="{start_editing()}")
     text_edit: QLineEdit = new(
         bind="name",
         visible="{is_editing}",
         validator=filename_safe_validator,
-        onBlur="_on_stop_editing",
-        onEnterKey="_on_stop_editing",
+        onBlur="stop_editing",
+        onEnterKey="stop_editing",
     )
 
     ### Methods ###
-    def _on_start_editing(self) -> None:
+    def start_editing(self) -> None:
+        print("Start editing")
         self.is_editing = True
         self.text_edit.setFocus()
 
-    def _on_stop_editing(self) -> None:
+    def stop_editing(self) -> None:
+        print("Stop editing")
+        self.text_edit.clearFocus()
         self.is_editing = False
+        self.emit_signal("on_rename", self.record_value, self.text_edit.text())
 
 
-@widget
+@widget(on_rename="_on_rename")
 class CollectionsTreeWidget(Widget):
+    on_rename = Signal(object, str)
+
     ### Services ###
     workspace_service: Variable[WorkspaceService]
+
+    ### Variables ###
+    current_tree_widget_row: Variable[CollectionsTreeWidgetRow | None] = new(None)
 
     ### Widgets ###
     header: QLabel = new(bind="{workspace?.name}")
     treeview: QTreeView = new(
         bind="workspace.collections",
         children="items",
-        # format="[{method.value}] {name}",
-        # editable="name",
-        # onEdited="_on_rename",
         selectedItem="current_workspace_item",
         expand=True,
         headerHidden=True,
         validator=filename_safe_validator,
         clicked="{on_current_workspace_item_changed()}",
         widget=CollectionsTreeWidgetRow,
-        # widget=embed(CollectionsTreeWidgetRow),
+        onEnterKey="_on_enter_key",
+        selectedWidget="current_tree_widget_row",
     )
 
     ### Methods ###
-    def _on_rename(self, item: Collection | Request, old_name: str, new_name: str) -> None:
+    def _on_rename(self, item: Collection | Request, new_name: str) -> None:
+        print(f"Called rename for item '{item}' to new name '{new_name}'")
         self.workspace_service().rename_item(item, new_name)
+
+    def _on_enter_key(self) -> None:
+        print("Tree: on enter")
+        widget = self.current_tree_widget_row()
+        if widget is not None:
+            widget.start_editing()
 
 
 @widget

@@ -16,6 +16,7 @@ def setup_selection_bindings(
     selected_item_path: str | None,
     selected_indexes_path: str | None = None,
     selected_items_list_path: str | None = None,
+    selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
 ) -> None:
     """Set up two-way selection bindings for model widgets.
@@ -28,11 +29,13 @@ def setup_selection_bindings(
         selected_item_path: Variable path for item binding (e.g., "_selected_item")
         selected_indexes_path: Variable path for multi-index binding (QListView only)
         selected_items_list_path: Variable path for multi-item binding (QListView only)
+        selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
     """
     has_single = selected_index_path is not None or selected_item_path is not None
     has_multi = selected_indexes_path is not None or selected_items_list_path is not None
-    if not has_single and not has_multi:
+    has_widget = selected_widget_path is not None
+    if not has_single and not has_multi and not has_widget:
         return
 
     from observant import Observable, ObservableProxy
@@ -44,6 +47,7 @@ def setup_selection_bindings(
     item_var: VarType[Any] | None = None
     indexes_var: VarType[list[int]] | None = None
     items_list_var: VarType[list[Any]] | None = None
+    widget_var: VarType[Any] | None = None
 
     if selected_index_path is not None:
         source = resolve_or_create_variable_fn(host, selected_index_path, int)
@@ -69,11 +73,16 @@ def setup_selection_bindings(
         if isinstance(source, VarType):
             items_list_var = source  # pyright: ignore[reportUnknownVariableType]
 
+    if selected_widget_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_widget_path, None)
+        if isinstance(source, VarType):
+            widget_var = source  # pyright: ignore[reportUnknownVariableType]
+
     # ALWAYS call _setup_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers
     # (which are connected later in _connect_signals). The handler uses a mutable container
     # so it can access Variables that are resolved later when bindings are reapplied.
-    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var)
+    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var, widget_var)
 
 
 def _setup_selection_bindings_impl(
@@ -84,6 +93,7 @@ def _setup_selection_bindings_impl(
     item_var: Any | None,  # Variable[Any] | None
     indexes_var: Any | None,  # Variable[list[int]] | None
     items_list_var: Any | None,  # Variable[list[Any]] | None
+    widget_var: Any | None = None,  # Variable[QWidget | None] | None
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
     from observant import Observable, ObservableProxy
@@ -102,6 +112,7 @@ def _setup_selection_bindings_impl(
         "model": model,
         "index_var": index_var,
         "item_var": item_var,
+        "widget_var": widget_var,
         "is_observable": isinstance(item_var, Observable) if item_var is not None else False,
         "connected": False,
     }
@@ -422,6 +433,17 @@ def _setup_selection_bindings_impl(
                 return int(current_idx.row())  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
             return -1
 
+        # Helper to get the embedded widget at a row index (for selectedWidget binding)
+        def get_widget_at_row(row: int) -> Any:
+            if row < 0:
+                return None
+            current_model = binding_container["model"]
+            if row >= current_model.rowCount():
+                return None
+            model_idx = current_model.index(row, 0)
+            # QAbstractItemView.indexWidget() returns the widget for persistent editors
+            return widget.indexWidget(model_idx)  # type: ignore[attr-defined]
+
         # Initialize from current state
         current_row = get_current_row()
 
@@ -448,6 +470,10 @@ def _setup_selection_bindings_impl(
                 # Sync item Variable to widget's current selection
                 effective_row = current_row if current_row >= 0 else 0
                 set_item_var_value_view(get_item_at_index(effective_row), effective_row)
+
+        # Initialize widget_var to current selection's widget (read-only binding)
+        if widget_var is not None:
+            widget_var.value = get_widget_at_row(current_row)
 
         # Variable → Widget binding
         if index_var is not None:
@@ -501,7 +527,8 @@ def _setup_selection_bindings_impl(
             # Get current vars from container (may be None on first setup, valid later)
             current_index_var = binding_container["index_var"]
             current_item_var = binding_container["item_var"]
-            if current_index_var is None and current_item_var is None:
+            current_widget_var = binding_container["widget_var"]
+            if current_index_var is None and current_item_var is None and current_widget_var is None:
                 # No bindings yet, nothing to do
                 return
             updating["flag"] = True
@@ -511,6 +538,8 @@ def _setup_selection_bindings_impl(
                     current_index_var.value = row
                 if current_item_var is not None:
                     set_item_var_value_view(get_item_at_index(row) if row >= 0 else None, row)
+                if current_widget_var is not None:
+                    current_widget_var.value = get_widget_at_row(row)
             finally:
                 updating["flag"] = False
 

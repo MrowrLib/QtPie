@@ -232,3 +232,137 @@ class TestTableViewLifecycle:
 
         model = instance._table.model()
         assert_that(model.rowCount()).is_equal_to(0)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewSelectedWidget:
+    """QTableView with selectedWidget binding to get embedded widget."""
+
+    def test_selected_widget_is_none_initially(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget is None when nothing is selected."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions],
+                selectedWidget="_selected_widget",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Initially no selection, so widget should be None
+        assert_that(instance._selected_widget.value).is_none()
+
+    def test_selected_widget_updates_on_selection(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget updates when a cell in a widget column is selected."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions],
+                selectedWidget="_selected_widget",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select the widget column cell (column 1)
+        model = instance._table.model()
+        index = model.index(0, 1)
+        instance._table.setCurrentIndex(index)
+        qt.process_events()
+
+        # The embedded widget at that cell
+        embedded = instance._table.indexWidget(index)
+        assert_that(instance._selected_widget.value).is_same_as(embedded)
+
+    def test_selected_widget_updates_on_selection_change(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget updates when selection changes between widget columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions],
+                selectedWidget="_selected_widget",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+
+        # Select first row widget column
+        index0 = model.index(0, 1)
+        instance._table.setCurrentIndex(index0)
+        qt.process_events()
+        widget0 = instance._selected_widget.value
+
+        # Select second row widget column
+        index1 = model.index(1, 1)
+        instance._table.setCurrentIndex(index1)
+        qt.process_events()
+        widget1 = instance._selected_widget.value
+
+        # Widgets should be different
+        assert_that(widget0).is_not_same_as(widget1)
+        assert_that(instance._selected_widget.value).is_same_as(instance._table.indexWidget(index1))
+
+    def test_selected_widget_none_for_non_widget_column(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget is None when selecting a non-widget column."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions],
+                selectedWidget="_selected_widget",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select the text column (column 0 - "name")
+        model = instance._table.model()
+        index = model.index(0, 0)
+        instance._table.setCurrentIndex(index)
+        qt.process_events()
+
+        # No embedded widget in text column
+        assert_that(instance._selected_widget.value).is_none()
+
+    def test_selected_widget_is_dog_actions_instance(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget is an instance of the embedded widget class."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions],
+                selectedWidget="_selected_widget",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select the widget column
+        model = instance._table.model()
+        index = model.index(0, 1)
+        instance._table.setCurrentIndex(index)
+        qt.process_events()
+
+        # Check it's a DogActions instance
+        assert_that(instance._selected_widget.value).is_instance_of(DogActions)

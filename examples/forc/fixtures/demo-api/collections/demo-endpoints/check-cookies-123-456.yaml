@@ -1,0 +1,17 @@
+name: Check Cookies 123 456
+method: GET
+url: ${BASE_URL}/demo/cookies/check
+headers:
+- key: Accept
+  value: application/json
+  enabled: true
+  secret: false
+- key: Cookie
+  value: simple=test_value; session=abc123
+  enabled: true
+  secret: false
+query_params: []
+body: ''
+body_fields: []
+body_type: none
+auth:

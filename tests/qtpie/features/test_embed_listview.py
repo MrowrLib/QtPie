@@ -297,3 +297,96 @@ class TestListViewEmbedCombined:
 
         model = instance._list.model()
         assert_that(model.rowCount()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListViewSelectedWidget:
+    """QListView with selectedWidget binding to get embedded widget."""
+
+    def test_selected_widget_is_none_initially(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget is None when nothing is selected."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _list: QListView = new(bind="_dogs", widget=DogLabel, selectedWidget="_selected_widget")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Initially no selection, so widget should be None
+        assert_that(instance._selected_widget.value).is_none()
+
+    def test_selected_widget_updates_on_selection(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget updates when a row is selected."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _list: QListView = new(bind="_dogs", widget=DogLabel, selectedWidget="_selected_widget")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select the first row
+        model = instance._list.model()
+        index = model.index(0, 0)
+        instance._list.setCurrentIndex(index)
+        qt.process_events()
+
+        # Now the widget should be set to the embedded widget at that index
+        embedded = instance._list.indexWidget(index)
+        assert_that(instance._selected_widget.value).is_same_as(embedded)
+
+    def test_selected_widget_updates_on_selection_change(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget updates when selection changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _list: QListView = new(bind="_dogs", widget=DogLabel, selectedWidget="_selected_widget")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._list.model()
+
+        # Select first row
+        index0 = model.index(0, 0)
+        instance._list.setCurrentIndex(index0)
+        qt.process_events()
+        widget0 = instance._selected_widget.value
+
+        # Select second row
+        index1 = model.index(1, 0)
+        instance._list.setCurrentIndex(index1)
+        qt.process_events()
+        widget1 = instance._selected_widget.value
+
+        # Widgets should be different
+        assert_that(widget0).is_not_same_as(widget1)
+        assert_that(instance._selected_widget.value).is_same_as(instance._list.indexWidget(index1))
+
+    def test_selected_widget_is_dog_label_instance(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedWidget is an instance of the embedded widget class."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _selected_widget: Variable[Widget | None] = new(None)
+            _list: QListView = new(bind="_dogs", widget=DogLabel, selectedWidget="_selected_widget")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Select the row
+        model = instance._list.model()
+        index = model.index(0, 0)
+        instance._list.setCurrentIndex(index)
+        qt.process_events()
+
+        # Check it's a DogLabel instance
+        assert_that(instance._selected_widget.value).is_instance_of(DogLabel)

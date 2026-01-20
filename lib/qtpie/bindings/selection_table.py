@@ -20,16 +20,17 @@ def setup_table_selection_bindings(
     selected_columns_path: str | None,
     selected_cells_path: str | None,
     selected_items_path: str | None,
+    selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
 ) -> None:
     """Set up selection bindings specific to QTableView.
 
     Supports both single and multi-selection bindings:
-    - Single: selectedRow, selectedColumn, selectedCell, selectedItem
+    - Single: selectedRow, selectedColumn, selectedCell, selectedItem, selectedWidget
     - Multi: selectedRows, selectedColumns, selectedCells, selectedItems
     """
     # Check if any binding is specified
-    has_single = any([selected_row_path, selected_column_path, selected_cell_path, selected_item_path])
+    has_single = any([selected_row_path, selected_column_path, selected_cell_path, selected_item_path, selected_widget_path])
     has_multi = any([selected_rows_path, selected_columns_path, selected_cells_path, selected_items_path])
     if not has_single and not has_multi:
         return
@@ -47,6 +48,7 @@ def setup_table_selection_bindings(
     column_var: Any | None = None
     cell_var: Any | None = None
     item_var: Any | None = None
+    widget_var: Any | None = None
     rows_var: Any | None = None
     columns_var: Any | None = None
     cells_var: Any | None = None
@@ -73,6 +75,11 @@ def setup_table_selection_bindings(
         if is_var_or_obs(source):
             item_var = source
 
+    if selected_widget_path:
+        source = resolve_or_create_variable_fn(host, selected_widget_path, None)
+        if is_var_or_obs(source):
+            widget_var = source
+
     # Multi selection variables
     if selected_rows_path:
         source = resolve_or_create_variable_fn(host, selected_rows_path, None)
@@ -97,7 +104,7 @@ def setup_table_selection_bindings(
     # ALWAYS call _setup_table_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers.
     # The handler uses a mutable container so it can access Variables resolved later.
-    _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, rows_var, columns_var, cells_var, items_var)
+    _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, widget_var, rows_var, columns_var, cells_var, items_var)
 
 
 def _setup_table_selection_bindings_impl(
@@ -108,6 +115,7 @@ def _setup_table_selection_bindings_impl(
     column_var: Any | None,  # Variable[int] | None
     cell_var: Any | None,  # Variable[tuple[int, int]] | None
     item_var: Any | None,  # Variable[Any] | None
+    widget_var: Any | None,  # Variable[QWidget | None] | None
     rows_var: Any | None,  # Variable[list[int]] | None
     columns_var: Any | None,  # Variable[list[int]] | None
     cells_var: Any | None,  # Variable[list[tuple[int, int]]] | None
@@ -128,6 +136,7 @@ def _setup_table_selection_bindings_impl(
         "column_var": column_var,
         "cell_var": cell_var,
         "item_var": item_var,
+        "widget_var": widget_var,
         "rows_var": rows_var,
         "columns_var": columns_var,
         "cells_var": cells_var,
@@ -275,6 +284,13 @@ def _setup_table_selection_bindings_impl(
             idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
         )
 
+    # Helper to get the embedded widget at a cell (for selectedWidget binding)
+    def get_widget_at_cell(index: QModelIndex) -> Any:
+        if not index.isValid():
+            return None
+        # QAbstractItemView.indexWidget() returns the widget for persistent editors
+        return widget.indexWidget(index)  # type: ignore[attr-defined]
+
     # Widget → Variable binding handler (must be defined BEFORE connecting)
     def on_current_changed(current: QModelIndex, _previous: QModelIndex) -> None:
         if updating["flag"]:
@@ -287,6 +303,7 @@ def _setup_table_selection_bindings_impl(
             cv = container["column_var"]
             cellv = container["cell_var"]
             iv = container["item_var"]
+            wv = container["widget_var"]
             if rv is not None:
                 set_var_value(rv, row)
             if cv is not None:
@@ -295,6 +312,8 @@ def _setup_table_selection_bindings_impl(
                 set_var_value(cellv, (row, col))
             if iv is not None:
                 set_var_value(iv, get_item_at_row(row) if row >= 0 else None, row)
+            if wv is not None:
+                set_var_value(wv, get_widget_at_cell(current))
         finally:
             updating["flag"] = False
 
@@ -344,7 +363,7 @@ def _setup_table_selection_bindings_impl(
     # (only if variables are already resolved)
 
     # Check if we have any vars to work with
-    has_single = row_var is not None or column_var is not None or cell_var is not None or item_var is not None
+    has_single = row_var is not None or column_var is not None or cell_var is not None or item_var is not None or widget_var is not None
     has_multi = rows_var is not None or columns_var is not None or cells_var is not None or items_var is not None
 
     if not has_single and not has_multi:
@@ -381,6 +400,13 @@ def _setup_table_selection_bindings_impl(
         effective_row = current_row if current_row >= 0 else 0
         if get_var_value(item_var) is None:
             set_var_value(item_var, get_item_at_row(effective_row))
+
+    # Initialize widget_var to current selection's widget (read-only binding)
+    if widget_var is not None:
+        sm = container["selection_model"]
+        if sm is not None:
+            current_idx = sm.currentIndex()  # pyright: ignore[reportUnknownMemberType]
+            set_var_value(widget_var, get_widget_at_cell(current_idx))
 
     # Initialize multi selection variables
     if rows_var is not None:

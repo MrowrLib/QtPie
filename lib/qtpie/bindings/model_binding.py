@@ -925,6 +925,7 @@ def apply_model_binding(
             model,
             field_info.selected_item,
             field_info.selected_items,
+            field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
         )
 
@@ -955,6 +956,7 @@ def apply_model_binding(
             field_info.selected_columns,
             field_info.selected_cells,
             field_info.selected_items,
+            field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
         )
         # Set up embedded widgets for QTableView columns
@@ -970,6 +972,7 @@ def apply_model_binding(
             field_info.selected_item,
             field_info.selected_indexes,
             field_info.selected_items_list,
+            field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
         )
         # Set up embedded widget for QListView (not QComboBox)

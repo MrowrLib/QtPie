@@ -14,6 +14,7 @@ def setup_tree_selection_bindings(
     model: Any,  # ReactiveTreeModel
     selected_item_path: str | None,
     selected_items_path: str | None,
+    selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
 ) -> None:
     """Set up selection bindings for QTreeView.
@@ -24,9 +25,10 @@ def setup_tree_selection_bindings(
         model: The ReactiveTreeModel backing the widget
         selected_item_path: Variable path for single item binding (e.g., "_selected_node")
         selected_items_path: Variable path for multi-item binding (e.g., "_selected_nodes")
+        selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
     """
-    if selected_item_path is None and selected_items_path is None:
+    if selected_item_path is None and selected_items_path is None and selected_widget_path is None:
         return
 
     from observant import Observable
@@ -40,6 +42,7 @@ def setup_tree_selection_bindings(
     # Resolve Variables (or Observables for record field bindings)
     item_var: Any | None = None
     items_var: Any | None = None
+    widget_var: Any | None = None
 
     if selected_item_path is not None:
         source = resolve_or_create_variable_fn(host, selected_item_path, None)
@@ -51,10 +54,15 @@ def setup_tree_selection_bindings(
         if is_var_or_obs(source):
             items_var = source
 
+    if selected_widget_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_widget_path, None)
+        if is_var_or_obs(source):
+            widget_var = source
+
     # ALWAYS call _setup_tree_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers.
     # The handler uses a mutable container so it can access Variables resolved later.
-    _setup_tree_selection_bindings_impl(host, widget, model, item_var, items_var)
+    _setup_tree_selection_bindings_impl(host, widget, model, item_var, items_var, widget_var)
 
 
 def _setup_tree_selection_bindings_impl(
@@ -63,6 +71,7 @@ def _setup_tree_selection_bindings_impl(
     model: Any,  # ReactiveTreeModel
     item_var: Any | None,  # Variable[Any] | None
     items_var: Any | None,  # Variable[list[Any]] | None
+    widget_var: Any | None = None,  # Variable[QWidget | None] | None
 ) -> None:
     """Implementation of tree selection bindings (called after Variables are resolved)."""
     from observant import Observable
@@ -77,6 +86,7 @@ def _setup_tree_selection_bindings_impl(
         "model": model,
         "item_var": item_var,
         "items_var": items_var,
+        "widget_var": widget_var,
         "selection_model": None,
     }
 
@@ -188,6 +198,13 @@ def _setup_tree_selection_bindings_impl(
                 return child_result
         return QModelIndex()
 
+    # Helper to get the embedded widget at an index (for selectedWidget binding)
+    def get_widget_at_index(index: QModelIndex) -> Any:
+        if not index.isValid():
+            return None
+        # QAbstractItemView.indexWidget() returns the widget for persistent editors
+        return widget.indexWidget(index)  # type: ignore[attr-defined]
+
     # Widget → Variable binding handler (must be defined BEFORE connecting)
     def on_current_changed(current: QModelIndex, _previous: QModelIndex) -> None:
         if updating["flag"]:
@@ -197,6 +214,9 @@ def _setup_tree_selection_bindings_impl(
             iv = container["item_var"]
             if iv is not None:
                 set_var_value(iv, get_item_at_index(current), current)
+            wv = container["widget_var"]
+            if wv is not None:
+                set_var_value(wv, get_widget_at_index(current))
         finally:
             updating["flag"] = False
 
@@ -233,7 +253,7 @@ def _setup_tree_selection_bindings_impl(
 
     # Now do initialization and Variable → Widget bindings
     # (only if variables are already resolved)
-    if item_var is None and items_var is None:
+    if item_var is None and items_var is None and widget_var is None:
         return  # No vars yet, handler is connected and will work when vars are set
 
     # Initialize from current state or Variable defaults
@@ -255,6 +275,13 @@ def _setup_tree_selection_bindings_impl(
         initial_items = get_var_value(items_var)
         if initial_items is None or not initial_items:
             set_var_value(items_var, get_selected_items())
+
+    # Initialize widget_var to current selection's widget (read-only binding)
+    if widget_var is not None:
+        sm = container["selection_model"]
+        if sm is not None:
+            current_idx = sm.currentIndex()  # pyright: ignore[reportUnknownMemberType]
+            set_var_value(widget_var, get_widget_at_index(current_idx))
 
     # Variable → Widget binding (single item)
     if item_var is not None:
