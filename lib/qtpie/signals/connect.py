@@ -370,7 +370,7 @@ def _resolve_event_handler(
             raise AttributeError(f'{type(context).__name__}.{handler} is not callable or a Signal for {event_name}="{handler}"')
 
     # Use lazy resolution for hierarchy lookup
-    def lazy_event_handler(event: QEvent, handler_name: str = handler) -> bool | None:
+    def lazy_event_handler(event: QEvent | None = None, handler_name: str = handler) -> bool | None:
         resolved: Any = getattr(context, handler_name, None)
         if resolved is None:
             resolved = resolve_signal_from_hierarchy(context, handler_name)
@@ -384,7 +384,7 @@ def _resolve_event_handler(
         elif callable(resolved):
             # Check if handler accepts event parameter
             accepts_event = _handler_accepts_event(resolved)
-            if pass_event and accepts_event:
+            if pass_event and accepts_event and event is not None:
                 result = resolved(event)
             else:
                 result = resolved()
