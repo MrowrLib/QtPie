@@ -12,6 +12,7 @@ from .embed import EmbedConfig, embed
 from .entrypoint import entrypoint
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
+from .messagebox import MessageBoxResult, confirm, messagebox
 from .new import new, none
 from .new_fields import new_fields
 from .ref import Ref, ref
@@ -23,7 +24,9 @@ from .styles import (
     enable_light_mode,
     get_theme,
     get_themes,
+    is_dark_mode,
     is_dark_theme,
+    is_light_mode,
     set_color_scheme,
     set_theme,
 )
@@ -47,9 +50,11 @@ __all__ = [
     "DialogResult",
     "Dock",
     "EmbedConfig",
+    "MessageBoxResult",
     "Stretch",
     "app",
     "buttons",
+    "confirm",
     "create_instance",
     "dialog",
     "DictWidgetRepeater",
@@ -57,6 +62,7 @@ __all__ = [
     "embed",
     "Menu",
     "MenuConfig",
+    "messagebox",
     "RecordVariable",
     "Ref",
     "Section",
@@ -71,6 +77,8 @@ __all__ = [
     "enable_dark_mode",
     "enable_light_mode",
     "entrypoint",
+    "is_dark_mode",
+    "is_light_mode",
     "get_theme",
     "get_themes",
     "is_dark_theme",

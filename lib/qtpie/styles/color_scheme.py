@@ -86,3 +86,57 @@ def enable_light_mode(app: QGuiApplication | None = None) -> None:
         app: Optional app instance. If None, uses QApplication.instance().
     """
     set_color_scheme(ColorScheme.Light, app)
+
+
+def is_dark_mode() -> bool:
+    """Check if the application is currently in dark mode.
+
+    This checks multiple sources:
+    1. The deferred color scheme (if set before app started)
+    2. The theme system (if initialized)
+    3. The Qt runtime color scheme
+    """
+    # First check deferred scheme (set before app started)
+    if _deferred_color_scheme is not None:
+        return _deferred_color_scheme == ColorScheme.Dark
+
+    # Check if theme system is active (use public API)
+    from qtpie.styles.theme_runtime import get_theme, is_dark_theme
+
+    if get_theme() is not None:
+        return is_dark_theme()
+
+    # Fall back to Qt runtime check
+    instance = QApplication.instance()
+    if instance is not None:
+        app = cast(QGuiApplication, instance)
+        return app.styleHints().colorScheme() == Qt.ColorScheme.Dark
+
+    return False
+
+
+def is_light_mode() -> bool:
+    """Check if the application is currently in light mode.
+
+    This checks multiple sources:
+    1. The deferred color scheme (if set before app started)
+    2. The theme system (if initialized)
+    3. The Qt runtime color scheme
+    """
+    # First check deferred scheme (set before app started)
+    if _deferred_color_scheme is not None:
+        return _deferred_color_scheme == ColorScheme.Light
+
+    # Check if theme system is active (use public API)
+    from qtpie.styles.theme_runtime import get_theme, is_dark_theme
+
+    if get_theme() is not None:
+        return not is_dark_theme()
+
+    # Fall back to Qt runtime check
+    instance = QApplication.instance()
+    if instance is not None:
+        app = cast(QGuiApplication, instance)
+        return app.styleHints().colorScheme() == Qt.ColorScheme.Light
+
+    return False

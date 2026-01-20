@@ -1,5 +1,6 @@
 """Workspace service for loading and saving workspaces."""
 
+import shutil
 from pathlib import Path
 
 from forc.domain.formats import YamlFormat
@@ -167,8 +168,8 @@ class WorkspaceService:
 
     # Collection operations
 
-    def add_collection(self, name: str, parent: Collection | None = None) -> Collection:
-        """Create and add a collection.
+    def create_collection(self, name: str, parent: Collection | None = None) -> Collection:
+        """Create a collection and write it to disk.
 
         Args:
             name: Collection name
@@ -190,8 +191,8 @@ class WorkspaceService:
 
         return collection
 
-    def add_request(self, name: str, collection: Collection) -> Request:
-        """Create and add a request to a collection.
+    def create_request(self, name: str, collection: Collection) -> Request:
+        """Create a request and write it to disk.
 
         Args:
             name: Request name
@@ -199,55 +200,86 @@ class WorkspaceService:
 
         Returns:
             The created request
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
         """
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
         request = Request(name=name, collection=collection)
         collection.items.append(request)
+
+        # Write to disk immediately
+        self.save_request(request)
+
         return request
 
-    def remove_collection(self, name: str) -> None:
-        """Remove a top-level collection by name."""
-        if self._workspace is None:
-            raise RuntimeError("No workspace loaded")
-        for c in list(self._workspace.collections):
-            if c.name == name:
-                self._workspace.collections.remove(c)
-
-    def remove_item(self, item: Request | Collection) -> None:
-        """Remove an item from its parent collection or workspace.
+    def delete_request(self, request: Request) -> None:
+        """Delete a request and its file from disk.
 
         Args:
-            item: The request or collection to remove
+            request: The request to delete
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
         """
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
 
-        if isinstance(item, Request):
-            if item.collection is not None:
-                item.collection.items.remove(item)
-                item.collection = None
-        else:
-            # It's a Collection
-            if item.parent is not None:
-                item.parent.items.remove(item)
-                item.parent = None
-            else:
-                # Top-level collection
-                self._workspace.collections.remove(item)
+        # Remove file from disk
+        path = self._get_request_path(request)
+        if path.exists():
+            path.unlink()
 
-    def rename_item(self, item: Request | Collection, new_name: str) -> None:
-        """Rename a request or collection and its file/folder on disk.
+        # Remove from model
+        if request.collection is not None:
+            request.collection.items.remove(request)
+            request.collection = None
+
+    def delete_collection(self, collection: Collection) -> None:
+        """Delete a collection and its folder recursively from disk.
 
         Args:
-            item: The request or collection to rename
-            new_name: The new name
+            collection: The collection to delete
+
+        Raises:
+            RuntimeError: If no workspace is loaded or no path set
+        """
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if self._path is None:
+            raise RuntimeError("No workspace path set")
+
+        # Remove folder recursively from disk
+        path = self._get_collection_path(collection)
+        if path.exists():
+            shutil.rmtree(path)
+
+        # Remove from model
+        if collection.parent is not None:
+            collection.parent.items.remove(collection)
+            collection.parent = None
+        else:
+            self._workspace.collections.remove(collection)
+
+    def delete_item(self, item: Request | Collection) -> None:
+        """Delete a request or collection and its file/folder from disk.
+
+        Args:
+            item: The request or collection to delete
 
         Raises:
             RuntimeError: If no workspace is loaded or no path set
         """
         if isinstance(item, Request):
-            self.rename_request(item, new_name)
+            self.delete_request(item)
         else:
-            self.rename_collection(item, new_name)
+            self.delete_collection(item)
 
     def rename_request(self, request: Request, new_name: str) -> None:
         """Rename a request and its file on disk.

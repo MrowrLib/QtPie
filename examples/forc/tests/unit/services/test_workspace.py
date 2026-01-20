@@ -114,18 +114,18 @@ class TestWorkspaceServiceCollections:
         self.svc = WorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
-    def test_add_collection(self):
-        coll = self.svc.add_collection("Users API")
-        self.svc.add_request("Get Users", coll)
+    def test_create_collection(self):
+        coll = self.svc.create_collection("Users API")
+        self.svc.create_request("Get Users", coll)
 
         assert self.svc.workspace is not None
         assert_that(self.svc.workspace.collections).is_length(1)
         assert_that(self.svc.workspace.collections[0].name).is_equal_to("Users API")
 
-    def test_remove_collection(self):
-        self.svc.add_collection("API 1")
-        self.svc.add_collection("API 2")
-        self.svc.remove_collection("API 1")
+    def test_delete_collection(self):
+        coll1 = self.svc.create_collection("API 1")
+        self.svc.create_collection("API 2")
+        self.svc.delete_collection(coll1)
 
         assert self.svc.workspace is not None
         assert_that(self.svc.workspace.collections).is_length(1)
@@ -272,11 +272,11 @@ class TestWorkspaceServicePersistence:
         # Create with data
         self.svc.create("Full Project", self.tmp_dir / "project")
         self.svc.add_environment(Environment(name="dev", variables=[KeyValue(key="X", value="Y")]))
-        api_coll = self.svc.add_collection("API")
-        get_req = self.svc.add_request("Get", api_coll)
+        api_coll = self.svc.create_collection("API")
+        get_req = self.svc.create_request("Get", api_coll)
         get_req.method = HttpMethod.GET
         get_req.url = "/get"
-        post_req = self.svc.add_request("Post", api_coll)
+        post_req = self.svc.create_request("Post", api_coll)
         post_req.method = HttpMethod.POST
         post_req.url = "/post"
         self.svc.set_active_environment("dev")
@@ -301,8 +301,8 @@ class TestWorkspaceServiceRename:
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_rename_request(self):
-        coll = self.svc.add_collection("API")
-        req = self.svc.add_request("Get Users", coll)
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
         req.url = "https://example.com/users"
         self.svc.save_request(req)
 
@@ -317,8 +317,8 @@ class TestWorkspaceServiceRename:
         assert_that(old_path.exists()).is_false()
 
     def test_rename_request_preserves_content(self):
-        coll = self.svc.add_collection("API")
-        req = self.svc.add_request("Get Users", coll)
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
         req.url = "https://example.com/users"
         req.method = HttpMethod.POST
         self.svc.save_request(req)
@@ -335,9 +335,8 @@ class TestWorkspaceServiceRename:
         assert_that(reloaded_req.method).is_equal_to(HttpMethod.POST)
 
     def test_rename_collection(self):
-        coll = self.svc.add_collection("Users API")
-        req = self.svc.add_request("Get Users", coll)
-        self.svc.save_request(req)
+        coll = self.svc.create_collection("Users API")
+        self.svc.create_request("Get Users", coll)
 
         old_path = self.tmp_dir / "test" / "collections" / "users-api"
         assert_that(old_path.exists()).is_true()
@@ -351,8 +350,8 @@ class TestWorkspaceServiceRename:
         assert_that(old_path.exists()).is_false()
 
     def test_rename_collection_preserves_contents(self):
-        coll = self.svc.add_collection("Users API")
-        req = self.svc.add_request("Get Users", coll)
+        coll = self.svc.create_collection("Users API")
+        req = self.svc.create_request("Get Users", coll)
         req.url = "https://example.com/users"
         self.svc.save_request(req)
 
@@ -363,10 +362,9 @@ class TestWorkspaceServiceRename:
         assert_that(req_path.exists()).is_true()
 
     def test_rename_nested_collection(self):
-        parent = self.svc.add_collection("API")
-        child = self.svc.add_collection("Users", parent=parent)
-        req = self.svc.add_request("Get User", child)
-        self.svc.save_request(req)
+        parent = self.svc.create_collection("API")
+        child = self.svc.create_collection("Users", parent=parent)
+        self.svc.create_request("Get User", child)
 
         old_path = self.tmp_dir / "test" / "collections" / "api" / "users"
         assert_that(old_path.exists()).is_true()
@@ -379,21 +377,19 @@ class TestWorkspaceServiceRename:
         assert_that(new_path.exists()).is_true()
         assert_that(old_path.exists()).is_false()
 
-    def test_rename_item_request(self):
-        coll = self.svc.add_collection("API")
-        req = self.svc.add_request("Get Users", coll)
-        self.svc.save_request(req)
+    def test_rename_request_via_method(self):
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
 
-        self.svc.rename_item(req, "List Users")
+        self.svc.rename_request(req, "List Users")
 
         assert_that(req.name).is_equal_to("List Users")
 
-    def test_rename_item_collection(self):
-        coll = self.svc.add_collection("Users API")
-        req = self.svc.add_request("Get Users", coll)
-        self.svc.save_request(req)
+    def test_rename_collection_via_method(self):
+        coll = self.svc.create_collection("Users API")
+        self.svc.create_request("Get Users", coll)
 
-        self.svc.rename_item(coll, "People API")
+        self.svc.rename_collection(coll, "People API")
 
         assert_that(coll.name).is_equal_to("People API")
         assert_that(coll.folder).is_equal_to("people-api")
@@ -418,9 +414,8 @@ class TestWorkspaceServiceRename:
 
     def test_new_collection_persists_name_in_metadata(self):
         """New collections should save their name to _collection.yaml."""
-        coll = self.svc.add_collection("My Cool API")
-        req = self.svc.add_request("Get Users", coll)
-        self.svc.save_request(req)
+        coll = self.svc.create_collection("My Cool API")
+        self.svc.create_request("Get Users", coll)
 
         # Reload workspace and verify the collection name comes back correctly
         self.svc.close()
@@ -431,9 +426,8 @@ class TestWorkspaceServiceRename:
 
     def test_renamed_collection_persists_name_in_metadata(self):
         """Renaming a collection should update _collection.yaml with new name."""
-        coll = self.svc.add_collection("Old Name")
-        req = self.svc.add_request("Get Users", coll)
-        self.svc.save_request(req)
+        coll = self.svc.create_collection("Old Name")
+        self.svc.create_request("Get Users", coll)
 
         self.svc.rename_collection(coll, "New Name")
 
@@ -446,10 +440,9 @@ class TestWorkspaceServiceRename:
 
     def test_renamed_nested_collection_persists_name_in_metadata(self):
         """Renaming a nested collection should update its _collection.yaml."""
-        parent = self.svc.add_collection("Parent")
-        child = self.svc.add_collection("Old Child Name", parent=parent)
-        req = self.svc.add_request("Get User", child)
-        self.svc.save_request(req)
+        parent = self.svc.create_collection("Parent")
+        child = self.svc.create_collection("Old Child Name", parent=parent)
+        self.svc.create_request("Get User", child)
 
         self.svc.rename_collection(child, "New Child Name")
 
@@ -460,3 +453,216 @@ class TestWorkspaceServiceRename:
         reloaded_child = ws.collections[0].items[0]
         assert isinstance(reloaded_child, Collection)
         assert_that(reloaded_child.name).is_equal_to("New Child Name")
+
+
+class TestWorkspaceServiceCRUD:
+    """Tests for the new consistent CRUD API with filesystem operations."""
+
+    def setup_method(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.svc = WorkspaceService()
+        self.svc.create("Test", self.tmp_dir / "test")
+
+    # --- create_collection tests ---
+
+    def test_create_collection_creates_folder_and_metadata(self):
+        """create_collection should create the folder and _collection.yaml."""
+        coll = self.svc.create_collection("Users API")
+
+        assert_that(coll.name).is_equal_to("Users API")
+        folder_path = self.tmp_dir / "test" / "collections" / "users-api"
+        assert_that(folder_path.exists()).is_true()
+        metadata_path = folder_path / "_collection.yaml"
+        assert_that(metadata_path.exists()).is_true()
+
+    def test_create_collection_nested_creates_in_parent(self):
+        """create_collection with parent should create nested folder."""
+        parent = self.svc.create_collection("API")
+        child = self.svc.create_collection("Users", parent=parent)
+
+        assert_that(child.name).is_equal_to("Users")
+        assert_that(child.parent).is_equal_to(parent)
+        child_path = self.tmp_dir / "test" / "collections" / "api" / "users"
+        assert_that(child_path.exists()).is_true()
+
+    def test_create_collection_no_workspace_raises(self):
+        """create_collection without workspace should raise RuntimeError."""
+        import pytest
+
+        self.svc.close()
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.create_collection("Test")
+
+    # --- create_request tests ---
+
+    def test_create_request_creates_file(self):
+        """create_request should create the .yaml file on disk."""
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
+
+        assert_that(req.name).is_equal_to("Get Users")
+        assert_that(req.collection).is_equal_to(coll)
+        file_path = self.tmp_dir / "test" / "collections" / "api" / "get-users.yaml"
+        assert_that(file_path.exists()).is_true()
+
+    def test_create_request_in_nested_collection(self):
+        """create_request in nested collection should create file in correct path."""
+        parent = self.svc.create_collection("API")
+        child = self.svc.create_collection("Users", parent=parent)
+        self.svc.create_request("Get User", child)
+
+        file_path = self.tmp_dir / "test" / "collections" / "api" / "users" / "get-user.yaml"
+        assert_that(file_path.exists()).is_true()
+
+    def test_create_request_no_workspace_raises(self):
+        """create_request without workspace should raise RuntimeError."""
+        import pytest
+
+        self.svc.close()
+        coll = Collection(name="Test")
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.create_request("Test Request", coll)
+
+    # --- delete_request tests ---
+
+    def test_delete_request_removes_file(self):
+        """delete_request should remove the .yaml file from disk."""
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
+
+        file_path = self.tmp_dir / "test" / "collections" / "api" / "get-users.yaml"
+        assert_that(file_path.exists()).is_true()
+
+        self.svc.delete_request(req)
+
+        assert_that(file_path.exists()).is_false()
+
+    def test_delete_request_removes_from_collection(self):
+        """delete_request should remove request from its collection."""
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
+        assert_that(coll.items).is_length(1)
+
+        self.svc.delete_request(req)
+
+        assert_that(coll.items).is_length(0)
+        assert_that(req.collection).is_none()
+
+    def test_delete_request_no_workspace_raises(self):
+        """delete_request without workspace should raise RuntimeError."""
+        import pytest
+
+        self.svc.close()
+        req = Request(name="Test")
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.delete_request(req)
+
+    def test_delete_request_nonexistent_file_still_removes_from_model(self):
+        """delete_request should remove from model even if file doesn't exist."""
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
+
+        # Manually delete the file
+        file_path = self.tmp_dir / "test" / "collections" / "api" / "get-users.yaml"
+        file_path.unlink()
+
+        # Should not raise, just remove from model
+        self.svc.delete_request(req)
+
+        assert_that(coll.items).is_length(0)
+
+    # --- delete_collection tests ---
+
+    def test_delete_collection_removes_folder(self):
+        """delete_collection should remove the folder from disk."""
+        coll = self.svc.create_collection("Users API")
+
+        folder_path = self.tmp_dir / "test" / "collections" / "users-api"
+        assert_that(folder_path.exists()).is_true()
+
+        self.svc.delete_collection(coll)
+
+        assert_that(folder_path.exists()).is_false()
+
+    def test_delete_collection_recursive_deletes_contents(self):
+        """delete_collection should recursively delete requests and nested collections."""
+        parent = self.svc.create_collection("API")
+        child = self.svc.create_collection("Users", parent=parent)
+        self.svc.create_request("Get User", child)
+        self.svc.create_request("List Users", parent)
+
+        parent_path = self.tmp_dir / "test" / "collections" / "api"
+        child_path = parent_path / "users"
+        req1_path = child_path / "get-user.yaml"
+        req2_path = parent_path / "list-users.yaml"
+
+        assert_that(parent_path.exists()).is_true()
+        assert_that(child_path.exists()).is_true()
+        assert_that(req1_path.exists()).is_true()
+        assert_that(req2_path.exists()).is_true()
+
+        self.svc.delete_collection(parent)
+
+        assert_that(parent_path.exists()).is_false()
+
+    def test_delete_collection_removes_from_workspace(self):
+        """delete_collection should remove top-level collection from workspace."""
+        coll = self.svc.create_collection("API")
+        assert self.svc.workspace is not None
+        assert_that(self.svc.workspace.collections).is_length(1)
+
+        self.svc.delete_collection(coll)
+
+        assert_that(self.svc.workspace.collections).is_length(0)
+
+    def test_delete_collection_nested_removes_from_parent(self):
+        """delete_collection on nested collection should remove from parent."""
+        parent = self.svc.create_collection("API")
+        child = self.svc.create_collection("Users", parent=parent)
+        assert_that(parent.items).is_length(1)
+
+        self.svc.delete_collection(child)
+
+        assert_that(parent.items).is_length(0)
+        assert_that(child.parent).is_none()
+
+    def test_delete_collection_no_workspace_raises(self):
+        """delete_collection without workspace should raise RuntimeError."""
+        import pytest
+
+        self.svc.close()
+        coll = Collection(name="Test")
+
+        with pytest.raises(RuntimeError, match="No workspace"):
+            self.svc.delete_collection(coll)
+
+    # --- delete_item tests ---
+
+    def test_delete_item_request(self):
+        """delete_item should dispatch to delete_request for Request."""
+        coll = self.svc.create_collection("API")
+        req = self.svc.create_request("Get Users", coll)
+
+        file_path = self.tmp_dir / "test" / "collections" / "api" / "get-users.yaml"
+        assert_that(file_path.exists()).is_true()
+
+        self.svc.delete_item(req)
+
+        assert_that(file_path.exists()).is_false()
+        assert_that(coll.items).is_length(0)
+
+    def test_delete_item_collection(self):
+        """delete_item should dispatch to delete_collection for Collection."""
+        coll = self.svc.create_collection("API")
+
+        folder_path = self.tmp_dir / "test" / "collections" / "api"
+        assert_that(folder_path.exists()).is_true()
+
+        self.svc.delete_item(coll)
+
+        assert_that(folder_path.exists()).is_false()
+        assert self.svc.workspace is not None
+        assert_that(self.svc.workspace.collections).is_length(0)

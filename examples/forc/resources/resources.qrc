@@ -5,5 +5,8 @@
     <file alias="icon.png">images/icon_transparent_256.png</file>
     <file alias="arrow-right.svg">images/arrows/arrow-right.svg</file>
     <file alias="arrow-down.svg">images/arrows/arrow-down.svg</file>
+    <file alias="trash.svg">images/icons/trash.svg</file>
+    <file alias="trash-dark.svg">images/icons/trash-dark.svg</file>
+    <file alias="trash-light.svg">images/icons/trash-light.svg</file>
   </qresource>
 </RCC>

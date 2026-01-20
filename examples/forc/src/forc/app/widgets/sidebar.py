@@ -1,7 +1,7 @@
 from PySide6.QtCore import Signal
 from qtpy.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeView
 
-from forc.app.helpers import filename_safe_validator
+from forc.app.helpers import confirm_delete, filename_safe_validator
 from forc.app.widgets.cookie_manager import CookieManagerDialog
 from forc.app.widgets.environments import EnvironmentSelectorWidget
 from forc.domain.models import Collection, Request
@@ -87,17 +87,27 @@ class CollectionsTreeWidget(Widget):
         clicked="{on_current_workspace_item_changed()}",
         widget=CollectionsTreeWidgetRow,
         onEnterKey="_on_enter_key",
+        onDeleteKey="_on_delete_key",
         selectedWidget="current_tree_widget_row",
     )
 
     ### Methods ###
     def _on_rename(self, item: Collection | Request, new_name: str) -> None:
-        self.workspace_service().rename_item(item, new_name)
+        if isinstance(item, Request):
+            self.workspace_service().rename_request(item, new_name)
+        else:
+            self.workspace_service().rename_collection(item, new_name)
 
     def _on_enter_key(self) -> None:
         widget = self.current_tree_widget_row()
         if widget is not None:
             widget.start_editing()
+
+    def _on_delete_key(self) -> None:
+        if confirm_delete():
+            item = self.var("current_workspace_item", Collection, Request, None)
+            if item is not None:
+                self.workspace_service().delete_item(item)
 
 
 @widget
@@ -139,7 +149,7 @@ class SidebarWidget(Widget):
         if dialog.show_dialog():
             collection_name = dialog.name()
             print("Creating new collection with name:", collection_name)
-            self.workspace_service().add_collection(name=collection_name)
+            self.workspace_service().create_collection(name=collection_name)
 
     def _on_new_request(self):
         selected_item = self.var("current_workspace_item", Collection, Request, None)
@@ -150,4 +160,4 @@ class SidebarWidget(Widget):
             return
         dialog = TextValueDialog(kind="Request")
         if dialog.show_dialog():
-            self.workspace_service().add_request(name=dialog.value(), collection=collection)
+            self.workspace_service().create_request(name=dialog.value(), collection=collection)
