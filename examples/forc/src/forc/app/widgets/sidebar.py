@@ -53,9 +53,7 @@ class CollectionsTreeWidget(Widget):
 
     ### Methods ###
     def _on_rename(self, item: Collection | Request, old_name: str, new_name: str) -> None:
-        print(f"Renaming item from '{old_name}' to '{new_name}'")
         self.workspace_service().rename_item(item, new_name)
-        print("Item renamed.")
 
 
 @widget
