@@ -60,6 +60,7 @@ class AppConfig:
     dock_tabs_hide_title_bar: bool = False  # Auto-hide title bar when dock is tabified
     dock_tabs_drag_to_undock: bool = False  # Drag tab outside tab bar to float dock
     dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
+    dock_tabs_middle_click_close: bool = True  # Middle-click on tab closes dock
 
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
@@ -557,6 +558,7 @@ def app[A: AppBase[Any]](
     dockTabsHideTitleBar: bool = False,
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
+    dockTabsMiddleClickClose: bool = True,
     **kwargs: Any,
 ) -> Callable[[type[A]], type[A]]: ...
 
@@ -598,6 +600,7 @@ def app[A: AppBase[Any]](
     dockTabsHideTitleBar: bool = False,
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
+    dockTabsMiddleClickClose: bool = True,
     **kwargs: Any,
 ) -> type[A] | Callable[[type[A]], type[A]]:
     """Decorator for App/AppBase classes with declarative features.
@@ -683,6 +686,7 @@ def app[A: AppBase[Any]](
         config.dock_tabs_hide_title_bar = dockTabsHideTitleBar
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
+        config.dock_tabs_middle_click_close = dockTabsMiddleClickClose
         config.size = size
         config.signal_connections = signal_connections
         config.org = org

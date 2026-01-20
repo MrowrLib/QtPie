@@ -4,6 +4,16 @@ from qtpie import Widget, new, widget
 
 
 @widget(layout="horizontal")
+class ExampleComboBoxEmbedWidget(Widget):
+    """
+    This is an example of embedding a QComboBox inside a QtPie widget.
+    """
+
+    qlabel1: QLabel = new("Label 1")
+    qlabel2: QLabel = new("Label 2")
+
+
+@widget(layout="horizontal")
 class EnvironmentSelectorWidget(Widget):
     """
     This will show a dropdown to select the environment for the current request

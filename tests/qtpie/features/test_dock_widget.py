@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QWidget
 
@@ -3835,3 +3835,264 @@ class TestSelectedItemDirtyStateSharing:
         # Both should now be clean
         assert not instance._selected_item.is_dirty.get(), "Selected item should be clean after reset"
         assert not widget_instance.is_dirty.get(), "Widget should also be clean (shared proxy)"
+
+
+# =============================================================================
+# Middle-Click to Close Dock Tabs
+# =============================================================================
+
+
+def send_middle_click_release(target: QTabBar, pos: QPoint) -> None:
+    """Send a middle mouse button release event to a tab bar at the given position."""
+    from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonRelease,
+        QPointF(pos),
+        QPointF(100, 100),  # global pos
+        Qt.MouseButton.MiddleButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QCoreApplication.sendEvent(target, event)
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabsMiddleClickClose:
+    """Test dockTabsMiddleClickClose window-level option."""
+
+    def test_middle_click_close_enabled_by_default(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsMiddleClickClose is True by default."""
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Check config has middle click close enabled by default
+        assert instance._qtpie_config.dock_tabs_middle_click_close is True
+
+    def test_middle_click_closes_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Middle-clicking a tab closes that dock."""
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Both docks should be visible initially
+        assert instance._props.is_visible is True
+        assert instance._inspector.is_visible is True
+
+        # Find the tab bar
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        assert len(tab_bars) >= 1, "Should have at least one dock tab bar"
+
+        inspector_tab_bar = None
+        inspector_tab_index = -1
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Inspector":
+                    inspector_tab_bar = tb
+                    inspector_tab_index = i
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None, "Should find Inspector tab"
+
+        # Get the position of the Inspector tab
+        tab_rect = inspector_tab_bar.tabRect(inspector_tab_index)
+        tab_center = tab_rect.center()
+
+        # Middle-click on the Inspector tab
+        send_middle_click_release(inspector_tab_bar, tab_center)
+        qt.process_events()
+
+        # Inspector dock should now be closed/hidden
+        assert instance._inspector.is_visible is False
+        # Properties dock should still be visible
+        assert instance._props.is_visible is True
+
+    def test_middle_click_close_disabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabsMiddleClickClose=False disables middle-click close."""
+
+        @decorator(dockTabsMiddleClickClose=False)
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Both docks should be visible initially
+        assert instance._props.is_visible is True
+        assert instance._inspector.is_visible is True
+
+        # Find the tab bar
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        assert len(tab_bars) >= 1, "Should have at least one dock tab bar"
+
+        inspector_tab_bar = None
+        inspector_tab_index = -1
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "Inspector":
+                    inspector_tab_bar = tb
+                    inspector_tab_index = i
+                    break
+            if inspector_tab_bar:
+                break
+        assert inspector_tab_bar is not None, "Should find Inspector tab"
+
+        # Get the position of the Inspector tab
+        tab_rect = inspector_tab_bar.tabRect(inspector_tab_index)
+        tab_center = tab_rect.center()
+
+        # Middle-click on the Inspector tab
+        send_middle_click_release(inspector_tab_bar, tab_center)
+        qt.process_events()
+
+        # Inspector dock should STILL be visible (middle-click close is disabled)
+        assert instance._inspector.is_visible is True
+
+    def test_middle_click_outside_tab_does_nothing(self, base_class, decorator, qt: QtDriver) -> None:
+        """Middle-clicking outside a tab does not close any dock."""
+
+        @decorator
+        class TestClass(base_class):
+            _props: Dock[PropertiesPanel] = new(dock="right", group="inspector", title="Properties")
+            _inspector: Dock[InspectorPanel] = new(group="inspector", title="Inspector")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Find the tab bar
+        tab_bars = [tb for tb in win.findChildren(QTabBar) if tb.parent() is win]
+        assert len(tab_bars) >= 1
+
+        tab_bar = tab_bars[0]
+
+        # Click at a position outside any tab (far right of the tab bar)
+        outside_pos = QPoint(tab_bar.width() + 100, 5)
+
+        # Middle-click outside
+        send_middle_click_release(tab_bar, outside_pos)
+        qt.process_events()
+
+        # Both docks should still be visible
+        assert instance._props.is_visible is True
+        assert instance._inspector.is_visible is True
+
+    def test_middle_click_on_title_bar_closes_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Middle-clicking on a dock's title bar closes the dock (not tabified)."""
+        from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+        from PySide6.QtGui import QMouseEvent
+
+        @decorator
+        class TestClass(base_class):
+            # Single dock - not tabified, has visible title bar
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Dock should be visible initially
+        assert instance._explorer.is_visible is True
+
+        # Get the dock widget
+        dock_widget = instance._explorer.dock_widget
+
+        # Send middle-click release on the title bar area (top of dock)
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(50, 10),  # In title bar area
+            QPointF(100, 100),
+            Qt.MouseButton.MiddleButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QCoreApplication.sendEvent(dock_widget, event)
+        qt.process_events()
+
+        # Dock should now be closed
+        assert instance._explorer.is_visible is False
+
+    def test_middle_click_on_title_bar_disabled(self, base_class, decorator, qt: QtDriver) -> None:
+        """Middle-click on title bar does nothing when dockTabsMiddleClickClose=False."""
+        from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+        from PySide6.QtGui import QMouseEvent
+
+        @decorator(dockTabsMiddleClickClose=False)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        assert instance._explorer.is_visible is True
+
+        dock_widget = instance._explorer.dock_widget
+
+        # Send middle-click on title bar
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(50, 10),
+            QPointF(100, 100),
+            Qt.MouseButton.MiddleButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QCoreApplication.sendEvent(dock_widget, event)
+        qt.process_events()
+
+        # Dock should still be visible (feature disabled)
+        assert instance._explorer.is_visible is True
+
+    def test_middle_click_below_title_bar_does_nothing(self, base_class, decorator, qt: QtDriver) -> None:
+        """Middle-clicking below the title bar area does not close the dock."""
+        from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+        from PySide6.QtGui import QMouseEvent
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        assert instance._explorer.is_visible is True
+
+        dock_widget = instance._explorer.dock_widget
+
+        # Send middle-click well below the title bar (in content area)
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            QPointF(50, 100),  # Below title bar
+            QPointF(100, 200),
+            Qt.MouseButton.MiddleButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QCoreApplication.sendEvent(dock_widget, event)
+        qt.process_events()
+
+        # Dock should still be visible
+        assert instance._explorer.is_visible is True

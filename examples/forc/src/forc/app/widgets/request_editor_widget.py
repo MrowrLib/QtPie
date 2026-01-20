@@ -104,6 +104,8 @@ class AuthTabContent(Widget[Request]):
         visible="{auth?.type == AuthType.API_KEY}",
     )
 
+    # TODO: are there other types of auth to support?
+
 
 @widget(title="Body", on_delete="_on_delete")
 class BodyTabContent(Widget[Request]):

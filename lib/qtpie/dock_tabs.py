@@ -27,6 +27,7 @@ class DockTabConfig(Protocol):
     dock_tabs_hide_title_bar: bool
     dock_tabs_drag_to_undock: bool
     dock_tabs_drag_margin: int
+    dock_tabs_middle_click_close: bool
 
 
 # Map user-friendly position names to Qt tab positions
@@ -83,7 +84,7 @@ def install_dock_tab_features(
     any_dock_has_hide_titlebar = any(d.get("hide_title_bar") is True for d in overrides.values())
 
     # Need to install event filter if:
-    # - Any tab feature is enabled (closable, drag-to-undock, hide title bar)
+    # - Any tab feature is enabled (closable, drag-to-undock, hide title bar, middle-click close)
     # - OR if movable is explicitly False (need to override Qt's default of True)
     # - OR if any per-dock override wants to hide title bar
     needs_customization = any(
@@ -91,6 +92,7 @@ def install_dock_tab_features(
             config.dock_tabs_closable,
             config.dock_tabs_drag_to_undock,
             config.dock_tabs_hide_title_bar,
+            config.dock_tabs_middle_click_close,
             any_dock_wants_hide_titlebar,
             any_dock_has_hide_titlebar,
             not config.dock_tabs_movable,  # Need to disable Qt's default movable=True
@@ -102,6 +104,10 @@ def install_dock_tab_features(
 
     event_filter = DockTabEventFilter(window, config, overrides)
     window.installEventFilter(event_filter)
+
+    # If middle-click close is enabled, install filters on existing docks
+    if config.dock_tabs_middle_click_close:
+        event_filter.install_dock_title_bar_filters()
 
     # If hide title bar is enabled (window-level or any per-dock override), set up hooks
     if config.dock_tabs_hide_title_bar or any_dock_wants_hide_titlebar or any_dock_has_hide_titlebar:
@@ -137,8 +143,17 @@ class DockTabEventFilter(QObject):
             # A layout change occurred - check for new tab bars and new docks
             self._customize_tab_bars()
             self._setup_new_dock_hooks()
-        elif isinstance(watched, QTabBar) and self._config.dock_tabs_drag_to_undock:
-            self._handle_tab_bar_mouse_event(watched, event)
+            if self._config.dock_tabs_middle_click_close:
+                self.install_dock_title_bar_filters()
+        elif isinstance(watched, QTabBar):
+            if self._config.dock_tabs_drag_to_undock:
+                self._handle_tab_bar_mouse_event(watched, event)
+            if self._config.dock_tabs_middle_click_close:
+                if self._handle_middle_click(watched, event):
+                    return True  # Event consumed
+        elif isinstance(watched, QDockWidget) and self._config.dock_tabs_middle_click_close:
+            if self._handle_dock_title_bar_middle_click(watched, event):
+                return True  # Event consumed
         return super().eventFilter(watched, event)
 
     def _setup_new_dock_hooks(self) -> None:
@@ -185,7 +200,7 @@ class DockTabEventFilter(QObject):
             # Qt default is movable=True for dock tab bars, so explicitly set to match config
             tab_bar.setMovable(self._config.dock_tabs_movable)
 
-            if self._config.dock_tabs_drag_to_undock:
+            if self._config.dock_tabs_drag_to_undock or self._config.dock_tabs_middle_click_close:
                 tab_bar.installEventFilter(self)
 
             tab_bar.setProperty("_qtpie_customized", True)
@@ -239,6 +254,69 @@ class DockTabEventFilter(QObject):
             if dock.windowTitle() == tab_text:
                 dock.close()
                 break
+
+    def _handle_middle_click(self, tab_bar: QTabBar, event: QEvent) -> bool:
+        """Handle middle mouse button click to close tab.
+
+        Returns True if event was consumed, False otherwise.
+        """
+        if event.type() != QEvent.Type.MouseButtonRelease:
+            return False
+
+        mouse_event = cast(QMouseEvent, event)
+        if mouse_event.button() != Qt.MouseButton.MiddleButton:
+            return False
+
+        tab_index = tab_bar.tabAt(mouse_event.pos())
+        if tab_index < 0:
+            return False
+
+        tab_text = tab_bar.tabText(tab_index)
+        for dock in self._window.findChildren(QDockWidget):
+            if dock.windowTitle() == tab_text:
+                dock.close()
+                return True
+
+        return False
+
+    def install_dock_title_bar_filters(self) -> None:
+        """Install event filters on dock widgets for title bar middle-click detection."""
+        for dock in self._window.findChildren(QDockWidget):
+            if dock.property("_qtpie_middle_click_filter"):
+                continue
+            dock.installEventFilter(self)
+            dock.setProperty("_qtpie_middle_click_filter", True)
+
+    def _handle_dock_title_bar_middle_click(self, dock: QDockWidget, event: QEvent) -> bool:
+        """Handle middle mouse button click on dock title bar to close dock.
+
+        Returns True if event was consumed, False otherwise.
+        """
+        if event.type() != QEvent.Type.MouseButtonRelease:
+            return False
+
+        mouse_event = cast(QMouseEvent, event)
+        if mouse_event.button() != Qt.MouseButton.MiddleButton:
+            return False
+
+        # Check if click is in the title bar area (top portion of dock widget)
+        # The title bar height is typically around 20-30 pixels
+        # Note: titleBarWidget() returns None for default title bar, but stubs say QWidget
+        title_bar = cast(QWidget | None, dock.titleBarWidget())
+        if title_bar is not None and title_bar.height() > 0:
+            # Custom title bar - check if click is within it
+            title_bar_rect = title_bar.geometry()
+            if not title_bar_rect.contains(mouse_event.pos()):
+                return False
+        else:
+            # Default title bar or hidden title bar - check if click is in the top area
+            # Use a reasonable height estimate for the default title bar
+            title_bar_height = 30
+            if mouse_event.pos().y() > title_bar_height:
+                return False
+
+        dock.close()
+        return True
 
 
 def _setup_title_bar_hooks(
