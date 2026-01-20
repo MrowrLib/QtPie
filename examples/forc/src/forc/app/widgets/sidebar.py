@@ -31,6 +31,17 @@ class AddCollectionDialog(Dialog):
     _cancel: DialogButton
 
 
+@widget(layout="horizontal", margins=0)
+class CollectionsTreeWidgetRow(Widget[Collection | Request]):
+    ### Widgets ###
+    method_chip: QLabel = new(
+        bind="{method?.value}",
+        classes=["method-badge", "method-{method?.value}"],
+        visible="{record?.method is not None}",
+    )
+    text_label: QLabel = new(bind="{name}")
+
+
 @widget
 class CollectionsTreeWidget(Widget):
     ### Services ###
@@ -41,14 +52,16 @@ class CollectionsTreeWidget(Widget):
     treeview: QTreeView = new(
         bind="workspace.collections",
         children="items",
-        format="{name}",
-        editable="name",
-        onEdited="_on_rename",
+        # format="[{method.value}] {name}",
+        # editable="name",
+        # onEdited="_on_rename",
         selectedItem="current_workspace_item",
         expand=True,
         headerHidden=True,
         validator=filename_safe_validator,
         clicked="{on_current_workspace_item_changed()}",
+        widget=CollectionsTreeWidgetRow,
+        # widget=embed(CollectionsTreeWidgetRow),
     )
 
     ### Methods ###

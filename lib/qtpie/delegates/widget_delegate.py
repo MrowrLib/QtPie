@@ -221,3 +221,17 @@ class QtPieWidgetDelegate(QStyledItemDelegate):
         """
         # No-op - Widget[T] record changes sync automatically via ObservableProxy
         pass
+
+    @override
+    def paint(
+        self,
+        painter: Any,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
+        """Don't paint anything - the embedded widget handles all rendering.
+
+        Without this override, Qt draws the DisplayRole text underneath the widget.
+        """
+        # No-op - widget covers the entire cell
+        pass

@@ -439,6 +439,10 @@ def _open_all_persistent_editors(view: QWidget, model: Any, parent_index: Any = 
         if is_tree and model.rowCount(index) > 0:
             _open_all_persistent_editors(view, model, index, is_tree=True)
 
+    # Schedule layout recalculation to pick up widget size hints (only at root level)
+    if parent_index is not None and not parent_index.isValid() and hasattr(view, "scheduleDelayedItemsLayout"):
+        view.scheduleDelayedItemsLayout()  # type: ignore[attr-defined]
+
 
 def _is_list_view(widget: QWidget) -> bool:
     """Check if widget is a QListView (but not QTableView or QTreeView)."""

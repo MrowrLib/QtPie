@@ -1,0 +1,3 @@
+name: HEAD Example
+method: HEAD
+url: ${BASE_URL}/demo/echo

@@ -154,7 +154,12 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     if isinstance(instance, QWidget):
                         if field.object_name is not None:
                             # Explicit name= on new() takes top priority
-                            instance.setObjectName(field.object_name)
+                            # Check for reactive binding in object name
+                            if "{" in field.object_name and "}" in field.object_name:
+                                # Defer reactive object name application until after __init__ completes
+                                _defer_reactive_object_name(self, instance, field.object_name)
+                            else:
+                                instance.setObjectName(field.object_name)
                         elif config is not None and config.object_name is not None:
                             # @widget(name=...) on parent class is next priority
                             instance.setObjectName(config.object_name)
@@ -165,9 +170,17 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                         # Apply CSS classes if specified
                         if field.css_classes:
+                            from .bindings.format_binding import is_format_string
                             from .styles import set_classes
 
-                            set_classes(instance, field.css_classes)
+                            # Check if any class has a reactive binding
+                            has_reactive = any(is_format_string(c) for c in field.css_classes)
+                            if has_reactive:
+                                # Defer reactive class application until after __init__ completes
+                                # to ensure widget base class is fully initialized
+                                _defer_reactive_classes(self, instance, field.css_classes)
+                            else:
+                                set_classes(instance, field.css_classes)
 
                         # Apply input validator (QLineEdit, QComboBox, etc.)
                         if field.validator is not None:
@@ -938,3 +951,91 @@ def _resolve_parent_refs(parent: Any, child: Any) -> None:
 
     # Clean up
     del child._qtpie_deferred_parent_refs
+
+
+def _defer_reactive_classes(context: Any, widget: Any, css_classes: list[str]) -> None:
+    """Defer reactive class application until after __init__ completes.
+
+    This is needed because create_format_binding may try to walk the parent hierarchy,
+    which requires the widget's base class __init__ to have completed.
+    """
+    from qtpy.QtCore import QTimer
+
+    def apply_later() -> None:
+        _apply_reactive_classes(context, widget, css_classes)
+
+    QTimer.singleShot(0, apply_later)
+
+
+def _defer_reactive_object_name(context: Any, widget: Any, name_template: str) -> None:
+    """Defer reactive object name application until after __init__ completes."""
+    from qtpy.QtCore import QTimer
+
+    from .bindings import create_format_binding
+
+    def apply_later() -> None:
+        create_format_binding(
+            context,
+            name_template,
+            lambda v, inst=widget: inst.setObjectName(str(v) if v is not None else ""),
+        )
+
+    QTimer.singleShot(0, apply_later)
+
+
+def _apply_reactive_classes(context: Any, widget: Any, css_classes: list[str]) -> None:
+    """Apply CSS classes with reactive bindings.
+
+    For each class that contains {expression}, create a binding that updates
+    the class when the expression value changes.
+
+    Args:
+        context: The parent widget (provides variable context for bindings).
+        widget: The widget to apply classes to.
+        css_classes: List of CSS class names, some may contain {expression} bindings.
+    """
+    from qtpy.QtWidgets import QWidget
+
+    from .bindings import create_format_binding
+    from .bindings.format_binding import is_format_string
+    from .styles import set_classes
+
+    if not isinstance(widget, QWidget):
+        return
+
+    # Separate static and reactive classes
+    static_classes: list[str] = []
+    reactive_templates: list[str] = []
+
+    for css_class in css_classes:
+        if is_format_string(css_class):
+            reactive_templates.append(css_class)
+        else:
+            static_classes.append(css_class)
+
+    # Track current resolved values for reactive classes
+    # Key = template, Value = current resolved class name
+    resolved_reactive: dict[str, str] = {}
+
+    def update_classes() -> None:
+        """Rebuild and apply the full class list."""
+        all_classes = static_classes + [v for v in resolved_reactive.values() if v]
+        set_classes(widget, all_classes)
+
+    # Create bindings for each reactive template
+    for template in reactive_templates:
+        # Initialize with empty string
+        resolved_reactive[template] = ""
+
+        def make_setter(tmpl: str) -> Any:
+            def setter(value: Any) -> None:
+                resolved_reactive[tmpl] = str(value) if value is not None else ""
+                update_classes()
+
+            return setter
+
+        create_format_binding(context, template, make_setter(template))
+
+    # If no reactive classes, just set static ones
+    if not reactive_templates:
+        set_classes(widget, static_classes)

@@ -429,3 +429,124 @@ class TestDecoratorNameInheritance:
         assert_that(instance._button.objectName()).is_equal_to("button")
         # No underscore
         assert_that(instance.label.objectName()).is_equal_to("label")
+
+
+# =============================================================================
+# Reactive CSS Classes (format string bindings)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestReactiveCssClasses:
+    """CSS classes with format string bindings that update reactively."""
+
+    def test_class_with_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """classes=["method-{_method}"] updates when variable changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _method: Variable[str] = new("GET")
+            _label: QLabel = new("Request", classes=["badge", "method-{_method}"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("badge", "method-GET")
+
+        # Change the variable - class should update reactively
+        instance._method.value = "POST"
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("badge", "method-POST")
+        assert_that(get_classes(instance._label)).does_not_contain("method-GET")
+
+    def test_class_with_record_field_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """classes=["status-{status}"] works with Widget[T] record fields."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Item:
+            name: str
+            status: str
+
+        @decorator(record=Item("Test", "active"))
+        class TestClass(base_class[Item]):
+            _label: QLabel = new(bind="{name}", classes=["item", "status-{status}"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("item", "status-active")
+
+        # Change record field - class should update
+        instance.record.status = "inactive"
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("item", "status-inactive")
+        assert_that(get_classes(instance._label)).does_not_contain("status-active")
+
+    def test_multiple_dynamic_classes(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple classes can have bindings."""
+
+        @decorator
+        class TestClass(base_class):
+            _size: Variable[str] = new("large")
+            _color: Variable[str] = new("blue")
+            _label: QLabel = new("Styled", classes=["btn", "size-{_size}", "color-{_color}"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("btn", "size-large", "color-blue")
+
+        instance._size.value = "small"
+        instance._color.value = "red"
+        qt.process_events()
+
+        assert_that(get_classes(instance._label)).contains("btn", "size-small", "color-red")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestReactiveObjectName:
+    """Object name with format string bindings that update reactively."""
+
+    def test_name_with_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """name="item-{_id}" updates when variable changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _id: Variable[int] = new(1)
+            _label: QLabel = new("Item", name="item-{_id}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        assert_that(instance._label.objectName()).is_equal_to("item-1")
+
+        instance._id.value = 42
+        qt.process_events()
+
+        assert_that(instance._label.objectName()).is_equal_to("item-42")
+
+    def test_name_with_record_field_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """name="row-{id}" works with Widget[T] record fields."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Row:
+            id: int
+            text: str
+
+        @decorator(record=Row(5, "Hello"))
+        class TestClass(base_class[Row]):
+            _label: QLabel = new(bind="{text}", name="row-{id}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        assert_that(instance._label.objectName()).is_equal_to("row-5")
+
+        instance.record.id = 99
+        qt.process_events()
+
+        assert_that(instance._label.objectName()).is_equal_to("row-99")

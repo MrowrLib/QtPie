@@ -31,14 +31,21 @@ $error-muted: #b91c1c;
 $info: #3b82f6;
 $info-muted: #1d4ed8;
 
-// HTTP Method colors
-$method-get: #22c55e;
-$method-post: #f59e0b;
-$method-put: #3b82f6;
-$method-patch: #8b5cf6;
-$method-delete: #ef4444;
-$method-options: #ec4899;
-$method-head: #06b6d4;
+// HTTP Method colors (jewel tones - rich, saturated, elegant)
+$method-get: #73d677;
+$method-get-bg: #1a2e1c;
+$method-post: #f0a050;
+$method-post-bg: #2e2418;
+$method-put: #50b0f0;
+$method-put-bg: #18242e;
+$method-patch: #b088e0;
+$method-patch-bg: #241e30;
+$method-delete: #f06070;
+$method-delete-bg: #2e1a1c;
+$method-options: #e080c0;
+$method-options-bg: #2c1a26;
+$method-head: #50d0d0;
+$method-head-bg: #182a2a;
 
 // Borders
 $border-subtle: #2a2a2a;
