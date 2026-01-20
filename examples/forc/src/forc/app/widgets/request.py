@@ -1,5 +1,5 @@
 from qtpy.QtCore import Qt, Signal
-from qtpy.QtWidgets import QSplitter
+from qtpy.QtWidgets import QPushButton, QSplitter
 
 from forc.app.widgets.response_viewer import ResponseViewerWidget
 from forc.domain.models import Request, Response
@@ -20,11 +20,16 @@ class RequestWidget(Widget[Request]):
     ### Variables ###
     response: Variable[Response | None] = new(None)
     is_sending: Variable[bool] = new(False)
+    orientation: Variable[Qt.Orientation] = new(Qt.Orientation.Horizontal)
 
     ### Widgets ###
-    splitter: QSplitter = new(Qt.Orientation.Horizontal)
-    request_editor: RequestEditorWidget = new(splitter="_splitter")
-    response_viewer: ResponseViewerWidget = new(bind="response", splitter="_splitter")
+    test_switch_orientation_button: QPushButton = new(
+        "Switch Orientation",
+        clicked="_on_switch_orientation_clicked",
+    )
+    splitter: QSplitter = new(bind="orientation")
+    request_editor: RequestEditorWidget = new(splitter="splitter")
+    response_viewer: ResponseViewerWidget = new(bind="response", splitter="splitter")
 
     ### Methods ###
     @slot
@@ -34,3 +39,9 @@ class RequestWidget(Widget[Request]):
             self.response = await self.http_client_service.value.send(request)
         finally:
             self.is_sending = False
+
+    def _on_switch_orientation_clicked(self) -> None:
+        if self.orientation() == Qt.Orientation.Horizontal:
+            self.orientation = Qt.Orientation.Vertical
+        else:
+            self.orientation = Qt.Orientation.Horizontal

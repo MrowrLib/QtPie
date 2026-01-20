@@ -66,9 +66,10 @@
 }
 
 // Cookie manager button
-#SidebarWidget QPushButton#_cookie_manager_button {
+#SidebarWidget QPushButton#cookie_manager_button {
     border-style: solid;
-    margin-top: 8px;
+    margin-left: 12px;
+    margin-right: 12px;
 }
 
 // Environment selector

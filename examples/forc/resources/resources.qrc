@@ -8,5 +8,7 @@
     <file alias="trash.svg">images/icons/trash.svg</file>
     <file alias="trash-dark.svg">images/icons/trash-dark.svg</file>
     <file alias="trash-light.svg">images/icons/trash-light.svg</file>
+    <file alias="settings-light.svg">images/icons/settings-light.svg</file>
+    <file alias="settings-dark.svg">images/icons/settings-dark.svg</file>
   </qresource>
 </RCC>

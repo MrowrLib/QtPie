@@ -3,6 +3,7 @@
 from typing import Any, get_origin
 
 from .new_field import NewField
+from .utils.type_checks import is_model_widget
 from .variable import AnyObservable, RecordVariable, Variable
 
 # Default property mapping for common widget types
@@ -196,6 +197,15 @@ def new_fields[T](cls: type[T]) -> type[T]:
                         if isinstance(value, Translatable):
                             value = value.resolve()
 
+                        # Special handling for icon= - convert str/QPixmap/StandardPixmap to QIcon
+                        if prop_name == "icon":
+                            from .utils.layouts import resolve_icon
+
+                            resolved_icon = resolve_icon(value)
+                            if resolved_icon is not None and hasattr(instance, "setIcon"):
+                                instance.setIcon(resolved_icon)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+                            continue
+
                         setter_name = f"set{prop_name[0].upper()}{prop_name[1:]}"
                         setter = getattr(instance, setter_name, None)
                         if setter is not None and callable(setter):
@@ -235,6 +245,19 @@ def new_fields[T](cls: type[T]) -> type[T]:
                         for ref_kwarg, ref_obj in field.ref_bindings.items():
                             pending_refs.append((fname, instance, ref_kwarg, ref_obj))
 
+                    # Defer bind= for plain QWidgets that use registry-based binding
+                    # (e.g., QSplitter with bind="orientation")
+                    # Skip: QtPie widgets, format strings, and model widgets (QComboBox, etc.)
+                    if (
+                        field.bind is not None
+                        and field.bind is not False
+                        and not hasattr(field.field_type, "_qtpie_config")
+                        and isinstance(field.bind, str)
+                        and "{" not in field.bind  # Not a format string
+                        and not is_model_widget(field.field_type)  # Not QComboBox/QListView/etc.
+                    ):
+                        _defer_plain_widget_bind(self, instance, field.bind)
+
                     setattr(self, fname, instance)
 
         # Resolve refs now that all fields exist
@@ -248,6 +271,56 @@ def new_fields[T](cls: type[T]) -> type[T]:
     cls.__new_fields_processed__ = True  # type: ignore[attr-defined]
 
     return cls
+
+
+def _defer_plain_widget_bind(context: Any, widget: Any, bind_expr: str) -> None:
+    """Defer bind= application for plain QWidgets until after __init__ completes.
+
+    This is needed because resolve_binding_source walks the parent hierarchy,
+    which requires the widget's base class __init__ to have completed.
+    """
+    from qtpy.QtCore import QTimer
+
+    def apply_later() -> None:
+        _apply_plain_widget_bind(context, widget, bind_expr)
+
+    QTimer.singleShot(0, apply_later)
+
+
+def _apply_plain_widget_bind(context: Any, widget: Any, bind_expr: str) -> None:
+    """Apply bind= for plain QWidgets (non-QtPie widgets like QSplitter).
+
+    Uses the binding registry to find the default property for the widget type
+    and sets up a one-way binding from the parent's Variable.
+    """
+    from observant import Observable
+
+    from .bindings.path import resolve_binding_source
+    from .bindings.registry import get_binding_registry
+    from .variable import Variable
+
+    # Get the registry and find the default property for this widget type
+    registry = get_binding_registry()
+    property_name = registry.get_default_prop(widget)
+
+    # Get the adapter for this widget/property
+    adapter = registry.get(widget, property_name)
+    if adapter is None or adapter.setter is None:
+        return
+
+    setter = adapter.setter
+
+    # Resolve the source Variable/Observable
+    source = resolve_binding_source(context, bind_expr)  # type: ignore[arg-type]
+    if source is None:
+        return
+
+    if isinstance(source, Variable):
+        setter(widget, source.value)  # pyright: ignore[reportUnknownMemberType]
+        source.on_change(lambda v: setter(widget, v))  # pyright: ignore[reportUnknownLambdaType]
+    elif isinstance(source, Observable):
+        setter(widget, source.get())
+        source.on_change(lambda v: setter(widget, v))  # pyright: ignore[reportUnknownLambdaType]
 
 
 def _apply_variable_bindings_direct(parent: Any, child: Any, bindings: dict[str, Any]) -> None:  # pyright: ignore[reportUnusedFunction] - imported dynamically in widget/window/menu __init__

@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QRadioButton,
     QSlider,
     QSpinBox,
+    QSplitter,
     QTextEdit,
     QWidget,
 )
@@ -351,3 +352,18 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
             signal_name=None,
         ),
     )
+
+    # ============================================================
+    # QSplitter
+    # ============================================================
+
+    # QSplitter - orientation (one-way)
+    registry.add(
+        BindingKey(QSplitter, "orientation"),
+        BindingAdapter(
+            getter=lambda w: w.orientation(),
+            setter=lambda w, v: w.setOrientation(v) if v is not None else None,
+            signal_name=None,
+        ),
+    )
+    registry.set_default_prop(QSplitter, "orientation")

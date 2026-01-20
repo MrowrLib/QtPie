@@ -1,30 +1,21 @@
-from qtpy.QtWidgets import QLabel, QSizePolicy, QSpacerItem
+from qtpy.QtWidgets import QComboBox, QLabel, QSizePolicy, QToolButton
 
-from qtpie import Widget, new, widget
-
-
-@widget(layout="horizontal")
-class ExampleComboBoxEmbedWidget(Widget):
-    """
-    This is an example of embedding a QComboBox inside a QtPie widget.
-    """
-
-    qlabel1: QLabel = new("Label 1")
-    qlabel2: QLabel = new("Label 2")
+from qtpie import Variable, Widget, new, widget
 
 
 @widget(layout="horizontal")
 class EnvironmentSelectorWidget(Widget):
-    """
-    This will show a dropdown to select the environment for the current request
-    and buttons for adding and removing environments.
-    """
+    ### Variables ###
+    test_list: Variable[list[str]] = new(["Env 1", "Env 2", "Env 3"])
 
-    # Let's just use QLabel placeholders for everything first.
-    # Because even things like a "simple QComboBox" actually requires
-    # knowing a good bit of things about how QComboBox works in QtPie, for example.
+    ### Widgets ###
+    label: QLabel = new("Environment:")
+    environments_chooser: QComboBox = new(
+        bind="test_list",
+        sizePolicy=QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed),
+    )
+    settings_button: QToolButton = new(icon=":/settings-dark.svg", clicked="_on_test_clicked")
 
-    environment_dropdown: QLabel = new("Environment Dropdown Placeholder")
-    add_button: QLabel = new("[+]")
-    remove_button: QLabel = new("[-]")
-    spacer: QSpacerItem = new(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+    ### Methods ###
+    def _on_test_clicked(self) -> None:
+        print("Test button clicked!")

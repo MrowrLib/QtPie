@@ -56,12 +56,13 @@ QComboBox:focus {
 
 QComboBox::drop-down {
     border: none;
-    width: 20px;
+    width: 28px;
 }
 
 QComboBox::down-arrow {
-    // Using text-based arrow via font
-    image: none;
+    image: url(:/arrow-down.svg);
+    width: 24px;
+    height: 24px;
 }
 
 QComboBox QAbstractItemView {

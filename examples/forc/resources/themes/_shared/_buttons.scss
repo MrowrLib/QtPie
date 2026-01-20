@@ -76,3 +76,23 @@ QPushButton[class~="add-button"]:hover {
     color: $accent;
     background-color: rgba(124, 58, 237, 0.1);
 }
+
+// QToolButton with icon and text
+QToolButton {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-height: 20px;
+    spacing: 6px;  // Try spacing between icon and text
+}
+
+QToolButton:hover {
+    background-color: $bg-hover;
+    border-color: $border-strong;
+}
+
+QToolButton:pressed {
+    background-color: $bg-selected;
+}

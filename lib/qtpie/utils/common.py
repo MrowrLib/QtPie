@@ -2,6 +2,7 @@
 
 import re
 import types
+from enum import Enum
 
 # Regex to find placeholders like {#self}, {#index}, {name}, {age}, {#self.age}
 PLACEHOLDER_RE = re.compile(r"\{(#?\w+(?:\.\w+)*)\}")
@@ -11,8 +12,13 @@ HANDLER_SPEC_RE = re.compile(r"^(\w+)(?:\((.*)\))?$")
 
 
 def is_primitive_type(t: type | types.UnionType | None) -> bool:
-    """Check if type is a primitive."""
-    return t in (str, int, float, bool, type(None))
+    """Check if type is a primitive (including enums, which are value types)."""
+    if t in (str, int, float, bool, type(None)):
+        return True
+    # Enum types are also value types, not complex objects
+    if t is not None and isinstance(t, type) and issubclass(t, Enum):
+        return True
+    return False
 
 
 def is_signal(obj: object) -> bool:

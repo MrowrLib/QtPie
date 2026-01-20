@@ -551,7 +551,9 @@ class NewField:
             self.is_splitter = True
             # Extract target layout reference (splitter can be in a layout)
             self._extract_target_layout()
-            # Args/kwargs are passed directly to QSplitter constructor
+            # Extract bind= for property binding (e.g., bind="orientation")
+            self.bind = self.kwargs.pop("bind", None)
+            # Remaining kwargs are passed directly to QSplitter constructor
             return
 
         # Handle list[Dock[W]] - creates a DockWidgetRepeater bound to a list source
