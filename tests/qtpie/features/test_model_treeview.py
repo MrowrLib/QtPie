@@ -11,6 +11,7 @@
 """Tests for QTreeView with bind= to hierarchical data."""
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 from assertpy import assert_that
@@ -1870,3 +1871,142 @@ class TestTreeViewEditableValidator:
 
         # Should NOT be our custom delegate
         assert_that(isinstance(delegate, ValidatorItemDelegate)).is_false()
+
+
+# =============================================================================
+# QTreeView onEdited Callback Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewOnEdited:
+    """Test QTreeView editable= with onEdited= callback support."""
+
+    def test_on_edited_called_with_method_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEdited= with method name string calls the method after edit."""
+        from PySide6.QtCore import Qt
+
+        callback_calls: list[tuple[Any, str, str]] = []
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableNode]] = new([EditableNode("Original")])
+            _tree: QTreeView = new(bind="_nodes", editable="name", onEdited="_on_node_edited")
+
+            def _on_node_edited(self, item: EditableNode, old_value: str, new_value: str) -> None:
+                callback_calls.append((item, old_value, new_value))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+        idx = model.index(0, 0)
+
+        # Edit via model
+        model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+
+        # Callback should have been called with correct args
+        assert_that(callback_calls).is_length(1)
+        assert_that(callback_calls[0][1]).is_equal_to("Original")
+        assert_that(callback_calls[0][2]).is_equal_to("Modified")
+
+    def test_on_edited_called_with_callable(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEdited= with callable calls the function after edit."""
+        from PySide6.QtCore import Qt
+
+        callback_calls: list[tuple[Any, str, str]] = []
+
+        def on_edited(item: Any, old_value: str, new_value: str) -> None:
+            callback_calls.append((item, old_value, new_value))
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableNode]] = new([EditableNode("Original")])
+            _tree: QTreeView = new(bind="_nodes", editable="name", onEdited=on_edited)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+        idx = model.index(0, 0)
+
+        # Edit via model
+        model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+
+        # Callback should have been called
+        assert_that(callback_calls).is_length(1)
+        assert_that(callback_calls[0][1]).is_equal_to("Original")
+        assert_that(callback_calls[0][2]).is_equal_to("Modified")
+
+    def test_on_edited_receives_correct_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEdited= receives the correct item object."""
+        from PySide6.QtCore import Qt
+
+        received_items: list[EditableNode] = []
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableNode]] = new([EditableNode("First"), EditableNode("Second")])
+            _tree: QTreeView = new(bind="_nodes", editable="name", onEdited="_on_edited")
+
+            def _on_edited(self, item: EditableNode, old_value: str, new_value: str) -> None:
+                received_items.append(item)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Edit second item
+        idx = model.index(1, 0)
+        model.setData(idx, "Changed", Qt.ItemDataRole.EditRole)
+
+        # Should receive the second item
+        assert_that(received_items).is_length(1)
+        assert_that(received_items[0]).is_same_as(instance._nodes.value[1])
+
+    def test_on_edited_not_called_when_edit_fails(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEdited= is not called when setData fails (e.g., invalid index)."""
+        from PySide6.QtCore import Qt
+
+        callback_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableNode]] = new([EditableNode("Test")])
+            _tree: QTreeView = new(bind="_nodes", editable="name", onEdited="_on_edited")
+
+            def _on_edited(self, item: EditableNode, old_value: str, new_value: str) -> None:
+                callback_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Try to edit invalid index
+        from qtpy.QtCore import QModelIndex
+
+        invalid_idx = QModelIndex()
+        model.setData(invalid_idx, "Value", Qt.ItemDataRole.EditRole)
+
+        # Callback should NOT have been called
+        assert_that(callback_count[0]).is_equal_to(0)
+
+    def test_on_edited_with_nested_path(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEdited= works with nested path editing."""
+        from PySide6.QtCore import Qt
+
+        callback_calls: list[tuple[Any, str, str]] = []
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[NodeWithNested]] = new([NodeWithNested(info=NestedInfo(title="Original"))])
+            _tree: QTreeView = new(bind="_nodes", editable="info.title", onEdited="_on_edited")
+
+            def _on_edited(self, item: NodeWithNested, old_value: str, new_value: str) -> None:
+                callback_calls.append((item, old_value, new_value))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+        idx = model.index(0, 0)
+
+        # Edit via model
+        model.setData(idx, "Modified", Qt.ItemDataRole.EditRole)
+
+        # Callback should have the old and new values for the nested field
+        assert_that(callback_calls).is_length(1)
+        assert_that(callback_calls[0][1]).is_equal_to("Original")
+        assert_that(callback_calls[0][2]).is_equal_to("Modified")

@@ -10,7 +10,6 @@ from qtpy.QtWidgets import (
     QTabWidget,
 )
 
-from forc.app.helpers import filename_safe_validator
 from forc.domain.models import (
     API_KEY_LOCATION_LABELS,
     AUTH_TYPE_LABELS,
@@ -138,13 +137,13 @@ class BodyTabContent(Widget[Request]):
 @widget
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
-    _request_name: QLineEdit = new(
-        bind="name",
-        placeholderText="Request Name...",
-        validator=filename_safe_validator,
-        onFocus="_on_focus_request_name",
-        onBlur="_on_blur_request_name",
-    )
+    # _request_name: QLineEdit = new(
+    #     bind="name",
+    #     placeholderText="Request Name...",
+    #     validator=filename_safe_validator,
+    #     onFocus="_on_focus_request_name",
+    #     onBlur="_on_blur_request_name",
+    # )
     _address_bar: RequestAddressBarWidget
     _tabs: QTabWidget = new(tabs=[ParamsTabContent, BodyTabContent, AuthTabContent, HeadersTabContent])
 

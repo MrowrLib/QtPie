@@ -130,6 +130,10 @@ class NewField:
         # Validator for tree/list inline editing (same format as QLineEdit validator=)
         self.tree_validator: str | Callable[..., Any] | None = None
         self.list_validator: str | Callable[..., Any] | None = None
+        # onEdited callback for tree/list inline editing - called after edit is committed
+        # Callback signature: (item, old_value, new_value) -> None
+        self.tree_on_edited: str | Callable[..., Any] | None = None
+        self.list_on_edited: str | Callable[..., Any] | None = None
         # Filter for model widgets: "{_search} in {name}", "method_name", or callable
         self.model_filter: str | Callable[[Any], bool] | None = None
         # Filter dependencies: Variable names to watch for callable/method filters
@@ -782,6 +786,8 @@ class NewField:
                     self.edit_on_edit_key = self.kwargs.pop("editOnEditKey", None)
                     # validator= for inline editing (same format as QLineEdit validator=)
                     self.list_validator = self.kwargs.pop("validator", None)
+                    # onEdited= callback for after inline edit is committed
+                    self.list_on_edited = self.kwargs.pop("onEdited", None)
                     # QListView-specific selection bindings (multi)
                     self.selected_indexes = self.kwargs.pop("selectedIndexes", None)
                     self.selected_items_list = self.kwargs.pop("selectedItems", None)
@@ -809,6 +815,8 @@ class NewField:
                     self.edit_on_edit_key = self.kwargs.pop("editOnEditKey", None)
                     # validator= for inline editing (same format as QLineEdit validator=)
                     self.tree_validator = self.kwargs.pop("validator", None)
+                    # onEdited= callback for after inline edit is committed
+                    self.tree_on_edited = self.kwargs.pop("onEdited", None)
                     # QTreeView selection bindings (multi)
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)

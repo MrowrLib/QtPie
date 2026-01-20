@@ -41,12 +41,16 @@ class CollectionsTreeWidget(Widget):
         children="items",
         format="{name}",
         editable="name",
+        onEdited="_on_rename",
         selectedItem="current_workspace_item",
         expand=True,
         headerHidden=True,
         validator=filename_safe_validator,
         clicked="{on_current_workspace_item_changed()}",
     )
+
+    def _on_rename(self, item: Collection | Request, old_name: str, new_name: str) -> None:
+        print(f"Renaming item from '{old_name}' to '{new_name}'")
 
 
 @widget

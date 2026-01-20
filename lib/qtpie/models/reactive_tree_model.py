@@ -52,6 +52,7 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         format_fn: Callable[[T], str] | None = None,
         checkable: str | bool | None = None,
         editable: str | bool | None = None,
+        on_edited: Callable[[T, Any, Any], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
@@ -60,6 +61,7 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         self._checkable = checkable
         self._checkable_is_expression = checkable is not None and isinstance(checkable, str) and "{" in checkable
         self._editable = editable
+        self._on_edited = on_edited
 
         # Cache of ObservableProxy per item (keyed by id(item))
         # This enables per-item dirty/valid state tracking
@@ -274,6 +276,7 @@ class ReactiveTreeModel[T](QAbstractItemModel):
                 # Simple type - replace item in list
                 row = index.row()
                 parent_index = self.parent(index)
+                old_value = item  # The item itself is the old value
                 if parent_index.isValid():
                     # Child item - find parent's children list
                     parent_item = parent_index.internalPointer()
@@ -281,17 +284,21 @@ class ReactiveTreeModel[T](QAbstractItemModel):
                     if children is not None and 0 <= row < len(children):
                         children[row] = value
                         self.dataChanged.emit(index, index, [role])
+                        self._invoke_on_edited(item, old_value, value)
                         return True
                 else:
                     # Root item
                     if 0 <= row < len(self._obs_list):
                         self._obs_list[row] = value
                         self.dataChanged.emit(index, index, [role])
+                        self._invoke_on_edited(item, old_value, value)
                         return True
             elif isinstance(self._editable, str):
                 # Field name - set the field value (supports nested paths)
+                old_value = self._get_nested_attr(item, self._editable)
                 if self._set_nested_attr(item, self._editable, value):
                     self.dataChanged.emit(index, index, [role])
+                    self._invoke_on_edited(item, old_value, value)
                     return True
             return False
 
@@ -303,6 +310,14 @@ class ReactiveTreeModel[T](QAbstractItemModel):
                     self.dataChanged.emit(index, index, [role])
                     return True
         return False
+
+    def _invoke_on_edited(self, item: T, old_value: Any, new_value: Any) -> None:
+        """Invoke the on_edited callback if set."""
+        if self._on_edited is not None:
+            try:
+                self._on_edited(item, old_value, new_value)
+            except Exception:
+                pass  # Don't let callback errors break the edit
 
     def _evaluate_checkable(self, item: T) -> bool:
         """Evaluate the checkable field/expression for an item."""

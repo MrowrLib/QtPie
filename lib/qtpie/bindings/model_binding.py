@@ -16,6 +16,33 @@ if TYPE_CHECKING:
     from qtpie.models import ReactiveListModel, ReactiveTreeModel
 
 
+def _resolve_on_edited_callback(
+    host: QWidget,
+    on_edited_spec: str | Callable[..., Any] | None,
+) -> Callable[[Any, Any, Any], None] | None:
+    """Resolve the onEdited callback from a string method name or callable.
+
+    Args:
+        host: The widget instance to look up method names on.
+        on_edited_spec: Either a callable, a method name string, or None.
+
+    Returns:
+        A callable (item, old_value, new_value) -> None, or None if not specified.
+    """
+    if on_edited_spec is None:
+        return None
+
+    if callable(on_edited_spec):
+        return on_edited_spec  # type: ignore[return-value]
+
+    # It's a string - look up the method on the host
+    method = getattr(host, on_edited_spec, None)
+    if method is not None and callable(method):
+        return method  # type: ignore[return-value]
+
+    return None
+
+
 def _apply_edit_triggers(
     view: QWidget,
     edit_on_double_click: bool | None,
@@ -575,6 +602,9 @@ def apply_model_binding(
         # Default children attribute to "children" if not specified
         children_attr = field_info.tree_children or "children"
 
+        # Resolve onEdited callback
+        on_edited_callback = _resolve_on_edited_callback(host, field_info.tree_on_edited)
+
         model = ReactiveTreeModel(
             obs_list,
             parent=widget_instance,
@@ -582,6 +612,7 @@ def apply_model_binding(
             format_fn=format_fn,
             checkable=field_info.tree_checkable,
             editable=field_info.tree_editable,
+            on_edited=on_edited_callback,
         )
 
         # Set edit triggers if editable is enabled
@@ -657,12 +688,16 @@ def apply_model_binding(
             else:
                 format_fn = create_item_formatter(field_info.model_format)
 
+        # Resolve onEdited callback
+        on_edited_callback = _resolve_on_edited_callback(host, field_info.list_on_edited)
+
         model = ReactiveListModel(
             obs_list,
             parent=widget_instance,
             format_fn=format_fn,
             checkable=field_info.list_checkable,
             editable=field_info.list_editable,
+            on_edited=on_edited_callback,
         )
 
         # Set edit triggers if editable is enabled (for QListView only, not QComboBox)
