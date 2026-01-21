@@ -820,6 +820,17 @@ class _VariableDescriptor[T]:
         inner_kwargs: dict[str, Any] | None = None,
         # Setting[T] support - if set, creates Setting instead of Variable
         persist_key: str | None = None,
+        # Callback for value changes
+        on_change: str | Callable[..., Any] | None = None,
+        # List-specific callbacks
+        on_insert: str | Callable[..., Any] | None = None,
+        on_remove: str | Callable[..., Any] | None = None,
+        on_replace: str | Callable[..., Any] | None = None,
+        on_clear: str | Callable[..., Any] | None = None,
+        # Set-specific callbacks
+        on_add: str | Callable[..., Any] | None = None,
+        # Dict-specific callbacks
+        on_set: str | Callable[..., Any] | None = None,
     ) -> None:
         self._default = default
         self._name = name
@@ -844,6 +855,17 @@ class _VariableDescriptor[T]:
         self._inner_kwargs = inner_kwargs or {}
         # Setting persistence key - if set, creates Setting instead of Variable
         self._persist_key = persist_key
+        # Callback for value changes - method name or callable
+        self._on_change = on_change
+        # List-specific callbacks
+        self._on_insert = on_insert
+        self._on_remove = on_remove
+        self._on_replace = on_replace
+        self._on_clear = on_clear
+        # Set-specific callbacks
+        self._on_add = on_add
+        # Dict-specific callbacks
+        self._on_set = on_set
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Variable[T]: ...
@@ -899,6 +921,19 @@ class _VariableDescriptor[T]:
                 wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs)
                 var = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
+
+            # Wire up callbacks if specified
+            if self._on_change is not None:
+                _wire_on_change_callback(obj, var, self._on_change)
+            if self._on_insert is not None:
+                _wire_on_insert_callback(obj, var, self._on_insert)
+            if self._on_remove is not None:
+                _wire_on_remove_callback(obj, var, self._on_remove)
+            if self._on_add is not None:
+                _wire_on_add_callback(obj, var, self._on_add)
+            if self._on_set is not None:
+                _wire_on_set_callback(obj, var, self._on_set)
+            # Note: onReplace and onClear are handled specially via value assignment
 
             # If widget_type is set, create the widget and bind it
             if self._widget_type is not None:
@@ -1178,6 +1213,232 @@ class _VariableDescriptor[T]:
             var.value = value
 
 
+def _wire_on_change_callback(
+    obj: object,
+    var: Variable[Any],
+    on_change: str | Callable[..., Any],
+) -> None:
+    """Wire up an onChange callback to a Variable's underlying Observable.
+
+    Args:
+        obj: The host object (Widget, Service, etc.) that owns the method
+        var: The Variable whose Observable to subscribe to
+        on_change: Method name (str) or callable to invoke on change
+    """
+    import inspect
+
+    # Get the callback function
+    if isinstance(on_change, str):
+        callback = getattr(obj, on_change, None)
+        if callback is None:
+            return  # Method doesn't exist - silently skip
+    else:
+        callback = on_change
+
+    # Check callback signature to determine how to call it
+    try:
+        sig = inspect.signature(callback)
+        # Count parameters excluding 'self' (for bound methods, self is already bound)
+        params = [p for p in sig.parameters.values() if p.name != "self"]
+        accepts_value = len(params) >= 1
+    except (ValueError, TypeError):
+        # Can't inspect - assume no value parameter
+        accepts_value = False
+
+    # Get the underlying observable
+    observable = var.observable
+
+    # Wire up based on observable type
+    if isinstance(observable, Observable):
+        # Observable[T] - on_change(callback) passes new value
+        if accepts_value:
+            observable.on_change(lambda v: callback(v))
+        else:
+            observable.on_change(lambda _: callback())
+    else:
+        # Collection types (ObservableList, ObservableDict, ObservableSet) and ObservableProxy
+        # - on_change() takes no args
+        observable.on_change(callback)  # type: ignore[arg-type]
+
+
+def _wire_on_insert_callback(
+    obj: object,
+    var: Variable[Any],
+    on_insert: str | Callable[..., Any],
+) -> None:
+    """Wire up an onInsert callback to an ObservableList or ObservableDict.
+
+    For ObservableList: callback receives (index: int, item: T)
+    For ObservableDict: callback receives (key: K, value: V)
+    """
+    import inspect
+
+    if isinstance(on_insert, str):
+        callback = getattr(obj, on_insert, None)
+        if callback is None:
+            return
+    else:
+        callback = on_insert
+
+    observable = var.observable
+
+    if isinstance(observable, ObservableList):
+        # ObservableList.on_insert(callback) passes (index, item)
+        # Check if callback accepts args
+        try:
+            sig = inspect.signature(callback)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+            num_params = len(params)
+        except (ValueError, TypeError):
+            num_params = 0
+
+        if num_params >= 2:
+            observable.on_insert(lambda idx, item: callback(item, idx))
+        elif num_params == 1:
+            observable.on_insert(lambda idx, item: callback(item))
+        else:
+            observable.on_insert(lambda idx, item: callback())
+    elif isinstance(observable, ObservableDict):
+        # ObservableDict.on_insert(callback) passes (key, value)
+        try:
+            sig = inspect.signature(callback)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+            num_params = len(params)
+        except (ValueError, TypeError):
+            num_params = 0
+
+        if num_params >= 2:
+            observable.on_insert(lambda key, val: callback(key, val))
+        elif num_params == 1:
+            observable.on_insert(lambda key, val: callback(key))
+        else:
+            observable.on_insert(lambda key, val: callback())
+
+
+def _wire_on_remove_callback(
+    obj: object,
+    var: Variable[Any],
+    on_remove: str | Callable[..., Any],
+) -> None:
+    """Wire up an onRemove callback to an ObservableList, ObservableSet, or ObservableDict.
+
+    For ObservableList: callback receives (index: int, item: T)
+    For ObservableSet: callback receives (item: T)
+    For ObservableDict: callback receives (key: K, value: V)
+    """
+    import inspect
+
+    if isinstance(on_remove, str):
+        callback = getattr(obj, on_remove, None)
+        if callback is None:
+            return
+    else:
+        callback = on_remove
+
+    observable = var.observable
+
+    try:
+        sig = inspect.signature(callback)
+        params = [p for p in sig.parameters.values() if p.name != "self"]
+        num_params = len(params)
+    except (ValueError, TypeError):
+        num_params = 0
+
+    if isinstance(observable, ObservableList):
+        # ObservableList.on_remove(callback) passes (index, item)
+        if num_params >= 2:
+            observable.on_remove(lambda idx, item: callback(item, idx))
+        elif num_params == 1:
+            observable.on_remove(lambda idx, item: callback(item))
+        else:
+            observable.on_remove(lambda idx, item: callback())
+    elif isinstance(observable, ObservableSet):
+        # ObservableSet.on_remove(callback) passes (item,)
+        if num_params >= 1:
+            observable.on_remove(lambda item: callback(item))
+        else:
+            observable.on_remove(lambda item: callback())
+    elif isinstance(observable, ObservableDict):
+        # ObservableDict.on_remove(callback) passes (key, value)
+        if num_params >= 2:
+            observable.on_remove(lambda key, val: callback(key, val))
+        elif num_params == 1:
+            observable.on_remove(lambda key, val: callback(key))
+        else:
+            observable.on_remove(lambda key, val: callback())
+
+
+def _wire_on_add_callback(
+    obj: object,
+    var: Variable[Any],
+    on_add: str | Callable[..., Any],
+) -> None:
+    """Wire up an onAdd callback to an ObservableSet.
+
+    Callback receives (item: T)
+    """
+    import inspect
+
+    if isinstance(on_add, str):
+        callback = getattr(obj, on_add, None)
+        if callback is None:
+            return
+    else:
+        callback = on_add
+
+    observable = var.observable
+
+    if isinstance(observable, ObservableSet):
+        try:
+            sig = inspect.signature(callback)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+            num_params = len(params)
+        except (ValueError, TypeError):
+            num_params = 0
+
+        if num_params >= 1:
+            observable.on_add(lambda item: callback(item))
+        else:
+            observable.on_add(lambda item: callback())
+
+
+def _wire_on_set_callback(
+    obj: object,
+    var: Variable[Any],
+    on_set: str | Callable[..., Any],
+) -> None:
+    """Wire up an onSet callback to an ObservableDict.
+
+    Callback receives (key: K, value: V)
+    Note: Maps to on_insert which fires for both new keys and updates.
+    """
+    import inspect
+
+    if isinstance(on_set, str):
+        callback = getattr(obj, on_set, None)
+        if callback is None:
+            return
+    else:
+        callback = on_set
+
+    observable = var.observable
+
+    if isinstance(observable, ObservableDict):
+        try:
+            sig = inspect.signature(callback)
+            params = [p for p in sig.parameters.values() if p.name != "self"]
+            num_params = len(params)
+        except (ValueError, TypeError):
+            num_params = 0
+
+        if num_params >= 2:
+            observable.on_insert(lambda key, val: callback(key, val))
+        elif num_params == 1:
+            observable.on_insert(lambda key, val: callback(key))
+        else:
+            observable.on_insert(lambda key, val: callback())
+
+
 def create_variable_descriptor(
     default: Any,
     name: str,
@@ -1195,10 +1456,39 @@ def create_variable_descriptor(
     target_layout: str | None = None,
     inner_kwargs: dict[str, Any] | None = None,
     persist_key: str | None = None,
+    on_change: str | Callable[..., Any] | None = None,
+    on_insert: str | Callable[..., Any] | None = None,
+    on_remove: str | Callable[..., Any] | None = None,
+    on_replace: str | Callable[..., Any] | None = None,
+    on_clear: str | Callable[..., Any] | None = None,
+    on_add: str | Callable[..., Any] | None = None,
+    on_set: str | Callable[..., Any] | None = None,
 ) -> Any:
     """Create a variable descriptor. Used by NewField."""
     return _VariableDescriptor(
-        default, name, inner_type, widget_type, widget_args, widget_kwargs, label, grid, exclude_from_layout, validators, object_name, css_classes, dock_info, target_layout, inner_kwargs, persist_key
+        default,
+        name,
+        inner_type,
+        widget_type,
+        widget_args,
+        widget_kwargs,
+        label,
+        grid,
+        exclude_from_layout,
+        validators,
+        object_name,
+        css_classes,
+        dock_info,
+        target_layout,
+        inner_kwargs,
+        persist_key,
+        on_change,
+        on_insert,
+        on_remove,
+        on_replace,
+        on_clear,
+        on_add,
+        on_set,
     )
 
 

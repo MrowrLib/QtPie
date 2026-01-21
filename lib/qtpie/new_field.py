@@ -47,6 +47,17 @@ class NewField:
         # Event handlers (not Qt signals, but handled via event filter)
         # Keys are event names like "onFocus", "onMouseEnter", etc.
         self.event_handlers: dict[str, str | Callable[..., Any]] = {}
+        # Variable callbacks (onChange, onInsert, onRemove, etc.)
+        self.on_change: str | Callable[..., Any] | None = None
+        # List-specific callbacks
+        self.on_insert: str | Callable[..., Any] | None = None
+        self.on_remove: str | Callable[..., Any] | None = None
+        self.on_replace: str | Callable[..., Any] | None = None
+        self.on_clear: str | Callable[..., Any] | None = None
+        # Set-specific callbacks
+        self.on_add: str | Callable[..., Any] | None = None
+        # Dict-specific callbacks (onRemove shared with list/set)
+        self.on_set: str | Callable[..., Any] | None = None
         self.widget_props: dict[str, Any] = {}  # propName -> value (becomes setPropName(value))
         # Layout params for form/grid layouts
         self.label: str | None = None  # For form layouts: new(label="Name")
@@ -455,6 +466,41 @@ class NewField:
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
 
+            # Extract Variable callbacks - onChange applies to all types
+            on_change = self.kwargs.pop("onChange", None)
+            self.on_change = on_change
+
+            # Extract type-specific callbacks based on inner_type
+            on_insert: str | Callable[..., Any] | None = None
+            on_remove: str | Callable[..., Any] | None = None
+            on_replace: str | Callable[..., Any] | None = None
+            on_clear: str | Callable[..., Any] | None = None
+            on_add: str | Callable[..., Any] | None = None
+            on_set: str | Callable[..., Any] | None = None
+
+            inner_origin = get_origin(inner_type)
+            if inner_origin is list:
+                # List callbacks: onInsert, onRemove, onReplace, onClear
+                on_insert = self.kwargs.pop("onInsert", None)
+                on_remove = self.kwargs.pop("onRemove", None)
+                on_replace = self.kwargs.pop("onReplace", None)
+                on_clear = self.kwargs.pop("onClear", None)
+            elif inner_origin is set:
+                # Set callbacks: onAdd, onRemove
+                on_add = self.kwargs.pop("onAdd", None)
+                on_remove = self.kwargs.pop("onRemove", None)
+            elif inner_origin is dict:
+                # Dict callbacks: onSet, onRemove
+                on_set = self.kwargs.pop("onSet", None)
+                on_remove = self.kwargs.pop("onRemove", None)
+
+            self.on_insert = on_insert
+            self.on_remove = on_remove
+            self.on_replace = on_replace
+            self.on_clear = on_clear
+            self.on_add = on_add
+            self.on_set = on_set
+
             # Remaining self.kwargs are constructor kwargs for the inner type T
             # (only used when no widget_type, i.e., Variable[T] not Variable[T, W])
             # Convert any NewField references to string names for deferred resolution
@@ -483,6 +529,13 @@ class NewField:
                 target_layout,
                 inner_kwargs if inner_kwargs else None,
                 persist_key,
+                on_change,
+                on_insert,
+                on_remove,
+                on_replace,
+                on_clear,
+                on_add,
+                on_set,
             )
             setattr(owner, name, descriptor)
             return

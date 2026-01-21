@@ -16,6 +16,7 @@ from .messagebox import MessageBoxResult, confirm, messagebox
 from .new import new, none
 from .new_fields import new_fields
 from .ref import Ref, ref
+from .service import Service, service
 from .set_widget_repeater import SetWidgetRepeater
 from .setting import Setting
 from .slot import slot
@@ -68,6 +69,8 @@ __all__ = [
     "Ref",
     "Section",
     "Separator",
+    "Service",
+    "service",
     "SetWidgetRepeater",
     "Setting",
     "Translatable",
