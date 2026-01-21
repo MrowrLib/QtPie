@@ -5,13 +5,13 @@ from pathlib import Path
 
 from forc.domain.formats import YamlFormat
 from forc.domain.models import Collection, KeyValue, Request, Workspace
-from qtpie import Variable, new
+from qtpie import State, Variable, new, state
 
 from .environments import EnvironmentsService
 
 
-# @service
-class WorkspaceService:
+@state
+class WorkspaceService(State):
     ### Variables ###
     workspace: Variable[Workspace | None] = new(None)
 

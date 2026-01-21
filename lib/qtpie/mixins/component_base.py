@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, overload
 from observant import Observable
 
 if TYPE_CHECKING:
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
 
 
 class QtPieComponentBase:
@@ -36,7 +36,7 @@ class QtPieComponentBase:
 
     def _ensure_state(self) -> QtPieState:
         """Ensure _qtpie state exists, creating it lazily if needed."""
-        from qtpie.state import QtPieState
+        from qtpie.qt_pie_state import QtPieState
 
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)  # type: ignore[arg-type]

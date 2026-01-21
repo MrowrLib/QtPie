@@ -9,8 +9,8 @@
 # pyright: reportUntypedClassDecorator=false
 """Tests for Variable callbacks (onChange, onInsert, etc.) across all QtPie class types.
 
-These callbacks were originally implemented for Service, but should work on all
-QtPie classes that host Variables: Widget, Window, Dialog, Menu, App, WidgetBase, Service.
+These callbacks were originally implemented for State, but should work on all
+QtPie classes that host Variables: Widget, Window, Dialog, Menu, App, WidgetBase, State.
 """
 
 import pytest
@@ -20,10 +20,10 @@ from PySide6.QtWidgets import QLabel
 from qtpie import Variable, new
 from qtpie.testing import QtDriver
 
-from .conftest import ALL_CLASS_TYPES_WITH_SERVICE, WIDGET_CLASS_TYPES, create_and_track
+from .conftest import ALL_CLASS_TYPES_WITH_STATE, WIDGET_CLASS_TYPES, create_and_track
 
 
-@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_SERVICE)
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_STATE)
 class TestOnChangeCallback:
     """onChange callback works across all class types."""
 
@@ -91,7 +91,7 @@ class TestOnChangeCallback:
         assert_that(calls).is_equal_to([42])
 
 
-@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_SERVICE)
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_STATE)
 class TestListCallbacks:
     """List Variable callbacks (onInsert, onRemove) work across all class types."""
 
@@ -165,7 +165,7 @@ class TestListCallbacks:
         assert_that(inserts).is_equal_to(["x"])
 
 
-@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_SERVICE)
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_STATE)
 class TestSetCallbacks:
     """Set Variable callbacks (onAdd, onRemove) work across all class types."""
 
@@ -226,7 +226,7 @@ class TestSetCallbacks:
         assert_that(removes).is_equal_to(["x"])
 
 
-@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_SERVICE)
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES_WITH_STATE)
 class TestDictCallbacks:
     """Dict Variable callbacks (onSet, onRemove) work across all class types."""
 

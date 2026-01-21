@@ -63,7 +63,7 @@ def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None
     """
     from observant import Observable
 
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
     from qtpie.variable import Variable as VarType
     from qtpie.variable import _RequiredBindingDescriptor, _VariableDescriptor  # pyright: ignore[reportPrivateUsage]
 
@@ -183,7 +183,7 @@ def _resolve_or_create_variable(
     from observant import Observable
 
     from qtpie.bindings import resolve_binding_source
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
     from qtpie.variable import Variable as VarType
     from qtpie.variable import (
         _RequiredBindingDescriptor,  # pyright: ignore[reportPrivateUsage]

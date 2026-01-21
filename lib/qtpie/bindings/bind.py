@@ -114,8 +114,8 @@ class Binding[T]:
         # For Widget[T], we need to share our ObservableProxy with the widget's record
         if isinstance(observable, ObservableProxy):
             # Import here to avoid circular imports
+            from ..qt_pie_state import QtPieState
             from ..repeaters.utils import rebind_child_widgets
-            from ..state import QtPieState
             from ..variable import RecordVariable
             from .apply import apply_auto_bindings
 

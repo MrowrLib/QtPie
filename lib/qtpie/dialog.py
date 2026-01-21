@@ -20,8 +20,8 @@ from .layout import GridPosition, LayoutType
 from .mixins import QtPieComponentBase
 from .new_field import NewField
 from .new_fields import new_fields
+from .qt_pie_state import QtPieState
 from .signals import create_signal_expression_handler
-from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor

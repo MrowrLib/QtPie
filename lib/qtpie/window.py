@@ -16,12 +16,13 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from .event import extract_event_args, is_event_hint
 from .layout import GridPosition, LayoutType
 from .mixins import QtPieComponentBase
 from .new_field import NewField
 from .new_fields import new_fields
+from .qt_pie_state import QtPieState
 from .signals import create_signal_expression_handler
-from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
@@ -125,6 +126,9 @@ class Window[T = None](QMainWindow, QtPieComponentBase):
         # These are required bindings - must be provided by parent
         _detect_required_bindings_for_window(cls)
 
+        # Process Event[T] annotations and create real Qt Signals
+        _process_event_annotations_for_window(cls)
+
         # Auto-new bare annotations (non-Variable types)
         from .widget_base import _auto_new_bare_annotations
 
@@ -219,6 +223,32 @@ def _detect_required_bindings_for_window(cls: type[Window[Any]]) -> None:
 
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
     detect_required_bindings(cls, "_qtpie_config", Setting, _RequiredBindingDescriptor)
+
+
+def _process_event_annotations_for_window(cls: type[Window[Any]]) -> None:
+    """Process Event[T] annotations and create real Qt Signals.
+
+    A bare annotation like `on_click: Event` or `on_changed: Event[int]`
+    gets a real Qt Signal created on the class.
+    """
+    import typing
+
+    from qtpy.QtCore import Signal
+
+    # Get annotations including from parent classes
+    hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
+
+    for name, hint in hints.items():
+        # Skip if already has a value
+        if name in cls.__dict__:
+            continue
+
+        # Check if it's an Event annotation
+        if is_event_hint(hint):
+            # Extract signal argument types from Event[T]
+            args = extract_event_args(hint)
+            # Create real Qt Signal on the class
+            setattr(cls, name, Signal(*args))
 
 
 @overload

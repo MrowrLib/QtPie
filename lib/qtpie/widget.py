@@ -13,13 +13,14 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from .event import extract_event_args, is_event_hint
 from .layout import GridPosition, LayoutType
 from .mixins import QtPieComponentBase
 from .new_field import NewField
 from .new_fields import new_fields
+from .qt_pie_state import QtPieState
 from .qtpie_config import _QtPieConfig
 from .signals import create_signal_expression_handler
-from .state import QtPieState
 from .utils.common import detect_required_bindings
 from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
 from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
@@ -233,6 +234,9 @@ class Widget[T = None](QWidget, QtPieComponentBase):
         # Detect bare Variable[T] annotations (no = new())
         # These are required bindings - must be provided by parent
         _detect_required_bindings(cls)
+
+        # Process Event[T] annotations and create real Qt Signals
+        _process_event_annotations_for_widget(cls)
 
         # Auto-new bare annotations (non-Variable types)
         from .widget_base import _auto_new_bare_annotations, _auto_record_bind_children
@@ -1644,6 +1648,36 @@ def _detect_required_bindings(cls: type[Widget[Any]]) -> None:
 
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
     detect_required_bindings(cls, "_qtpie_config", Setting, _RequiredBindingDescriptor)
+
+
+def _process_event_annotations_for_widget(cls: type[Widget[Any]]) -> None:
+    """Process Event[T] annotations and create real Qt Signals.
+
+    A bare annotation like `on_click: Event` or `on_changed: Event[int]`
+    gets a real Qt Signal created on the class.
+
+    This enables the unified Event API:
+    - In State: Event annotation creates pure Python Event()
+    - In Widget: Event annotation creates real Qt Signal
+    """
+    import typing
+
+    from qtpy.QtCore import Signal
+
+    # Get annotations including from parent classes
+    hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
+
+    for name, hint in hints.items():
+        # Skip if already has a value (e.g., on_click = Signal(int))
+        if name in cls.__dict__:
+            continue
+
+        # Check if it's an Event annotation
+        if is_event_hint(hint):
+            # Extract signal argument types from Event[T]
+            args = extract_event_args(hint)
+            # Create real Qt Signal on the class
+            setattr(cls, name, Signal(*args))
 
 
 def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) -> None:

@@ -35,7 +35,7 @@ def find_variable_in_hierarchy(context: Any, name: str) -> Any | None:
     Returns:
         The Variable object if found, None otherwise.
     """
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
 
     # Try on context itself
     found = _try_get_variable_from_obj(context, name)
@@ -129,7 +129,7 @@ def find_setting_by_key(context: Any, key: str) -> Any | None:
     Returns:
         The Setting object if found, None otherwise.
     """
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
 
     # Try on context itself
     found = _try_get_setting_by_key(context, key)
@@ -232,7 +232,7 @@ def resolve_var(context: Any, name: str) -> Any:
         count = self.var("count")  # Gets current value of _count Variable
         item = self.var("selected_item")  # May resolve from parent widget
     """
-    from qtpie.state import QtPieState
+    from qtpie.qt_pie_state import QtPieState
     from qtpie.variable import Variable
 
     # Try on context itself (with underscore variants)

@@ -10,8 +10,8 @@ from observant import Observable
 
 from .new_field import NewField
 from .new_fields import new_fields
+from .qt_pie_state import QtPieState
 from .qtpie_config import _QtPieConfig
-from .state import QtPieState
 from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 
 

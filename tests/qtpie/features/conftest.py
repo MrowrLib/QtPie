@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from PySide6.QtWidgets import QLabel
 
-from qtpie import AppBase, Dialog, Menu, Service, Widget, WidgetBase, Window, app, dialog, menu, service, widget, window
+from qtpie import AppBase, Dialog, Menu, State, Widget, WidgetBase, Window, app, dialog, menu, state, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -69,16 +69,16 @@ RECORD_CLASS_TYPES = [
     pytest.param(AppBase, app, id="App"),
 ]
 
-# All class types including Service - for features that work on all Variable hosts
-# Service is not a QWidget, so it doesn't need tracking
-ALL_CLASS_TYPES_WITH_SERVICE = [
+# All class types including State - for features that work on all Variable hosts
+# State is not a QWidget, so it doesn't need tracking
+ALL_CLASS_TYPES_WITH_STATE = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
     pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(Menu, menu, id="Menu"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
-    pytest.param(Service, service, id="Service"),
+    pytest.param(State, state, id="State"),
 ]
 
 
@@ -102,8 +102,8 @@ def create_and_track(
     """
     instance = decorated_class(**kwargs)
 
-    if base_class is Service:
-        # Service is not a QWidget, just return the instance
+    if base_class is State:
+        # State is not a QWidget, just return the instance
         pass
     elif base_class is AppBase:
         # AppBase is not a QWidget, but if it has a window, track that

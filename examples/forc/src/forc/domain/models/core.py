@@ -5,6 +5,8 @@ from enum import Enum
 
 from observant import Observable, ObservableList
 
+from qtpie import State
+
 from .auth import Auth
 
 
@@ -76,11 +78,22 @@ class Environment:
 
 
 @dataclass
-class Workspace:
+class Workspace(State):
     name: str
     collections: ObservableList[Collection] = field(default_factory=lambda: ObservableList[Collection]())
     environments: ObservableList[Environment] = field(default_factory=lambda: ObservableList[Environment]())
     active_environment: Observable[str | None] = field(default_factory=lambda: Observable[str | None](None))
+
+
+# Maybe something like this:
+#
+# @state
+# @dataclass
+# class Workspace(State):
+#     name: Variable[str] = new("")
+#     collections: Variable[list[Collection]] = new([])
+#     environments: Variable[list[Environment]] = new([])
+#     active_environment: Variable[str | None] = new(None)
 
 
 def validate_request_name(

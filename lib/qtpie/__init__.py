@@ -10,16 +10,17 @@ from .dock import Dock
 from .dock_widget_repeater import DockWidgetRepeater
 from .embed import EmbedConfig, embed
 from .entrypoint import entrypoint
+from .event import Event
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .messagebox import MessageBoxResult, confirm, messagebox
 from .new import new, none
 from .new_fields import new_fields
 from .ref import Ref, ref
-from .service import Service, service
 from .set_widget_repeater import SetWidgetRepeater
 from .setting import Setting
 from .slot import slot
+from .state import State, state
 from .styles import (
     ColorScheme,
     enable_dark_mode,
@@ -46,6 +47,7 @@ __all__ = [
     "ButtonInfo",
     "ColorScheme",
     "Dialog",
+    "Event",
     "DialogButton",
     "DialogButtons",
     "DialogConfig",
@@ -69,8 +71,8 @@ __all__ = [
     "Ref",
     "Section",
     "Separator",
-    "Service",
-    "service",
+    "State",
+    "state",
     "SetWidgetRepeater",
     "Setting",
     "Translatable",

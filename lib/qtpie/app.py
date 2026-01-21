@@ -730,7 +730,7 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
 
         # Initialize state for dirty tracking and validation
         # _qtpie may already exist if _RecordDescriptor created it during new_fields
-        from qtpie.state import QtPieState
+        from qtpie.qt_pie_state import QtPieState
 
         if not hasattr(self, "_qtpie"):
             self._qtpie = QtPieState(self)  # type: ignore[attr-defined]

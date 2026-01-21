@@ -746,7 +746,7 @@ class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - use
             return self  # type: ignore[return-value]
 
         # Check if Variable was created by explicit binding
-        from .state import QtPieState
+        from .qt_pie_state import QtPieState
 
         if not hasattr(obj, "_qtpie"):
             obj._qtpie = QtPieState(obj)  # type: ignore[attr-defined]
@@ -770,7 +770,7 @@ class _RequiredBindingDescriptor[T]:  # pyright: ignore[reportUnusedClass] - use
 
     def __set__(self, obj: object, value: T | Variable[T] | RecordVariable[T]) -> None:
         """Allow setting either a Variable/RecordVariable (for binding injection) or a value."""
-        from .state import QtPieState
+        from .qt_pie_state import QtPieState
 
         if not hasattr(obj, "_qtpie"):
             obj._qtpie = QtPieState(obj)  # type: ignore[attr-defined]
@@ -1220,14 +1220,65 @@ def _wire_on_change_callback(
 ) -> None:
     """Wire up an onChange callback to a Variable's underlying Observable.
 
+    For State objects, if the callback method is not found on obj, it walks
+    up the state_parent hierarchy to find it (lazily at emit time).
+    If an Event is found, it emits.
+
     Args:
-        obj: The host object (Widget, Service, etc.) that owns the method
+        obj: The host object (Widget, State, etc.) that owns the method
         var: The Variable whose Observable to subscribe to
         on_change: Method name (str) or callable to invoke on change
     """
     import inspect
 
-    # Get the callback function
+    from .event import Event
+    from .state import State, resolve_from_state_hierarchy
+
+    # For string callbacks on State, we need LAZY resolution because
+    # the parent might not be set yet at wire time
+    if isinstance(on_change, str) and isinstance(obj, State):
+        callback_name = on_change
+        state_obj = obj
+        observable = var.observable
+
+        # Create lazy resolver that looks up callback at emit time
+        def lazy_resolve_and_call(value: Any = None) -> None:
+            # First try direct lookup on obj
+            callback = getattr(state_obj, callback_name, None)
+
+            # If not found, walk the parent hierarchy
+            if callback is None:
+                callback = resolve_from_state_hierarchy(state_obj, callback_name)
+
+            if callback is None:
+                return  # Not found anywhere - silently skip
+
+            # Handle Event - emit it
+            if isinstance(callback, Event):
+                callback.emit()
+                return
+
+            # Call the callback
+            try:
+                sig = inspect.signature(callback)
+                params = [p for p in sig.parameters.values() if p.name != "self"]
+                accepts_value = len(params) >= 1
+            except (ValueError, TypeError):
+                accepts_value = False
+
+            if accepts_value and value is not None:
+                callback(value)
+            else:
+                callback()
+
+        if isinstance(observable, Observable):
+            observable.on_change(lazy_resolve_and_call)
+        else:
+            observable.on_change(lambda: lazy_resolve_and_call())  # type: ignore[arg-type]
+        return
+
+    # Non-State case: direct callback lookup (original behavior)
+    callback: Callable[..., Any] | None = None
     if isinstance(on_change, str):
         callback = getattr(obj, on_change, None)
         if callback is None:
@@ -1268,19 +1319,60 @@ def _wire_on_insert_callback(
 ) -> None:
     """Wire up an onInsert callback to an ObservableList or ObservableDict.
 
+    For State objects, resolution is lazy (at emit time) to support parent hierarchy.
     For ObservableList: callback receives (index: int, item: T)
     For ObservableDict: callback receives (key: K, value: V)
     """
     import inspect
 
+    from .event import Event
+    from .state import State, resolve_from_state_hierarchy
+
+    observable = var.observable
+
+    # For string callbacks on State, use LAZY resolution
+    if isinstance(on_insert, str) and isinstance(obj, State):
+        callback_name = on_insert
+        state_obj = obj
+
+        def lazy_resolve_and_call(index_or_key: Any, item_or_value: Any) -> None:
+            callback = getattr(state_obj, callback_name, None)
+            if callback is None:
+                callback = resolve_from_state_hierarchy(state_obj, callback_name)
+            if callback is None:
+                return
+
+            if isinstance(callback, Event):
+                callback.emit()
+                return
+
+            try:
+                sig = inspect.signature(callback)
+                params = [p for p in sig.parameters.values() if p.name != "self"]
+                num_params = len(params)
+            except (ValueError, TypeError):
+                num_params = 0
+
+            if num_params >= 2:
+                callback(item_or_value, index_or_key)
+            elif num_params == 1:
+                callback(item_or_value)
+            else:
+                callback()
+
+        if isinstance(observable, ObservableList):
+            observable.on_insert(lazy_resolve_and_call)
+        elif isinstance(observable, ObservableDict):
+            observable.on_insert(lazy_resolve_and_call)
+        return
+
+    # Non-State case: direct callback lookup (original behavior)
     if isinstance(on_insert, str):
         callback = getattr(obj, on_insert, None)
         if callback is None:
             return
     else:
         callback = on_insert
-
-    observable = var.observable
 
     if isinstance(observable, ObservableList):
         # ObservableList.on_insert(callback) passes (index, item)
