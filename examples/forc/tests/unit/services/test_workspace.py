@@ -6,13 +6,13 @@ from pathlib import Path
 
 from assertpy import assert_that
 from forc.domain.models import Collection, HttpMethod, KeyValue, Request
-from forc.services.workspace import WorkspaceService
+from forc.services.workspace import OldWorkspaceService
 
 
 class TestWorkspaceServiceBasic:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
 
     def test_initially_not_loaded(self) -> None:
         assert_that(self.svc.is_loaded).is_false()
@@ -60,7 +60,7 @@ class TestWorkspaceServiceEnvironments:
 
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_create_environment(self) -> None:
@@ -123,7 +123,7 @@ class TestWorkspaceServiceEnvironments:
         self.svc.save()
 
         # Reload and verify
-        svc2 = WorkspaceService()
+        svc2 = OldWorkspaceService()
         ws2 = svc2.load(self.tmp_dir / "test")
         assert_that(ws2.active_environment.get()).is_equal_to("dev")
 
@@ -132,7 +132,7 @@ class TestWorkspaceServiceEnvironments:
         self.svc.save()
 
         # Reload again and verify the change persisted
-        svc3 = WorkspaceService()
+        svc3 = OldWorkspaceService()
         ws3 = svc3.load(self.tmp_dir / "test")
         assert_that(ws3.active_environment.get()).is_equal_to("prod")
 
@@ -148,7 +148,7 @@ class TestWorkspaceServiceEnvironments:
         self.svc.save()
 
         # Reload and verify it's cleared
-        svc2 = WorkspaceService()
+        svc2 = OldWorkspaceService()
         ws2 = svc2.load(self.tmp_dir / "test")
         assert_that(ws2.active_environment.get()).is_none()
 
@@ -156,7 +156,7 @@ class TestWorkspaceServiceEnvironments:
 class TestWorkspaceServiceCollections:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_create_collection(self) -> None:
@@ -180,7 +180,7 @@ class TestWorkspaceServiceCollections:
 class TestWorkspaceServiceVariableResolution:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_resolve_from_environment(self) -> None:
@@ -238,7 +238,7 @@ class TestWorkspaceServiceVariableResolution:
 class TestWorkspaceServiceResolveRequest:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
         self.svc.environments.create("dev")
@@ -294,7 +294,7 @@ class TestWorkspaceServiceResolveRequest:
 class TestWorkspaceServicePersistence:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
 
     def test_full_round_trip(self) -> None:
         # Create with data
@@ -313,7 +313,7 @@ class TestWorkspaceServicePersistence:
         self.svc.save()
 
         # Load fresh
-        svc2 = WorkspaceService()
+        svc2 = OldWorkspaceService()
         ws = svc2.load(self.tmp_dir / "project")
 
         assert_that(ws.name).is_equal_to("Full Project")
@@ -327,7 +327,7 @@ class TestWorkspaceServicePersistence:
 class TestWorkspaceServiceRename:
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
     def test_rename_request(self) -> None:
@@ -490,7 +490,7 @@ class TestWorkspaceServiceCRUD:
 
     def setup_method(self) -> None:
         self.tmp_dir = Path(tempfile.mkdtemp())
-        self.svc = WorkspaceService()
+        self.svc = OldWorkspaceService()
         self.svc.create("Test", self.tmp_dir / "test")
 
     # --- create_collection tests ---

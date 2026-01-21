@@ -14,6 +14,7 @@ Example:
             ...
 """
 
+from collections.abc import Callable
 from typing import Any, overload
 
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
@@ -122,6 +123,11 @@ def _wrap_init_for_service(cls: type[Service]) -> None:
         # Call original __init__
         original_init(self, *args, **kwargs)
 
+        # Call __setup__ hook if defined
+        setup_method = getattr(self, "__setup__", None)
+        if setup_method is not None:
+            setup_method()
+
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._service_config.init_wrapped = True
 
@@ -164,14 +170,18 @@ def _apply_variable_kwargs_for_service(instance: Service, variable_kwargs: dict[
 
 
 @overload
-def service(cls: type[Service]) -> type[Service]: ...
+def service[S: Service](cls: type[S]) -> type[S]: ...
 
 
 @overload
-def service(cls: None = None) -> type[Service]: ...
+def service[S: Service](
+    cls: None = None,
+) -> Callable[[type[S]], type[S]]: ...
 
 
-def service(cls: type[Service] | None = None) -> type[Service]:
+def service[S: Service](
+    cls: type[S] | None = None,
+) -> type[S] | Callable[[type[S]], type[S]]:
     """Decorator to mark a class as a QtPie Service.
 
     Usage:
@@ -183,12 +193,12 @@ def service(cls: type[Service] | None = None) -> type[Service]:
     but have no Qt dependencies.
     """
 
-    def decorator(target: type[Service]) -> type[Service]:
+    def decorator(target: type[S]) -> type[S]:
         # Wrap __init__ to set up instance state
-        _wrap_init_for_service(target)
+        _wrap_init_for_service(target)  # type: ignore[arg-type]
         return target
 
     if cls is not None:
         return decorator(cls)
 
-    return decorator  # type: ignore[return-value]
+    return decorator

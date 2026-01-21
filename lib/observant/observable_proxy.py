@@ -862,6 +862,13 @@ class ObservableProxy[T]:
         if isinstance(value, (Observable, ObservableList, ObservableDict, ObservableProxy)):
             return value  # pyright: ignore[reportUnknownVariableType]
 
+        # Check for Variable-like objects (have .observable property that returns an Observable)
+        # This handles qtpie.Variable without coupling observant to qtpie
+        if hasattr(value, "observable"):
+            inner_obs = getattr(value, "observable", None)
+            if isinstance(inner_obs, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+                return inner_obs  # pyright: ignore[reportUnknownVariableType]
+
         # For primitives, return Observable
         if _is_primitive(value):
             return self._get_or_create_field_observable(name)

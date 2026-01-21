@@ -500,19 +500,30 @@ def _traverse_optional_path(expr: str, context: dict[str, Any]) -> Any:
         return None
 
     # Traverse remaining segments
+    # Import here to avoid circular imports
+    from qtpie.variable import Variable
+
     for attr_name, is_opt in segments[1:]:
         if current is None:
             return None
-        if not hasattr(current, attr_name):
+        # Unwrap Variable to get actual value for traversal
+        if isinstance(current, Variable):
+            current = current.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            if current is None:
+                return None
+        if not hasattr(current, attr_name):  # pyright: ignore[reportUnknownArgumentType]
             if is_opt:
                 return None
             # Required attribute missing - let caller handle
-            raise AttributeError(f"'{type(current).__name__}' has no attribute '{attr_name}'")
-        current = getattr(current, attr_name)
+            raise AttributeError(f"'{type(current).__name__}' has no attribute '{attr_name}'")  # pyright: ignore[reportUnknownArgumentType]
+        current = getattr(current, attr_name)  # pyright: ignore[reportUnknownArgumentType]
+        # Unwrap Variable result as well
+        if isinstance(current, Variable):
+            current = current.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if is_opt and current is None:
             return None
 
-    return current
+    return current  # pyright: ignore[reportUnknownVariableType]
 
 
 def _get_variable_names(fields: list[_FormatField]) -> set[str]:
@@ -564,7 +575,11 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
             result.append(source)
 
     # Try to resolve as binding source (full path) on current widget
+    import logging
+
+    _logger = logging.getLogger("qtpie.format_binding")
     source = resolve_binding_source(widget, name)
+    _logger.debug("_get_observables_for_name: resolve_binding_source(%r) -> %s (type=%s)", name, source, type(source).__name__ if source else None)
     if source is not None:
         add_source(source)
 
@@ -609,15 +624,41 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
 
     # For nested paths like "workspace.name", also try to subscribe to the ROOT Variable
     # This is critical because the root Variable's Observable is what changes when the value is replaced
+    _logger.debug("_get_observables_for_name: checking nested path, normalized=%r, has_dot=%s", normalized, "." in normalized)
     if "." in normalized:
         # Try root name directly on widget (handles descriptors like bare Variables)
         root_attr: Any = getattr(widget, root_name, None)
+        _logger.debug("_get_observables_for_name: root_attr from widget=%s (type=%s)", root_attr, type(root_attr).__name__ if root_attr else None)
         if root_attr is not None and isinstance(root_attr, Variable):
             add_source(cast(BindingSource, root_attr))
 
     # Also try underscore variants for root name
     lookup_name = root_name.lstrip("_")
     underscore_name = f"_{lookup_name}"
+
+    def traverse_and_subscribe_nested(root_var: Variable[Any, Any]) -> None:
+        """Traverse nested path and subscribe to any Variables along the way.
+
+        e.g., for "workspace_service.workspace.name", subscribe to workspace Variable
+        """
+        parts = normalized.split(".")
+        current_value: Any = root_var.value
+        _logger.debug("  traverse_and_subscribe_nested: parts=%s, root_value=%s", parts, type(current_value).__name__ if current_value else None)
+        for part in parts[1:]:  # Skip root, traverse rest
+            if current_value is None:
+                _logger.debug("    stopped at part=%s: current_value is None", part)
+                break
+            nested_attr: Any = getattr(current_value, part, None)
+            _logger.debug("    part=%s, nested_attr=%s (type=%s)", part, nested_attr, type(nested_attr).__name__)
+            if nested_attr is not None and isinstance(nested_attr, Variable):
+                nested_var = cast("Variable[Any, Any]", nested_attr)
+                nested_obs_id = id(nested_var.observable)
+                if not any(id(obs) == nested_obs_id for obs in result):
+                    _logger.debug("    -> subscribing to nested Variable!")
+                    add_source(nested_var)
+                current_value = nested_var.value
+            else:
+                current_value = nested_attr
 
     # Track if we found the root Variable on current widget (for nested paths)
     found_root_on_widget = False
@@ -631,6 +672,9 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                     obs_id = id(root_var.observable)
                     if not any(id(obs) == obs_id for obs in result):
                         add_source(root_var)
+
+                    # Traverse nested path to find and subscribe to nested Variables
+                    traverse_and_subscribe_nested(root_var)
                     found_root_on_widget = True
                     break
             except Exception:
@@ -667,6 +711,9 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                         # Avoid duplicates
                         if not any(id(obs) == obs_id for obs in result):
                             add_source(cast(BindingSource, found))
+                        # Also traverse nested path to subscribe to nested Variables
+                        if "." in normalized:
+                            traverse_and_subscribe_nested(found)
                         found_in_parent = True
                     break
 
@@ -687,6 +734,9 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                             obs_id = id(found.observable)
                             if not any(id(obs) == obs_id for obs in result):
                                 add_source(cast(BindingSource, found))
+                            # Also traverse nested path to subscribe to nested Variables
+                            if "." in normalized:
+                                traverse_and_subscribe_nested(found)
                         break
 
     return result
@@ -732,6 +782,11 @@ def create_format_binding(
         setter: Callable to set the formatted value (e.g., label.setText).
         variable: Optional Variable/Observable to use for #self/#var resolution.
     """
+    import logging
+
+    logger = logging.getLogger("qtpie.format_binding")
+    logger.debug("create_format_binding: template=%r, widget=%s", template, type(widget).__name__)
+
     from qtpie.variable import Variable
 
     fields = _parse_format_fields(template)
@@ -740,6 +795,7 @@ def create_format_binding(
 
     # Extract all variable names/paths we need to observe
     var_names = _get_variable_names(fields)
+    logger.debug("  var_names=%s, fields=%s", var_names, [(f.expression, f.is_expression) for f in fields])
 
     # Check for special placeholder usage (can appear anywhere in expression)
     uses_self = any("#self" in f.expression for f in fields)
@@ -756,6 +812,7 @@ def create_format_binding(
 
     for name in var_names:
         obs_list = _get_observables_for_name(widget, name)
+        logger.debug("  _get_observables_for_name(%r) -> %d observables: %s", name, len(obs_list), [type(o).__name__ for o in obs_list])
         all_observables.extend(obs_list)
 
     # If we have a variable, subscribe to it too
@@ -772,6 +829,7 @@ def create_format_binding(
     def compute() -> str:
         # Build context with current values using root names
         context: dict[str, Any] = {}
+        logger.debug("compute() called for template=%r", template)
 
         # Add #widget as 'widget_ref' in context if used
         if uses_widget:
@@ -894,6 +952,8 @@ def create_format_binding(
                             context[root_name] = found_var.value  # pyright: ignore[reportUnknownMemberType]
                             break
 
+        logger.debug("  context keys=%s, values=%s", list(context.keys()), {k: type(v).__name__ for k, v in context.items()})
+
         # Process each field and build the result
         result_parts: list[str] = []
 
@@ -916,6 +976,7 @@ def create_format_binding(
                         value = _eval_with_optional_chaining(eval_expr, context)
                     else:
                         value = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                    logger.debug("  eval(%r) -> %s (type=%s)", eval_expr, value, type(value).__name__)
                     # Unwrap Observable/ObservableProxy/ObservableDict/ObservableList results
                     if isinstance(value, Observable):
                         value = value.get()  # pyright: ignore[reportUnknownVariableType]
@@ -928,7 +989,8 @@ def create_format_binding(
                     # If value is callable (method without parens), call it
                     if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()
-                except Exception:
+                except Exception as e:
+                    logger.debug("  eval(%r) EXCEPTION: %s", eval_expr, e)
                     value = None  # Return None on errors (allows `or 'default'` in expressions)
 
                 # Apply format spec if present

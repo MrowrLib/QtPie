@@ -3,12 +3,13 @@ import os
 
 os.environ["QTPIE_DEBUG"] = "1"  # Must be set before importing qtpie
 
-# Set up file logging for debug output
+# Set up file logging for debug output (logs to both file AND stdout)
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(name)s: %(message)s",
     handlers=[
         logging.FileHandler("forc_debug.log", mode="w"),
+        logging.StreamHandler(),
     ],
 )
 

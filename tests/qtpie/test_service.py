@@ -4,6 +4,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportUnknownLambdaType=false
 # pyright: reportCallIssue=false
+# pyright: reportArgumentType=false
 """Tests for Service - QtPie primitive for business logic without Qt dependencies."""
 
 from assertpy import assert_that
@@ -85,6 +86,52 @@ class TestServiceBasics:
 
         assert_that(svc1.value.value).is_equal_to(10)
         assert_that(svc2.value.value).is_equal_to(20)
+
+
+class TestServiceSetup:
+    """Test __setup__ lifecycle hook on Service."""
+
+    def test_setup_is_called(self) -> None:
+        """__setup__ is called after __init__."""
+        calls: list[str] = []
+
+        @service
+        class MyService(Service):
+            count: Variable[int] = new(0)
+
+            def __setup__(self) -> None:
+                calls.append("setup")
+
+        MyService()
+        assert_that(calls).is_equal_to(["setup"])
+
+    def test_setup_can_access_variables(self) -> None:
+        """__setup__ can access Variables."""
+
+        @service
+        class MyService(Service):
+            count: Variable[int] = new(0)
+            doubled: Variable[int] = new(0)
+
+            def __setup__(self) -> None:
+                self.doubled.value = self.count.value * 2
+
+        svc = MyService(count=5)
+        assert_that(svc.doubled.value).is_equal_to(10)
+
+    def test_setup_called_after_constructor_kwargs_applied(self) -> None:
+        """__setup__ sees constructor-provided values."""
+        seen_values: list[int] = []
+
+        @service
+        class MyService(Service):
+            count: Variable[int] = new(0)
+
+            def __setup__(self) -> None:
+                seen_values.append(self.count.value)
+
+        MyService(count=42)
+        assert_that(seen_values).is_equal_to([42])
 
 
 class TestServiceConstructorKwargs:

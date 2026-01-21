@@ -27,6 +27,7 @@ dev = [
   "assertpy>=1.1",
   "fastapi>=0.128.0",
   "mkdocs-material>=9.7.1",
+  "mypy>=1.19.1",
   "pydantic>=2.12.5",
   "pyright>=1.1.407",
   "pyside6>=6.10.1",
@@ -62,6 +63,9 @@ reportUnknownLambdaType = "error"
 reportUnknownMemberType = "error"
 reportUnknownParameterType = "error"
 reportUnknownVariableType = "error"
+
+# Catch assignment to undeclared attributes
+reportAttributeAccessIssue = "error"
 
 # Extra pedantic goodness
 reportImplicitOverride = "error"
