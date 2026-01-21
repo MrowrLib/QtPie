@@ -64,6 +64,7 @@ class WorkspaceService:
         def on_proxy_available(target: object, proxy: object) -> None:
             if target is self._workspace:
                 from observant import ObservableProxy
+
                 if isinstance(proxy, ObservableProxy):
                     field_obs = proxy._get_or_create_field_observable("active_environment")
                     field_obs.on_change(lambda _: self._save_config())
@@ -72,6 +73,7 @@ class WorkspaceService:
         proxies = get_proxies_for(self._workspace)
         if proxies:
             from observant import ObservableProxy
+
             proxy = proxies[0]
             if isinstance(proxy, ObservableProxy):
                 field_obs = proxy._get_or_create_field_observable("active_environment")
@@ -79,6 +81,7 @@ class WorkspaceService:
         else:
             # Wait for proxy to be created
             from observant import on_proxy_registered
+
             on_proxy_registered(on_proxy_available)
         return self._workspace
 

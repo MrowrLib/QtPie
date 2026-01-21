@@ -190,14 +190,14 @@ def _setup_selection_bindings_impl(
     # Helper to find index of item
     def find_index_of_item(item: Any) -> int:
         import logging
+
         _find_logger = logging.getLogger("qtpie.bindings.selection")
         try:
             current_model = binding_container["model"]
             _find_logger.debug("find_index_of_item: looking for item=%s (id=%s)", item, id(item))
             for i in range(current_model.rowCount()):
                 model_item = get_item_at_index(i)
-                _find_logger.debug("find_index_of_item: index %d has item=%s (id=%s), eq=%s, is=%s",
-                                   i, model_item, id(model_item), model_item == item, model_item is item)
+                _find_logger.debug("find_index_of_item: index %d has item=%s (id=%s), eq=%s, is=%s", i, model_item, id(model_item), model_item == item, model_item is item)
                 if get_item_at_index(i) == item:
                     return i
             return -1
@@ -250,13 +250,15 @@ def _setup_selection_bindings_impl(
             them on the new wrapper.
             """
             import logging
+
             _set_logger = logging.getLogger("qtpie.bindings.selection")
             from dataclasses import is_dataclass
             from enum import Enum
 
             current_item_var = binding_container["item_var"]
-            _set_logger.warning("set_item_var_value called: val=%s, item_var=%s (id=%s), is_observable=%s",
-                               val, type(current_item_var).__name__, id(current_item_var), binding_container["is_observable"])
+            _set_logger.warning(
+                "set_item_var_value called: val=%s, item_var=%s (id=%s), is_observable=%s", val, type(current_item_var).__name__, id(current_item_var), binding_container["is_observable"]
+            )
             if current_item_var is None:
                 return
             if binding_container["is_observable"]:
@@ -317,6 +319,7 @@ def _setup_selection_bindings_impl(
 
         if item_var is not None and set_current_index_fn is not None:
             import logging
+
             _sel_logger = logging.getLogger("qtpie.bindings.selection")
 
             def try_apply_pending_selection() -> bool:
@@ -346,6 +349,7 @@ def _setup_selection_bindings_impl(
             def on_model_rows_inserted(*_args: Any) -> None:
                 """Called when model gets new rows - defer selection to let all inserts complete."""
                 from qtpy.QtCore import QTimer
+
                 _sel_logger.debug("on_model_rows_inserted called, scheduling deferred apply")
                 # Defer to next event loop iteration so all batch inserts complete first
                 QTimer.singleShot(0, try_apply_pending_selection)

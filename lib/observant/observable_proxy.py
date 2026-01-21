@@ -813,6 +813,7 @@ class ObservableProxy[T]:
                                         r.set(val)
                                     finally:
                                         s["flag"] = False
+
                                 return sync
 
                             def make_sync_to_pending_obs(p: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
@@ -825,6 +826,7 @@ class ObservableProxy[T]:
                                         p.set(val)
                                     finally:
                                         s["flag"] = False
+
                                 return sync
 
                             pending_obs.on_change(make_sync_to_real_obs(real_obs, syncing))
@@ -856,6 +858,7 @@ class ObservableProxy[T]:
                                             f.set(val)
                                         finally:
                                             s["flag"] = False
+
                                     return sync
 
                                 def make_sync_to_pending_from_field(p: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
@@ -868,6 +871,7 @@ class ObservableProxy[T]:
                                             p.set(val)
                                         finally:
                                             s["flag"] = False
+
                                     return sync
 
                                 pending_obs.on_change(make_sync_to_field(field_obs, syncing))
