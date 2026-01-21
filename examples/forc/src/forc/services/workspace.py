@@ -58,9 +58,46 @@ class WorkspaceService:
             self._path,
             self._workspace,
         )
-        # Auto-persist when active environment changes
-        self._workspace.active_environment.on_change(lambda _: self._save_config())
+        # Subscribe to active_environment changes to persist to disk
+        from observant import get_proxies_for
+
+        def on_proxy_available(target: object, proxy: object) -> None:
+            if target is self._workspace:
+                from observant import ObservableProxy
+                if isinstance(proxy, ObservableProxy):
+                    field_obs = proxy._get_or_create_field_observable("active_environment")
+                    field_obs.on_change(lambda _: self._save_config())
+
+        # Check if proxy already exists
+        proxies = get_proxies_for(self._workspace)
+        if proxies:
+            from observant import ObservableProxy
+            proxy = proxies[0]
+            if isinstance(proxy, ObservableProxy):
+                field_obs = proxy._get_or_create_field_observable("active_environment")
+                field_obs.on_change(lambda _: self._save_config())
+        else:
+            # Wait for proxy to be created
+            from observant import on_proxy_registered
+            on_proxy_registered(on_proxy_available)
         return self._workspace
+
+    def set_active_environment(self, name: str | None) -> None:
+        """Set the active environment and persist to disk.
+
+        Args:
+            name: Environment name, or None to clear
+        """
+        if self._workspace is None:
+            raise RuntimeError("No workspace loaded")
+        if name is None:
+            self._workspace.active_environment = None
+        else:
+            env = self._environments.get(name)
+            if env is None:
+                raise ValueError(f"Environment '{name}' not found")
+            self._workspace.active_environment = env
+        self._save_config()
 
     def save(self, path: Path | None = None) -> None:
         """Save the current workspace to disk.
@@ -356,7 +393,7 @@ class WorkspaceService:
         """Save workspace configuration (active environment, etc.)."""
         if self._workspace is None or self._path is None:
             return
-        self._format.save_workspace(self._workspace, self._path)
+        self._format.save_workspace_config(self._workspace, self._path)
 
     # Variable resolution (delegate to EnvironmentsService)
 
@@ -369,8 +406,8 @@ class WorkspaceService:
         """
         if self._workspace is None:
             raise RuntimeError("No workspace loaded")
-        active = self._workspace.active_environment.get()
-        return self._environments.resolve(text, active)
+        env_name = self._workspace.active_environment.name if self._workspace.active_environment else None
+        return self._environments.resolve(text, env_name)
 
     def resolve_request(self, request: Request) -> Request:
         """Create a copy of the request with all variables resolved."""

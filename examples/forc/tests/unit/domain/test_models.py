@@ -156,21 +156,23 @@ class TestWorkspace:
         assert_that(ws.name).is_equal_to("My Workspace")
         assert_that(ws.collections).is_empty()
         assert_that(ws.environments).is_empty()
-        assert_that(ws.active_environment.get()).is_none()
+        assert_that(ws.active_environment).is_none()
 
     def test_create_full(self):
         envs: ObservableList[Environment] = ObservableList()
-        envs.append(Environment(name="dev"))
+        dev_env = Environment(name="dev")
+        envs.append(dev_env)
         envs.append(Environment(name="prod"))
         ws = Workspace(
             name="Project",
             collections=ObservableList([Collection(name="API")]),
             environments=envs,
         )
-        ws.active_environment.set("dev")
+        ws.active_environment = dev_env
         assert_that(list(ws.collections)).is_length(1)
         assert_that(list(ws.environments)).is_length(2)
-        assert_that(ws.active_environment.get()).is_equal_to("dev")
+        assert ws.active_environment is not None
+        assert_that(ws.active_environment.name).is_equal_to("dev")
 
 
 class TestResponse:

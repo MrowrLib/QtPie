@@ -161,9 +161,8 @@ class EnvironmentsService:
             old_path.unlink()
         self._save_env(env)
 
-        # Update active environment if it was renamed
-        if self._workspace is not None and self._workspace.active_environment.get() == old_name:
-            self._workspace.active_environment.set(new_name)
+        # Update active environment if it was renamed (it's the same object, just update config)
+        if self._workspace is not None and self._workspace.active_environment is env:
             self._save_workspace_config()
 
     def delete(self, name: str) -> None:
@@ -197,8 +196,8 @@ class EnvironmentsService:
         self._environments.remove(env)
 
         # Clear active if it was deleted
-        if self._workspace is not None and self._workspace.active_environment.get() == name:
-            self._workspace.active_environment.set(None)
+        if self._workspace is not None and self._workspace.active_environment is env:
+            self._workspace.active_environment = None
             self._save_workspace_config()
 
     def get(self, name: str) -> Environment | None:

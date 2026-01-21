@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from observant import Observable, ObservableList
+from observant import ObservableList
 
 from .auth import Auth
 
@@ -80,7 +80,7 @@ class Workspace:
     name: str
     collections: ObservableList[Collection] = field(default_factory=lambda: ObservableList[Collection]())
     environments: ObservableList[Environment] = field(default_factory=lambda: ObservableList[Environment]())
-    active_environment: Observable[str | None] = field(default_factory=lambda: Observable[str | None](None))
+    active_environment: Observable[Environment | None] = field(default_factory=lambda: Observable[Environment | None](None))
 
 
 def validate_request_name(

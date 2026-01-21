@@ -300,7 +300,12 @@ class YamlFormat:
             collections=collections,
             environments=environments,
         )
-        ws.active_environment.set(active_environment)
+        # Resolve active_environment name to Environment object
+        if active_environment:
+            for env in environments:
+                if env.name == active_environment:
+                    ws.active_environment = env
+                    break
         return ws
 
     def save_workspace_config(self, workspace: Workspace, path: Path) -> None:
@@ -309,9 +314,8 @@ class YamlFormat:
         config: dict[str, Any] = {
             "name": workspace.name,
         }
-        active_env = workspace.active_environment.get()
-        if active_env:
-            config["active_environment"] = active_env
+        if workspace.active_environment:
+            config["active_environment"] = workspace.active_environment.name
         with config_path.open("w") as f:
             _yaml_dump(self._yaml, config, f)
 

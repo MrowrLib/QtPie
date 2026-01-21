@@ -115,6 +115,8 @@ def _setup_selection_bindings_impl(
         "widget_var": widget_var,
         "is_observable": isinstance(item_var, Observable) if item_var is not None else False,
         "connected": False,
+        "pending_item": None,  # Item to select when model gets populated
+        "model_listener_connected": False,
     }
 
     if qtpie_state is not None:
@@ -187,9 +189,15 @@ def _setup_selection_bindings_impl(
 
     # Helper to find index of item
     def find_index_of_item(item: Any) -> int:
+        import logging
+        _find_logger = logging.getLogger("qtpie.bindings.selection")
         try:
             current_model = binding_container["model"]
+            _find_logger.debug("find_index_of_item: looking for item=%s (id=%s)", item, id(item))
             for i in range(current_model.rowCount()):
+                model_item = get_item_at_index(i)
+                _find_logger.debug("find_index_of_item: index %d has item=%s (id=%s), eq=%s, is=%s",
+                                   i, model_item, id(model_item), model_item == item, model_item is item)
                 if get_item_at_index(i) == item:
                     return i
             return -1
@@ -241,13 +249,18 @@ def _setup_selection_bindings_impl(
             Variable.replace_wrapper() preserves on_change callbacks by re-registering
             them on the new wrapper.
             """
+            import logging
+            _set_logger = logging.getLogger("qtpie.bindings.selection")
             from dataclasses import is_dataclass
             from enum import Enum
 
             current_item_var = binding_container["item_var"]
+            _set_logger.warning("set_item_var_value called: val=%s, item_var=%s (id=%s), is_observable=%s",
+                               val, type(current_item_var).__name__, id(current_item_var), binding_container["is_observable"])
             if current_item_var is None:
                 return
             if binding_container["is_observable"]:
+                _set_logger.warning("set_item_var_value: calling .set() on Observable")
                 current_item_var.set(val)
             else:
                 # Only use replace_wrapper if:
@@ -303,22 +316,69 @@ def _setup_selection_bindings_impl(
             index_var.on_change(on_index_var_change_combo)
 
         if item_var is not None and set_current_index_fn is not None:
+            import logging
+            _sel_logger = logging.getLogger("qtpie.bindings.selection")
+
+            def try_apply_pending_selection() -> bool:
+                """Try to apply pending selection. Returns True if successful."""
+                pending = binding_container.get("pending_item")
+                if pending is None:
+                    return False
+                idx = find_index_of_item(pending)
+                current_model = binding_container["model"]
+                row_count = current_model.rowCount()
+                _sel_logger.debug("try_apply_pending_selection: pending=%s, idx=%s, row_count=%s", pending, idx, row_count)
+                if idx >= 0:
+                    updating["flag"] = True
+                    try:
+                        _sel_logger.debug("try_apply_pending_selection: calling set_current_index_fn(%s)", idx)
+                        set_current_index_fn(idx)
+                        _sel_logger.debug("try_apply_pending_selection: set_current_index_fn returned")
+                        if index_var is not None:
+                            index_var.value = idx
+                    finally:
+                        updating["flag"] = False
+                    # Clear pending after successful application
+                    binding_container["pending_item"] = None
+                    return True
+                return False
+
+            def on_model_rows_inserted(*_args: Any) -> None:
+                """Called when model gets new rows - defer selection to let all inserts complete."""
+                from qtpy.QtCore import QTimer
+                _sel_logger.debug("on_model_rows_inserted called, scheduling deferred apply")
+                # Defer to next event loop iteration so all batch inserts complete first
+                QTimer.singleShot(0, try_apply_pending_selection)
 
             def on_item_var_change_combo(*_args: Any) -> None:
                 # Note: Observable passes value, ObservableProxy passes nothing
+                _sel_logger.debug("on_item_var_change_combo called, args=%s", _args)
                 if not is_model_valid():
+                    _sel_logger.debug("on_item_var_change_combo: model not valid, returning")
                     return
                 if updating["flag"]:
+                    _sel_logger.debug("on_item_var_change_combo: updating flag set, returning")
                     return
                 updating["flag"] = True
                 try:
                     new_item = get_item_var_value()
+                    _sel_logger.debug("on_item_var_change_combo: new_item=%s", new_item)
                     idx = find_index_of_item(new_item)
+                    _sel_logger.debug("on_item_var_change_combo: found idx=%s", idx)
                     if idx >= 0:
                         set_current_index_fn(idx)
                         # Also update index_var if both bindings are present
                         if index_var is not None:
                             index_var.value = idx
+                    elif new_item is not None:
+                        # Item not found - model might not be populated yet
+                        # Store as pending and listen for model changes
+                        _sel_logger.debug("on_item_var_change_combo: storing pending_item=%s", new_item)
+                        binding_container["pending_item"] = new_item
+                        if not binding_container.get("model_listener_connected"):
+                            current_model = binding_container["model"]
+                            current_model.rowsInserted.connect(on_model_rows_inserted)
+                            binding_container["model_listener_connected"] = True
                 finally:
                     updating["flag"] = False
 

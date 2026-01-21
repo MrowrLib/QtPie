@@ -132,6 +132,9 @@ class ObservableProxy[T]:
         object.__setattr__(self, "_field_lists", {})
         object.__setattr__(self, "_field_dicts", {})
         object.__setattr__(self, "_nested_proxies", {})
+        # Pending path observables - paths requested when target was None
+        # Format: {path: Observable} - will be resolved when replace_target is called
+        object.__setattr__(self, "_pending_path_observables", {})
         object.__setattr__(self, "_callbacks", [])
         object.__setattr__(self, "_dirty_tracking", dirty_tracking)
         object.__setattr__(self, "_validation", validation)
@@ -773,6 +776,117 @@ class ObservableProxy[T]:
                 new_value = getattr(new_target, name)
                 proxy.replace_target(new_value)
 
+        # Resolve pending path observables that were created when target was None
+        # Now that we have a target, try to resolve each path and update the Observable
+        pending: dict[str, Observable[Any]] = object.__getattribute__(self, "_pending_path_observables")
+        logger.warning("replace_target: pending paths = %s, new_target = %s", list(pending.keys()), new_target)
+        if pending and new_target is not None:
+            resolved_paths: list[str] = []
+            for path, pending_obs in list(pending.items()):  # Use list() to avoid dict modification during iteration
+                try:
+                    # Use _resolve_path_value to get the actual value, not observable_for_path
+                    # which would just return the pending observable again for optional paths
+                    value = self._resolve_path_value(path)
+                    logger.warning("replace_target: resolved path '%s' to value = %s", path, value)
+                    pending_obs.set(value)
+
+                    # Now get the real observable for two-way binding
+                    # First, temporarily remove from pending so observable_for_path returns the real one
+                    del pending[path]
+                    try:
+                        real_obs = self.observable_for_path(path)
+                        logger.warning("replace_target: got real_obs for path '%s': %s (type=%s)", path, real_obs, type(real_obs).__name__)
+
+                        # Set up two-way sync between pending_obs and real_obs
+                        # real_obs could be Observable, ObservableProxy, ObservableList, or ObservableDict
+                        syncing = {"flag": False}
+
+                        if isinstance(real_obs, Observable):
+                            # For Observable: use get/set directly
+                            def make_sync_to_real_obs(r: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
+                                def sync(val: Any) -> None:
+                                    logger.warning("sync_to_real (Observable) called: val=%s, flag=%s", val, s["flag"])
+                                    if s["flag"]:
+                                        return
+                                    s["flag"] = True
+                                    try:
+                                        r.set(val)
+                                    finally:
+                                        s["flag"] = False
+                                return sync
+
+                            def make_sync_to_pending_obs(p: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
+                                def sync(val: Any) -> None:
+                                    logger.warning("sync_to_pending (Observable) called: val=%s, flag=%s", val, s["flag"])
+                                    if s["flag"]:
+                                        return
+                                    s["flag"] = True
+                                    try:
+                                        p.set(val)
+                                    finally:
+                                        s["flag"] = False
+                                return sync
+
+                            pending_obs.on_change(make_sync_to_real_obs(real_obs, syncing))
+                            real_obs.on_change(make_sync_to_pending_obs(pending_obs, syncing))
+                            logger.warning("replace_target: set up two-way sync (Observable) for path '%s'", path)
+
+                        elif isinstance(real_obs, ObservableProxy):
+                            # For ObservableProxy: the field is a complex object (like Environment)
+                            # We need to sync via the FIELD OBSERVABLE on the parent proxy, not the nested proxy
+                            # The pending_obs holds the actual value (Environment object), not a proxy
+                            # We need to find the field observable that controls this field
+                            field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+
+                            # The path might be multi-segment, get the last segment as the field name
+                            segments = self._parse_path_segments(path)
+                            if segments:
+                                field_name = segments[-1][0]  # Last segment's name
+                                # Get or create the field observable for this field
+                                field_obs = self._get_or_create_field_observable(field_name)
+                                logger.warning("replace_target: using field_obs for '%s': %s", field_name, field_obs)
+
+                                def make_sync_to_field(f: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
+                                    def sync(val: Any) -> None:
+                                        logger.warning("sync_to_field called: val=%s, flag=%s", val, s["flag"])
+                                        if s["flag"]:
+                                            return
+                                        s["flag"] = True
+                                        try:
+                                            f.set(val)
+                                        finally:
+                                            s["flag"] = False
+                                    return sync
+
+                                def make_sync_to_pending_from_field(p: Observable[Any], s: dict[str, bool]) -> Callable[[Any], None]:
+                                    def sync(val: Any) -> None:
+                                        logger.warning("sync_to_pending (from field) called: val=%s, flag=%s", val, s["flag"])
+                                        if s["flag"]:
+                                            return
+                                        s["flag"] = True
+                                        try:
+                                            p.set(val)
+                                        finally:
+                                            s["flag"] = False
+                                    return sync
+
+                                pending_obs.on_change(make_sync_to_field(field_obs, syncing))
+                                field_obs.on_change(make_sync_to_pending_from_field(pending_obs, syncing))
+                                logger.warning("replace_target: set up two-way sync (via field_obs) for path '%s'", path)
+                        else:
+                            logger.warning("replace_target: real_obs is %s, no two-way sync set up", type(real_obs).__name__)
+
+                    except (AttributeError, ValueError) as e:
+                        # Couldn't get real observable, put pending back
+                        logger.warning("replace_target: couldn't get real obs for '%s': %s, keeping pending", path, e)
+                        pending[path] = pending_obs
+
+                    resolved_paths.append(path)
+                except (AttributeError, ValueError) as e:
+                    # Path still can't be resolved, keep it pending
+                    logger.warning("replace_target: failed to resolve path '%s': %s", path, e)
+            # Note: resolved paths are already removed from pending in the loop above
+
         # Update dirty/valid state and notify
         self._update_dirty_state()
         self._validate()
@@ -797,11 +911,50 @@ class ObservableProxy[T]:
                 segments.append((name, is_optional))
         return segments
 
+    def _resolve_path_value(self, path: str) -> Any:
+        """Resolve a dotted path to its actual value (not wrapped in Observable).
+
+        Used by replace_target to get values for pending path observables.
+
+        Args:
+            path: Dotted path like 'name', 'dog.breed', or 'dog.breed?.name'
+
+        Returns:
+            The actual value at the path.
+
+        Raises:
+            AttributeError: If path can't be resolved.
+        """
+        segments = self._parse_path_segments(path)
+        target = object.__getattribute__(self, "_target")
+
+        if target is None:
+            raise AttributeError("Target is None")
+
+        current: Any = target
+        for name, is_optional in segments:
+            if current is None:
+                if is_optional:
+                    return None
+                raise AttributeError(f"Cannot access '{name}' on None")
+
+            if not hasattr(current, name):
+                if is_optional:
+                    return None
+                raise AttributeError(f"'{type(current).__name__}' object has no attribute '{name}'")
+
+            current = getattr(current, name)
+
+        return current
+
     def observable_for_path(self, path: str) -> Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any]:
         """Get observable for a dotted path like 'dog.breed.name'.
 
         Handles optional chaining: 'dog.breed?.name' returns None-safe observable.
         If breed is None, returns an Observable holding None instead of erroring.
+
+        When the target is None, a pending Observable is created and tracked.
+        This Observable will be updated when replace_target is called with a non-None target.
 
         Args:
             path: Dotted path like 'name', 'dog.breed', or 'dog.breed?.name'
@@ -819,18 +972,31 @@ class ObservableProxy[T]:
 
                 # Check if target is None (from optional chaining)
                 if target is None:
-                    return Observable[Any](None)
+                    # Return a tracked pending Observable instead of a disconnected one.
+                    # This Observable will be updated when replace_target is called.
+                    pending: dict[str, Observable[Any]] = object.__getattribute__(self, "_pending_path_observables")
+                    if path not in pending:
+                        pending[path] = Observable[Any](None, dirty_tracking=False, validation=False)
+                    return pending[path]
 
                 # Check if field exists
                 if not hasattr(target, name):
                     if is_optional:
-                        return Observable[Any](None)
+                        # For optional fields that don't exist, also use pending observables
+                        pending = object.__getattribute__(self, "_pending_path_observables")
+                        if path not in pending:
+                            pending[path] = Observable[Any](None, dirty_tracking=False, validation=False)
+                        return pending[path]
                     raise AttributeError(f"'{type(target).__name__}' object has no attribute '{name}'")
 
                 # Get the value to check if it's None before optional chaining
                 value = getattr(target, name)
                 if value is None and is_optional:
-                    return Observable[Any](None)
+                    # For optional chaining on None values, also use pending observables
+                    pending = object.__getattribute__(self, "_pending_path_observables")
+                    if path not in pending:
+                        pending[path] = Observable[Any](None, dirty_tracking=False, validation=False)
+                    return pending[path]
 
                 # Get the observable/proxy for this field
                 current = getattr(current, name)

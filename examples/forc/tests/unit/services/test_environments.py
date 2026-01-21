@@ -104,11 +104,11 @@ class TestEnvironmentsServiceCrud:
         assert_that(env_file.exists()).is_false()
 
     def test_delete_active_clears_active(self) -> None:
-        self.svc.create("dev")
-        self.workspace.active_environment.set("dev")
+        env = self.svc.create("dev")
+        self.workspace.active_environment = env
         self.svc.delete("dev")
 
-        assert_that(self.workspace.active_environment.get()).is_none()
+        assert_that(self.workspace.active_environment).is_none()
 
     def test_rename(self) -> None:
         self.svc.create("dev")
@@ -124,11 +124,13 @@ class TestEnvironmentsServiceCrud:
         assert_that(self.svc.get("dev")).is_none()
 
     def test_rename_active_updates_active(self) -> None:
-        self.svc.create("dev")
-        self.workspace.active_environment.set("dev")
+        env = self.svc.create("dev")
+        self.workspace.active_environment = env
         self.svc.rename("dev", "development")
 
-        assert_that(self.workspace.active_environment.get()).is_equal_to("development")
+        # The Environment object is the same, just with updated name
+        assert self.workspace.active_environment is not None
+        assert_that(self.workspace.active_environment.name).is_equal_to("development")
 
     def test_get(self) -> None:
         self.svc.create("dev")

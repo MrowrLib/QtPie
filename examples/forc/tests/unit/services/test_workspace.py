@@ -81,20 +81,19 @@ class TestWorkspaceServiceEnvironments:
 
     def test_set_active_environment(self) -> None:
         self.svc.environments.create("dev")
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
-        assert_that(self.svc.workspace.active_environment.get()).is_equal_to("dev")
+        assert self.svc.workspace is not None
+        assert self.svc.workspace.active_environment is not None
+        assert_that(self.svc.workspace.active_environment.name).is_equal_to("dev")
 
     def test_get_active_environment(self) -> None:
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "X", "Y")
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
-        active_name = self.svc.workspace.active_environment.get()
-        assert active_name is not None
-        active = self.svc.environments.get(active_name)
+        assert self.svc.workspace is not None
+        active = self.svc.workspace.active_environment
 
         assert active is not None
         assert_that(active.name).is_equal_to("dev")
@@ -102,55 +101,51 @@ class TestWorkspaceServiceEnvironments:
 
     def test_get_active_environment_none(self) -> None:
         assert self.svc.workspace is not None
-        assert_that(self.svc.workspace.active_environment.get()).is_none()
+        assert_that(self.svc.workspace.active_environment).is_none()
 
     def test_delete_active_environment_clears_active(self) -> None:
         self.svc.environments.create("dev")
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
         self.svc.environments.delete("dev")
 
-        assert_that(self.svc.workspace.active_environment.get()).is_none()
+        assert self.svc.workspace is not None
+        assert_that(self.svc.workspace.active_environment).is_none()
 
-    def test_active_environment_change_persists(self) -> None:
-        """When active_environment Observable changes, it persists to disk."""
+    def test_set_active_environment_persists(self) -> None:
+        """set_active_environment persists to disk."""
         self.svc.environments.create("dev")
         self.svc.environments.create("prod")
-        assert self.svc.workspace is not None
 
-        # Set active and save
-        self.svc.workspace.active_environment.set("dev")
-        self.svc.save()
+        # Set active (auto-persists)
+        self.svc.set_active_environment("dev")
 
         # Reload and verify
         svc2 = WorkspaceService()
         ws2 = svc2.load(self.tmp_dir / "test")
-        assert_that(ws2.active_environment.get()).is_equal_to("dev")
+        assert ws2.active_environment is not None
+        assert_that(ws2.active_environment.name).is_equal_to("dev")
 
-        # Change to different environment and save
-        self.svc.workspace.active_environment.set("prod")
-        self.svc.save()
+        # Change to different environment (auto-persists)
+        self.svc.set_active_environment("prod")
 
         # Reload again and verify the change persisted
         svc3 = WorkspaceService()
         ws3 = svc3.load(self.tmp_dir / "test")
-        assert_that(ws3.active_environment.get()).is_equal_to("prod")
+        assert ws3.active_environment is not None
+        assert_that(ws3.active_environment.name).is_equal_to("prod")
 
-    def test_active_environment_clear_persists(self) -> None:
-        """Clearing active_environment persists to disk."""
+    def test_set_active_environment_clear_persists(self) -> None:
+        """Clearing active_environment via set_active_environment persists to disk."""
         self.svc.environments.create("dev")
-        assert self.svc.workspace is not None
 
-        # Set active, save, then clear
-        self.svc.workspace.active_environment.set("dev")
-        self.svc.save()
-        self.svc.workspace.active_environment.set(None)
-        self.svc.save()
+        # Set active, then clear (both auto-persist)
+        self.svc.set_active_environment("dev")
+        self.svc.set_active_environment(None)
 
         # Reload and verify it's cleared
         svc2 = WorkspaceService()
         ws2 = svc2.load(self.tmp_dir / "test")
-        assert_that(ws2.active_environment.get()).is_none()
+        assert_that(ws2.active_environment).is_none()
 
 
 class TestWorkspaceServiceCollections:
@@ -187,8 +182,7 @@ class TestWorkspaceServiceVariableResolution:
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "API_URL", "http://localhost:3000")
         self.svc.environments.add_variable("dev", "VERSION", "v1")
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
         result = self.svc.resolve_variables("${API_URL}/${VERSION}/users")
 
@@ -198,8 +192,7 @@ class TestWorkspaceServiceVariableResolution:
         """Secret variables resolve the same as regular ones."""
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "SECRET_KEY", "abc123", secret=True)
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
         result = self.svc.resolve_variables("Key: ${SECRET_KEY}")
 
@@ -210,8 +203,7 @@ class TestWorkspaceServiceVariableResolution:
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "BASE_URL", "https://api.example.com")
         self.svc.environments.add_variable("dev", "API_KEY", "secret123", secret=True)
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
         result = self.svc.resolve_variables("${BASE_URL}?key=${API_KEY}")
 
@@ -221,8 +213,7 @@ class TestWorkspaceServiceVariableResolution:
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "DISABLED", "should_not_appear")
         self.svc.environments.update_variable("dev", "DISABLED", enabled=False)
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
         # strict=False to test "left as-is" behavior
         result = self.svc._environments.resolve("${DISABLED}", "dev", strict=False)
@@ -244,8 +235,7 @@ class TestWorkspaceServiceResolveRequest:
         self.svc.environments.create("dev")
         self.svc.environments.add_variable("dev", "BASE_URL", "https://api.example.com")
         self.svc.environments.add_variable("dev", "TOKEN", "secret123")
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
+        self.svc.set_active_environment("dev")
 
     def test_resolve_url(self) -> None:
         req = Request(name="Test", url="${BASE_URL}/users")
@@ -308,9 +298,7 @@ class TestWorkspaceServicePersistence:
         post_req = self.svc.create_request("Post", api_coll)
         post_req.method = HttpMethod.POST
         post_req.url = "/post"
-        assert self.svc.workspace is not None
-        self.svc.workspace.active_environment.set("dev")
-        self.svc.save()
+        self.svc.set_active_environment("dev")
 
         # Load fresh
         svc2 = WorkspaceService()
@@ -321,7 +309,8 @@ class TestWorkspaceServicePersistence:
         assert_that(ws.environments[0].name).is_equal_to("dev")
         assert_that(list(ws.collections)).is_length(1)
         assert_that(list(ws.collections[0].items)).is_length(2)
-        assert_that(ws.active_environment.get()).is_equal_to("dev")
+        assert ws.active_environment is not None
+        assert_that(ws.active_environment.name).is_equal_to("dev")
 
 
 class TestWorkspaceServiceRename:

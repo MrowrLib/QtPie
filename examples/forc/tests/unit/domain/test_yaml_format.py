@@ -209,7 +209,7 @@ class TestYamlFormatWorkspace:
         assert_that(loaded.name).is_equal_to("My Workspace")
         assert_that(loaded.collections).is_empty()
         assert_that(loaded.environments).is_empty()
-        assert_that(loaded.active_environment.get()).is_none()
+        assert_that(loaded.active_environment).is_none()
 
     def test_save_and_load_workspace_with_environments(self):
         dev_vars: ObservableList[KeyValue] = ObservableList()
@@ -217,13 +217,14 @@ class TestYamlFormatWorkspace:
         prod_vars: ObservableList[KeyValue] = ObservableList()
         prod_vars.append(KeyValue(key="URL", value="api.example.com"))
         envs: ObservableList[Environment] = ObservableList()
-        envs.append(Environment(name="dev", variables=dev_vars))
+        dev_env = Environment(name="dev", variables=dev_vars)
+        envs.append(dev_env)
         envs.append(Environment(name="prod", variables=prod_vars))
         ws = Workspace(
             name="Project",
             environments=envs,
         )
-        ws.active_environment.set("dev")
+        ws.active_environment = dev_env
         path = Path(self.tmp_dir) / "project"
 
         self.fmt.save_workspace(ws, path)
@@ -231,11 +232,13 @@ class TestYamlFormatWorkspace:
 
         assert_that(loaded.name).is_equal_to("Project")
         assert_that(list(loaded.environments)).is_length(2)
-        assert_that(loaded.active_environment.get()).is_equal_to("dev")
+        assert loaded.active_environment is not None
+        assert_that(loaded.active_environment.name).is_equal_to("dev")
 
     def test_save_and_load_full_workspace(self):
         envs: ObservableList[Environment] = ObservableList()
-        envs.append(Environment(name="dev"))
+        dev_env = Environment(name="dev")
+        envs.append(dev_env)
         ws = Workspace(
             name="Full Project",
             collections=ObservableList(
@@ -253,7 +256,7 @@ class TestYamlFormatWorkspace:
             ),
             environments=envs,
         )
-        ws.active_environment.set("dev")
+        ws.active_environment = dev_env
         path = Path(self.tmp_dir) / "full-project"
 
         self.fmt.save_workspace(ws, path)
@@ -264,7 +267,8 @@ class TestYamlFormatWorkspace:
         assert_that(loaded.collections[0].name).is_equal_to("Users API")
         assert_that(loaded.collections[0].items).is_length(2)
         assert_that(loaded.environments).is_length(1)
-        assert_that(loaded.active_environment.get()).is_equal_to("dev")
+        assert loaded.active_environment is not None
+        assert_that(loaded.active_environment.name).is_equal_to("dev")
 
     def test_load_workspace_without_config(self):
         # Create a workspace directory without forc.yaml
