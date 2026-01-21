@@ -1,3 +1,4 @@
+# pyright: reportUnknownArgumentType=false
 """Tests for forc2 domain models."""
 
 from assertpy import assert_that
