@@ -9,6 +9,7 @@ logging.basicConfig(
     format="%(name)s: %(message)s",
     handlers=[
         logging.FileHandler("forc_debug.log", mode="w"),
+        logging.StreamHandler(),  # Also log to console
     ],
 )
 

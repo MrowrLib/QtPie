@@ -813,6 +813,13 @@ class ObservableProxy[T]:
 
         current: Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableProxy[Any] = self
         for name, is_optional in segments:
+            # Check for Variable-like objects (have .observable that is an ObservableProxy)
+            # This handles qtpie.Variable without coupling observant to qtpie
+            if not isinstance(current, ObservableProxy) and hasattr(current, "observable"):
+                inner = getattr(current, "observable", None)
+                if isinstance(inner, ObservableProxy):
+                    current = inner  # pyright: ignore[reportUnknownVariableType]
+
             # If we have an ObservableProxy, traverse into it
             if isinstance(current, ObservableProxy):
                 target = object.__getattribute__(current, "_target")
@@ -854,20 +861,21 @@ class ObservableProxy[T]:
 
         value = getattr(target, name)
 
-        # For callables (methods, functions), return directly without wrapping
-        if callable(value):
-            return value  # type: ignore[return-value]
-
         # If already an Observable type, return it directly (don't re-wrap)
         if isinstance(value, (Observable, ObservableList, ObservableDict, ObservableProxy)):
             return value  # pyright: ignore[reportUnknownVariableType]
 
         # Check for Variable-like objects (have .observable property that returns an Observable)
         # This handles qtpie.Variable without coupling observant to qtpie
+        # NOTE: Must check BEFORE callable check since Variable is callable (__call__)
         if hasattr(value, "observable"):
             inner_obs = getattr(value, "observable", None)
             if isinstance(inner_obs, (Observable, ObservableList, ObservableDict, ObservableProxy)):
                 return inner_obs  # pyright: ignore[reportUnknownVariableType]
+
+        # For callables (methods, functions), return directly without wrapping
+        if callable(value):
+            return value  # type: ignore[return-value]
 
         # For primitives, return Observable
         if _is_primitive(value):

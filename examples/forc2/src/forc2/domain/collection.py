@@ -29,14 +29,20 @@ class Collection(State):
     when items are added to the `items` list.
     """
 
+    ### Variables ###
     name: Variable[str] = new("")
     items: Variable[list[TreeItem]] = new([])
+    filename: Variable[str | None] = new(None)
 
-    # Events
+    ### Events ###
+    # TODO: remove unless we need these, no one ever asked for these ever:
     on_changed: Event  # Fires when this collection or any descendant changes
     on_item_added: Event[TreeItem]  # Fires when an item is added
     on_item_removed: Event[TreeItem]  # Fires when an item is removed
 
+    ### Methods ###
+
+    # TODO: DO NOT USE __setup__ REMOVE THIS unless we NEED it
     def __setup__(self) -> None:
         # Wire name changes to on_changed (lambda discards value arg)
         self.name.on_change(lambda _: self.on_changed.emit())
@@ -50,7 +56,7 @@ class Collection(State):
     def _on_item_inserted(self, index: int, item: TreeItem) -> None:
         """Called when an item is added to the items list."""
         # Connect child's on_changed to bubble up to this collection
-        item.on_changed.connect(lambda: self.on_changed.emit())
+        # item.on_changed.connect(lambda: self.on_changed.emit())
 
         self.on_item_added.emit(item)
         self.on_changed.emit()

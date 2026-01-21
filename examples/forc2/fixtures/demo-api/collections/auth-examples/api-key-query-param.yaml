@@ -1,0 +1,11 @@
+name: API Key (Query Param)
+method: GET
+url: ${BASE_URL}/data/public
+headers:
+  - key: Accept
+    value: application/json
+auth:
+  type: api_key
+  key: api_key
+  value: ${API_KEY_PUBLIC}
+  location: query

@@ -95,7 +95,24 @@ class ReactiveTableModel[T](QAbstractTableModel):
             if isinstance(item, tuple):
                 return list(range(len(cast(tuple[Any, ...], item))))  # [0, 1] for 2-tuple, etc.
             # For regular objects, use public attributes that aren't methods
-            return [attr for attr in dir(item) if not attr.startswith("_") and not callable(getattr(item, attr, None))]
+            # BUT: Variable fields are callable (have __call__), so check for Variable-like objects
+            # Exclude State-specific attributes that shouldn't be columns
+            excluded_attrs = {"state_parent"}
+
+            def is_data_attr(attr: str) -> bool:
+                if attr in excluded_attrs:
+                    return False
+                val = getattr(item, attr, None)
+                # Variable-like objects (have .value and .observable) ARE data fields
+                if hasattr(val, "value") and hasattr(val, "observable"):
+                    return True
+                # Exclude Event objects (have .emit but no .value)
+                if hasattr(val, "emit") and not hasattr(val, "value"):
+                    return False
+                # Exclude callables (methods/functions)
+                return not callable(val)
+
+            return [attr for attr in dir(item) if not attr.startswith("_") and is_data_attr(attr)]
         return []
 
     def _resolve_checkable_columns(self) -> set[str]:
@@ -193,6 +210,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
             else:
                 # String column = attribute access
                 value = getattr(item, column_name, None)
+                # Unwrap Variable to get its value (for State objects with Variable fields)
+                if hasattr(value, "value") and hasattr(value, "observable"):
+                    value = value.value
 
             # For EditRole, return raw value (for editor to use)
             if role == Qt.ItemDataRole.EditRole:
@@ -208,6 +228,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
             # Return check state for checkable columns
             if column_name in self._checkable_columns:
                 value = getattr(item, column_name, False)
+                # Unwrap Variable to get its value (for State objects with Variable fields)
+                if hasattr(value, "value") and hasattr(value, "observable"):
+                    value = value.value
                 return Qt.CheckState.Checked if value else Qt.CheckState.Unchecked
             return None
 

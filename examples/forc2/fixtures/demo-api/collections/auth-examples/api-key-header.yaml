@@ -1,0 +1,11 @@
+name: API Key (Header)
+method: GET
+url: ${BASE_URL}/data/secure
+headers:
+  - key: Accept
+    value: application/json
+auth:
+  type: api_key
+  key: X-API-Key
+  value: ${API_KEY}
+  location: header

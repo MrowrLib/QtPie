@@ -403,10 +403,16 @@ def _eval_with_optional_chaining(expr: str, context: dict[str, Any]) -> Any:
     # For complex expressions, we transform ?. into a safe getattr pattern
     # "a?.b?.c or 'x'" becomes "(getattr(getattr(a, 'b', None), 'c', None) if a is not None else None) or 'x'"
     # But simpler: we use a helper that does safe attribute access
+    from qtpie.variable import Variable
+
     def _safe_getattr(obj: Any, name: str) -> Any:
         if obj is None:
             return None
-        return getattr(obj, name, None)
+        result = getattr(obj, name, None)
+        # Unwrap Variable to get the actual value (like _traverse_optional_path does)
+        if isinstance(result, Variable):
+            return result.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+        return result
 
     # Add safe_getattr to eval context
     eval_context = {**context, "_safe_getattr": _safe_getattr}
@@ -1193,7 +1199,11 @@ def create_item_formatter(template: str) -> Callable[[Any], str]:
         for name in var_names:
             root = name.split(".")[0]
             if hasattr(cast(Any, item), root):
-                context[root] = getattr(cast(Any, item), root)
+                attr = getattr(cast(Any, item), root)
+                # Unwrap Variable to get its value (for State objects with Variable fields)
+                if hasattr(attr, "value") and hasattr(attr, "observable"):
+                    attr = attr.value
+                context[root] = attr
 
         # Process each field and build the result
         result_parts: list[str] = []
@@ -1298,7 +1308,11 @@ def create_item_formatter_with_context(template: str) -> Callable[[Any, dict[str
         for name in var_names:
             root = name.split(".")[0]
             if hasattr(item, root):
-                context[root] = getattr(item, root)
+                attr = getattr(item, root)
+                # Unwrap Variable to get its value (for State objects with Variable fields)
+                if hasattr(attr, "value") and hasattr(attr, "observable"):
+                    attr = attr.value
+                context[root] = attr
 
         # Process each field and build the result
         result_parts: list[str] = []

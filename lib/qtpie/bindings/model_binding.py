@@ -851,12 +851,22 @@ def apply_model_binding(
                         last_nested_list_id[0] = 0
                     return
 
-                # Traverse nested path
+                # Traverse nested path, unwrapping Variables at each step
                 nested_val: Any = root_val
                 for part in path.split("."):
                     if nested_val is None:
                         break
+                    # Unwrap Variable to get its value before traversing
+                    if hasattr(nested_val, "value") and hasattr(nested_val, "observable"):
+                        # It's a Variable-like object
+                        nested_val = nested_val.value
+                        if nested_val is None:
+                            break
                     nested_val = getattr(nested_val, part, None)
+
+                # Final unwrap: if we ended on a Variable[list], get the list value
+                if nested_val is not None and hasattr(nested_val, "value") and hasattr(nested_val, "observable"):
+                    nested_val = nested_val.value
 
                 # Only re-sync if the nested list/dict object itself changed (identity change)
                 # Skip if it's the same collection just being mutated - this prevents expensive

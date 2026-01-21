@@ -1,5 +1,5 @@
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QLabel
+from qtpy.QtWidgets import QLabel, QListView, QTableView, QTreeView
 
 from forc2.app.menus import FileMenu, ViewMenu
 from qtpie import Window, new, window
@@ -39,28 +39,55 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
-    label_test: QLabel = new("Test")
+    label_test2: QLabel = new(bind="Length: {len(workspace?.collection?.items)}")
 
-    # TODO: Dock tabs should close on middle-click by default.
-    # TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
-    ### Docks / Widgets ###
-    # sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
-    # editors: Variable[list[Request], Dock[RequestWidget]] = new(
-    #     group="requests",
-    #     dock="right",
-    #     title="{name} {'*' if #widget.is_dirty else ''}",
-    #     groupSelectedIndex="selected_request_index",
-    #     selectedItem="current_request",
-    # )
+    label1: QLabel = new("TREE:")
+    collections_tree: QTreeView = new(bind="workspace?.collection?.items", children="items", format="{name}")
 
-    # def _on_current_workspace_item_changed(self) -> None:
-    #     item = self.current_workspace_item()
-    #     if isinstance(item, Request):
-    #         # If it's already added, then simply switch to that tab:
-    #         for index, editor in enumerate(self.editors.value):
-    #             if editor is item:
-    #                 self.selected_request_index.value = index  # TODO remove .value
-    #                 return
-    #         # Otherwise, add a new tab:
-    #         self.editors.append(item)
-    #         self.selected_request_index.value = len(self.editors) - 1
+    label2: QLabel = new("LIST:")
+    collections_list: QListView = new(bind="workspace?.collection?.items", format="{name}")
+
+    label3: QLabel = new("TABLE:")
+    collections_table: QTableView = new(bind="workspace?.collection?.items")
+
+    label_another: QLabel = new("END")
+
+
+#  treeview: QTreeView = new(
+#         bind="workspace.collections",
+#         children="items",
+#         selectedItem="current_workspace_item",
+#         expand=True,
+#         headerHidden=True,
+#         validator=filename_safe_validator,
+#         clicked="{on_current_workspace_item_changed()}",
+#         widget=CollectionsTreeWidgetRow,
+#         onEnterKey="_on_enter_key",
+#         onDeleteKey="_on_delete_key",
+#         selectedWidget="current_tree_widget_row",
+#     )
+
+
+# TODO: Dock tabs should close on middle-click by default.
+# TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
+### Docks / Widgets ###
+# sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
+# editors: Variable[list[Request], Dock[RequestWidget]] = new(
+#     group="requests",
+#     dock="right",
+#     title="{name} {'*' if #widget.is_dirty else ''}",
+#     groupSelectedIndex="selected_request_index",
+#     selectedItem="current_request",
+# )
+
+# def _on_current_workspace_item_changed(self) -> None:
+#     item = self.current_workspace_item()
+#     if isinstance(item, Request):
+#         # If it's already added, then simply switch to that tab:
+#         for index, editor in enumerate(self.editors.value):
+#             if editor is item:
+#                 self.selected_request_index.value = index  # TODO remove .value
+#                 return
+#         # Otherwise, add a new tab:
+#         self.editors.append(item)
+#         self.selected_request_index.value = len(self.editors) - 1

@@ -1,0 +1,13 @@
+name: Custom Headers (hello)
+method: GET
+url: ${BASE_URL}/demo/headers
+headers:
+- key: Accept
+  value: application/json
+  enabled: true
+  secret: false
+query_params: []
+body: ''
+body_fields: []
+body_type: none
+auth:

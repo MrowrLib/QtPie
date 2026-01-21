@@ -114,7 +114,15 @@ class SettingsBackend:
     _NONE_SENTINEL = "__QTPIE_NONE__"
 
     def __init__(self) -> None:
-        """Initialize with QSettings using app's org/name."""
+        """Initialize with QSettings using app's org/name.
+
+        Uses IniFormat (set via QSettings.setDefaultFormat in entrypoint)
+        to store settings in a .ini file instead of the Windows registry.
+        Location depends on platform:
+        - Windows: %APPDATA%/{org}/{app}.ini
+        - macOS: ~/Library/Preferences/{app}.ini
+        - Linux: ~/.config/{org}/{app}.conf
+        """
         self._qsettings = QSettings()
 
     def get[T](self, key: str, default: T, type_hint: type[T] | types.UnionType | None) -> T:

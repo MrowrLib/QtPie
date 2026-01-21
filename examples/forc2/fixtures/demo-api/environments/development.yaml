@@ -1,0 +1,14 @@
+name: Development
+variables:
+  - key: BASE_URL
+    value: http://localhost:8000
+  - key: API_KEY
+    value: sk_live_abc123def456
+    secret: true
+  - key: API_KEY_PUBLIC
+    value: pk_test_xyz789
+  - key: BEARER_TOKEN
+    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.Gfx6VO9tcxwk6xqx9yYzSfebfeakZp5JYIgP_edcw_A
+    secret: true
+  - key: TIMEOUT
+    value: "30"

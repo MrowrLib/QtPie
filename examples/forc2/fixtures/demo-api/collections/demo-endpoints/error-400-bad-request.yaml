@@ -1,0 +1,6 @@
+name: Error 400 (Bad Request)
+method: GET
+url: ${BASE_URL}/demo/error/400
+headers:
+  - key: Accept
+    value: application/json

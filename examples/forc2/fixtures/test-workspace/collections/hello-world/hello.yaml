@@ -1,0 +1,9 @@
+name: Hello
+method: GET
+url: ${BASE_URL}/demo/echo
+headers: []
+query_params: []
+body: ''
+body_fields: []
+body_type: none
+auth:

@@ -85,6 +85,11 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         children = getattr(item, self._children_attr, None)
         if children is None:
             return []
+        # Unwrap Variable to get its value (for State objects with Variable fields)
+        if hasattr(children, "value") and hasattr(children, "observable"):
+            children = children.value
+            if children is None:
+                return []
         # Handle ObservableList or regular list
         if isinstance(children, ObservableList):
             return list(children)  # pyright: ignore[reportUnknownArgumentType]
@@ -374,6 +379,12 @@ class ReactiveTreeModel[T](QAbstractItemModel):
     def _subscribe_to_children(self, item: T) -> None:
         """Subscribe to an item's children ObservableList for updates."""
         children_raw = getattr(item, self._children_attr, None)
+        # Unwrap Variable to get its observable (for State objects with Variable fields)
+        if children_raw is not None and hasattr(children_raw, "value") and hasattr(children_raw, "observable"):
+            # For Variable[list[...]], the observable is an ObservableList
+            unwrapped = children_raw.observable
+            if unwrapped is not None:
+                children_raw = unwrapped
         if children_raw is None or not isinstance(children_raw, ObservableList):
             return
 

@@ -9,11 +9,15 @@ from pathlib import Path
 from typing import Any, cast, overload
 
 import qasync  # type: ignore[import-untyped]
-from qtpy.QtCore import QFile, QIODeviceBase, QTextStream, QTimer
+from qtpy.QtCore import QFile, QIODeviceBase, QSettings, QTextStream, QTimer
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, set_color_scheme
 from qtpie.styles.watcher import QssWatcher, ScssWatcher
+
+# Use INI format for QSettings instead of Windows registry
+# This must be set before any QSettings instances are created
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
 
 # Import App and run_app lazily to avoid circular imports
 _App: type | None = None

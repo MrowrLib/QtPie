@@ -1,0 +1,6 @@
+name: Missing Bearer Token (401)
+method: GET
+url: ${BASE_URL}/auth/profile
+headers:
+  - key: Accept
+    value: application/json

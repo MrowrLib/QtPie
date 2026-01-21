@@ -1,0 +1,3 @@
+name: DELETE Example
+method: DELETE
+url: ${BASE_URL}/demo/echo

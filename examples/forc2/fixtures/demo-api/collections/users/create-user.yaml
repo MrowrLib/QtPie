@@ -1,0 +1,15 @@
+name: Create User
+method: POST
+url: ${BASE_URL}/users
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: application/json
+body: |
+  {
+    "name": "John Doe",
+    "username": "johndoe",
+    "email": "john@example.com"
+  }
+body_type: json

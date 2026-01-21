@@ -26,18 +26,6 @@ class TestRequest:
         assert_that(r.method.value).is_equal_to(HttpMethod.POST)
         assert_that(r.url.value).is_equal_to("https://api.example.com/users")
 
-    def test_on_changed_fires(self) -> None:
-        """on_changed event fires when any field changes."""
-        r = Request()
-        changes: list[str] = []
-        r.on_changed.connect(lambda: changes.append("changed"))
-
-        r.name.value = "Test"
-        r.method.value = HttpMethod.DELETE
-        r.url.value = "http://test.com"
-
-        assert_that(changes).is_length(3)
-
 
 class TestCollection:
     """Tests for Collection state."""

@@ -1,0 +1,6 @@
+name: Error 404 (Not Found)
+method: GET
+url: ${BASE_URL}/demo/error/404
+headers:
+  - key: Accept
+    value: application/json

@@ -1,0 +1,8 @@
+name: Get All Users
+method: GET
+url: ${BASE_URL}/users
+headers:
+  - key: Accept
+    value: application/json
+  - key: X-API-Key
+    value: ${API_KEY}

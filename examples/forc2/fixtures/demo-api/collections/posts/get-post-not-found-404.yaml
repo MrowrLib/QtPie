@@ -1,0 +1,6 @@
+name: Get Post Not Found (404)
+method: GET
+url: ${BASE_URL}/posts/999
+headers:
+  - key: Accept
+    value: application/json

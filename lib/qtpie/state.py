@@ -31,7 +31,7 @@ Wire Events to handlers via decorator kwargs:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, overload
+from typing import Any, overload, override
 
 from .event import Event, is_event_hint
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
@@ -107,6 +107,31 @@ class State:
         if not hasattr(self, "_state_instance"):
             self._state_instance = StateInstance()
         self._state_instance.state_parent = parent
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a dict of all Variable fields with their unwrapped values.
+
+        Only includes Variable fields (not Events, state_parent, or other attributes).
+        """
+        if not hasattr(self, "_state_config"):
+            return {}
+
+        result: dict[str, Any] = {}
+        for name in self._state_config.variable_names:
+            var = getattr(self, name, None)
+            if var is not None and hasattr(var, "value"):
+                result[name] = var.value
+        return result
+
+    @override
+    def __repr__(self) -> str:
+        """Return a repr showing all Variable fields with their unwrapped values."""
+        class_name = type(self).__name__
+        data = self.to_dict()
+        if not data:
+            return f"{class_name}()"
+        items = [f"{k}={v!r}" for k, v in data.items()]
+        return f"{class_name}({', '.join(items)})"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

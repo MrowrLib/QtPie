@@ -1,0 +1,8 @@
+name: Invalid API Key (403)
+method: GET
+url: ${BASE_URL}/data/secure
+headers:
+  - key: Accept
+    value: application/json
+  - key: X-API-Key
+    value: invalid-key-12345

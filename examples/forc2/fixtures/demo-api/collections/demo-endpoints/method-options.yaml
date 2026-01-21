@@ -1,0 +1,3 @@
+name: OPTIONS Example
+method: OPTIONS
+url: ${BASE_URL}/demo/echo

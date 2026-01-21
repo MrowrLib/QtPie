@@ -1,0 +1,10 @@
+name: Basic Auth Login
+method: POST
+url: ${BASE_URL}/auth/login
+headers:
+  - key: Accept
+    value: application/json
+auth:
+  type: basic
+  username: admin
+  password: secret123

@@ -1,9 +1,11 @@
+from pathlib import Path
 from typing import override
 
 from qtpy.QtCore import Signal
 
 from forc2.app import ForcWindow
-from qtpie import App, app
+from forc2.domain.workspace import Workspace
+from qtpie import App, Setting, Variable, app, new
 
 
 @app(
@@ -23,13 +25,10 @@ class ForcApp(App):
     # ...
 
     ### Settings ###
-    # loaded_workspace_path: Setting[str | None] = new("fixtures/demo-api")
+    loaded_workspace_path: Setting[str | None] = new("fixtures/demo-api")
 
     ### Variables ###
-    # workspace: Variable[Workspace | None] = new(None)
-    # current_workspace_item: Variable[Collection | Request | None] = new(None)  # TODO rename!
-    # current_request: Variable[Request | None] = new(None)
-    # orientation: Variable[Qt.Orientation] = new(Qt.Orientation.Horizontal)  # TODO rename!
+    workspace: Variable[Workspace | None] = new(default=Workspace())
 
     ### Window ###
     main_window: ForcWindow
@@ -38,6 +37,11 @@ class ForcApp(App):
     @override
     def on_run(self) -> None:
         self.main_window.show()
+
+    def __setup__(self) -> None:
+        workspace_path = self.loaded_workspace_path()
+        if workspace_path is not None:
+            self.workspace.path = Path(workspace_path)
 
     def _on_reload_window(self) -> None:
         """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""

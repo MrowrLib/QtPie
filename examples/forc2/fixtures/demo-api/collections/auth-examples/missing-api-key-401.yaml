@@ -1,0 +1,13 @@
+name: Missing API Key (401)
+method: POST
+url: ${BASE_URL}/data/secure
+headers:
+- key: Accept
+  value: application/json
+  enabled: true
+  secret: false
+query_params: []
+body: ''
+body_fields: []
+body_type: none
+auth:
