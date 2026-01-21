@@ -5,7 +5,7 @@ from forc.app.helpers import confirm_delete, filename_safe_validator
 from forc.app.widgets.cookie_manager import CookieManagerDialog
 from forc.app.widgets.environments import EnvironmentSelectorWidget
 from forc.domain.models import Collection, Request
-from forc.services import OldWorkspaceService
+from forc.services import WorkspaceService
 from qtpie import Dialog, DialogButton, Variable, Widget, dialog, new, widget
 
 
@@ -70,15 +70,15 @@ class CollectionsTreeWidget(Widget):
     on_rename = Signal(object, str)
 
     ### Services ###
-    workspace_service: Variable[OldWorkspaceService]
+    workspace_service: Variable[WorkspaceService]
 
     ### Variables ###
     current_tree_widget_row: Variable[CollectionsTreeWidgetRow | None] = new(None)
 
     ### Widgets ###
-    header: QLabel = new(bind="{workspace_service.workspace?.name}")
+    header: QLabel = new(bind="{workspace?.name}")
     treeview: QTreeView = new(
-        bind="workspace_service.workspace.collections",
+        bind="workspace.collections",
         children="items",
         selectedItem="current_workspace_item",
         expand=True,
@@ -113,7 +113,7 @@ class CollectionsTreeWidget(Widget):
 @widget
 class SidebarWidget(Widget):
     ### Services ###
-    workspace_service: Variable[OldWorkspaceService]
+    workspace_service: Variable[WorkspaceService]
 
     ### Widgets ###
     _buttons_layout: QHBoxLayout

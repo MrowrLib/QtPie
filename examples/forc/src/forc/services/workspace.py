@@ -5,39 +5,11 @@ from pathlib import Path
 
 from forc.domain.formats import YamlFormat
 from forc.domain.models import Collection, KeyValue, Request, Workspace
-from qtpie import State, Variable, new, state
 
 from .environments import EnvironmentsService
 
 
-@state
-class WorkspaceService(State):
-    ### Variables ###
-    workspace: Variable[Workspace | None] = new(None)
-
-    ### Private Variables ###
-    _format_handler: YamlFormat
-    _current_path: Path | None = None
-    _environments: EnvironmentsService
-
-    ### Methods ###
-    def __setup__(self):
-        self._format_handler = YamlFormat()
-        self._environments = EnvironmentsService(format_handler=self._format_handler)
-
-    def load_workspace(self, path: Path) -> Workspace | None:  # TODO: don't return anything
-        workspace = self._format_handler.load_workspace(path)
-        self._current_path = path.resolve()
-        self._environments.load(
-            workspace.environments,
-            self._current_path,
-            workspace,
-        )
-        self.workspace = workspace
-        return workspace
-
-
-class OldWorkspaceService:
+class WorkspaceService:
     """Service for managing workspaces."""
 
     def __init__(

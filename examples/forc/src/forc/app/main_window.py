@@ -28,14 +28,6 @@ class TestStatusBar(Widget):
     size=(1600, 900),
 )
 class ForcWindow(Window):
-    info_label: QLabel = new("Welcome to Forc!")
-    # workspace_info_label1: QLabel = new(
-    #     bind="{workspace_service.workspace}"
-    # )  # <--- this renders the whole workspace object, it works
-    workspace_info_label2: QLabel = new(
-        bind="Workspace: {workspace_service?.workspace?.name}"
-    )  # <--- this renders nothing :(
-
     ### Signals ###
     on_current_workspace_item_changed = Signal()
 

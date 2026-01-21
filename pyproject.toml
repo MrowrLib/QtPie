@@ -1,5 +1,6 @@
 [project]
 dependencies = [
+    "poethepoet>=0.40.0",
     "pytest-asyncio>=1.3.0",
 ]
 description = "Add your description here"
@@ -7,6 +8,11 @@ name = "v2-prototyping"
 readme = "README.md"
 requires-python = ">=3.13"
 version = "0.1.0"
+
+[tool.poe.tasks]
+test-apis = "uvicorn main:app --reload --app-dir examples/test-apis"
+forc1 = {cmd = "uv run src/forc/app/__main__.py", cwd = "examples/forc"}
+forc2 = {cmd = "uv run src/forc/app/__main__.py", cwd = "examples/forc2"}
 
 [tool.uv.workspace]
 members = [
@@ -16,10 +22,15 @@ members = [
   "examples/forc/src",
   "examples/forc/tests",
   "examples/forc/test-apis",
+  "examples/forc2",
+  "examples/forc2/src",
+  "examples/forc2/tests",
+  "examples/test-apis",
 ]
 
 [tool.uv.sources]
 forc = {workspace = true}
+forc2 = {workspace = true}
 qtpie = {workspace = true}
 
 [dependency-groups]

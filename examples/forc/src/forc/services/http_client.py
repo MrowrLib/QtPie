@@ -20,7 +20,7 @@ from forc.domain.models import (
 )
 
 if TYPE_CHECKING:
-    from forc.services.workspace import OldWorkspaceService
+    from forc.services.workspace import WorkspaceService
 
 
 class HttpClientService:
@@ -28,7 +28,7 @@ class HttpClientService:
 
     def __init__(
         self,
-        workspace_service: OldWorkspaceService | None = None,
+        workspace_service: WorkspaceService | None = None,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         """Initialize with workspace service for variable resolution.
