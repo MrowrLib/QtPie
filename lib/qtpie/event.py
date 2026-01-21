@@ -36,18 +36,18 @@ class Event[T = None]:
     def __init__(self) -> None:
         self._handlers: list[Callable[..., Any]] = []
 
-    def connect(self, handler: Callable[..., Any]) -> None:
+    def connect(self, handler: Callable[[T], object] | Callable[[], object]) -> None:
         """Connect a handler to this event."""
         self._handlers.append(handler)
 
-    def disconnect(self, handler: Callable[..., Any]) -> None:
+    def disconnect(self, handler: Callable[[T], object] | Callable[[], object]) -> None:
         """Disconnect a handler from this event."""
         self._handlers.remove(handler)
 
-    def emit(self, *args: Any) -> None:
+    def emit(self, *args: T) -> None:  # type: ignore[misc]  # T could be tuple for multi-arg
         """Emit this event, calling all connected handlers."""
         for handler in self._handlers:
-            handler(*args)
+            handler(*args)  # type: ignore[arg-type]  # Handler could be 0-arg or 1-arg
 
 
 def is_event_hint(hint: object) -> bool:

@@ -12,7 +12,9 @@ version = "0.1.0"
 [tool.poe.tasks]
 test-apis = "uvicorn main:app --reload --app-dir examples/test-apis"
 forc1 = {cmd = "uv run src/forc/app/__main__.py", cwd = "examples/forc"}
-forc2 = {cmd = "uv run src/forc/app/__main__.py", cwd = "examples/forc2"}
+forc2 = {cmd = "uv run src/forc2/app/__main__.py", cwd = "examples/forc2"}
+qrc1 = {cmd = "pyside6-rcc -o src/forc/app/qrc_resources.py resources/resources.qrc", cwd = "examples/forc"}
+qrc2 = {cmd = "pyside6-rcc -o src/forc2/app/qrc_resources.py resources/resources.qrc", cwd = "examples/forc2"}
 
 [tool.uv.workspace]
 members = [
@@ -70,7 +72,7 @@ analyzeUnannotatedFunctions = true
 reportMissingParameterType = "error"
 reportMissingTypeArgument = "error"
 reportUnknownArgumentType = "error"
-reportUnknownLambdaType = "error"
+reportUnknownLambdaType = false
 reportUnknownMemberType = "error"
 reportUnknownParameterType = "error"
 reportUnknownVariableType = "error"

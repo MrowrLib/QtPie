@@ -1,0 +1,86 @@
+// Sidebar widget styles
+
+#SidebarWidget {
+    background-color: $bg-secondary;
+    border-right: 1px solid $border-default;
+}
+
+#SidebarWidget QLabel#header {
+    font-size: 14px;
+    font-weight: 600;
+    color: $text-primary;
+    padding: 12px;
+    background-color: $bg-secondary;
+}
+
+// Sidebar buttons spacing
+#SidebarWidget QPushButton[class~="add-button"] {
+    margin: 4px;
+    font-size: 12px;
+}
+
+// Collections tree
+#CollectionsTreeWidget {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidget QTreeView {
+    background-color: transparent;
+    font-size: 13px;
+}
+
+// Embedded widget in tree items - ensure background shows through
+#CollectionsTreeWidgetRow {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidgetRow QLabel {
+    background-color: transparent;
+}
+
+// Uncomment to add colored backgrounds to method badges (GET, POST, etc.)
+// #CollectionsTreeWidgetRow QLabel[class~="method-GET"] {
+//     background-color: $method-get-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-POST"] {
+//     background-color: $method-post-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-PUT"] {
+//     background-color: $method-put-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-PATCH"] {
+//     background-color: $method-patch-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-DELETE"] {
+//     background-color: $method-delete-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-OPTIONS"] {
+//     background-color: $method-options-bg;
+// }
+// #CollectionsTreeWidgetRow QLabel[class~="method-HEAD"] {
+//     background-color: $method-head-bg;
+// }
+
+#CollectionsTreeWidgetRow QLineEdit {
+    background-color: $bg-tertiary;
+}
+
+// Cookie manager button
+#SidebarWidget QPushButton#cookie_manager_button {
+    border-style: solid;
+    margin-left: 12px;
+    margin-right: 12px;
+}
+
+// Environment selector
+#EnvironmentSelectorWidget {
+    padding: 8px;
+    border-top: 1px solid $border-default;
+}
+
+#EnvironmentSelectorWidget QLabel {
+    font-size: 11px;
+    color: $text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

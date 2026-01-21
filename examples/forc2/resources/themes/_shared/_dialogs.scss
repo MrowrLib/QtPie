@@ -1,0 +1,82 @@
+// Dialog styles
+
+QDialog {
+    background-color: $bg-primary;
+}
+
+// Dialog button box
+QDialogButtonBox {
+    button-layout: 0;
+}
+
+// Message box
+QMessageBox {
+    background-color: $bg-primary;
+}
+
+QMessageBox QLabel {
+    color: $text-primary;
+}
+
+// Menu
+QMenu {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 8px 24px 8px 12px;
+    border-radius: 4px;
+    margin: 2px;
+}
+
+QMenu::item:selected {
+    background-color: $accent;
+    color: white;
+}
+
+QMenu::item:disabled {
+    color: $text-muted;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: $border-default;
+    margin: 4px 8px;
+}
+
+QMenu::indicator {
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+}
+
+// Menu bar
+QMenuBar {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    border-bottom: 1px solid $border-default;
+    padding: 2px;
+}
+
+QMenuBar::item {
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected {
+    background-color: $bg-hover;
+}
+
+QMenuBar::item:pressed {
+    background-color: $accent;
+    color: white;
+}
+
+// Context menu
+QMenu[contextMenu="true"] {
+    padding: 4px;
+}

@@ -1,0 +1,98 @@
+// Button styles
+
+QPushButton {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-height: 20px;
+}
+
+QPushButton:hover {
+    background-color: $bg-hover;
+    border-color: $border-strong;
+}
+
+QPushButton:pressed {
+    background-color: $bg-selected;
+}
+
+QPushButton:disabled {
+    background-color: $bg-secondary;
+    color: $text-muted;
+    border-color: $border-subtle;
+}
+
+// Primary/accent button (e.g., Send button)
+QPushButton#send-button,
+QPushButton[class~="primary"] {
+    background-color: $accent;
+    color: white;
+    border: none;
+    font-weight: 600;
+}
+
+QPushButton#send-button:hover,
+QPushButton[class~="primary"]:hover {
+    background-color: $accent-hover;
+}
+
+QPushButton#send-button:pressed,
+QPushButton[class~="primary"]:pressed {
+    background-color: $accent-active;
+}
+
+QPushButton#send-button:disabled,
+QPushButton[class~="primary"]:disabled {
+    background-color: $accent-muted;
+    color: $text-muted;
+}
+
+// Flat/ghost button (for toolbar-style buttons)
+QPushButton[flat="true"],
+QPushButton#delete-button {
+    background: transparent;
+    border: none;
+    padding: 4px;
+}
+
+QPushButton[flat="true"]:hover,
+QPushButton#delete-button:hover {
+    background-color: $bg-hover;
+}
+
+// Add button style (ghost with border)
+QPushButton#add-button,
+QPushButton[class~="add-button"] {
+    background: transparent;
+    border: 1px solid $border-default;
+    color: $text-secondary;
+}
+
+QPushButton#add-button:hover,
+QPushButton[class~="add-button"]:hover {
+    border-color: $accent;
+    color: $accent;
+    background-color: rgba(124, 58, 237, 0.1);
+}
+
+// QToolButton with icon and text
+QToolButton {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+    border: 1px solid $border-default;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-height: 20px;
+    spacing: 6px;  // Try spacing between icon and text
+}
+
+QToolButton:hover {
+    background-color: $bg-hover;
+    border-color: $border-strong;
+}
+
+QToolButton:pressed {
+    background-color: $bg-selected;
+}

@@ -1,0 +1,143 @@
+// Request editor widget styles
+
+#RequestWidget {
+    background-color: $bg-primary;
+}
+
+#RequestEditorWidget {
+    background-color: $bg-primary;
+    padding: 8px;
+}
+
+// Request name input
+#RequestEditorWidget > QLineEdit#_request_name {
+    font-size: 14px;
+    font-weight: 600;
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    padding: 8px 4px;
+}
+
+#RequestEditorWidget > QLineEdit#_request_name:hover {
+    border-bottom-color: $border-default;
+}
+
+#RequestEditorWidget > QLineEdit#_request_name:focus {
+    border-bottom-color: $accent;
+}
+
+// Address bar (method + URL + send)
+#RequestAddressBarWidget {
+    background-color: $bg-secondary;
+    border: 1px solid $border-default;
+    border-radius: 6px;
+    padding: 4px;
+    margin: 8px 0;
+}
+
+// Method label/badge
+#RequestAddressBarWidget QLabel#_method {
+    font-weight: 700;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    min-width: 50px;
+    text-align: center;
+}
+
+// URL input inside address bar
+#RequestAddressBarWidget QLineEdit {
+    background-color: transparent;
+    border: none;
+    font-size: 14px;
+    padding: 8px;
+}
+
+#RequestAddressBarWidget QLineEdit:focus {
+    background-color: transparent;
+}
+
+// Send button
+#RequestAddressBarWidget QPushButton#_send {
+    background-color: $accent;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 20px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+#RequestAddressBarWidget QPushButton#_send:hover {
+    background-color: $accent-hover;
+}
+
+#RequestAddressBarWidget QPushButton#_send:pressed {
+    background-color: $accent-active;
+}
+
+// Params tab content
+#ParamsTabContent {
+    padding: 12px;
+}
+
+#ParamsTabContent QLabel#header {
+    font-weight: 600;
+    color: $text-secondary;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 8px;
+}
+
+// Add button spacing in Params tab
+#ParamsTabContent QPushButton[class~="add-button"] {
+    margin-bottom: 8px;
+}
+
+// Body tab content
+#BodyTabContent {
+    padding: 12px;
+}
+
+#BodyTabContent QComboBox {
+    margin-bottom: 8px;
+}
+
+#BodyTabContent QPlainTextEdit {
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+}
+
+// Auth tab content
+#AuthTabContent {
+    padding: 12px;
+}
+
+#AuthTabContent QComboBox {
+    margin-bottom: 12px;
+    min-width: 150px;
+}
+
+#AuthTabContent QLabel {
+    color: $text-secondary;
+}
+
+// Headers tab content
+#HeadersTabContent {
+    padding: 12px;
+}
+
+// Delete button in tables
+#DeleteWidget QPushButton {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    font-size: 14px;
+}
+
+#DeleteWidget QPushButton:hover {
+    background-color: $error-muted;
+    border-radius: 4px;
+}

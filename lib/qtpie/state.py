@@ -212,6 +212,10 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
         if not hasattr(self, "_state_instance"):
             self._state_instance = StateInstance()
 
+        # Create per-instance Event objects (class-level ones are just placeholders)
+        for event_name in config.event_names:
+            setattr(self, event_name, Event())
+
         # Apply constructor variable kwargs
         if variable_kwargs:
             _apply_variable_kwargs_for_state(self, variable_kwargs)

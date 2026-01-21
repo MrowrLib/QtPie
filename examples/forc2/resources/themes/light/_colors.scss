@@ -1,0 +1,65 @@
+// Light Theme Color Palette
+// Clean, modern light theme
+
+// Backgrounds (lightest to darkest)
+$bg-base: #ffffff;
+$bg-primary: #fafafa;
+$bg-secondary: #f0f0f0;
+$bg-tertiary: #e5e5e5;
+$bg-hover: #d9d9d9;
+$bg-selected: #d0d0f0;
+
+// Text
+$text-primary: #1a1a1a;
+$text-secondary: #505050;
+$text-muted: #808080;
+$text-placeholder: #a0a0a0;
+
+// Accent (Insomnia-style purple)
+$accent: #7c3aed;
+$accent-hover: #6d28d9;
+$accent-active: #5b21b6;
+$accent-muted: #c4b5fd;
+
+// Semantic colors
+$success: #16a34a;
+$success-muted: #bbf7d0;
+$warning: #d97706;
+$warning-muted: #fef3c7;
+$error: #dc2626;
+$error-muted: #fecaca;
+$info: #2563eb;
+$info-muted: #dbeafe;
+
+// HTTP Method colors (with light backgrounds for badges)
+$method-get: #16a34a;
+$method-get-bg: #dcfce7;
+$method-post: #d97706;
+$method-post-bg: #fef3c7;
+$method-put: #2563eb;
+$method-put-bg: #dbeafe;
+$method-patch: #7c3aed;
+$method-patch-bg: #ede9fe;
+$method-delete: #dc2626;
+$method-delete-bg: #fee2e2;
+$method-options: #db2777;
+$method-options-bg: #fce7f3;
+$method-head: #0891b2;
+$method-head-bg: #cffafe;
+
+// Borders
+$border-subtle: #e5e5e5;
+$border-default: #d4d4d4;
+$border-strong: #a3a3a3;
+$border-focus: $accent;
+
+// Scrollbar
+$scrollbar-track: $bg-secondary;
+$scrollbar-thumb: #c0c0c0;
+$scrollbar-thumb-hover: #a0a0a0;
+
+// Status codes
+$status-success: $success;      // 2xx
+$status-redirect: $info;        // 3xx
+$status-client-error: $warning; // 4xx
+$status-server-error: $error;   // 5xx
