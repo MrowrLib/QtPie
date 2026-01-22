@@ -138,6 +138,8 @@ def _setup_selection_bindings_impl(
     from qtpy.QtCore import QItemSelectionModel, QModelIndex, Qt
     from qtpy.QtWidgets import QComboBox
 
+    from qtpie.bindings.selection_helpers import subscribe_to_root_variable_change
+
     # Use mutable containers for model and item_var so they can be updated when
     # record changes. This allows the same signal handler to use updated references
     # without needing to disconnect/reconnect (which would mess up handler ordering).
@@ -448,39 +450,22 @@ def _setup_selection_bindings_impl(
             index_var.on_change(on_index_var_change_combo)
 
             # For nested paths like "workspace?.selected_index", subscribe to ROOT Variable
-            if root_variable is not None and index_var_path is not None and resolve_or_create_variable_fn is not None:
-                from qtpie.variable import Variable as VarType
+            def on_combo_index_resolved(value: Any) -> None:
+                if isinstance(value, int) and value >= 0 and set_current_index_fn is not None:
+                    set_current_index_fn(value)
 
-                root_subscribed_key = f"combo_index_root_subscribed_{id(widget)}"
-                if not binding_container.get(root_subscribed_key, False):
-                    binding_container[root_subscribed_key] = True
-
-                    def on_root_variable_change_combo_index(*_args: Any) -> None:
-                        """Re-resolve index_var when root Variable changes."""
-                        if updating["flag"]:
-                            return
-                        assert index_var_path is not None
-                        assert resolve_or_create_variable_fn is not None
-                        assert set_current_index_fn is not None
-                        new_source = resolve_or_create_variable_fn(host, index_var_path, int)
-                        if new_source is None:
-                            return
-
-                        new_idx: int | None = None
-                        if isinstance(new_source, VarType):
-                            new_idx = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                        elif isinstance(new_source, (Observable, ObservableProxy)):
-                            val = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
-                            new_idx = val if isinstance(val, int) else None
-
-                        if new_idx is not None and new_idx >= 0:
-                            updating["flag"] = True
-                            try:
-                                set_current_index_fn(new_idx)
-                            finally:
-                                updating["flag"] = False
-
-                    root_variable.on_change(on_root_variable_change_combo_index)
+            subscribe_to_root_variable_change(
+                root_variable,
+                index_var_path,
+                resolve_or_create_variable_fn,
+                host,
+                binding_container,
+                updating,
+                "combo_index",
+                id(widget),
+                int,
+                on_combo_index_resolved,
+            )
 
         if item_var is not None and set_current_index_fn is not None:
 
@@ -505,40 +490,24 @@ def _setup_selection_bindings_impl(
             item_var.on_change(on_item_var_change_combo)
 
             # For nested paths like "workspace?.selected_item", subscribe to ROOT Variable
-            if root_variable is not None and item_var_path is not None and resolve_or_create_variable_fn is not None:
-                from qtpie.variable import Variable as VarType
+            def on_combo_item_resolved(item: Any) -> None:
+                if set_current_index_fn is not None:
+                    idx = find_index_of_item(item)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
 
-                root_subscribed_key = f"combo_item_root_subscribed_{id(widget)}"
-                if not binding_container.get(root_subscribed_key, False):
-                    binding_container[root_subscribed_key] = True
-
-                    def on_root_variable_change_combo_item(*_args: Any) -> None:
-                        """Re-resolve item_var when root Variable changes."""
-                        if updating["flag"]:
-                            return
-                        assert item_var_path is not None
-                        assert resolve_or_create_variable_fn is not None
-                        assert set_current_index_fn is not None
-                        new_source = resolve_or_create_variable_fn(host, item_var_path, None)
-                        if new_source is None:
-                            return
-
-                        new_item: Any = None
-                        if isinstance(new_source, VarType):
-                            new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                        elif isinstance(new_source, (Observable, ObservableProxy)):
-                            new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
-
-                        if new_item is not None:
-                            updating["flag"] = True
-                            try:
-                                idx = find_index_of_item(new_item)
-                                if idx >= 0:
-                                    set_current_index_fn(idx)
-                            finally:
-                                updating["flag"] = False
-
-                    root_variable.on_change(on_root_variable_change_combo_item)
+            subscribe_to_root_variable_change(
+                root_variable,
+                item_var_path,
+                resolve_or_create_variable_fn,
+                host,
+                binding_container,
+                updating,
+                "combo_item",
+                id(widget),
+                None,
+                on_combo_item_resolved,
+            )
 
         if text_var is not None and set_current_index_fn is not None:
 
@@ -938,38 +907,22 @@ def _setup_selection_bindings_impl(
             index_var.on_change(on_index_var_change_view)
 
             # For nested paths like "workspace?.selected_index", subscribe to ROOT Variable
-            if root_variable is not None and index_var_path is not None and resolve_or_create_variable_fn is not None:
-                from qtpie.variable import Variable as VarType
+            def on_index_resolved(value: Any) -> None:
+                if isinstance(value, int) and value >= 0:
+                    set_row_index(value)
 
-                root_subscribed_key = f"index_root_subscribed_{id(widget)}"
-                if not binding_container.get(root_subscribed_key, False):
-                    binding_container[root_subscribed_key] = True
-
-                    def on_root_variable_change_index(*_args: Any) -> None:
-                        """Re-resolve index_var when root Variable changes."""
-                        if updating["flag"]:
-                            return
-                        assert index_var_path is not None
-                        assert resolve_or_create_variable_fn is not None
-                        new_source = resolve_or_create_variable_fn(host, index_var_path, int)
-                        if new_source is None:
-                            return
-
-                        new_idx: int | None = None
-                        if isinstance(new_source, VarType):
-                            new_idx = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                        elif isinstance(new_source, (Observable, ObservableProxy)):
-                            val = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
-                            new_idx = val if isinstance(val, int) else None
-
-                        if new_idx is not None and new_idx >= 0:
-                            updating["flag"] = True
-                            try:
-                                set_row_index(new_idx)  # pyright: ignore[reportUnknownArgumentType]
-                            finally:
-                                updating["flag"] = False
-
-                    root_variable.on_change(on_root_variable_change_index)
+            subscribe_to_root_variable_change(
+                root_variable,
+                index_var_path,
+                resolve_or_create_variable_fn,
+                host,
+                binding_container,
+                updating,
+                "index",
+                id(widget),
+                int,
+                on_index_resolved,
+            )
 
         if item_var is not None:
 
@@ -992,39 +945,23 @@ def _setup_selection_bindings_impl(
             item_var.on_change(on_item_var_change_view)
 
             # For nested paths like "workspace?.selected_item", subscribe to ROOT Variable
-            if root_variable is not None and item_var_path is not None and resolve_or_create_variable_fn is not None:
-                from qtpie.variable import Variable as VarType
+            def on_item_resolved(item: Any) -> None:
+                idx = find_index_of_item(item)
+                if idx >= 0:
+                    set_row_index(idx)
 
-                root_subscribed_key = f"item_root_subscribed_{id(widget)}"
-                if not binding_container.get(root_subscribed_key, False):
-                    binding_container[root_subscribed_key] = True
-
-                    def on_root_variable_change_item(*_args: Any) -> None:
-                        """Re-resolve item_var when root Variable changes."""
-                        if updating["flag"]:
-                            return
-                        assert item_var_path is not None
-                        assert resolve_or_create_variable_fn is not None
-                        new_source = resolve_or_create_variable_fn(host, item_var_path, None)
-                        if new_source is None:
-                            return
-
-                        new_item: Any = None
-                        if isinstance(new_source, VarType):
-                            new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                        elif isinstance(new_source, (Observable, ObservableProxy)):
-                            new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
-
-                        if new_item is not None:
-                            updating["flag"] = True
-                            try:
-                                idx = find_index_of_item(new_item)
-                                if idx >= 0:
-                                    set_row_index(idx)
-                            finally:
-                                updating["flag"] = False
-
-                    root_variable.on_change(on_root_variable_change_item)
+            subscribe_to_root_variable_change(
+                root_variable,
+                item_var_path,
+                resolve_or_create_variable_fn,
+                host,
+                binding_container,
+                updating,
+                "item",
+                id(widget),
+                None,
+                on_item_resolved,
+            )
 
         if text_var is not None:
 
@@ -1241,44 +1178,28 @@ def _setup_selection_bindings_impl(
         # For nested paths like "workspace?.selected_items", subscribe to ROOT Variable
         # This must be OUTSIDE the items_list_var check because when root is None,
         # items_list_var will also be None (path can't be resolved yet)
-        if root_variable is not None and items_list_var_path is not None and resolve_or_create_variable_fn is not None:
-            from qtpie.variable import Variable as VarType
+        def on_items_list_resolved(items: Any) -> None:
+            if not isinstance(items, list) or not items:
+                return
+            current_model = binding_container["model"]
+            current_selection_model = binding_container.get("selection_model")
+            if current_model is not None and current_selection_model is not None:
+                current_selection_model.clearSelection()  # pyright: ignore[reportUnknownMemberType]
+                for item in items:  # pyright: ignore[reportUnknownVariableType]
+                    row = find_index_of_item(item)
+                    if row >= 0:
+                        idx = current_model.index(row, 0)  # pyright: ignore[reportUnknownMemberType]
+                        current_selection_model.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)  # pyright: ignore[reportUnknownMemberType]
 
-            root_subscribed_key = f"items_list_root_subscribed_{id(widget)}"
-            if not binding_container.get(root_subscribed_key, False):
-                binding_container[root_subscribed_key] = True
-
-                def on_root_variable_change_items_list(*_args: Any) -> None:
-                    """Re-resolve items_list_var when root Variable changes."""
-                    if updating["flag"]:
-                        return
-                    assert items_list_var_path is not None
-                    assert resolve_or_create_variable_fn is not None
-                    new_source = resolve_or_create_variable_fn(host, items_list_var_path, None)
-                    if new_source is None:
-                        return
-
-                    # Get the items from the new source
-                    new_items: list[Any] = []  # pyright: ignore[reportUnknownVariableType]
-                    if isinstance(new_source, VarType):
-                        new_items = new_source.value or []  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
-                    elif isinstance(new_source, ObservableList):
-                        new_items = list(new_source)  # pyright: ignore[reportUnknownArgumentType]
-
-                    if new_items:
-                        # Sync widget selection to match the new items
-                        updating["flag"] = True
-                        try:
-                            current_model = binding_container["model"]
-                            current_selection_model = binding_container.get("selection_model")
-                            if current_model is not None and current_selection_model is not None:
-                                current_selection_model.clearSelection()  # pyright: ignore[reportUnknownMemberType]
-                                for item in new_items:  # pyright: ignore[reportUnknownVariableType]
-                                    row = find_index_of_item(item)
-                                    if row >= 0:
-                                        idx = current_model.index(row, 0)  # pyright: ignore[reportUnknownMemberType]
-                                        current_selection_model.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)  # pyright: ignore[reportUnknownMemberType]
-                        finally:
-                            updating["flag"] = False
-
-                root_variable.on_change(on_root_variable_change_items_list)
+        subscribe_to_root_variable_change(
+            root_variable,
+            items_list_var_path,
+            resolve_or_create_variable_fn,
+            host,
+            binding_container,
+            updating,
+            "items_list",
+            id(widget),
+            None,
+            on_items_list_resolved,
+        )
