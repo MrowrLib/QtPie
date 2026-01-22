@@ -2335,3 +2335,57 @@ class TestComboBoxSelectedTextBinding:
         assert_that(instance._combo.count()).is_equal_to(3)
         assert_that(instance._combo.currentIndex()).is_equal_to(1)
         assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxSelectedTextObservable:
+    """QComboBox with selectedText= binding using Observable[str] instead of Variable[str]."""
+
+    def test_selected_text_observable_initial_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= works with Observable[str] for initial selection."""
+        from observant import Observable
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5), Dog("Max", 7)])
+            _name: Observable[str] = new("Rex")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # "Rex" should match the second item
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+    def test_selected_text_observable_variable_to_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing Observable[str] updates QComboBox selection."""
+        from observant import Observable
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5), Dog("Max", 7)])
+            _name: Observable[str] = new("Fido")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+        instance._name.set("Max")
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._combo.currentText()).is_equal_to("Max")
+
+    def test_selected_text_observable_widget_to_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing QComboBox selection updates Observable[str]."""
+        from observant import Observable
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _name: Observable[str] = new("")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initial sync sets the display text
+        assert_that(instance._name.get()).is_equal_to("Fido")
+
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._name.get()).is_equal_to("Rex")
