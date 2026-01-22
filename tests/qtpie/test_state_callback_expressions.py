@@ -373,3 +373,187 @@ class TestExpressionWithComplexExpressions:
         s.trigger.value = "go"
 
         assert_that(received).is_equal_to([20])
+
+
+class TestAssignmentExpressions:
+    """Tests for assignment expressions in callbacks (e.g., {count += 1})."""
+
+    def test_simple_assignment_to_variable(self) -> None:
+        """onChange="{count = 42}" assigns to Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(0)
+            trigger: Variable[str] = new("", onChange="{count = 42}")
+
+        s = MyState()
+        assert_that(s.count.value).is_equal_to(0)
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(42)
+
+    def test_increment_assignment_to_variable(self) -> None:
+        """onChange="{count += 1}" increments Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(10)
+            trigger: Variable[str] = new("", onChange="{count += 1}")
+
+        s = MyState()
+        assert_that(s.count.value).is_equal_to(10)
+        s.trigger.value = "a"
+        assert_that(s.count.value).is_equal_to(11)
+        s.trigger.value = "b"
+        assert_that(s.count.value).is_equal_to(12)
+
+    def test_decrement_assignment_to_variable(self) -> None:
+        """onChange="{count -= 5}" decrements Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(100)
+            trigger: Variable[str] = new("", onChange="{count -= 5}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(95)
+
+    def test_multiply_assignment_to_variable(self) -> None:
+        """onChange="{count *= 2}" multiplies Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(3)
+            trigger: Variable[str] = new("", onChange="{count *= 2}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(6)
+
+    def test_divide_assignment_to_variable(self) -> None:
+        """onChange="{count /= 2}" divides Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[float] = new(10.0)
+            trigger: Variable[str] = new("", onChange="{count /= 2}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(5.0)
+
+    def test_floor_divide_assignment_to_variable(self) -> None:
+        """onChange="{count //= 3}" floor divides Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(10)
+            trigger: Variable[str] = new("", onChange="{count //= 3}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(3)
+
+    def test_modulo_assignment_to_variable(self) -> None:
+        """onChange="{count %= 3}" applies modulo to Variable."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(10)
+            trigger: Variable[str] = new("", onChange="{count %= 3}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(1)
+
+    def test_power_assignment_to_variable(self) -> None:
+        """onChange="{count **= 2}" raises Variable to power."""
+
+        @state
+        class MyState(State):
+            count: Variable[int] = new(3)
+            trigger: Variable[str] = new("", onChange="{count **= 2}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.count.value).is_equal_to(9)
+
+    def test_assignment_with_expression(self) -> None:
+        """onChange="{result = a + b}" assigns computed value."""
+
+        @state
+        class MyState(State):
+            a: Variable[int] = new(10)
+            b: Variable[int] = new(20)
+            result: Variable[int] = new(0)
+            trigger: Variable[str] = new("", onChange="{result = a + b}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.result.value).is_equal_to(30)
+
+    def test_assignment_with_method_call(self) -> None:
+        """onChange="{result = compute()}" assigns method return value."""
+
+        @state
+        class MyState(State):
+            result: Variable[int] = new(0)
+            trigger: Variable[str] = new("", onChange="{result = _compute()}")
+
+            def _compute(self) -> int:
+                return 999
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.result.value).is_equal_to(999)
+
+    def test_bitwise_or_assignment(self) -> None:
+        """onChange="{flags |= 4}" applies bitwise OR."""
+
+        @state
+        class MyState(State):
+            flags: Variable[int] = new(1)
+            trigger: Variable[str] = new("", onChange="{flags |= 4}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.flags.value).is_equal_to(5)  # 0b001 | 0b100 = 0b101
+
+    def test_bitwise_and_assignment(self) -> None:
+        """onChange="{flags &= 3}" applies bitwise AND."""
+
+        @state
+        class MyState(State):
+            flags: Variable[int] = new(7)  # 0b111
+            trigger: Variable[str] = new("", onChange="{flags &= 3}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s.flags.value).is_equal_to(3)  # 0b111 & 0b011 = 0b011
+
+    def test_assignment_to_underscore_prefixed_variable(self) -> None:
+        """onChange="{count += 1}" finds _count Variable."""
+
+        @state
+        class MyState(State):
+            _count: Variable[int] = new(0)
+            trigger: Variable[str] = new("", onChange="{count += 1}")
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(s._count.value).is_equal_to(1)
+
+    def test_equals_in_string_not_treated_as_assignment(self) -> None:
+        """print("x = 1") is NOT an assignment, it's a function call."""
+        received: list[str] = []
+
+        @state
+        class MyState(State):
+            trigger: Variable[str] = new("", onChange='{_log("x = 1")}')
+
+            def _log(self, msg: str) -> None:
+                received.append(msg)
+
+        s = MyState()
+        s.trigger.value = "go"
+        assert_that(received).is_equal_to(["x = 1"])

@@ -1,6 +1,8 @@
 # pyright: reportUnknownVariableType=false
 """Workspace - the root state that holds a collection and its path."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from qtpie import Event, State, Var, new, state
@@ -22,6 +24,11 @@ class Workspace(State):
     ### Events ###
     on_save: Event
 
+    ### Static Methods ###
+    @staticmethod
+    def load(folder: Path) -> Workspace | None:
+        return load_workspace(folder)
+
     ### Methods ###
     def _on_active_environment_changed(self) -> None:
         print("On active environment changed to:", self.active_environment_name())
@@ -32,42 +39,7 @@ class Workspace(State):
                 return
 
     def _on_path_changed(self) -> None:
-        """Load or unload collection and environments when path changes."""
-        from ..format import load_collection, load_environment, load_workspace_config
-
-        path = self.path.value
-        if path is None or not path.exists():
-            if self.collection() is not None:
-                self.collection = None
-            if self.environments():
-                self.environments = []
-            self.name = ""
-            self.active_environment_name = None
-            return
-
-        # Load workspace config from forc.yaml
-        load_workspace_config(self, path)
-
-        # Load collections from 'collections/' subfolder
-        collections_path = path / "collections"
-        if collections_path.exists():
-            collection = load_collection(collections_path)
-            collection.state_parent = self
-            self.collection = collection
-
-        # Load environments from 'environments/' subfolder
-        environments_path = path / "environments"
-        if environments_path.exists():
-            envs: list[Environment] = []
-            for env_file in sorted(environments_path.iterdir()):
-                if env_file.suffix in (".yaml", ".yml"):
-                    env = load_environment(env_file)
-                    env.state_parent = self
-                    envs.append(env)
-            self.environments = envs
-
-        # print out the active environment after loading
-        print("Loaded environments. Active environment is:", self.active_environment_name())
+        print("Workspace path changed to:", self.path())
 
     def _do_save(self) -> None:
         """Save the collection to disk."""

@@ -346,3 +346,80 @@ class TestEventNewOnSyntax:
 
         assert_that(new_calls).is_equal_to(["new"])
         assert_that(decorator_calls).is_equal_to(["decorator"])
+
+
+@pytest.mark.parametrize("base_class,decorator", SIGNAL_CLASS_TYPES)
+class TestAssignmentExpressions:
+    """Tests for assignment expressions in signal handlers."""
+
+    def test_simple_assignment_to_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Signal handler {count = 42} assigns to Variable."""
+
+        @decorator
+        class TestClass(base_class):
+            count: Variable[int] = new(0)
+            on_test: Event = new(on="{count = 42}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.count.value).is_equal_to(0)
+        instance.on_test.emit()
+        assert_that(instance.count.value).is_equal_to(42)
+
+    def test_increment_assignment(self, base_class, decorator, qt: QtDriver) -> None:
+        """Signal handler {count += 1} increments Variable."""
+
+        @decorator
+        class TestClass(base_class):
+            count: Variable[int] = new(10)
+            on_test: Event = new(on="{count += 1}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.count.value).is_equal_to(10)
+        instance.on_test.emit()
+        assert_that(instance.count.value).is_equal_to(11)
+        instance.on_test.emit()
+        assert_that(instance.count.value).is_equal_to(12)
+
+    def test_assignment_with_expression(self, base_class, decorator, qt: QtDriver) -> None:
+        """Signal handler {result = a + b} assigns computed value."""
+
+        @decorator
+        class TestClass(base_class):
+            a: Variable[int] = new(10)
+            b: Variable[int] = new(20)
+            result: Variable[int] = new(0)
+            on_test: Event = new(on="{result = a + b}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+        assert_that(instance.result.value).is_equal_to(30)
+
+    def test_assignment_with_method_call(self, base_class, decorator, qt: QtDriver) -> None:
+        """Signal handler {result = _compute()} assigns method return value."""
+
+        @decorator
+        class TestClass(base_class):
+            result: Variable[int] = new(0)
+            on_test: Event = new(on="{result = _compute()}")
+
+            def _compute(self) -> int:
+                return 999
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+        assert_that(instance.result.value).is_equal_to(999)
+
+    def test_equals_in_string_not_treated_as_assignment(self, base_class, decorator, qt: QtDriver) -> None:
+        """print("x = 1") is NOT an assignment, it's a function call."""
+        received: list[str] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_test: Event = new(on='{_log("x = 1")}')
+
+            def _log(self, msg: str) -> None:
+                received.append(msg)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+        assert_that(received).is_equal_to(["x = 1"])

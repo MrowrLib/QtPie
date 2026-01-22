@@ -1,7 +1,5 @@
 import logging
 
-from qtpy.QtWidgets import QLabel, QPushButton
-
 from forc2.app.menus import FileMenu, ViewMenu
 from forc2.app.widgets.request import RequestWidget
 from forc2.app.widgets.sidebar import SidebarWidget
@@ -38,26 +36,6 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
-    e1: Event[int] = new(on="_on_e1")
-
-    def _on_e1(self, value: int) -> None:
-        print("Event e1 fired with value:", value)
-
-    test_var: Var[int] = new(42, onChange="{print(test_var)}")  # "_changed")
-    test_label: QLabel = new(bind="Test Var: {test_var}")  # Just a test label
-    test_button: QPushButton = new(
-        "Click me",
-        clicked="{e1(test_var)}",
-        # clicked="{test_var += 1}",
-        # clicked="_onclick"
-    )
-
-    def _onclick(self) -> None:
-        self.test_var += 1
-
-    def _changed(self) -> None:
-        print("Test var changed to:", self.test_var())
-
     # workspace_value_label: QLabel = new(bind="Workspace: {workspace}")
 
     ### Docks / Widgets ###
@@ -65,7 +43,7 @@ class ForcWindow(Window):
         dock="left",
         title="Explorer",
         hideTitleBar=True,
-        visible="{workspace is not None}",
+        # visible="{workspace is not None}",
     )(maximumWidth=400)
 
     editors: Var[list[Request], Dock[RequestWidget]] = new(
@@ -74,7 +52,7 @@ class ForcWindow(Window):
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
-        visible="{workspace is not None}",
+        # visible="{workspace is not None}",
     )
 
     ### Methods ###

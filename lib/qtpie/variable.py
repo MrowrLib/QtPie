@@ -1286,6 +1286,35 @@ def _resolve_var_for_state_expression(state_obj: Any, var_name: str) -> Any | No
     return None
 
 
+def _resolve_variable_object_for_state(state_obj: Any, var_name: str) -> Variable[Any, Any] | None:
+    """Resolve a Variable object (not its value) for assignment support in State.
+
+    Returns the Variable object itself, not its value.
+    Returns None if not found or not a Variable.
+    """
+    # Try on state_obj itself (exact name, then underscore prefix)
+    for attr_name in [var_name, f"_{var_name}"]:
+        if hasattr(state_obj, attr_name):
+            raw_attr: Any = getattr(state_obj, attr_name)
+            if isinstance(raw_attr, Variable):
+                return raw_attr  # pyright: ignore[reportUnknownVariableType]
+
+    # Walk state_parent hierarchy
+    from .state import State
+
+    if isinstance(state_obj, State):
+        current: State | None = state_obj.state_parent
+        while current is not None:
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(current, attr_name):
+                    raw_attr = getattr(current, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        return raw_attr  # pyright: ignore[reportUnknownVariableType]
+            current = current.state_parent
+
+    return None
+
+
 def _create_state_expression_handler(
     state_obj: Any,
     expression: str,
@@ -1306,8 +1335,10 @@ def _create_state_expression_handler(
         - Full Python expressions with state variables
         - #args placeholder to pass callback arguments: {handle(#args)}
         - #self placeholder for the state_obj instance
+        - Assignments to Variables: {count = 42}, {count += 1}
     """
     from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields  # pyright: ignore[reportPrivateUsage]
+    from .signals.expression_handler import _extract_assignment_target, _is_statement  # pyright: ignore[reportPrivateUsage]
 
     # Parse the expression to get the inner content
     fields = _parse_format_fields(expression)
@@ -1321,6 +1352,12 @@ def _create_state_expression_handler(
     uses_args = "#args" in expr
     uses_self = "#self" in expr
 
+    # Check if this is a statement (assignment, etc.)
+    is_stmt = _is_statement(expr)
+
+    # For assignments, check if target is a Variable
+    assignment_info = _extract_assignment_target(expr) if is_stmt else None
+
     # Replace special placeholders before AST extraction (they're not valid Python)
     expr_for_ast = expr
     if uses_args:
@@ -1329,7 +1366,17 @@ def _create_state_expression_handler(
         expr_for_ast = expr_for_ast.replace("#self", "_state_ref_")
 
     # Extract variable names from the expression for context building
-    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
+    # For assignments, we also need to extract names from the value expression
+    if assignment_info:
+        _, _, value_expr = assignment_info
+        value_expr_for_ast = value_expr
+        if uses_args:
+            value_expr_for_ast = value_expr_for_ast.replace("#args", "_signal_args_placeholder_")
+        if uses_self:
+            value_expr_for_ast = value_expr_for_ast.replace("#self", "_state_ref_")
+        var_names = _extract_ast_names(value_expr_for_ast) - _BUILTINS
+    else:
+        var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
     # Remove placeholder names we added
     var_names.discard("_signal_args_placeholder_")
     var_names.discard("_state_ref_")
@@ -1359,10 +1406,56 @@ def _create_state_expression_handler(
         if uses_self:
             eval_expr = eval_expr.replace("#self", "state_ref")
 
-        # Evaluate the expression
+        # Execute/evaluate the expression
         try:
-            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-            return result
+            if is_stmt and assignment_info:
+                # Handle assignment to Variable specially
+                target_name, operator, value_expr = assignment_info
+                var_obj = _resolve_variable_object_for_state(state_obj, target_name)
+
+                if var_obj is not None:
+                    # Target is a Variable - update its .value
+                    new_value = eval(value_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+
+                    if operator == "=":
+                        var_obj.value = new_value
+                    elif operator == "+=":
+                        var_obj.value = var_obj.value + new_value
+                    elif operator == "-=":
+                        var_obj.value = var_obj.value - new_value
+                    elif operator == "*=":
+                        var_obj.value = var_obj.value * new_value
+                    elif operator == "/=":
+                        var_obj.value = var_obj.value / new_value
+                    elif operator == "//=":
+                        var_obj.value = var_obj.value // new_value
+                    elif operator == "%=":
+                        var_obj.value = var_obj.value % new_value
+                    elif operator == "**=":
+                        var_obj.value = var_obj.value**new_value
+                    elif operator == "|=":
+                        var_obj.value = var_obj.value | new_value
+                    elif operator == "&=":
+                        var_obj.value = var_obj.value & new_value
+                    elif operator == "^=":
+                        var_obj.value = var_obj.value ^ new_value
+                    elif operator == "<<=":
+                        var_obj.value = var_obj.value << new_value
+                    elif operator == ">>=":
+                        var_obj.value = var_obj.value >> new_value
+                    return None
+                else:
+                    # Not a Variable, use exec for regular statement
+                    exec(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S102
+                    return None
+            elif is_stmt:
+                # Statement but not a simple assignment we can handle
+                exec(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S102
+                return None
+            else:
+                # Regular expression
+                result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+                return result
         except Exception as e:
             raise RuntimeError(f"Error evaluating state expression '{expression}': {e}") from e
 
