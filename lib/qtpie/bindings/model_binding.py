@@ -686,11 +686,11 @@ def apply_model_binding(
         # At this point obs_list must be set (or we would have returned False earlier)
         assert obs_list is not None
 
-        if is_dict_binding and columns is None:
-            # Dict items are (key, value) tuples - use index access
-            columns = [0, 1]
-            if headers is None:
-                headers = cast(dict[str | int, str], {0: "Key", 1: "Value"})
+        # For dict bindings without explicit columns, let ReactiveTableModel auto-detect
+        # It will use #key + value properties if value is a complex object,
+        # or [0, 1] for simple dict[K, V] where V is primitive.
+        # Don't pre-set headers here - let _auto_detect_columns() set appropriate headers
+        # based on what columns it detects.
 
         # Resolve editable - default is True (like other Qt widgets)
         # readOnly=True sets editable=False

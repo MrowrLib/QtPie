@@ -74,6 +74,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._editable = editable  # None/False=none, True=all, list=specific columns
         self._source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = source_dict  # For dict bindings
         self._dict_sync: DictToTupleListSync[Any, Any] | None = dict_sync  # For #key column support
+        # Track dict binding detected via auto-detection (when items are 2-tuples with complex values)
+        self._auto_detected_dict_binding = False
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
@@ -107,27 +109,77 @@ class ReactiveTableModel[T](QAbstractTableModel):
                 return [f.name for f in fields(item)]
             # Handle tuples/sequences (e.g., dict items converted to (key, value) tuples)
             if isinstance(item, tuple):
-                return list(range(len(cast(tuple[Any, ...], item))))  # [0, 1] for 2-tuple, etc.
+                item_tuple = cast(tuple[Any, ...], item)
+                # Check if this looks like a dict binding: 2-tuple where value is complex
+                # This handles both explicit dict bindings AND cases where we couldn't
+                # detect dict binding initially (e.g., nested path with initial None value)
+                if len(item_tuple) == 2:
+                    value_obj: Any = item_tuple[1]
+                    value_attrs = self._get_object_columns(value_obj)
+                    if value_attrs:
+                        # This is a dict binding with complex value objects
+                        # Mark as auto-detected dict binding for data() method
+                        self._auto_detected_dict_binding = True
+                        # Set default header for #key if not already set
+                        if DICT_KEY_COLUMN not in self._headers:
+                            self._headers[DICT_KEY_COLUMN] = "Key"
+                        # Use #key + value's properties
+                        result: list[str | int] = [DICT_KEY_COLUMN]
+                        result.extend(value_attrs)
+                        return result
+                    else:
+                        # Simple 2-tuple (e.g., dict[str, str]) - set default headers
+                        if 0 not in self._headers:
+                            self._headers[0] = "Key"
+                        if 1 not in self._headers:
+                            self._headers[1] = "Value"
+                # Fallback: simple tuple indexing [0, 1, ...]
+                return list(range(len(item_tuple)))
             # For regular objects, use public attributes that aren't methods
-            # BUT: Variable fields are callable (have __call__), so check for Variable-like objects
-            # Exclude State-specific attributes that shouldn't be columns
-            excluded_attrs = {"state_parent"}
-
-            def is_data_attr(attr: str) -> bool:
-                if attr in excluded_attrs:
-                    return False
-                val = getattr(item, attr, None)
-                # Variable-like objects (have .value and .observable) ARE data fields
-                if hasattr(val, "value") and hasattr(val, "observable"):
-                    return True
-                # Exclude Event objects (have .emit but no .value)
-                if hasattr(val, "emit") and not hasattr(val, "value"):
-                    return False
-                # Exclude callables (methods/functions)
-                return not callable(val)
-
-            return [attr for attr in dir(item) if not attr.startswith("_") and is_data_attr(attr)]
+            result = cast(list[str | int], self._get_object_columns(item))
+            return result
         return []
+
+    def _get_object_columns(self, obj: Any) -> list[str]:
+        """Get column names from an object's public attributes.
+
+        Handles:
+        - State objects: returns Variable field names from _state_config.variable_names
+        - Dataclasses: returns field names
+        - Regular objects: returns non-private, non-callable attributes
+        - Primitives (str, int, float, bool, None): returns empty list
+        """
+        # Skip primitives - they have attributes but aren't "complex objects"
+        if obj is None or isinstance(obj, (str, int, float, bool, bytes)):
+            return []
+
+        # Check for State objects (have _state_config with variable_names)
+        state_config = getattr(obj, "_state_config", None)
+        if state_config is not None and hasattr(state_config, "variable_names"):
+            return list(state_config.variable_names)
+
+        # Check for dataclasses
+        if is_dataclass(obj) and not isinstance(obj, type):
+            return [f.name for f in fields(obj)]
+
+        # Fallback: scan public attributes
+        # Exclude State-specific attributes that shouldn't be columns
+        excluded_attrs = {"state_parent"}
+
+        def is_data_attr(attr: str) -> bool:
+            if attr in excluded_attrs:
+                return False
+            val = getattr(obj, attr, None)
+            # Variable-like objects (have .value and .observable) ARE data fields
+            if hasattr(val, "value") and hasattr(val, "observable"):
+                return True
+            # Exclude Event objects (have .emit but no .value)
+            if hasattr(val, "emit") and not hasattr(val, "value"):
+                return False
+            # Exclude callables (methods/functions)
+            return not callable(val)
+
+        return [attr for attr in dir(obj) if not attr.startswith("_") and is_data_attr(attr)]
 
     def _resolve_checkable_columns(self) -> set[str]:
         """Resolve which columns should be checkable (have checkboxes)."""
@@ -189,7 +241,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
     def _is_dict_binding(self) -> bool:
         """Check if this is a dict binding (items are key-value tuples)."""
-        return self._source_dict is not None or self._dict_sync is not None
+        return self._source_dict is not None or self._dict_sync is not None or self._auto_detected_dict_binding
 
     def _get_value_from_tuple(self, item: Any, column_name: str | int) -> Any:
         """Get a value from a (key, value) tuple item for dict bindings.
@@ -472,9 +524,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
             if new_columns:
                 self.beginResetModel()
                 self._columns = new_columns
-                # Set default headers for tuple columns (from dict bindings)
-                if isinstance(item, tuple) and len(cast(tuple[Any, ...], item)) == 2 and not self._headers:
-                    self._headers = {0: "Key", 1: "Value"}
+                # Note: _auto_detect_columns() now sets appropriate headers internally
                 self.endResetModel()
                 return  # Reset already handles the insert
         self.beginInsertRows(QModelIndex(), index, index)
