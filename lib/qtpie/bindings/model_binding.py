@@ -1089,6 +1089,7 @@ def apply_model_binding(
             field_info.selected_widget,
             field_info.selected_text,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+            root_variable=root_variable,  # Pass root for nested path subscriptions
         )
         # Set up embedded widget for QListView (not QComboBox)
         if field_info.embed_widget is not None and _is_list_view(widget_instance):

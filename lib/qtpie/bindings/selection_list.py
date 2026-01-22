@@ -19,6 +19,7 @@ def setup_selection_bindings(
     selected_widget_path: str | None = None,
     selected_text_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
+    root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
 ) -> None:
     """Set up two-way selection bindings for model widgets.
 
@@ -33,6 +34,7 @@ def setup_selection_bindings(
         selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
         selected_text_path: Variable path for text binding - matches by display text (e.g., "_selected_name")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
+        root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.active_env")
     """
     has_single = selected_index_path is not None or selected_item_path is not None or selected_text_path is not None
     has_multi = selected_indexes_path is not None or selected_items_list_path is not None
@@ -81,42 +83,13 @@ def setup_selection_bindings(
             widget_var = source  # pyright: ignore[reportUnknownVariableType]
 
     text_var: VarType[str] | None = None
-    text_var_root_variable: VarType[Any] | None = None  # Root Variable for nested paths
 
     if selected_text_path is not None:
         source = resolve_or_create_variable_fn(host, selected_text_path, str)
         if isinstance(source, VarType):
             text_var = source  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(source, (Observable, ObservableProxy)):
-            text_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
-
-        # For nested paths like "workspace?.active_environment_name", find the ROOT Variable
-        # so we can re-resolve and sync when it changes from None to a real object
-        path_normalized = selected_text_path.replace("?.", ".")
-        if "." in path_normalized:
-            root_name = path_normalized.split(".")[0]
-            # Search parent hierarchy for root Variable (mirrors model_binding.py logic)
-            from qtpy.QtWidgets import QApplication
-
-            root_attr: Any = getattr(host, root_name, None)
-            if root_attr is None:
-                root_attr = getattr(host, f"_{root_name}", None)
-            if root_attr is None:
-                current: Any = host
-                while root_attr is None:
-                    if not hasattr(current, "parent") or not callable(current.parent):
-                        break
-                    parent_widget: Any = current.parent()
-                    if parent_widget is None:
-                        break
-                    root_attr = getattr(parent_widget, root_name, None)
-                    current = parent_widget
-                if root_attr is None:
-                    app = QApplication.instance()
-                    if app is not None:
-                        root_attr = getattr(app, root_name, None)
-            if root_attr is not None and isinstance(root_attr, VarType):
-                text_var_root_variable = root_attr  # pyright: ignore[reportUnknownVariableType]
+            text_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change  # pyright: ignore[reportUnknownVariableType]
 
     # ALWAYS call _setup_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers
@@ -132,7 +105,7 @@ def setup_selection_bindings(
         items_list_var,
         widget_var,
         text_var,
-        text_var_root_variable=text_var_root_variable,
+        root_variable=root_variable,
         text_var_path=selected_text_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
     )
@@ -148,7 +121,7 @@ def _setup_selection_bindings_impl(
     items_list_var: Any | None,  # Variable[list[Any]] | None
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
     text_var: Any | None = None,  # Variable[str] | None - matches by display text
-    text_var_root_variable: Any | None = None,  # Root Variable for nested text paths
+    root_variable: Any | None = None,  # Root Variable for nested paths (from model_binding)
     text_var_path: str | None = None,  # Original path for re-resolution
     resolve_or_create_variable_fn: Any | None = None,  # For re-resolving nested paths
 ) -> None:
@@ -557,7 +530,7 @@ def _setup_selection_bindings_impl(
             # For nested paths like "workspace?.active_environment_name", subscribe to ROOT
             # Variable changes. When root changes from None to a real object (or vice versa),
             # we need to re-resolve the text_var path and sync the selection.
-            if text_var_root_variable is not None and text_var_path is not None and resolve_or_create_variable_fn is not None:
+            if root_variable is not None and text_var_path is not None and resolve_or_create_variable_fn is not None:
                 from qtpie.variable import Variable as VarType
 
                 # Track if we've already subscribed to avoid duplicates
@@ -597,7 +570,7 @@ def _setup_selection_bindings_impl(
                             binding_container["intended_text"] = None
                             binding_container.pop("last_selected_text", None)
 
-                    text_var_root_variable.on_change(on_root_variable_change)
+                    root_variable.on_change(on_root_variable_change)
                     logger.debug(f"[selectedText] Connected root variable change callback for path={text_var_path}")
 
         # Widget → Variable binding
