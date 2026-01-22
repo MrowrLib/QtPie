@@ -846,3 +846,155 @@ class TestVariableCallable:
 
         instance._count.value = 100
         assert_that(instance._count()).is_equal_to(100)
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestVariableOnChangeCallback:
+    """Variable onChange callback for Widget/Window/App etc."""
+
+    def test_on_change_fires(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange callback fires when Variable value changes."""
+        calls: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            _count: Variable[int] = new(0, onChange="_on_count_changed")
+
+            def _on_count_changed(self) -> None:
+                calls.append(self._count.value)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._count.value = 42
+
+        assert_that(calls).is_equal_to([42])
+
+    def test_on_change_receives_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange callback receives the new value as argument."""
+        calls: list[str] = []
+
+        @decorator
+        class TestClass(base_class):
+            _name: Variable[str] = new("", onChange="_on_name_changed")
+
+            def _on_name_changed(self, value: str) -> None:
+                calls.append(value)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._name.value = "hello"
+
+        assert_that(calls).is_equal_to(["hello"])
+
+    def test_on_change_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange can be a lambda."""
+        calls: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            _count: Variable[int] = new(0, onChange=lambda v: calls.append(v))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance._count.value = 99
+
+        assert_that(calls).is_equal_to([99])
+
+    def test_on_change_with_none_initial_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange fires when Variable with None initial value changes."""
+        calls: list[object] = []
+
+        class Item:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[Item | None] = new(None, onChange="_on_selected")
+
+            def _on_selected(self, value: Item | None) -> None:
+                calls.append(value)
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Set to an actual value
+        item = Item("test")
+        instance._selected.value = item
+
+        assert_that(calls).is_length(1)
+        assert_that(calls[0]).is_same_as(item)
+
+    def test_on_change_with_union_type(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange fires for Variable with union type."""
+        calls: list[object] = []
+
+        class TypeA:
+            pass
+
+        class TypeB:
+            pass
+
+        @decorator
+        class TestClass(base_class):
+            _item: Variable[TypeA | TypeB | None] = new(None, onChange="_on_item")
+
+            def _on_item(self, value: TypeA | TypeB | None) -> None:
+                calls.append(value)
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Set to TypeA
+        a = TypeA()
+        instance._item.value = a
+        assert_that(calls).is_length(1)
+        assert_that(calls[0]).is_same_as(a)
+
+        # Set to TypeB
+        b = TypeB()
+        instance._item.value = b
+        assert_that(calls).is_length(2)
+        assert_that(calls[1]).is_same_as(b)
+
+        # Set back to None
+        instance._item.value = None
+        assert_that(calls).is_length(3)
+        assert_that(calls[2]).is_none()
+
+    def test_on_change_fires_on_replace_wrapper(self, base_class, decorator, qt: QtDriver) -> None:
+        """onChange callback fires when Variable.replace_wrapper() is called.
+
+        Regression test: When selectedItem binding replaces the Variable's wrapper
+        with a new ObservableProxy (for proxy sharing), the onChange callback must
+        fire to notify that the value has changed.
+        """
+        from observant import ObservableProxy
+
+        calls: list[object] = []
+
+        class Item:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        @decorator
+        class TestClass(base_class):
+            _selected: Variable[Item | None] = new(None, onChange="_on_selected")
+
+            def _on_selected(self) -> None:
+                calls.append(self._selected.value)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(calls).is_empty()  # No callback on init
+
+        # Create a new proxy with an actual item and replace the wrapper
+        item = Item("test-item")
+        new_proxy: ObservableProxy[Item | None] = ObservableProxy(item)
+        instance._selected.replace_wrapper(new_proxy)
+
+        # The callback should have fired with the new value
+        assert_that(calls).is_length(1)
+        assert_that(calls[0]).is_same_as(item)
+
+        # Replace with another proxy
+        item2 = Item("test-item-2")
+        new_proxy2: ObservableProxy[Item | None] = ObservableProxy(item2)
+        instance._selected.replace_wrapper(new_proxy2)
+
+        assert_that(calls).is_length(2)
+        assert_that(calls[1]).is_same_as(item2)

@@ -162,6 +162,27 @@ class QtPieComponentBase:
         sig = self.signal(name)
         sig.emit(*args, **kwargs)
 
+    def emit_event(self, name: str, *args: Any, **kwargs: Any) -> None:
+        """Emit an event by name. Alias for emit_signal() on Qt-based classes.
+
+        This provides API compatibility with State.emit_event() so code can
+        use emit_event() uniformly whether the class is State (pure Python Event)
+        or a Qt-based class (Qt Signal).
+
+        Args:
+            name: The event/signal name (e.g., "on_save")
+            *args: Arguments to pass to the event/signal
+            **kwargs: Keyword arguments to pass to the event/signal
+
+        Raises:
+            AttributeError: If event/signal not found in hierarchy
+
+        Example:
+            self.emit_event("on_save")
+            self.emit_event("on_data_changed", new_value)
+        """
+        self.emit_signal(name, *args, **kwargs)
+
     # -------------------------------------------------------------------------
     # Variable Resolution
     # -------------------------------------------------------------------------

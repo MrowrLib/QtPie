@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
+
+logger = logging.getLogger("qtpie.bindings.selection_tree")
 
 
 def setup_tree_selection_bindings(
@@ -212,8 +215,9 @@ def _setup_tree_selection_bindings_impl(
         updating["flag"] = True
         try:
             iv = container["item_var"]
+            item = get_item_at_index(current)
             if iv is not None:
-                set_var_value(iv, get_item_at_index(current), current)
+                set_var_value(iv, item, current)
             wv = container["widget_var"]
             if wv is not None:
                 set_var_value(wv, get_widget_at_index(current))

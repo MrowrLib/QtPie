@@ -279,7 +279,7 @@ class Variable[T, W = None]:
         ensuring they share dirty state, validation state, etc.
 
         All callbacks registered via on_change() are automatically re-registered
-        on the new wrapper.
+        on the new wrapper, and then fired to notify of the value change.
 
         Args:
             new_wrapper: The new wrapper to use (must be same type as current).
@@ -288,6 +288,18 @@ class Variable[T, W = None]:
         # Re-register all callbacks on the new wrapper
         for callback in self._callbacks:
             new_wrapper.on_change(callback)
+        # Fire callbacks to notify that the value has changed
+        # (the wrapper itself won't fire because it didn't "change" from its perspective)
+        for callback in self._callbacks:
+            try:
+                callback()
+            except TypeError:
+                # Some callbacks may expect a value argument (from Observable.on_change)
+                # Try passing the current value
+                try:
+                    callback(self.value)
+                except TypeError:
+                    pass  # Callback signature doesn't match - skip
 
     def __call__(self) -> T:
         """Shorthand for .value - allows my_var() instead of my_var.value."""
@@ -1407,10 +1419,16 @@ def _wire_on_change_callback(
             else:
                 callback()
 
+        # Wire up via Variable.on_change() so callbacks are tracked and re-registered
+        # when replace_wrapper() is called (e.g., by selectedItem binding for complex objects)
         if isinstance(observable, Observable):
-            observable.on_change(lazy_resolve_and_call)
+            var.on_change(lazy_resolve_and_call)
+        elif isinstance(observable, ObservableProxy):
+            # ObservableProxy - on_change() takes no args, get value from var
+            var.on_change(lambda: lazy_resolve_and_call(var.value))  # type: ignore[arg-type]
         else:
-            observable.on_change(lambda: lazy_resolve_and_call())  # type: ignore[arg-type]
+            # Collection types - on_change() takes no args
+            var.on_change(lambda: lazy_resolve_and_call())  # type: ignore[arg-type]
         return
 
     # Non-State case: direct callback lookup (original behavior)
@@ -1432,17 +1450,25 @@ def _wire_on_change_callback(
         # Can't inspect - assume no value parameter
         accepts_value = False
 
-    # Wire up based on observable type
+    # Wire up via Variable.on_change() so callbacks are tracked and re-registered
+    # when replace_wrapper() is called (e.g., by selectedItem binding for complex objects)
     if isinstance(observable, Observable):
         # Observable[T] - on_change(callback) passes new value
         if accepts_value:
-            observable.on_change(lambda v: callback(v))
+            var.on_change(lambda v: callback(v))
         else:
-            observable.on_change(lambda _: callback())
+            var.on_change(lambda _: callback())
+    elif isinstance(observable, ObservableProxy):
+        # ObservableProxy - on_change() takes no args, but we can get the value from var
+        if accepts_value:
+            # Get the current value from the Variable when callback fires
+            var.on_change(lambda: callback(var.value))  # type: ignore[arg-type]
+        else:
+            var.on_change(callback)  # type: ignore[arg-type]
     else:
-        # Collection types (ObservableList, ObservableDict, ObservableSet) and ObservableProxy
+        # Collection types (ObservableList, ObservableDict, ObservableSet)
         # - on_change() takes no args
-        observable.on_change(callback)  # type: ignore[arg-type]
+        var.on_change(callback)  # type: ignore[arg-type]
 
 
 def _wire_on_insert_callback(

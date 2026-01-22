@@ -176,6 +176,10 @@ class Menu[T = None](QMenu):
         # Detect bare Variable[T] annotations as required bindings
         _detect_required_bindings_for_menu(cls)
 
+        # Process Event[T] annotations - create real Qt Signals
+        # MUST happen BEFORE _auto_new_bare_annotations which would convert Event to NewField
+        _process_event_annotations_for_menu(cls)
+
         # Auto-new bare annotations (non-Variable types)
         from .widget_base import _auto_new_bare_annotations
 
@@ -366,6 +370,26 @@ class Menu[T = None](QMenu):
         """
         sig = self.signal(name)
         sig.emit(*args, **kwargs)
+
+    def emit_event(self, name: str, *args: Any, **kwargs: Any) -> None:
+        """Emit an event by name. Alias for emit_signal() on Qt-based classes.
+
+        This provides API compatibility with State.emit_event() so code can
+        use emit_event() uniformly whether the class is State (pure Python Event)
+        or a Qt-based class (Qt Signal).
+
+        Args:
+            name: The event/signal name (e.g., "on_save")
+            *args: Arguments to pass to the event/signal
+            **kwargs: Keyword arguments to pass to the event/signal
+
+        Raises:
+            AttributeError: If event/signal not found in hierarchy
+
+        Example:
+            self.emit_event("on_save")
+        """
+        self.emit_signal(name, *args, **kwargs)
 
     # fmt: off
     # var() overloads for type inference
@@ -1150,3 +1174,31 @@ def _apply_action_property_bindings(menu: Menu[Any], config: MenuConfig) -> None
                     prop_setter(var.value)
                     # Subscribe to changes
                     var.observable.on_change(lambda new_val, s=prop_setter: s(new_val))
+
+
+def _process_event_annotations_for_menu(cls: type[Menu[Any]]) -> None:
+    """Process Event[T] annotations and create real Qt Signals for Menu.
+
+    A bare annotation like `on_click: Event` or `on_changed: Event[int]`
+    gets a real Qt Signal created on the class.
+    """
+    import typing
+
+    from qtpy.QtCore import Signal
+
+    from .event import extract_event_args, is_event_hint
+
+    # Get annotations including from parent classes
+    hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
+
+    for name, hint in hints.items():
+        # Skip if already has a value (e.g., on_click = Signal(int))
+        if name in cls.__dict__:
+            continue
+
+        # Check if it's an Event annotation
+        if is_event_hint(hint):
+            # Extract signal argument types from Event[T]
+            args = extract_event_args(hint)
+            # Create real Qt Signal on the class
+            setattr(cls, name, Signal(*args))

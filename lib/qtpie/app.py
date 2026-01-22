@@ -172,6 +172,34 @@ def _detect_required_bindings_for_app(cls: type) -> None:
     detect_required_bindings(cls, "_qtpie_config", Variable, _RequiredBindingDescriptor)
 
 
+def _process_event_annotations_for_app(cls: type) -> None:
+    """Process Event[T] annotations and create real Qt Signals for App.
+
+    A bare annotation like `on_click: Event` or `on_changed: Event[int]`
+    gets a real Qt Signal created on the class.
+    """
+    import typing
+
+    from qtpy.QtCore import Signal
+
+    from .event import extract_event_args, is_event_hint
+
+    # Get annotations including from parent classes
+    hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
+
+    for name, hint in hints.items():
+        # Skip if already has a value (e.g., on_click = Signal(int))
+        if name in cls.__dict__:
+            continue
+
+        # Check if it's an Event annotation
+        if is_event_hint(hint):
+            # Extract signal argument types from Event[T]
+            args = extract_event_args(hint)
+            # Create real Qt Signal on the class
+            setattr(cls, name, Signal(*args))
+
+
 class AppBase[T = None](QtPieComponentBase):
     """
     Base class with declarative features for App.
@@ -234,6 +262,10 @@ class AppBase[T = None](QtPieComponentBase):
 
         # Collect NewField instances before they're processed
         _collect_fields_for_app(cls)
+
+        # Process Event[T] annotations - create real Qt Signals
+        # MUST happen BEFORE _auto_new_bare_annotations which would convert Event to NewField
+        _process_event_annotations_for_app(cls)
 
         # Auto-new bare annotations (non-Variable types)
         from qtpie.widget_base import _auto_new_bare_annotations

@@ -1,13 +1,15 @@
+import logging
 from pathlib import Path
 from typing import override
 
-from qtpy.QtCore import Signal
-
+# from qtpy.QtCore import Signal
 from forc2.app import ForcWindow
 from forc2.domain.collection import Collection
 from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
-from qtpie import App, Setting, Variable, app, new
+from qtpie import App, Event, Setting, Variable, app, new
+
+logger = logging.getLogger(__name__)
 
 
 @app(
@@ -20,11 +22,8 @@ from qtpie import App, Setting, Variable, app, new
     on_toggle_splitter_orientation="_on_toggle_splitter_orientation",
 )
 class ForcApp(App):
-    ### Signals ###
-    on_reload_window = Signal()
-
-    ### Services ###
-    # ...
+    ### Events ###
+    on_reload_window: Event
 
     ### Settings ###
     loaded_workspace_path: Setting[str | None] = new("fixtures/demo-api")
@@ -57,4 +56,4 @@ class ForcApp(App):
         self.setQuitOnLastWindowClosed(True)
 
     def _on_selected_sidebar_item_changed(self) -> None:
-        print("-----> Selected sidebar item changed to:", self.selected_sidebar_item())
+        logger.warning("-----> Selected sidebar item changed to: %s", self.selected_sidebar_item())

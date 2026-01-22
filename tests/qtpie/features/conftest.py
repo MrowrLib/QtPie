@@ -5,6 +5,7 @@
 from typing import Any
 
 import pytest
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QLabel
 
 from qtpie import AppBase, Dialog, Menu, State, Widget, WidgetBase, Window, app, dialog, menu, state, widget, window
@@ -14,6 +15,14 @@ from qtpie.testing import QtDriver
 # WidgetBase test class - combines QLabel with WidgetBase mixin
 class WidgetBaseLabel[T = None](QLabel, WidgetBase[T]):
     """Test class for WidgetBase - a QLabel with QtPie features."""
+
+    pass
+
+
+# AppBase test class - combines QObject with AppBase for signal support
+# AppBase alone doesn't inherit from QObject, so Signals don't work
+class AppBaseWithSignals[T = None](QObject, AppBase[T]):
+    """Test class for AppBase with QObject for signal support."""
 
     pass
 
@@ -81,6 +90,18 @@ ALL_CLASS_TYPES_WITH_STATE = [
     pytest.param(State, state, id="State"),
 ]
 
+# Classes that support Qt Signals (QObject subclasses)
+# AppBase alone doesn't inherit from QObject, so we use AppBaseWithSignals
+# State creates pure Python Events, not Qt Signals, so it's excluded
+SIGNAL_CLASS_TYPES = [
+    pytest.param(Widget, widget, id="Widget"),
+    pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
+    pytest.param(Menu, menu, id="Menu"),
+    pytest.param(AppBaseWithSignals, app, id="App"),
+    pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+]
+
 
 def create_and_track(
     qt: QtDriver,
@@ -105,7 +126,7 @@ def create_and_track(
     if base_class is State:
         # State is not a QWidget, just return the instance
         pass
-    elif base_class is AppBase:
+    elif base_class is AppBase or base_class is AppBaseWithSignals:
         # AppBase is not a QWidget, but if it has a window, track that
         if hasattr(instance, "window") and instance.window is not None:
             qt.track(instance.window)
