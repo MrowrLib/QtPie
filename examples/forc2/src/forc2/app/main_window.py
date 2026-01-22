@@ -1,8 +1,9 @@
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QComboBox, QLabel, QTreeView
 
 from forc2.app.menus import FileMenu, ViewMenu
+from forc2.app.widgets.sidebar import Sidebar
 from qtpie import Window, new, window
+from qtpie.dock import Dock
 
 # @widget(layout="horizontal")
 # class TestStatusBar(Widget):
@@ -39,40 +40,12 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
-    collections_headers: QLabel = new(bind="workspace?.name")
-    collections_tree: QTreeView = new(
-        bind="workspace?.collection?.items",
-        children="items",
-        format="{name}",
-    )
-
-    environments_headers: QLabel = new("Environments (ComboBox)")
-    environments_chooser: QComboBox = new(
-        bind="workspace?.environments",
-        format="{name}",
-        selectedText="workspace?.active_environment_name",
-    )
+    # TODO: Dock tabs should close on middle-click by default.
+    # TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
+    ### Docks / Widgets ###
+    sidebar: Dock[Sidebar] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
 
 
-#  treeview: QTreeView = new(
-#         bind="workspace.collections",
-#         children="items",
-#         selectedItem="current_workspace_item",
-#         expand=True,
-#         headerHidden=True,
-#         validator=filename_safe_validator,
-#         clicked="{on_current_workspace_item_changed()}",
-#         widget=CollectionsTreeWidgetRow,
-#         onEnterKey="_on_enter_key",
-#         onDeleteKey="_on_delete_key",
-#         selectedWidget="current_tree_widget_row",
-#     )
-
-
-# TODO: Dock tabs should close on middle-click by default.
-# TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
-### Docks / Widgets ###
-# sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
 # editors: Variable[list[Request], Dock[RequestWidget]] = new(
 #     group="requests",
 #     dock="right",

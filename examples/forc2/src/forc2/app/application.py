@@ -4,6 +4,8 @@ from typing import override
 from qtpy.QtCore import Signal
 
 from forc2.app import ForcWindow
+from forc2.domain.collection import Collection
+from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
 from qtpie import App, Setting, Variable, app, new
 
@@ -29,6 +31,9 @@ class ForcApp(App):
 
     ### Variables ###
     workspace: Variable[Workspace | None] = new(default=Workspace())
+    selected_sidebar_item: Variable[Collection | Request | None] = new(
+        None, onChange="_on_selected_sidebar_item_changed"
+    )
 
     ### Window ###
     main_window: ForcWindow
@@ -50,3 +55,6 @@ class ForcApp(App):
         self.main_window = self.build(ForcWindow)
         self.main_window.show()
         self.setQuitOnLastWindowClosed(True)
+
+    def _on_selected_sidebar_item_changed(self) -> None:
+        print("-----> Selected sidebar item changed to:", self.selected_sidebar_item())

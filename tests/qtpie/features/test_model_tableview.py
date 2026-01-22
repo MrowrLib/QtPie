@@ -2049,3 +2049,161 @@ class TestTableViewStateBinding:
         # Values should update
         assert_that(model.data(model.index(0, 0))).is_equal_to("Diana Updated")
         assert_that(str(model.data(model.index(0, 1)))).is_equal_to("29")
+
+
+# =============================================================================
+# Regression Tests for Specific Bug Fixes
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewRegressionBugs:
+    """Regression tests for specific bugs that were fixed."""
+
+    def test_dict_binding_detects_from_key_column(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with #key column correctly detects dict binding mode.
+
+        Regression test for: When columns=["#key", ...] is specified, the model
+        should recognize this as a dict binding and display keys properly, even
+        when the underlying data structure is tuple-based internally.
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new({"HOST": EnvironmentVariable("localhost")})
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+        assert_that(model).is_not_none()
+
+        # Verify data shows keys (not tuple indices)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("HOST")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("localhost")
+
+    def test_dict_style_columns_parameter(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView supports dict-style columns parameter for combined columns+headers.
+
+        Regression test for: columns={"#key": "Name", "value": "Value"} syntax
+        wasn't supported - only separate columns= and headers= parameters worked.
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new({"BASE_URL": EnvironmentVariable("http://api.example.com")})
+            _table: QTableView = new(
+                bind="_vars",
+                columns={"#key": "Variable Name", "value": "Variable Value"},
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Headers should come from dict values
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Variable Name")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Variable Value")
+
+        # Data should work correctly
+        assert_that(model.data(model.index(0, 0))).is_equal_to("BASE_URL")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("http://api.example.com")
+
+    def test_auto_detect_columns_for_dict_with_complex_values(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView auto-detects columns when binding to dict with complex value objects.
+
+        Regression test for: When binding to dict[str, SomeClass] without explicit columns,
+        the table should auto-detect #key + value object properties, not just show [0, 1].
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new({"SECRET": EnvironmentVariable("password123", enabled=True, secret=True)})
+            # No columns specified - should auto-detect
+            _table: QTableView = new(bind="_vars")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have auto-detected columns: #key + EnvironmentVariable fields
+        # EnvironmentVariable has: value, enabled, secret
+        assert_that(model.columnCount()).is_greater_than_or_equal_to(2)
+
+        # First column header should be "Key" (default for #key)
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+
+        # Data should be accessible
+        assert_that(model.data(model.index(0, 0))).is_equal_to("SECRET")
+
+    def test_list_replace_triggers_column_redetection(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView re-detects columns when list is replaced (not just appended).
+
+        Regression test for: When using Variable[list].value = [...] (replace),
+        columns weren't re-detected because _on_clear didn't re-detect columns.
+        """
+        from qtpie import State, state
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new([])
+            # No columns specified - should auto-detect when items arrive
+            _table: QTableView = new(bind="_people")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Initially empty - no columns detected yet
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Replace the entire list (not append)
+        person = Person()
+        person.name = "Alice"
+        person.age = 30
+        instance._people.value = [person]
+
+        # Columns should now be auto-detected from Person
+        assert_that(model.rowCount()).is_equal_to(1)
+        assert_that(model.columnCount()).is_greater_than_or_equal_to(2)
+
+        # Find name column and verify data
+        name_col = None
+        for col in range(model.columnCount()):
+            header = model.headerData(col, Qt.Orientation.Horizontal)
+            if header and header.lower() == "name":
+                name_col = col
+                break
+        assert_that(name_col).is_not_none()
+        assert_that(model.data(model.index(0, name_col))).is_equal_to("Alice")
+
+    def test_key_header_and_value_header_parameters(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView supports keyHeader= and valueHeader= convenience parameters.
+
+        Regression test for: When binding dict to QTableView, keyHeader= and valueHeader=
+        provide a simpler way to customize the first two column headers without using
+        the full headers= parameter.
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _config: Variable[dict[str, str]] = new({"HOST": "localhost", "PORT": "8080"})
+            _table: QTableView = new(
+                bind="_config",
+                keyHeader="Setting",
+                valueHeader="Value",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Headers should use the custom values
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Setting")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+        # Data should work correctly
+        assert_that(model.rowCount()).is_equal_to(2)
