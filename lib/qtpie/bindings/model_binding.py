@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, cast
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, get_proxies_for, on_proxy_registered
 from qtpy.QtWidgets import QWidget
 
+from qtpie.models.reactive_table_model import DICT_KEY_COLUMN
+
 logger = logging.getLogger("qtpie.bindings")
 
 if TYPE_CHECKING:
@@ -534,15 +536,19 @@ def apply_model_binding(
     # Also handle dict -> list[KeyValuePair] conversion for QTableView
     is_dict_binding = False
     source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = None  # Track source dict for editing
+    dict_sync: Any = None  # DictToTupleListSync for synced dict bindings
 
     if isinstance(source, VarType):
         wrapper = source.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
         if isinstance(wrapper, ObservableList):
             obs_list = wrapper  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(wrapper, ObservableDict):
-            # Variable[dict] wraps ObservableDict - convert to list of tuples
-            obs_list = ObservableList(list(cast(ObservableDict[Any, Any], wrapper).items()))
-            source_dict = cast(ObservableDict[Any, Any], wrapper)  # Track for editing
+            # Variable[dict] wraps ObservableDict - use DictToTupleListSync for sync
+            from qtpie.models import DictToTupleListSync
+
+            dict_sync = DictToTupleListSync(cast(ObservableDict[Any, Any], wrapper))
+            obs_list = dict_sync.list
+            source_dict = cast(ObservableDict[Any, Any], wrapper)
             is_dict_binding = True
         elif isinstance(wrapper, (Observable, ObservableProxy)):
             # Source might be Observable[list] or ObservableProxy with nested list
@@ -560,7 +566,7 @@ def apply_model_binding(
             elif isinstance(val, list):
                 obs_list = ObservableList(cast(list[Any], val))
             elif isinstance(val, dict):
-                # Convert dict to list of (key, value) tuples for table display
+                # Plain dict - no sync, just snapshot
                 obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
                 source_dict = cast(dict[Any, Any], val)  # Track for editing
                 is_dict_binding = True
@@ -570,9 +576,12 @@ def apply_model_binding(
     elif isinstance(source, ObservableList):
         obs_list = source  # pyright: ignore[reportUnknownVariableType]
     elif isinstance(source, ObservableDict):
-        # ObservableDict directly - convert to list of tuples
-        obs_list = ObservableList(list(cast(ObservableDict[Any, Any], source).items()))
-        source_dict = cast(ObservableDict[Any, Any], source)  # Track for editing
+        # ObservableDict directly - use DictToTupleListSync for sync
+        from qtpie.models import DictToTupleListSync
+
+        dict_sync = DictToTupleListSync(cast(ObservableDict[Any, Any], source))
+        obs_list = dict_sync.list
+        source_dict = cast(ObservableDict[Any, Any], source)
         is_dict_binding = True
     elif isinstance(source, Observable):
         val = source.get()  # pyright: ignore[reportUnknownVariableType]
@@ -582,6 +591,7 @@ def apply_model_binding(
         elif isinstance(val, list):
             obs_list = ObservableList(cast(list[Any], val))
         elif isinstance(val, dict):
+            # Plain dict - no sync, just snapshot
             obs_list = ObservableList(list(cast(dict[Any, Any], val).items()))
             source_dict = cast(dict[Any, Any], val)  # Track for editing
             is_dict_binding = True
@@ -657,7 +667,25 @@ def apply_model_binding(
 
         # For dict bindings, use tuple index columns if not specified
         columns = field_info.table_columns
+        columns_were_explicit = columns is not None
         headers = field_info.table_headers
+
+        # Detect dict binding from columns if #key is present
+        # This handles the case where the initial value is None but we know it's a dict
+        if columns is not None and DICT_KEY_COLUMN in columns:
+            is_dict_binding = True
+            # Create dict_sync if not already created (initial value was None)
+            if dict_sync is None:
+                from qtpie.models import DictToTupleListSync
+
+                # Create empty sync adapter - will be populated via replace_source later
+                dict_sync = DictToTupleListSync(cast(dict[Any, Any], {}))
+                # Use the dict_sync's list as our obs_list
+                obs_list = dict_sync.list
+
+        # At this point obs_list must be set (or we would have returned False earlier)
+        assert obs_list is not None
+
         if is_dict_binding and columns is None:
             # Dict items are (key, value) tuples - use index access
             columns = [0, 1]
@@ -673,12 +701,14 @@ def apply_model_binding(
             # Default: editable=True (consistent with QLineEdit, QTextEdit, etc.)
             editable = True
 
-        # For dict bindings, map "key"/"value" to column indices
-        if is_dict_binding and isinstance(editable, list):
+        # For dict bindings, map "key"/"value" to column indices or #key
+        # Only map when using default columns (columns not explicitly specified)
+        if is_dict_binding and isinstance(editable, list) and not columns_were_explicit:
             mapped_editable: list[str | int] = []
             for col in cast(list[str | int], editable):
                 if col == "key":
-                    mapped_editable.append(0)
+                    # Map "key" to "#key" for new-style dict bindings
+                    mapped_editable.append("#key")
                 elif col == "value":
                     mapped_editable.append(1)
                 else:
@@ -692,8 +722,9 @@ def apply_model_binding(
             headers=headers,
             checkable=field_info.table_checkable,
             checkable_text=field_info.table_checkable_text,
-            editable=editable,
+            editable=cast("list[str | int] | bool | None", editable),
             source_dict=source_dict,
+            dict_sync=dict_sync,
         )
     else:
         # Create ReactiveListModel for QComboBox, QListView, etc.
@@ -769,6 +800,7 @@ def apply_model_binding(
             path: str,
             tree_widget: QWidget | None,
             expand_on_change: bool,
+            dict_sync_adapter: Any = None,  # DictToTupleListSync for dict bindings
         ) -> None:
             # Track the last nested list identity to detect when the root object changes
             # vs when the same list is just mutated. We only want to re-sync when the
@@ -852,7 +884,9 @@ def apply_model_binding(
                     return
 
                 # Traverse nested path, unwrapping Variables at each step
+                # Track the final Variable we end on (if any) to get its ObservableDict wrapper
                 nested_val: Any = root_val
+                final_variable: Any = None  # Track Variable[dict] for ObservableDict access
                 for part in path.split("."):
                     if nested_val is None:
                         break
@@ -862,10 +896,15 @@ def apply_model_binding(
                         nested_val = nested_val.value
                         if nested_val is None:
                             break
-                    nested_val = getattr(nested_val, part, None)
+                    attr_val = getattr(nested_val, part, None)
+                    # Check if we landed on a Variable (needed for dict sync)
+                    if hasattr(attr_val, "value") and hasattr(attr_val, "observable"):
+                        final_variable = attr_val
+                    nested_val = attr_val
 
-                # Final unwrap: if we ended on a Variable[list], get the list value
+                # Final unwrap: if we ended on a Variable[list/dict], get the value
                 if nested_val is not None and hasattr(nested_val, "value") and hasattr(nested_val, "observable"):
+                    final_variable = nested_val
                     nested_val = nested_val.value
 
                 # Only re-sync if the nested list/dict object itself changed (identity change)
@@ -906,23 +945,36 @@ def apply_model_binding(
                             path,
                             nested_id,
                         )
-                elif isinstance(nested_val, dict):
+                elif isinstance(nested_val, (dict, ObservableDict)):
                     # Handle dict -> list[(key, value)] conversion for QTableView
-                    nested_id = id(cast(dict[Any, Any], nested_val))
+                    nested_dict = cast(dict[Any, Any], nested_val)
+                    nested_id = id(nested_dict)
                     if nested_id != last_nested_list_id[0]:
                         logger.debug(
                             "on_root_change: dict identity changed for path=%s (old_id=%d, new_id=%d), syncing %d items",
                             path,
                             last_nested_list_id[0],
                             nested_id,
-                            len(cast(dict[Any, Any], nested_val)),
+                            len(nested_dict),
                         )
                         last_nested_list_id[0] = nested_id
                         syncing = True
                         try:
-                            target.clear()
-                            # Convert dict to list of (key, value) tuples
-                            target.extend(list(cast(dict[Any, Any], nested_val).items()))
+                            # If we have a dict_sync adapter, use replace_source to update it
+                            # This keeps the sync adapter connected to the new source dict
+                            if dict_sync_adapter is not None and final_variable is not None:
+                                # Get the ObservableDict wrapper from the Variable
+                                new_obs_dict = final_variable.observable
+                                if isinstance(new_obs_dict, ObservableDict):
+                                    dict_sync_adapter.replace_source(new_obs_dict)
+                                else:
+                                    # Fallback for plain dict
+                                    target.clear()
+                                    target.extend(list(cast(dict[Any, Any], nested_val).items()))
+                            else:
+                                target.clear()
+                                # Convert dict to list of (key, value) tuples
+                                target.extend(list(cast(dict[Any, Any], nested_val).items()))
                         finally:
                             syncing = False
                 elif nested_val is None and last_nested_list_id[0] != 0:
@@ -933,8 +985,34 @@ def apply_model_binding(
                         syncing = False
                     last_nested_list_id[0] = 0
 
+            # Subscribe to root variable
             root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
             logger.debug("Registered root sync callback for path=%s", path)
+
+            # Also subscribe to any intermediate Variables along the path
+            # e.g., for "active_environment.variables", subscribe to active_environment
+            def subscribe_to_intermediate_variables() -> None:
+                """Traverse path and subscribe to all Variables along the way."""
+                current_value: Any = root_var.value
+                subscribed_ids: set[int] = {id(root_var.observable)}  # type: ignore[arg-type]
+
+                for part in path.split(".")[:-1]:  # Skip the final part (target)
+                    if current_value is None:
+                        break
+                    nested_attr: Any = getattr(current_value, part, None)
+                    if nested_attr is not None and hasattr(nested_attr, "observable"):
+                        # It's a Variable - subscribe to it
+                        obs = nested_attr.observable
+                        obs_id = id(obs)
+                        if obs_id not in subscribed_ids:
+                            obs.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
+                            subscribed_ids.add(obs_id)
+                            logger.debug("Subscribed to intermediate Variable at part=%s for path=%s", part, path)
+                        current_value = nested_attr.value
+                    else:
+                        current_value = nested_attr
+
+            subscribe_to_intermediate_variables()
 
         assert root_variable is not None  # Checked in needs_root_sync condition
         make_root_sync_for_model(
@@ -943,6 +1021,7 @@ def apply_model_binding(
             nested_path,
             widget_instance if should_expand else None,
             should_expand,
+            dict_sync_adapter=dict_sync if is_dict_binding else None,
         )
 
     # Set up selection bindings based on widget type

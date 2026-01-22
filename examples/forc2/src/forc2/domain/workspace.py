@@ -15,7 +15,8 @@ class Workspace(State):
     name: Variable[str] = new("")
     collection: Variable[Collection | None] = new(None)
     environments: Variable[list[Environment]] = new([])
-    active_environment: Variable[str | None] = new(None, onChange="_on_active_environment_changed")
+    active_environment: Variable[Environment | None] = new(None)
+    active_environment_name: Variable[str | None] = new(None, onChange="_on_active_environment_changed")
     path: Variable[Path | None] = new(None, onChange="_on_path_changed")
 
     ### Events ###
@@ -23,7 +24,16 @@ class Workspace(State):
 
     ### Methods ###
     def _on_active_environment_changed(self) -> None:
-        print("On active environment changed to:", self.active_environment())
+        print("On active environment changed to:", self.active_environment_name())
+        # Update active_environment based on active_environment_name
+        active_name = self.active_environment_name()
+        for env in self.environments():
+            if env.name.value == active_name:
+                self.active_environment = env
+                print("Active environment set to:", env.name())
+                if env:
+                    print("Environment variables:", env.variables())
+                return
 
     def _on_path_changed(self) -> None:
         """Load or unload collection and environments when path changes."""
@@ -36,7 +46,7 @@ class Workspace(State):
             if self.environments():
                 self.environments.value = []
             self.name.value = ""
-            self.active_environment.value = None
+            self.active_environment_name.value = None
             return
 
         # Load workspace config from forc.yaml
@@ -61,22 +71,7 @@ class Workspace(State):
             self.environments.value = envs
 
         # print out the active environment after loading
-        print("Loaded environments. Active environment is:", self.active_environment())
-
-    # TODO REMOVE THIS STUPID USELESS FUNCTION
-    def get_environment(self, name: str) -> Environment | None:
-        """Get an environment by name."""
-        for env in self.environments.value:
-            if env.name.value == name:
-                return env
-        return None
-
-    # TODO REMOVE THIS STUPID USELESS FUNCTION
-    def get_active_environment(self) -> Environment | None:
-        """Get the currently active environment."""
-        if self.active_environment.value:
-            return self.get_environment(self.active_environment.value)
-        return None
+        print("Loaded environments. Active environment is:", self.active_environment_name())
 
     def _do_save(self) -> None:
         """Save the collection to disk."""

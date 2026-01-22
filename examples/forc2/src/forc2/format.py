@@ -6,7 +6,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .domain import Collection, Environment, HttpMethod, KeyValue, Request, Workspace
+from .domain import Collection, Environment, EnvironmentVariable, Header, HttpMethod, Request, Workspace
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -25,7 +25,7 @@ def load_workspace_config(workspace: Workspace, path: Path) -> None:
     if "name" in data:
         workspace.name.value = data["name"]
     if "active_environment" in data:
-        workspace.active_environment.value = data["active_environment"]
+        workspace.active_environment_name.value = data["active_environment"]
 
 
 def load_collection(path: Path) -> Collection:
@@ -103,22 +103,20 @@ def load_request(path: Path) -> Request:
     if "headers" in data:
         for h in data["headers"]:
             request.headers.append(
-                KeyValue(
+                Header(
                     key=h.get("key", ""),
                     value=h.get("value", ""),
                     enabled=h.get("enabled", True),
-                    secret=h.get("secret", False),
                 )
             )
 
     if "query_params" in data:
         for p in data["query_params"]:
             request.query_params.append(
-                KeyValue(
+                Header(
                     key=p.get("key", ""),
                     value=p.get("value", ""),
                     enabled=p.get("enabled", True),
-                    secret=p.get("secret", False),
                 )
             )
 
@@ -150,15 +148,15 @@ def load_environment(path: Path) -> Environment:
         env.name.value = path.stem
 
     if "variables" in data:
-        for v in data["variables"]:
-            env.variables.append(
-                KeyValue(
-                    key=v.get("key", ""),
-                    value=v.get("value", ""),
-                    enabled=v.get("enabled", True),
-                    secret=v.get("secret", False),
-                )
+        # Build the dict first, then assign to trigger reactivity
+        variables: dict[str, EnvironmentVariable] = {}
+        for key, v in data["variables"].items():
+            variables[key] = EnvironmentVariable(
+                value=v.get("value", ""),
+                enabled=v.get("enabled", True),
+                secret=v.get("secret", False),
             )
+        env.variables.value = variables
 
     return env
 
@@ -170,14 +168,14 @@ def save_environment(environment: Environment, path: Path) -> None:
     }
 
     if environment.variables.value:
-        variables_data: list[dict[str, Any]] = []
-        for v in environment.variables.value:
-            var_data: dict[str, Any] = {"key": v.key, "value": v.value}
-            if v.secret:
+        variables_data: dict[str, dict[str, Any]] = {}
+        for key, var in environment.variables.value.items():
+            var_data: dict[str, Any] = {"value": var.value}
+            if var.secret:
                 var_data["secret"] = True
-            if not v.enabled:
+            if not var.enabled:
                 var_data["enabled"] = False
-            variables_data.append(var_data)
+            variables_data[key] = var_data
         data["variables"] = variables_data
 
     with path.open("w") as f:

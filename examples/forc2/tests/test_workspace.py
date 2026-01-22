@@ -230,13 +230,13 @@ class TestWorkspaceEnvironments:
         (env_dir / "dev.yaml").write_text("""
 name: Development
 variables:
-  - key: URL
+  URL:
     value: http://localhost
 """)
         (env_dir / "prod.yaml").write_text("""
 name: Production
 variables:
-  - key: URL
+  URL:
     value: https://api.example.com
 """)
 
@@ -247,54 +247,6 @@ variables:
         # Sorted alphabetically
         assert_that(ws.environments.value[0].name.value).is_equal_to("Development")
         assert_that(ws.environments.value[1].name.value).is_equal_to("Production")
-
-    def test_get_environment_by_name(self, tmp_path: Path) -> None:
-        """Can get environment by name."""
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        coll_dir = workspace_dir / "collections"
-        coll_dir.mkdir()
-        (coll_dir / "_collection.yaml").write_text("name: API\n")
-
-        env_dir = workspace_dir / "environments"
-        env_dir.mkdir()
-        (env_dir / "dev.yaml").write_text("name: Development\n")
-
-        ws = Workspace()
-        ws.path.value = workspace_dir
-
-        dev = ws.get_environment("Development")
-        assert dev is not None
-        assert_that(dev.name.value).is_equal_to("Development")
-
-        missing = ws.get_environment("NonExistent")
-        assert_that(missing).is_none()
-
-    def test_active_environment(self, tmp_path: Path) -> None:
-        """Can set and get active environment."""
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        coll_dir = workspace_dir / "collections"
-        coll_dir.mkdir()
-        (coll_dir / "_collection.yaml").write_text("name: API\n")
-
-        env_dir = workspace_dir / "environments"
-        env_dir.mkdir()
-        (env_dir / "dev.yaml").write_text("name: Development\n")
-        (env_dir / "prod.yaml").write_text("name: Production\n")
-
-        ws = Workspace()
-        ws.path.value = workspace_dir
-
-        # Initially no active environment
-        assert_that(ws.active_environment.value).is_none()
-        assert_that(ws.get_active_environment()).is_none()
-
-        # Set active
-        ws.active_environment.value = "Development"
-        active = ws.get_active_environment()
-        assert active is not None
-        assert_that(active.name.value).is_equal_to("Development")
 
     def test_environment_state_parent_is_workspace(self, tmp_path: Path) -> None:
         """Loaded environments have workspace as state_parent."""
@@ -325,14 +277,15 @@ variables:
         # Should have loaded environments
         assert_that(list(ws.environments.value)).is_length(2)
 
-        # Find Development environment
-        dev = ws.get_environment("Development")
+        # Find Development environment by iterating
+        dev = next((e for e in ws.environments.value if e.name.value == "Development"), None)
         assert dev is not None
-        assert_that(list(dev.variables.value)).is_not_empty()
+        assert_that(dev.variables.value).is_not_empty()
 
         # Check a variable
-        base_url = dev.get_variable("BASE_URL")
-        assert_that(base_url).is_equal_to("http://localhost:8000")
+        base_url_var = dev.variables.value.get("BASE_URL")
+        assert base_url_var is not None
+        assert_that(base_url_var.value).is_equal_to("http://localhost:8000")
 
 
 class TestFilenamePreservation:

@@ -1,5 +1,5 @@
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QComboBox, QLabel, QListView, QTreeView
+from qtpy.QtWidgets import QComboBox, QLabel, QListView, QTableView, QTreeView
 
 from forc2.app.menus import FileMenu, ViewMenu
 from qtpie import Window, new, window
@@ -50,15 +50,33 @@ class ForcWindow(Window):
     environments_chooser: QComboBox = new(
         bind="workspace?.environments",
         format="{name}",
-        selectedText="workspace?.active_environment",
+        selectedText="workspace?.active_environment_name",
     )
 
     environments_headers2: QLabel = new("Environments (List)")
     environments_chooser2: QListView = new(
         bind="workspace?.environments",
         format="{name}",
-        selectedText="workspace?.active_environment",
+        selectedText="workspace?.active_environment_name",
     )
+
+    # Environment Variables table:
+    environment_variables_headers: QLabel = new("Environment Variables")
+
+    # When you change the active environment, this DOES NOT UPDATE:
+    environment_variables_table: QTableView = new(
+        bind="workspace?.active_environment?.variables",
+        columns={"#key": "Name", "value": "Value", "enabled": "Enabled", "secret": "Secret"},
+    )
+
+    # When you change the active environment, this updates properly:
+    env_vars_count_label: QLabel = new(
+        bind="Number of variables: {len(workspace?.active_environment?.variables) "
+        "if workspace?.active_environment?.variables else 0}"
+    )
+
+    # When you change the active environment, this updates properly:
+    env_vars_label: QLabel = new(bind="workspace?.active_environment?.variables")
 
 
 #  treeview: QTreeView = new(

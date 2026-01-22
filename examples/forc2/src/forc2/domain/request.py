@@ -1,7 +1,7 @@
 # pyright: reportUnknownVariableType=false
 """Request - the atomic unit of an HTTP request definition."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -21,25 +21,12 @@ class HttpMethod(Enum):
 
 
 @dataclass
-class KeyValue:
-    """A key-value pair for headers, query params, etc."""
+class Header:
+    """A header or query parameter for HTTP requests."""
 
     key: str = ""
     value: str = ""
     enabled: bool = True
-    secret: bool = False  # If true, value stored in keychain
-
-
-@dataclass
-class RequestData:
-    """Plain data for a Request (for serialization)."""
-
-    name: str = ""
-    method: HttpMethod = field(default=HttpMethod.GET)
-    url: str = ""
-    headers: list[KeyValue] = field(default_factory=list)
-    query_params: list[KeyValue] = field(default_factory=list)
-    body: str = ""
 
 
 @state(on_save="_do_save")
@@ -48,8 +35,8 @@ class Request(State):
     name: Variable[str] = new("")
     method: Variable[HttpMethod] = new(HttpMethod.GET)
     url: Variable[str] = new("")
-    headers: Variable[list[KeyValue]] = new([])
-    query_params: Variable[list[KeyValue]] = new([])
+    headers: Variable[list[Header]] = new([])
+    query_params: Variable[list[Header]] = new([])
     body: Variable[str] = new("")
     filename: Variable[str | None] = new(None)
 

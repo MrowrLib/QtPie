@@ -1635,3 +1635,241 @@ class TestTableViewSelectedItemDirtyStateAcrossSelections:
         # This test checks if dirty state is remembered per-item
         assert_that(instance._selected.value.name).is_equal_to("Alice Modified")
         assert_that(instance._selected.is_dirty.get()).is_true()
+
+
+# =============================================================================
+# #key Column Support for Dict Bindings with Complex Value Types
+# =============================================================================
+
+
+@dataclass
+class EnvironmentVariable:
+    """Environment variable with metadata."""
+
+    value: str = ""
+    enabled: bool = True
+    secret: bool = False
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewDictKeyColumn:
+    """QTableView with #key column for dict[str, ComplexType] bindings."""
+
+    def test_dict_with_key_column_shows_key_and_value_properties(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columns=['#key', 'value'] shows dict key and value.value."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "BASE_URL": EnvironmentVariable("http://localhost:8000"),
+                    "API_KEY": EnvironmentVariable("secret123", secret=True),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value", "enabled", "secret"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Should have 2 rows
+        assert_that(model.rowCount()).is_equal_to(2)
+        # Should have 4 columns
+        assert_that(model.columnCount()).is_equal_to(4)
+
+        # Check headers - #key defaults to "Key"
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Key")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+        assert_that(model.headerData(2, Qt.Orientation.Horizontal)).is_equal_to("Enabled")
+        assert_that(model.headerData(3, Qt.Orientation.Horizontal)).is_equal_to("Secret")
+
+        # Find BASE_URL row and check data
+        for row in range(model.rowCount()):
+            key = model.data(model.index(row, 0))
+            if key == "BASE_URL":
+                assert_that(model.data(model.index(row, 1))).is_equal_to("http://localhost:8000")
+                assert_that(model.data(model.index(row, 2))).is_equal_to("True")
+                assert_that(model.data(model.index(row, 3))).is_equal_to("False")
+                break
+        else:
+            raise AssertionError("BASE_URL row not found")
+
+    def test_dict_with_custom_key_header(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with headers={'#key': 'Variable Name'} uses custom header."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "BASE_URL": EnvironmentVariable("http://localhost"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+                headers={"#key": "Variable Name", "value": "Variable Value"},
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Variable Name")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Variable Value")
+
+    def test_dict_key_column_editable(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=['#key'] allows editing the dict key."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "OLD_NAME": EnvironmentVariable("some-value"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+                editable=["#key"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Key column (0) should be editable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+        # Value column (1) should NOT be editable
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+
+        # Edit the key
+        success = model.setData(model.index(0, 0), "NEW_NAME", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify old key removed and new key exists
+        assert_that("OLD_NAME" in instance._vars).is_false()
+        assert_that("NEW_NAME" in instance._vars).is_true()
+        assert_that(instance._vars["NEW_NAME"].value).is_equal_to("some-value")
+
+    def test_dict_value_property_editable(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with editable=['value'] allows editing value object properties."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "BASE_URL": EnvironmentVariable("http://old-url.com"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+                editable=["value"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Key column should NOT be editable
+        assert_that(model.flags(model.index(0, 0)) & Qt.ItemFlag.ItemIsEditable).is_equal_to(Qt.ItemFlag(0))
+        # Value column should be editable
+        assert_that(model.flags(model.index(0, 1)) & Qt.ItemFlag.ItemIsEditable).is_not_equal_to(Qt.ItemFlag(0))
+
+        # Edit the value property
+        success = model.setData(model.index(0, 1), "http://new-url.com", Qt.ItemDataRole.EditRole)
+        assert_that(success).is_true()
+
+        # Verify the EnvironmentVariable.value was updated
+        assert_that(instance._vars["BASE_URL"].value).is_equal_to("http://new-url.com")
+
+    def test_dict_checkable_on_value_properties(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with checkable=['enabled', 'secret'] shows checkboxes for value properties."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "API_KEY": EnvironmentVariable("secret123", enabled=True, secret=True),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value", "enabled", "secret"],
+                checkable=["enabled", "secret"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Check flags - enabled and secret should be checkable
+        assert_that(model.flags(model.index(0, 2)) & Qt.ItemFlag.ItemIsUserCheckable).is_not_equal_to(Qt.ItemFlag(0))
+        assert_that(model.flags(model.index(0, 3)) & Qt.ItemFlag.ItemIsUserCheckable).is_not_equal_to(Qt.ItemFlag(0))
+
+        # Check initial state
+        assert_that(model.data(model.index(0, 2), Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+        assert_that(model.data(model.index(0, 3), Qt.ItemDataRole.CheckStateRole)).is_equal_to(Qt.CheckState.Checked)
+
+        # Toggle enabled off
+        success = model.setData(model.index(0, 2), Qt.CheckState.Unchecked.value, Qt.ItemDataRole.CheckStateRole)
+        assert_that(success).is_true()
+        assert_that(instance._vars["API_KEY"].enabled).is_false()
+
+    def test_dict_key_rename_collision_rejected(self, base_class, decorator, qt: QtDriver) -> None:
+        """Renaming dict key to existing key name is rejected."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "KEY_A": EnvironmentVariable("value-a"),
+                    "KEY_B": EnvironmentVariable("value-b"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+                editable=["#key"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Find row for KEY_A
+        key_a_row = None
+        for row in range(model.rowCount()):
+            if model.data(model.index(row, 0)) == "KEY_A":
+                key_a_row = row
+                break
+        assert key_a_row is not None
+
+        # Try to rename KEY_A to KEY_B (which already exists)
+        success = model.setData(model.index(key_a_row, 0), "KEY_B", Qt.ItemDataRole.EditRole)
+
+        # Should be rejected
+        assert_that(success).is_false()
+        # Both keys should still exist
+        assert_that("KEY_A" in instance._vars).is_true()
+        assert_that("KEY_B" in instance._vars).is_true()
+
+    def test_dict_user_role_returns_value_object(self, base_class, decorator, qt: QtDriver) -> None:
+        """UserRole returns the value object (not the tuple) for dict bindings."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "BASE_URL": EnvironmentVariable("http://localhost"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                columns=["#key", "value"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # UserRole should return the EnvironmentVariable, not the tuple
+        item = model.data(model.index(0, 0), Qt.ItemDataRole.UserRole)
+        assert_that(item).is_instance_of(EnvironmentVariable)
+        assert_that(item.value).is_equal_to("http://localhost")

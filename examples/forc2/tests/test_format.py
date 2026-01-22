@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from assertpy import assert_that
-from forc2.domain import Collection, Environment, HttpMethod, KeyValue, Request, Workspace
+from forc2.domain import Collection, Environment, EnvironmentVariable, Header, HttpMethod, Request, Workspace
 from forc2.format import (
     load_collection,
     load_environment,
@@ -235,8 +235,8 @@ class TestSaveRequest:
         req.name.value = "Test"
         req.method.value = HttpMethod.POST
         req.url.value = "https://api.example.com"
-        req.headers.append(KeyValue(key="Content-Type", value="application/json"))
-        req.headers.append(KeyValue(key="Authorization", value="Bearer token"))
+        req.headers.append(Header(key="Content-Type", value="application/json"))
+        req.headers.append(Header(key="Authorization", value="Bearer token"))
 
         yaml_file = tmp_path / "test.yaml"
         save_request(req, yaml_file)
@@ -332,28 +332,27 @@ class TestLoadEnvironment:
         yaml_file.write_text("""
 name: Development
 variables:
-  - key: BASE_URL
+  BASE_URL:
     value: http://localhost:8000
-  - key: API_KEY
+  API_KEY:
     value: secret123
     secret: true
 """)
         env = load_environment(yaml_file)
 
         assert_that(env.name.value).is_equal_to("Development")
-        assert_that(list(env.variables.value)).is_length(2)
-        assert_that(env.variables.value[0].key).is_equal_to("BASE_URL")
-        assert_that(env.variables.value[0].value).is_equal_to("http://localhost:8000")
-        assert_that(env.variables.value[0].secret).is_false()
-        assert_that(env.variables.value[1].key).is_equal_to("API_KEY")
-        assert_that(env.variables.value[1].secret).is_true()
+        assert_that(env.variables.value).is_length(2)
+        assert_that(env.variables.value["BASE_URL"].value).is_equal_to("http://localhost:8000")
+        assert_that(env.variables.value["BASE_URL"].secret).is_false()
+        assert_that(env.variables.value["API_KEY"].value).is_equal_to("secret123")
+        assert_that(env.variables.value["API_KEY"].secret).is_true()
 
     def test_load_environment_uses_filename_as_name(self, tmp_path: Path) -> None:
         """If no name field, use filename."""
         yaml_file = tmp_path / "production.yaml"
         yaml_file.write_text("""
 variables:
-  - key: URL
+  URL:
     value: https://api.example.com
 """)
         env = load_environment(yaml_file)
@@ -369,7 +368,7 @@ variables:
         env = load_environment(yaml_file)
 
         assert_that(env.name.value).is_equal_to("empty")
-        assert_that(list(env.variables.value)).is_empty()
+        assert_that(env.variables.value).is_empty()
 
 
 class TestLoadEnvironmentFixtures:
@@ -383,7 +382,7 @@ class TestLoadEnvironmentFixtures:
 
         dev_env = load_environment(fixtures / "development.yaml")
         assert_that(dev_env.name.value).is_equal_to("Development")
-        assert_that(list(dev_env.variables.value)).is_not_empty()
+        assert_that(dev_env.variables.value).is_not_empty()
 
         prod_env = load_environment(fixtures / "production.yaml")
         assert_that(prod_env.name.value).is_equal_to("Production")
@@ -396,7 +395,7 @@ class TestSaveEnvironment:
         """Save a simple environment."""
         env = Environment()
         env.name.value = "Test"
-        env.variables.append(KeyValue(key="URL", value="http://localhost"))
+        env.variables.value["URL"] = EnvironmentVariable(value="http://localhost")
 
         yaml_file = tmp_path / "test.yaml"
         save_environment(env, yaml_file)
@@ -404,22 +403,22 @@ class TestSaveEnvironment:
         # Load it back
         loaded = load_environment(yaml_file)
         assert_that(loaded.name.value).is_equal_to("Test")
-        assert_that(list(loaded.variables.value)).is_length(1)
-        assert_that(loaded.variables.value[0].key).is_equal_to("URL")
+        assert_that(loaded.variables.value).is_length(1)
+        assert_that(loaded.variables.value["URL"].value).is_equal_to("http://localhost")
 
     def test_save_environment_with_secrets(self, tmp_path: Path) -> None:
         """Save an environment with secret variables."""
         env = Environment()
         env.name.value = "Secrets"
-        env.variables.append(KeyValue(key="PUBLIC", value="visible"))
-        env.variables.append(KeyValue(key="SECRET", value="hidden", secret=True))
+        env.variables.value["PUBLIC"] = EnvironmentVariable(value="visible")
+        env.variables.value["SECRET"] = EnvironmentVariable(value="hidden", secret=True)
 
         yaml_file = tmp_path / "secrets.yaml"
         save_environment(env, yaml_file)
 
         loaded = load_environment(yaml_file)
-        assert_that(loaded.variables.value[0].secret).is_false()
-        assert_that(loaded.variables.value[1].secret).is_true()
+        assert_that(loaded.variables.value["PUBLIC"].secret).is_false()
+        assert_that(loaded.variables.value["SECRET"].secret).is_true()
 
 
 class TestRoundTrip:
@@ -474,7 +473,7 @@ class TestLoadWorkspaceConfig:
         workspace = Workspace()
         load_workspace_config(workspace, tmp_path)
 
-        assert_that(workspace.active_environment.value).is_equal_to("Production")
+        assert_that(workspace.active_environment_name.value).is_equal_to("Production")
 
     def test_load_workspace_config_with_both_fields(self, tmp_path: Path) -> None:
         """Load both name and active_environment from forc.yaml."""
@@ -487,19 +486,19 @@ active_environment: Development
         load_workspace_config(workspace, tmp_path)
 
         assert_that(workspace.name.value).is_equal_to("JSONPlaceholder API")
-        assert_that(workspace.active_environment.value).is_equal_to("Development")
+        assert_that(workspace.active_environment_name.value).is_equal_to("Development")
 
     def test_load_workspace_config_missing_file(self, tmp_path: Path) -> None:
         """No error when forc.yaml doesn't exist."""
         workspace = Workspace()
         workspace.name.value = "Original"
-        workspace.active_environment.value = "Original Env"
+        workspace.active_environment_name.value = "Original Env"
 
         load_workspace_config(workspace, tmp_path)
 
         # Values should remain unchanged
         assert_that(workspace.name.value).is_equal_to("Original")
-        assert_that(workspace.active_environment.value).is_equal_to("Original Env")
+        assert_that(workspace.active_environment_name.value).is_equal_to("Original Env")
 
     def test_load_workspace_config_empty_file(self, tmp_path: Path) -> None:
         """No error when forc.yaml is empty."""
@@ -518,12 +517,12 @@ active_environment: Development
         (tmp_path / "forc.yaml").write_text("name: New Name\n")
 
         workspace = Workspace()
-        workspace.active_environment.value = "Should Stay"
+        workspace.active_environment_name.value = "Should Stay"
 
         load_workspace_config(workspace, tmp_path)
 
         assert_that(workspace.name.value).is_equal_to("New Name")
-        assert_that(workspace.active_environment.value).is_equal_to("Should Stay")
+        assert_that(workspace.active_environment_name.value).is_equal_to("Should Stay")
 
 
 class TestLoadWorkspaceConfigFixtures:
@@ -539,4 +538,4 @@ class TestLoadWorkspaceConfigFixtures:
         load_workspace_config(workspace, fixtures)
 
         assert_that(workspace.name.value).is_equal_to("JSONPlaceholder API")
-        assert_that(workspace.active_environment.value).is_equal_to("Production")
+        assert_that(workspace.active_environment_name.value).is_equal_to("Production")

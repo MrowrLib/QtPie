@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any, cast, get_args, get_origin, get_type_hints
 
 from .layout import GridPosition, Stretch
 from .setting import Setting
@@ -815,13 +815,23 @@ class NewField:
                     # Extract columns/headers for QTableView with bind=
                     # columns= specifies which fields to show: ["name", "age"]
                     # Can also include Widget classes or embed() configs for widget columns
+                    # Can also be a dict for combined columns+headers: {"name": "Dog Name"}
                     # headers= provides custom headers: {"name": "Dog Name"}
                     columns = self.kwargs.pop("columns", None)
                     if columns is not None:
-                        self._extract_table_columns(columns)
+                        if isinstance(columns, dict):
+                            # Dict-style: keys are columns, values are headers
+                            columns_dict = cast(dict[str, str], columns)
+                            self._extract_table_columns(list(columns_dict.keys()))
+                            self.table_headers = dict(columns_dict)
+                        else:
+                            self._extract_table_columns(columns)
                     headers = self.kwargs.pop("headers", None)
                     if headers is not None:
-                        self.table_headers = dict(headers)
+                        # headers= can override or supplement columns= dict headers
+                        if self.table_headers is None:
+                            self.table_headers = {}
+                        self.table_headers.update(dict(headers))
                     # checkable= specifies which columns have checkboxes
                     # - None (default): auto-detect bool fields
                     # - list[str]: only these columns are checkable

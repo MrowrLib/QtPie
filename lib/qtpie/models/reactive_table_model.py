@@ -7,9 +7,14 @@ from typing import Any, cast, override
 from observant import ObservableDict, ObservableList, ObservableProxy
 from qtpy.QtCore import QAbstractTableModel, QModelIndex, QObject, QPersistentModelIndex, Qt
 
+from .dict_sync import DictToTupleListSync
+
 # Custom role for getting the ObservableProxy wrapper for an item
 # This enables dirty/valid state tracking per-item
 TABLE_PROXY_ROLE = Qt.ItemDataRole.UserRole + 1
+
+# Special column name for dict key access
+DICT_KEY_COLUMN = "#key"
 
 
 class ReactiveTableModel[T](QAbstractTableModel):
@@ -37,6 +42,13 @@ class ReactiveTableModel[T](QAbstractTableModel):
         model = ReactiveTableModel(dogs, checkable=["active"])  # Explicit
         model = ReactiveTableModel(dogs, checkable=None)  # Auto-detect bool fields
         model = ReactiveTableModel(dogs, checkable=False)  # Disable checkboxes
+
+        # Dict binding with #key column
+        model = ReactiveTableModel(
+            obs_list,  # List of (key, value) tuples
+            columns=["#key", "value", "enabled"],  # #key accesses dict key
+            dict_sync=DictToTupleListSync(source_dict),  # For editing support
+        )
     """
 
     def __init__(
@@ -51,6 +63,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
         checkable_text: str | dict[str, str] | None = None,
         editable: list[str | int] | bool | None = None,
         source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = None,
+        dict_sync: DictToTupleListSync[Any, Any] | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
@@ -60,6 +73,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._checkable_text = checkable_text  # None=no text, str=all columns, dict=per-column
         self._editable = editable  # None/False=none, True=all, list=specific columns
         self._source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = source_dict  # For dict bindings
+        self._dict_sync: DictToTupleListSync[Any, Any] | None = dict_sync  # For #key column support
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
@@ -173,6 +187,39 @@ class ReactiveTableModel[T](QAbstractTableModel):
             return 0
         return len(self._columns)
 
+    def _is_dict_binding(self) -> bool:
+        """Check if this is a dict binding (items are key-value tuples)."""
+        return self._source_dict is not None or self._dict_sync is not None
+
+    def _get_value_from_tuple(self, item: Any, column_name: str | int) -> Any:
+        """Get a value from a (key, value) tuple item for dict bindings.
+
+        For dict bindings, items are (key, value) tuples. This method handles:
+        - "#key" -> returns the key (item[0])
+        - integer -> direct index access (item[column])
+        - string -> attribute access on the value object (item[1].column)
+        """
+        if not isinstance(item, tuple) or len(item) < 2:  # pyright: ignore[reportUnknownArgumentType]
+            return None
+
+        key, value_obj = item[0], item[1]  # pyright: ignore[reportUnknownVariableType]
+
+        if column_name == DICT_KEY_COLUMN:
+            return key  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(column_name, int):
+            # Direct tuple index access
+            try:
+                return item[column_name]  # pyright: ignore[reportUnknownVariableType]
+            except (IndexError, TypeError):
+                return None
+        else:
+            # String column = attribute access on value object
+            attr_value = getattr(value_obj, column_name, None)  # pyright: ignore[reportUnknownArgumentType]
+            # Unwrap Variable to get its value
+            if attr_value is not None and hasattr(attr_value, "value") and hasattr(attr_value, "observable"):
+                attr_value = attr_value.value  # pyright: ignore[reportUnknownMemberType]
+            return attr_value
+
     @override
     def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         """Return data for the given index and role."""
@@ -196,12 +243,18 @@ class ReactiveTableModel[T](QAbstractTableModel):
                 text_format = self._get_checkable_text_format(column_name)
                 if text_format is None:
                     return ""  # Checkbox only, no text
-                return self._format_checkable_text(text_format, item, row, column_name)
+                # For dict bindings with checkable, get the value object for formatting
+                if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+                    return self._format_checkable_text(text_format, item[1], row, column_name)  # pyright: ignore[reportUnknownArgumentType]
+                return self._format_checkable_text(text_format, item, row, column_name)  # pyright: ignore[reportUnknownArgumentType]
 
             # Get the attribute value
-            # Handle both string attributes (getattr) and integer indices (item[i])
             value: Any
-            if isinstance(column_name, int):
+
+            # Dict binding: handle #key column and value object properties
+            if self._is_dict_binding() and isinstance(item, tuple):
+                value = self._get_value_from_tuple(item, column_name)
+            elif isinstance(column_name, int):
                 # Integer column = index access (for tuples/lists)
                 try:
                     value = item[column_name]  # type: ignore[index]
@@ -227,7 +280,11 @@ class ReactiveTableModel[T](QAbstractTableModel):
         elif role == Qt.ItemDataRole.CheckStateRole:
             # Return check state for checkable columns
             if column_name in self._checkable_columns:
-                value = getattr(item, column_name, False)
+                # For dict bindings, get value from value object
+                if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+                    value = getattr(item[1], column_name, False)  # pyright: ignore[reportUnknownArgumentType]
+                else:
+                    value = getattr(item, column_name, False)  # pyright: ignore[reportUnknownArgumentType]
                 # Unwrap Variable to get its value (for State objects with Variable fields)
                 if hasattr(value, "value") and hasattr(value, "observable"):
                     value = value.value
@@ -236,10 +293,16 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
         elif role == Qt.ItemDataRole.UserRole:
             # Return the actual item for programmatic access
-            return item
+            # For dict bindings, return the value object (not the tuple)
+            if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+                return item[1]  # pyright: ignore[reportUnknownVariableType]
+            return item  # pyright: ignore[reportUnknownVariableType]
         elif role == TABLE_PROXY_ROLE:
             # Return the ObservableProxy for this item (creates one if needed)
-            return self.proxy_for_item(item)
+            # For dict bindings, proxy the value object
+            if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+                return self.proxy_for_item(item[1])  # pyright: ignore[reportUnknownArgumentType]
+            return self.proxy_for_item(item)  # pyright: ignore[reportUnknownArgumentType]
 
         return None
 
@@ -271,7 +334,12 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
             # Qt.CheckState.Checked.value is 2, Unchecked.value is 0
             new_value = value == Qt.CheckState.Checked.value
-            setattr(item, column_name, new_value)
+
+            # For dict bindings, set on value object
+            if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
+                setattr(item[1], column_name, new_value)  # pyright: ignore[reportUnknownArgumentType]
+            else:
+                setattr(item, column_name, new_value)  # pyright: ignore[reportUnknownArgumentType]
             self.dataChanged.emit(index, index, [role])
             return True
 
@@ -279,33 +347,65 @@ class ReactiveTableModel[T](QAbstractTableModel):
             if column_name not in self._editable_columns:
                 return False
 
-            # For dict bindings with tuple items (key, value)
-            if self._source_dict is not None and isinstance(item, tuple):
+            # Dict binding with #key column or value properties
+            if self._is_dict_binding() and isinstance(item, tuple) and len(item) >= 2:  # pyright: ignore[reportUnknownArgumentType]
                 tuple_item = cast(tuple[Any, Any], item)
                 old_key = tuple_item[0]
-                old_value = tuple_item[1]
+                value_obj = tuple_item[1]
 
-                if column_name == 0:  # Key column
-                    # Rename key: delete old, insert new with same value
+                if column_name == DICT_KEY_COLUMN:
+                    # Rename key using dict_sync if available
                     new_key = str(value)
-                    if new_key != old_key:
-                        del self._source_dict[old_key]
-                        self._source_dict[new_key] = old_value
-                        # Update the tuple in the list
-                        self._obs_list[row] = (new_key, old_value)  # type: ignore[assignment]
-                elif column_name == 1:  # Value column
-                    # Update value for existing key
-                    new_val = str(value)
-                    self._source_dict[old_key] = new_val
-                    # Update the tuple in the list
-                    self._obs_list[row] = (old_key, new_val)  # type: ignore[assignment]
+                    if new_key == old_key:
+                        return True  # No change needed
 
-                self.dataChanged.emit(index, index, [role])
-                return True
+                    # Check for key collision
+                    source = self._dict_sync.source if self._dict_sync else self._source_dict
+                    if source is not None and new_key in source:
+                        return False  # Key already exists, reject edit
+
+                    if self._dict_sync:
+                        # Use sync adapter for rename
+                        success = self._dict_sync.rename_key(old_key, new_key)
+                        if not success:
+                            return False
+                    elif self._source_dict is not None:
+                        # Direct dict manipulation
+                        del self._source_dict[old_key]
+                        self._source_dict[new_key] = value_obj
+                        self._obs_list[row] = (new_key, value_obj)  # type: ignore[assignment]
+
+                    self.dataChanged.emit(index, index, [role])
+                    return True
+
+                elif isinstance(column_name, int):
+                    # Integer column = old-style tuple index (0=key, 1=value as string)
+                    if column_name == 0:
+                        # Same as #key
+                        new_key = str(value)
+                        if new_key != old_key:
+                            if self._source_dict is not None:
+                                del self._source_dict[old_key]
+                                self._source_dict[new_key] = value_obj
+                            self._obs_list[row] = (new_key, value_obj)  # type: ignore[assignment]
+                    elif column_name == 1:
+                        # Update entire value (only works for simple values)
+                        new_val = str(value)
+                        if self._source_dict is not None:
+                            self._source_dict[old_key] = new_val  # type: ignore[assignment]
+                        self._obs_list[row] = (old_key, new_val)  # type: ignore[assignment]
+                    self.dataChanged.emit(index, index, [role])
+                    return True
+
+                else:
+                    # String column = property on value object
+                    setattr(value_obj, column_name, value)  # pyright: ignore[reportUnknownArgumentType]
+                    self.dataChanged.emit(index, index, [role])
+                    return True
 
             # For regular objects/dataclasses - use setattr
             if isinstance(column_name, str):
-                setattr(item, column_name, value)
+                setattr(item, column_name, value)  # pyright: ignore[reportUnknownArgumentType]
                 self.dataChanged.emit(index, index, [role])
                 return True
 
@@ -350,6 +450,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
                 # Use custom header if provided
                 if column_name in self._headers:
                     return self._headers.get(column_name)
+                # Special handling for #key column
+                if column_name == DICT_KEY_COLUMN:
+                    return "Key"
                 # Default: capitalize the field name (only for string columns)
                 if isinstance(column_name, str):
                     return column_name.replace("_", " ").title()

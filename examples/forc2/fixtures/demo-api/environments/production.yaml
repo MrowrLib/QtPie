@@ -1,9 +1,9 @@
 name: Production
 variables:
-  - key: BASE_URL
+  BASE_URL:
     value: https://api.production.example.com
-  - key: API_KEY
+  API_KEY:
     value: prod-key-secret-99999
     secret: true
-  - key: TIMEOUT
+  TIMEOUT:
     value: "10"
