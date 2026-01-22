@@ -7,7 +7,7 @@ from forc2.app import ForcWindow
 from forc2.domain.collection import Collection
 from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
-from qtpie import App, Event, Setting, Variable, app, new
+from qtpie import App, Event, Setting, Var, app, new
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,8 @@ class ForcApp(App):
     loaded_workspace_path: Setting[str | None] = new("fixtures/demo-api")
 
     ### Variables ###
-    workspace: Variable[Workspace | None] = new(default=Workspace())
-    selected_sidebar_item: Variable[Collection | Request | None] = new(
-        None, onChange="_on_selected_sidebar_item_changed"
-    )
+    workspace: Var[Workspace | None] = new(default=Workspace())
+    selected_sidebar_item: Var[Collection | Request | None] = new(None, onChange="_on_selected_sidebar_item_changed")
 
     ### Window ###
     main_window: ForcWindow

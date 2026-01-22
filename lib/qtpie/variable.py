@@ -593,6 +593,11 @@ class Variable[T, W = None]:
             self._wrapper.update(other)
 
 
+# Alias for Variable - shorter name, same class
+# Var[T] works identically to Variable[T]
+Var = Variable
+
+
 class RecordVariable[T](Variable[T, None]):
     """Variable specifically for Widget[T] records.
 

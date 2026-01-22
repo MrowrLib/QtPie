@@ -14,7 +14,7 @@ import pytest
 from assertpy import assert_that
 from PySide6.QtWidgets import QLabel, QLineEdit
 
-from qtpie import Variable, new
+from qtpie import Var, Variable, new
 from qtpie.testing import QtDriver
 
 from .conftest import ALL_CLASS_TYPES, WIDGET_CLASS_TYPES, create_and_track
@@ -33,6 +33,22 @@ class TestVariableCreation:
 
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(instance._count.value).is_equal_to(0)
+
+    def test_var_alias_works_same_as_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Var[T] is an alias for Variable[T] and works identically."""
+
+        @decorator
+        class TestClass(base_class):
+            _name: Var[str] = new("hello")
+            _count: Var[int] = new(42)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._name.value).is_equal_to("hello")
+        assert_that(instance._count.value).is_equal_to(42)
+
+        # Verify Var is literally Variable
+        assert_that(Var).is_same_as(Variable)
+        assert_that(isinstance(instance._name, Variable)).is_true()
 
     def test_variable_str_default(self, base_class, decorator, qt: QtDriver) -> None:
         """Variable[str] stores default value."""

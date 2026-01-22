@@ -34,7 +34,7 @@ from .styles import (
     set_theme,
 )
 from .translations import Translatable, set_language, t
-from .variable import RecordVariable, Variable
+from .variable import RecordVariable, Var, Variable
 from .widget import Widget, widget
 from .widget_base import WidgetBase
 from .widget_repeater import WidgetRepeater
@@ -76,6 +76,7 @@ __all__ = [
     "SetWidgetRepeater",
     "Setting",
     "Translatable",
+    "Var",
     "Variable",
     "Widget",
     "WidgetBase",
