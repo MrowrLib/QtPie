@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 from typing import override
 
 # from qtpy.QtCore import Signal
@@ -30,7 +29,7 @@ class ForcApp(App):
     workspace: Var[Workspace | None] = new(None)
 
     ### Window ###
-    main_window: ForcWindow
+    main_window: ForcWindow  # TODO make this a Window[Workspace | None]
 
     ### Methods ###
     @override
@@ -38,9 +37,10 @@ class ForcApp(App):
         self.main_window.show()
 
     def __setup__(self) -> None:
-        workspace_path = self.loaded_workspace_path()
-        if workspace_path is not None:
-            self.workspace.path = Path(workspace_path)
+        ...
+        # workspace_path = self.loaded_workspace_path()
+        # if workspace_path is not None:
+        #     self.workspace.path = Path(workspace_path)
 
     def _on_reload_window(self) -> None:
         """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""

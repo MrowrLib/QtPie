@@ -6,7 +6,7 @@ from .collection import Collection
 from .environment import Environment, EnvironmentVariable
 from .request import HttpMethod, Request, RequestKeyValue
 from .response import Cookie, Response
-from .workspace import Workspace
+from .workspace import Workspace, load_workspace
 
 __all__ = [
     # Auth
@@ -32,4 +32,5 @@ __all__ = [
     "Response",
     # Workspace
     "Workspace",
+    "load_workspace",
 ]

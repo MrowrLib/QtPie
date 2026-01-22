@@ -36,8 +36,15 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
+    # workspace_value_label: QLabel = new(bind="Workspace: {workspace}")
+
     ### Docks / Widgets ###
-    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
+    sidebar: Dock[SidebarWidget] = new(
+        dock="left",
+        title="Explorer",
+        hideTitleBar=True,
+        visible="{workspace is not None}",
+    )(maximumWidth=400)
 
     editors: Var[list[Request], Dock[RequestWidget]] = new(
         group="requests",
@@ -45,9 +52,17 @@ class ForcWindow(Window):
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
+        visible="{workspace is not None}",
     )
 
     ### Methods ###
+    def __setup__(self) -> None:
+        some_request = Request()  # (name="Sample Request")
+        self.editors.append(some_request)
+
+        another_request = Request()  # (name="Another Request")
+        self.editors.append(another_request)
+
     def _on_selected_sidebar_item_changed(self) -> None:
         logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
         #

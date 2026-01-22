@@ -663,6 +663,73 @@ class TestDockVisibleBinding:
         qt.process_events()
         assert instance._show_dock.value is True
 
+    def test_visible_expression_binding_initial_state(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible="{expr}" expression binding sets initial dock visibility."""
+
+        @decorator
+        class TestClass(base_class):
+            _workspace: Variable[str | None] = new(None)
+            _explorer: Dock[ExplorerPanel] = new(dock="left", visible="{_workspace is not None}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # workspace is None, so visible should be False -> dock should be hidden
+        assert instance._explorer.dock_widget.isHidden() is True
+
+    def test_visible_expression_binding_reactive(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible="{expr}" expression binding reacts to Variable changes."""
+
+        @decorator
+        class TestClass(base_class):
+            _workspace: Variable[str | None] = new(None)
+            _explorer: Dock[ExplorerPanel] = new(dock="left", visible="{_workspace is not None}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Initially hidden (workspace is None)
+        assert instance._explorer.is_visible is False
+
+        # Set workspace to a value
+        instance._workspace.value = "my-workspace"
+        qt.process_events()
+        assert instance._explorer.is_visible is True
+
+        # Set workspace back to None
+        instance._workspace.value = None
+        qt.process_events()
+        assert instance._explorer.is_visible is False
+
+    def test_visible_expression_binding_with_multiple_variables(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible="{expr}" can reference multiple Variables."""
+
+        @decorator
+        class TestClass(base_class):
+            _enabled: Variable[bool] = new(True)
+            _has_items: Variable[bool] = new(False)
+            _explorer: Dock[ExplorerPanel] = new(dock="left", visible="{_enabled and _has_items}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # enabled=True, has_items=False -> not visible
+        assert instance._explorer.is_visible is False
+
+        # Set has_items=True
+        instance._has_items.value = True
+        qt.process_events()
+        assert instance._explorer.is_visible is True
+
+        # Set enabled=False
+        instance._enabled.value = False
+        qt.process_events()
+        assert instance._explorer.is_visible is False
+
 
 # =============================================================================
 # Floating Binding

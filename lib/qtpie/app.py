@@ -1935,24 +1935,43 @@ def _setup_dock_bindings_for_app(
 
 
 def _setup_dock_visible_binding_for_app(app: AppBase[Any], dock: Any, binding: str) -> None:
-    """Set up two-way binding between Variable and dock visibility."""
+    """Set up binding between Variable/expression and dock visibility.
+
+    For simple Variable bindings (e.g., "_show_dock"), creates a two-way binding.
+    For expression bindings (e.g., "{workspace is not None}"), creates a one-way binding.
+    """
+    from qtpie.bindings import is_format_string
+    from qtpie.bindings.expression import create_expression_binding
     from qtpie.variable import _get_variable_observable
 
+    dock_widget = dock.dock_widget
+
+    # Helper to update dock visibility
+    def set_dock_visible(visible: Any) -> None:
+        # Convert to bool in case we receive a non-bool value
+        visible_bool = bool(visible) if visible is not None else False
+        if visible_bool and dock_widget.isHidden():
+            dock_widget.setVisible(True)
+        elif not visible_bool and not dock_widget.isHidden():
+            dock_widget.setVisible(False)
+
+    # Check if it's a format string expression
+    if is_format_string(binding):
+        # One-way binding from expression to dock visibility
+        # Use create_expression_binding which returns raw values (not strings)
+        create_expression_binding(app, binding, set_dock_visible)
+        return
+
+    # Simple Variable binding - two-way
     observable = _get_variable_observable(app, binding)
     if observable is None:
         return
 
-    dock_widget = dock.dock_widget
+    # Variable -> Dock visibility
+    observable.on_change(set_dock_visible)
+    set_dock_visible(observable.get())
 
-    def on_variable_change(visible: bool) -> None:
-        if visible and dock_widget.isHidden():
-            dock_widget.setVisible(True)
-        elif not visible and not dock_widget.isHidden():
-            dock_widget.setVisible(False)
-
-    observable.on_change(on_variable_change)
-    on_variable_change(observable.get())
-
+    # Dock visibility -> Variable (two-way)
     def on_visibility_change(visible: bool) -> None:
         if observable.get() != visible:
             observable.set(visible)
