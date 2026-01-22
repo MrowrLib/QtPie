@@ -64,6 +64,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
         editable: list[str | int] | bool | None = None,
         source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = None,
         dict_sync: DictToTupleListSync[Any, Any] | None = None,
+        key_header: str | None = None,
+        value_header: str | None = None,
     ) -> None:
         super().__init__(parent)
         self._obs_list = observable_list
@@ -74,6 +76,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._editable = editable  # None/False=none, True=all, list=specific columns
         self._source_dict: ObservableDict[Any, Any] | dict[Any, Any] | None = source_dict  # For dict bindings
         self._dict_sync: DictToTupleListSync[Any, Any] | None = dict_sync  # For #key column support
+        # Custom headers for dict bindings (simpler than headers= for common case)
+        self._key_header = key_header  # Custom header for #key or column 0 (default: "Key")
+        self._value_header = value_header  # Custom header for column 1 (default: "Value")
         # Track dict binding detected via auto-detection (when items are 2-tuples with complex values)
         self._auto_detected_dict_binding = False
 
@@ -120,19 +125,20 @@ class ReactiveTableModel[T](QAbstractTableModel):
                         # This is a dict binding with complex value objects
                         # Mark as auto-detected dict binding for data() method
                         self._auto_detected_dict_binding = True
-                        # Set default header for #key if not already set
+                        # Set header for #key (use custom key_header or default "Key")
                         if DICT_KEY_COLUMN not in self._headers:
-                            self._headers[DICT_KEY_COLUMN] = "Key"
+                            self._headers[DICT_KEY_COLUMN] = self._key_header or "Key"
                         # Use #key + value's properties
                         result: list[str | int] = [DICT_KEY_COLUMN]
                         result.extend(value_attrs)
                         return result
                     else:
                         # Simple 2-tuple (e.g., dict[str, str]) - set default headers
+                        # Use custom key_header/value_header if provided
                         if 0 not in self._headers:
-                            self._headers[0] = "Key"
+                            self._headers[0] = self._key_header or "Key"
                         if 1 not in self._headers:
-                            self._headers[1] = "Value"
+                            self._headers[1] = self._value_header or "Value"
                 # Fallback: simple tuple indexing [0, 1, ...]
                 return list(range(len(item_tuple)))
             # For regular objects, use public attributes that aren't methods

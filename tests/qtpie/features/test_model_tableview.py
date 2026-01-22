@@ -1718,6 +1718,48 @@ class TestTableViewDictKeyColumn:
         assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Variable Name")
         assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Variable Value")
 
+    def test_dict_with_key_header_shortcut(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with keyHeader= uses custom header for key column (auto-detect columns)."""
+
+        @decorator
+        class TestClass(base_class):
+            _vars: Variable[dict[str, EnvironmentVariable]] = new(
+                {
+                    "BASE_URL": EnvironmentVariable("http://localhost"),
+                }
+            )
+            _table: QTableView = new(
+                bind="_vars",
+                keyHeader="Environment Variable",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # keyHeader= should set the #key column header (complex value object case)
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Environment Variable")
+        # Other columns should have default headers (auto-detected from EnvironmentVariable)
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Value")
+
+    def test_dict_with_value_header_shortcut(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with valueHeader= uses custom header for value column (simple dict)."""
+
+        @decorator
+        class TestClass(base_class):
+            _settings: Variable[dict[str, str]] = new({"host": "localhost", "port": "8080"})
+            _table: QTableView = new(
+                bind="_settings",
+                keyHeader="Setting",
+                valueHeader="Configuration",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._table.model()
+
+        # Simple dict[str, str] - both keyHeader and valueHeader should work
+        assert_that(model.headerData(0, Qt.Orientation.Horizontal)).is_equal_to("Setting")
+        assert_that(model.headerData(1, Qt.Orientation.Horizontal)).is_equal_to("Configuration")
+
     def test_dict_key_column_editable(self, base_class, decorator, qt: QtDriver) -> None:
         """QTableView with editable=['#key'] allows editing the dict key."""
 

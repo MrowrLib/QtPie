@@ -64,17 +64,7 @@ class ForcWindow(Window):
     environment_variables_headers: QLabel = new("Environment Variables")
 
     # When you change the active environment, this DOES NOT UPDATE:
-    environment_variables_table: QTableView = new(
-        bind="workspace?.active_environment?.variables",
-        # key_column_name="Something Custom"
-        # should just replace the hard-coded "Key" - for when it defaults to Key and Value
-        # OR when it auto-detects but still uses 'Key'
-        # value_column_name="Also custom",
-        # should just replace the hard-coded "Value" - for when it defaults to Key and Value
-    )
-
-    #
-    # columns={"#key": "Name", "value": "Value", "enabled": "Enabled", "secret": "Secret"},
+    environment_variables_table: QTableView = new(bind="workspace?.active_environment?.variables", keyHeader="Name")
 
     # When you change the active environment, this updates properly:
     env_vars_count_label: QLabel = new(
@@ -85,10 +75,10 @@ class ForcWindow(Window):
     # When you change the active environment, this updates properly:
     env_vars_label: QLabel = new(bind="workspace?.active_environment?.variables")
 
-    # environment_as_table_label: QLabel = new("Environment as TableView:")
-    # environment_as_table: QTableView = new(bind="workspace?.active_environment")
+    environment_as_table_label: QLabel = new("Environment as TableView:")
+    environment_as_table: QTableView = new(bind="workspace?.active_environment")
 
-    # workspace_as_table_label: QLabel = new("Workspace as TableView:")
+    workspace_as_table_label: QLabel = new("Workspace as TableView:")
     # workspace_as_table: QTableView = new(bind="workspace")
 
 

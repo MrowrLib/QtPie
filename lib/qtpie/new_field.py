@@ -91,7 +91,10 @@ class NewField:
         self.model_format: str | Callable[[Any], str] | None = None  # Format for model items
         # Table columns for QTableView with bind= to list
         self.table_columns: list[str] | None = None  # Column names: ["name", "age"]
-        self.table_headers: dict[str, str] | None = None  # Custom headers: {"name": "Dog Name"}
+        self.table_headers: dict[str | int, str] | None = None  # Custom headers: {"name": "Dog Name"}
+        # Custom headers for auto-detected dict binding (simpler than headers= for common case)
+        self.key_header: str | None = None  # Custom header for #key or column 0 (default: "Key")
+        self.value_header: str | None = None  # Custom header for column 1 (default: "Value")
         # Checkable columns for QTableView (bool fields auto-detected by default)
         self.table_checkable: list[str] | bool | None = None  # Checkable columns or False to disable
         self.table_checkable_text: str | dict[str, str] | None = None  # Text format for checkable columns
@@ -821,7 +824,7 @@ class NewField:
                     if columns is not None:
                         if isinstance(columns, dict):
                             # Dict-style: keys are columns, values are headers
-                            columns_dict = cast(dict[str, str], columns)
+                            columns_dict = cast(dict[str | int, str], columns)
                             self._extract_table_columns(list(columns_dict.keys()))
                             self.table_headers = dict(columns_dict)
                         else:
@@ -832,6 +835,9 @@ class NewField:
                         if self.table_headers is None:
                             self.table_headers = {}
                         self.table_headers.update(dict(headers))
+                    # keyHeader=/valueHeader= for simple dict binding header customization
+                    self.key_header = self.kwargs.pop("keyHeader", None)
+                    self.value_header = self.kwargs.pop("valueHeader", None)
                     # checkable= specifies which columns have checkboxes
                     # - None (default): auto-detect bool fields
                     # - list[str]: only these columns are checkable

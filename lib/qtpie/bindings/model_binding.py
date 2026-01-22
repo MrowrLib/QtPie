@@ -725,6 +725,8 @@ def apply_model_binding(
             editable=cast("list[str | int] | bool | None", editable),
             source_dict=source_dict,
             dict_sync=dict_sync,
+            key_header=field_info.key_header,
+            value_header=field_info.value_header,
         )
     else:
         # Create ReactiveListModel for QComboBox, QListView, etc.
