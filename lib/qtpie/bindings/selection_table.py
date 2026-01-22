@@ -23,6 +23,8 @@ def setup_table_selection_bindings(
     selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
     root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
+    *,
+    _items_var_path: str | None = None,  # Internal: for re-resolution of items_var
 ) -> None:
     """Set up selection bindings specific to QTableView.
 
@@ -39,7 +41,7 @@ def setup_table_selection_bindings(
     if not has_single and not has_multi:
         return
 
-    from observant import Observable, ObservableProxy
+    from observant import Observable, ObservableList, ObservableProxy
 
     from qtpie.variable import Variable as VarType
 
@@ -104,6 +106,8 @@ def setup_table_selection_bindings(
         source = resolve_or_create_variable_fn(host, selected_items_path, None)
         if is_var_or_obs(source):
             items_var = source
+        elif isinstance(source, ObservableList):
+            items_var = source  # pyright: ignore[reportUnknownVariableType]
 
     # ALWAYS call _setup_table_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers.
@@ -124,6 +128,7 @@ def setup_table_selection_bindings(
         root_variable=root_variable,
         selected_row_path=selected_row_path,
         selected_item_path=selected_item_path,
+        selected_items_path=selected_items_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
     )
 
@@ -140,18 +145,22 @@ def _setup_table_selection_bindings_impl(
     rows_var: Any | None,  # Variable[list[int]] | None
     columns_var: Any | None,  # Variable[list[int]] | None
     cells_var: Any | None,  # Variable[list[tuple[int, int]]] | None
-    items_var: Any | None,  # Variable[list[Any]] | None
+    items_var: Any | None,  # Variable[list[Any]] | ObservableList | None
     root_variable: Any = None,  # Root Variable for nested paths
     selected_row_path: str | None = None,  # For re-resolution
     selected_item_path: str | None = None,  # For re-resolution
+    selected_items_path: str | None = None,  # For re-resolution of multi-selection
     resolve_or_create_variable_fn: Any = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of table selection bindings (called after Variables are resolved)."""
-    from observant import Observable, ObservableProxy
+    from observant import Observable, ObservableList, ObservableProxy
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
 
     # Flag to prevent circular updates
     updating = {"flag": False}
+
+    # Track if items_var is an ObservableList (vs Variable[list])
+    is_items_var_observable_list = isinstance(items_var, ObservableList) if items_var is not None else False
 
     # Use mutable container so handler closures can access updated values
     # (Variables may be resolved AFTER handler is connected)
@@ -300,6 +309,32 @@ def _setup_table_selection_bindings_impl(
         rows = get_selected_rows()
         return [get_item_at_row(r) for r in rows if get_item_at_row(r) is not None]
 
+    # Helpers for items_var (Variable[list], Observable[list], or ObservableList)
+    def get_items_var_value() -> list[Any]:  # pyright: ignore[reportUnknownVariableType]
+        """Get the current value from items_var (Variable, Observable, or ObservableList)."""
+        itemsv = container["items_var"]
+        if itemsv is None:
+            return []
+        if is_items_var_observable_list:
+            return list(itemsv)  # pyright: ignore[reportUnknownArgumentType]
+        if is_observable(itemsv):
+            val = itemsv.get()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            return val if isinstance(val, list) else []  # pyright: ignore[reportUnknownArgumentType,reportUnknownVariableType]
+        return itemsv.value or []  # pyright: ignore[reportUnknownMemberType]
+
+    def set_items_var_value(items: list[Any]) -> None:
+        """Set the value on items_var (Variable, Observable, or ObservableList)."""
+        itemsv = container["items_var"]
+        if itemsv is None:
+            return
+        if is_items_var_observable_list:
+            itemsv.clear()  # pyright: ignore[reportUnknownMemberType]
+            itemsv.extend(items)  # pyright: ignore[reportUnknownMemberType]
+        elif is_observable(itemsv):
+            itemsv.set(items)  # pyright: ignore[reportUnknownMemberType]
+        else:
+            itemsv.value = items  # pyright: ignore[reportUnknownMemberType]
+
     def set_current_cell(row: int, col: int) -> None:
         m = container["model"]
         sm = container["selection_model"]
@@ -363,7 +398,7 @@ def _setup_table_selection_bindings_impl(
             if cellsv is not None:
                 set_var_value(cellsv, get_selected_cells())
             if itemsv is not None:
-                set_var_value(itemsv, get_selected_items())
+                set_items_var_value(get_selected_items())
         finally:
             updating["flag"] = False
 
@@ -465,8 +500,9 @@ def _setup_table_selection_bindings_impl(
             set_var_value(cells_var, get_selected_cells() or ([(0, 0)] if m and m.rowCount() > 0 else []))
 
     if items_var is not None:
-        if get_var_value(items_var) is None:
-            set_var_value(items_var, get_selected_items())
+        initial_items = get_items_var_value()
+        if not initial_items:
+            set_items_var_value(get_selected_items())
 
     # Variable → Widget bindings (single)
     if row_var is not None:
@@ -612,3 +648,49 @@ def _setup_table_selection_bindings_impl(
                         updating["flag"] = False
 
             root_variable.on_change(on_root_variable_change_item)
+
+    # For nested paths like "workspace?.selected_items", subscribe to ROOT Variable
+    # This must be OUTSIDE the items_var check because when root is None,
+    # items_var will also be None (path can't be resolved yet)
+    if root_variable is not None and selected_items_path is not None and resolve_or_create_variable_fn is not None:
+        from qtpie.variable import Variable as VarType
+
+        root_subscribed_key = f"items_root_subscribed_{id(widget)}"
+        if not container.get(root_subscribed_key, False):
+            container[root_subscribed_key] = True
+
+            def on_root_variable_change_items(*_args: Any) -> None:
+                """Re-resolve items_var when root Variable changes."""
+                if updating["flag"]:
+                    return
+                assert selected_items_path is not None
+                assert resolve_or_create_variable_fn is not None
+                new_source = resolve_or_create_variable_fn(host, selected_items_path, None)
+                if new_source is None:
+                    return
+
+                # Get the items from the new source
+                new_items: list[Any] = []  # pyright: ignore[reportUnknownVariableType]
+                if isinstance(new_source, VarType):
+                    new_items = new_source.value or []  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                elif isinstance(new_source, ObservableList):
+                    new_items = list(new_source)  # pyright: ignore[reportUnknownArgumentType]
+
+                if new_items:
+                    # Sync widget selection to match the new items
+                    updating["flag"] = True
+                    try:
+                        m = container["model"]
+                        sm = container["selection_model"]
+                        if m is not None and sm is not None:
+                            sm.clearSelection()  # pyright: ignore[reportUnknownMemberType]
+                            for item in new_items:  # pyright: ignore[reportUnknownVariableType]
+                                for row in range(m.rowCount()):
+                                    if get_item_at_row(row) == item:
+                                        idx = m.index(row, 0)
+                                        sm.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)  # pyright: ignore[reportUnknownMemberType]
+                                        break
+                    finally:
+                        updating["flag"] = False
+
+            root_variable.on_change(on_root_variable_change_items)

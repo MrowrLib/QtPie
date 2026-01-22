@@ -180,7 +180,7 @@ def _resolve_or_create_variable(
     Returns:
         The Variable instance, or None if not found/creatable.
     """
-    from observant import Observable
+    from observant import Observable, ObservableDict, ObservableList, ObservableSet
 
     from qtpie.bindings import resolve_binding_source
     from qtpie.qt_pie_state import QtPieState
@@ -194,8 +194,8 @@ def _resolve_or_create_variable(
     source = resolve_binding_source(host, path)  # type: ignore[arg-type]
     if isinstance(source, VarType):
         return source
-    # Also return Observable/ObservableProxy sources (e.g., record enum fields)
-    if isinstance(source, (Observable, ObservableProxy)):
+    # Also return Observable/ObservableProxy/ObservableList/etc sources
+    if isinstance(source, (Observable, ObservableProxy, ObservableList, ObservableDict, ObservableSet)):
         return source
 
     # Strip leading underscores for lookup

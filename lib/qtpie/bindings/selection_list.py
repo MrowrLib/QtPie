@@ -42,7 +42,7 @@ def setup_selection_bindings(
     if not has_single and not has_multi and not has_widget:
         return
 
-    from observant import Observable, ObservableProxy
+    from observant import Observable, ObservableList, ObservableProxy
 
     from qtpie.variable import Variable as VarType
 
@@ -50,7 +50,7 @@ def setup_selection_bindings(
     index_var: VarType[int] | None = None
     item_var: VarType[Any] | None = None
     indexes_var: VarType[list[int]] | None = None
-    items_list_var: VarType[list[Any]] | None = None
+    items_list_var: VarType[list[Any]] | ObservableList[Any] | None = None
     widget_var: VarType[Any] | None = None
 
     if selected_index_path is not None:
@@ -75,6 +75,8 @@ def setup_selection_bindings(
     if selected_items_list_path is not None:
         source = resolve_or_create_variable_fn(host, selected_items_list_path, None)
         if isinstance(source, VarType):
+            items_list_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, ObservableList):
             items_list_var = source  # pyright: ignore[reportUnknownVariableType]
 
     if selected_widget_path is not None:
@@ -109,6 +111,7 @@ def setup_selection_bindings(
         index_var_path=selected_index_path,
         item_var_path=selected_item_path,
         text_var_path=selected_text_path,
+        items_list_var_path=selected_items_list_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
     )
 
@@ -120,18 +123,19 @@ def _setup_selection_bindings_impl(
     index_var: Any | None,  # Variable[int] | None
     item_var: Any | None,  # Variable[Any] | None
     indexes_var: Any | None,  # Variable[list[int]] | None
-    items_list_var: Any | None,  # Variable[list[Any]] | None
+    items_list_var: Any | None,  # Variable[list[Any]] | ObservableList | None
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
     text_var: Any | None = None,  # Variable[str] | None - matches by display text
     root_variable: Any | None = None,  # Root Variable for nested paths (from model_binding)
     index_var_path: str | None = None,  # Original path for re-resolution
     item_var_path: str | None = None,  # Original path for re-resolution
     text_var_path: str | None = None,  # Original path for re-resolution
+    items_list_var_path: str | None = None,  # Original path for re-resolution (multi-selection)
     resolve_or_create_variable_fn: Any | None = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
-    from observant import Observable, ObservableProxy
-    from qtpy.QtCore import QModelIndex, Qt
+    from observant import Observable, ObservableList, ObservableProxy
+    from qtpy.QtCore import QItemSelectionModel, QModelIndex, Qt
     from qtpy.QtWidgets import QComboBox
 
     # Use mutable containers for model and item_var so they can be updated when
@@ -1156,6 +1160,27 @@ def _setup_selection_bindings_impl(
         if indexes_var is not None or items_list_var is not None:
             from qtpy.QtCore import QItemSelection
 
+            # Track if items_list_var is an ObservableList (vs Variable[list])
+            is_items_list_observable = isinstance(items_list_var, ObservableList) if items_list_var is not None else False
+
+            def get_items_list_value() -> list[Any]:
+                """Get the current value from items_list_var (Variable or ObservableList)."""
+                if items_list_var is None:
+                    return []
+                if is_items_list_observable:
+                    return list(items_list_var)  # pyright: ignore[reportUnknownArgumentType]
+                return items_list_var.value or []  # pyright: ignore[reportUnknownMemberType]
+
+            def set_items_list_value(items: list[Any]) -> None:
+                """Set the value on items_list_var (Variable or ObservableList)."""
+                if items_list_var is None:
+                    return
+                if is_items_list_observable:
+                    items_list_var.clear()  # pyright: ignore[reportUnknownMemberType]
+                    items_list_var.extend(items)  # pyright: ignore[reportUnknownMemberType]
+                else:
+                    items_list_var.value = items  # pyright: ignore[reportUnknownMemberType]
+
             # Helper to get selected rows from selection model
             def get_selected_rows() -> list[int]:
                 selected_indexes = selection_model.selectedIndexes()  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
@@ -1176,9 +1201,22 @@ def _setup_selection_bindings_impl(
                     indexes_var.value = get_selected_rows()
 
             if items_list_var is not None:
-                initial_items = items_list_var.value
-                if initial_items is None or not initial_items:  # pyright: ignore[reportUnnecessaryComparison]
-                    items_list_var.value = get_selected_items()
+                initial_items = get_items_list_value()
+                if not initial_items:
+                    set_items_list_value(get_selected_items())
+                else:
+                    # Sync widget selection to match the Variable/ObservableList value
+                    updating["flag"] = True
+                    try:
+                        current_model = binding_container["model"]
+                        selection_model.clearSelection()  # pyright: ignore[reportUnknownMemberType]
+                        for item in initial_items:
+                            row = find_index_of_item(item)
+                            if row >= 0:
+                                idx = current_model.index(row, 0)  # pyright: ignore[reportUnknownMemberType]
+                                selection_model.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)  # pyright: ignore[reportUnknownMemberType]
+                    finally:
+                        updating["flag"] = False
 
             # Widget → Variable binding via selectionChanged signal (for multi-selection)
             def on_view_multi_selection_changed(_selected: QItemSelection, _deselected: QItemSelection) -> None:
@@ -1191,7 +1229,7 @@ def _setup_selection_bindings_impl(
                     if indexes_var is not None:
                         indexes_var.value = get_selected_rows()
                     if items_list_var is not None:
-                        items_list_var.value = get_selected_items()
+                        set_items_list_value(get_selected_items())
                 finally:
                     updating["flag"] = False
 
@@ -1199,3 +1237,48 @@ def _setup_selection_bindings_impl(
             # Store handler for disconnection when bindings are reapplied
             if qtpie_state is not None and hasattr(qtpie_state, "_handlers"):
                 qtpie_state._handlers[handler_key] = on_view_multi_selection_changed
+
+        # For nested paths like "workspace?.selected_items", subscribe to ROOT Variable
+        # This must be OUTSIDE the items_list_var check because when root is None,
+        # items_list_var will also be None (path can't be resolved yet)
+        if root_variable is not None and items_list_var_path is not None and resolve_or_create_variable_fn is not None:
+            from qtpie.variable import Variable as VarType
+
+            root_subscribed_key = f"items_list_root_subscribed_{id(widget)}"
+            if not binding_container.get(root_subscribed_key, False):
+                binding_container[root_subscribed_key] = True
+
+                def on_root_variable_change_items_list(*_args: Any) -> None:
+                    """Re-resolve items_list_var when root Variable changes."""
+                    if updating["flag"]:
+                        return
+                    assert items_list_var_path is not None
+                    assert resolve_or_create_variable_fn is not None
+                    new_source = resolve_or_create_variable_fn(host, items_list_var_path, None)
+                    if new_source is None:
+                        return
+
+                    # Get the items from the new source
+                    new_items: list[Any] = []  # pyright: ignore[reportUnknownVariableType]
+                    if isinstance(new_source, VarType):
+                        new_items = new_source.value or []  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                    elif isinstance(new_source, ObservableList):
+                        new_items = list(new_source)  # pyright: ignore[reportUnknownArgumentType]
+
+                    if new_items:
+                        # Sync widget selection to match the new items
+                        updating["flag"] = True
+                        try:
+                            current_model = binding_container["model"]
+                            current_selection_model = binding_container.get("selection_model")
+                            if current_model is not None and current_selection_model is not None:
+                                current_selection_model.clearSelection()  # pyright: ignore[reportUnknownMemberType]
+                                for item in new_items:  # pyright: ignore[reportUnknownVariableType]
+                                    row = find_index_of_item(item)
+                                    if row >= 0:
+                                        idx = current_model.index(row, 0)  # pyright: ignore[reportUnknownMemberType]
+                                        current_selection_model.select(idx, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)  # pyright: ignore[reportUnknownMemberType]
+                        finally:
+                            updating["flag"] = False
+
+                root_variable.on_change(on_root_variable_change_items_list)

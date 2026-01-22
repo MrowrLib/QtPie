@@ -152,6 +152,61 @@ class TestTreeViewSelectedItemNestedPath:
         assert_that(current_index.row()).is_equal_to(1)
 
 
+@dataclass
+class WorkspaceWithObservableList:
+    """Workspace with ObservableList field for multi-selection testing."""
+
+    name: str
+    items: list[TreeNode] = field(default_factory=list)
+    selected_items: ObservableList[TreeNode] = field(default_factory=lambda: ObservableList[TreeNode]())
+
+
+class TestTreeViewSelectedItemsWithObservableList:
+    """Test selectedItems= binding when the target is an ObservableList field."""
+
+    def test_selectedItems_with_observable_list_nested_path(self, qt: QtDriver) -> None:
+        """selectedItems= with nested path should work when field is ObservableList."""
+        from PySide6.QtWidgets import QAbstractItemView
+
+        from qtpie import Widget, widget
+
+        node_a = TreeNode("Node A")
+        node_b = TreeNode("Node B")
+        node_c = TreeNode("Node C")
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[WorkspaceWithObservableList | None] = new(None)
+            _tree: QTreeView = new(
+                bind="workspace?.items",
+                selectedItems="workspace?.selected_items",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        instance._tree.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        qt.process_events()
+
+        # Create workspace with ObservableList for selected_items, pre-selecting node_a and node_c
+        workspace = WorkspaceWithObservableList(
+            name="Test",
+            items=[node_a, node_b, node_c],
+            selected_items=ObservableList([node_a, node_c]),
+        )
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Tree should have 3 items
+        model = instance._tree.model()
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Selection should be synced - rows 0 and 2 should be selected
+        selection_model = instance._tree.selectionModel()
+        selected_rows = sorted(set(idx.row() for idx in selection_model.selectedIndexes()))
+        assert_that(selected_rows).is_equal_to([0, 2])
+
+
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestTreeViewModelBinding:
     """Test QTreeView with bind= to hierarchical Variable[list]."""

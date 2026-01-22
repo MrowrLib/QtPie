@@ -22,8 +22,9 @@ from dataclasses import dataclass, field
 
 import pytest
 from assertpy import assert_that
+from observant import ObservableList
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QTableView
+from PySide6.QtWidgets import QAbstractItemView, QTableView
 
 from qtpie import Variable, new
 from qtpie.testing import QtDriver
@@ -56,6 +57,60 @@ class TableWorkspace:
     items: list[Dog] = field(default_factory=list)
     selected_item: Dog | None = None
     selected_row: int = -1
+
+
+@dataclass
+class TableWorkspaceWithObservableList:
+    """Workspace with ObservableList field for multi-selection testing."""
+
+    name: str
+    items: list[Dog] = field(default_factory=list)
+    selected_items: ObservableList[Dog] = field(default_factory=lambda: ObservableList[Dog]())
+
+
+class TestTableViewSelectedItemsWithObservableList:
+    """Test selectedItems= binding when the target is an ObservableList field."""
+
+    def test_selectedItems_with_observable_list_nested_path(self, qt: QtDriver) -> None:
+        """selectedItems= with nested path should work when field is ObservableList."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+        dog_c = Dog("Max", 2)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[TableWorkspaceWithObservableList | None] = new(None)
+            _table: QTableView = new(
+                bind="workspace?.items",
+                selectedItems="workspace?.selected_items",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        instance._table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        instance._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        qt.process_events()
+
+        # Create workspace with ObservableList for selected_items, pre-selecting dog_a and dog_c
+        workspace = TableWorkspaceWithObservableList(
+            name="Test",
+            items=[dog_a, dog_b, dog_c],
+            selected_items=ObservableList([dog_a, dog_c]),
+        )
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Table should have 3 rows
+        model = instance._table.model()
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Selection should be synced - rows 0 and 2 should be selected
+        selection_model = instance._table.selectionModel()
+        selected_rows = sorted(set(idx.row() for idx in selection_model.selectedIndexes()))
+        assert_that(selected_rows).is_equal_to([0, 2])
 
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)

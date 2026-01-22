@@ -7,6 +7,7 @@ from forc2.app.widgets.request import RequestWidget
 from forc2.app.widgets.sidebar import SidebarWidget
 from forc2.domain.collection import Collection
 from forc2.domain.request import Request
+from forc2.domain.workspace import Workspace
 from qtpie import Dock, Event, Stretch, Var, Widget, Window, new, widget, window
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class CentralWidget(Widget):
     app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
     load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.")
-    load_workspace_button: QPushButton = new("Load Workspace")
+    load_workspace_button: QPushButton = new("Load Workspace", clicked="on_choose_workspace")
     stretch: Stretch
 
 
@@ -31,7 +32,22 @@ class CentralWidget(Widget):
     dockTabsDragToUndock=True,
     size=(1600, 900),
 )
-class ForcWindow(Window):
+class ForcWindow(Window[Workspace | None]):
+    label: QLabel = new("Forc Main Window")
+    workspace_name_label: QLabel = new(bind="Workspace is: {name}", visible="{#record is not None}")
+    stretch: Stretch
+
+
+@window(
+    title="Forc :: Free Open-source Rest Client",
+    icon=":/icon.png",
+    dockTabsClosable=True,
+    dockTabsHideTitleBar=True,
+    dockTabsMovable=True,
+    dockTabsDragToUndock=True,
+    size=(1600, 900),
+)
+class ForcWindowOne(Window):
     ### Events ###
     on_current_workspace_item_changed: Event
 

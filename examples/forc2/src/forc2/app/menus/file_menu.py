@@ -1,4 +1,3 @@
-from qtpy.QtCore import Signal
 from qtpy.QtGui import QAction
 
 from qtpie import Menu, menu, new
@@ -6,9 +5,6 @@ from qtpie import Menu, menu, new
 
 @menu(title="File")
 class FileMenu(Menu):
-    ### Signals ###
-    on_quit = Signal()
-
     ### Actions ###
     load_workspace: QAction = new("&Load Workspace...", shortcut="Ctrl+O", triggered="on_choose_workspace")
     save: QAction = new("&Save", shortcut="Ctrl+S", triggered="on_save")
