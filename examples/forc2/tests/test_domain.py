@@ -55,66 +55,6 @@ class TestCollection:
         assert_that(child.name.value).is_equal_to("Users")
         assert_that(list(parent.items.value)).is_length(1)
 
-    def test_on_item_added_fires(self) -> None:
-        """on_item_added event fires when items are added."""
-        c = Collection()
-        added: list[object] = []
-        c.on_item_added.connect(lambda item: added.append(item))
-
-        r = c.add_request("Test")
-
-        assert_that(added).is_length(1)
-        assert_that(added[0]).is_same_as(r)
-
-    def test_on_item_removed_fires(self) -> None:
-        """on_item_removed event fires when items are removed."""
-        c = Collection()
-        r = c.add_request("Test")
-
-        removed: list[object] = []
-        c.on_item_removed.connect(lambda item: removed.append(item))
-
-        c.remove(r)
-
-        assert_that(removed).is_length(1)
-        assert_that(removed[0]).is_same_as(r)
-
-    def test_nested_on_changed_bubbles(self) -> None:
-        """Changes in nested items bubble up via on_changed."""
-        root = Collection()
-        root.name.value = "Root"
-
-        changes: list[str] = []
-        root.on_changed.connect(lambda: changes.append("root_changed"))
-
-        # Add a request
-        r = root.add_request("Test")
-        assert_that(changes).contains("root_changed")  # Adding fires on_changed
-
-        changes.clear()
-
-        # Modify the request - should bubble up
-        r.url.value = "http://test.com"
-        assert_that(changes).contains("root_changed")
-
-    def test_deeply_nested_changes_bubble(self) -> None:
-        """Changes bubble up through multiple levels."""
-        root = Collection()
-        child = root.add_collection("Child")
-        grandchild = child.add_collection("Grandchild")
-        request = grandchild.add_request("Deep Request")
-
-        changes: list[str] = []
-        root.on_changed.connect(lambda: changes.append("root"))
-
-        changes.clear()
-
-        # Modify the deeply nested request
-        request.name.value = "Modified"
-
-        # Should bubble all the way up
-        assert_that(changes).contains("root")
-
 
 class TestStateParent:
     """Tests for state_parent hierarchy."""

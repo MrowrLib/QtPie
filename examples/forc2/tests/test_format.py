@@ -3,8 +3,15 @@
 from pathlib import Path
 
 from assertpy import assert_that
-from forc2.domain import Collection, HttpMethod, KeyValue, Request
-from forc2.format import load_collection, load_request, save_collection, save_request
+from forc2.domain import Collection, Environment, HttpMethod, KeyValue, Request
+from forc2.format import (
+    load_collection,
+    load_environment,
+    load_request,
+    save_collection,
+    save_environment,
+    save_request,
+)
 
 
 class TestLoadRequest:
@@ -313,6 +320,105 @@ class TestSaveCollection:
         assert isinstance(loaded_child, Collection)
         assert_that(loaded_child.name.value).is_equal_to("Child")
         assert_that(list(loaded_child.items.value)).is_length(1)
+
+
+class TestLoadEnvironment:
+    """Tests for loading environments from YAML."""
+
+    def test_load_basic_environment(self, tmp_path: Path) -> None:
+        """Load a simple environment with name and variables."""
+        yaml_file = tmp_path / "dev.yaml"
+        yaml_file.write_text("""
+name: Development
+variables:
+  - key: BASE_URL
+    value: http://localhost:8000
+  - key: API_KEY
+    value: secret123
+    secret: true
+""")
+        env = load_environment(yaml_file)
+
+        assert_that(env.name.value).is_equal_to("Development")
+        assert_that(list(env.variables.value)).is_length(2)
+        assert_that(env.variables.value[0].key).is_equal_to("BASE_URL")
+        assert_that(env.variables.value[0].value).is_equal_to("http://localhost:8000")
+        assert_that(env.variables.value[0].secret).is_false()
+        assert_that(env.variables.value[1].key).is_equal_to("API_KEY")
+        assert_that(env.variables.value[1].secret).is_true()
+
+    def test_load_environment_uses_filename_as_name(self, tmp_path: Path) -> None:
+        """If no name field, use filename."""
+        yaml_file = tmp_path / "production.yaml"
+        yaml_file.write_text("""
+variables:
+  - key: URL
+    value: https://api.example.com
+""")
+        env = load_environment(yaml_file)
+
+        assert_that(env.name.value).is_equal_to("production")
+        assert_that(env.filename.value).is_equal_to("production")
+
+    def test_load_environment_empty(self, tmp_path: Path) -> None:
+        """Load an empty environment file."""
+        yaml_file = tmp_path / "empty.yaml"
+        yaml_file.write_text("")
+
+        env = load_environment(yaml_file)
+
+        assert_that(env.name.value).is_equal_to("empty")
+        assert_that(list(env.variables.value)).is_empty()
+
+
+class TestLoadEnvironmentFixtures:
+    """Tests that load the actual environment fixtures."""
+
+    def test_load_demo_environments(self) -> None:
+        """Load the demo-api environment fixtures."""
+        fixtures = Path("examples/forc2/fixtures/demo-api/environments")
+        if not fixtures.exists():
+            return
+
+        dev_env = load_environment(fixtures / "development.yaml")
+        assert_that(dev_env.name.value).is_equal_to("Development")
+        assert_that(list(dev_env.variables.value)).is_not_empty()
+
+        prod_env = load_environment(fixtures / "production.yaml")
+        assert_that(prod_env.name.value).is_equal_to("Production")
+
+
+class TestSaveEnvironment:
+    """Tests for saving environments to YAML."""
+
+    def test_save_basic_environment(self, tmp_path: Path) -> None:
+        """Save a simple environment."""
+        env = Environment()
+        env.name.value = "Test"
+        env.variables.append(KeyValue(key="URL", value="http://localhost"))
+
+        yaml_file = tmp_path / "test.yaml"
+        save_environment(env, yaml_file)
+
+        # Load it back
+        loaded = load_environment(yaml_file)
+        assert_that(loaded.name.value).is_equal_to("Test")
+        assert_that(list(loaded.variables.value)).is_length(1)
+        assert_that(loaded.variables.value[0].key).is_equal_to("URL")
+
+    def test_save_environment_with_secrets(self, tmp_path: Path) -> None:
+        """Save an environment with secret variables."""
+        env = Environment()
+        env.name.value = "Secrets"
+        env.variables.append(KeyValue(key="PUBLIC", value="visible"))
+        env.variables.append(KeyValue(key="SECRET", value="hidden", secret=True))
+
+        yaml_file = tmp_path / "secrets.yaml"
+        save_environment(env, yaml_file)
+
+        loaded = load_environment(yaml_file)
+        assert_that(loaded.variables.value[0].secret).is_false()
+        assert_that(loaded.variables.value[1].secret).is_true()
 
 
 class TestRoundTrip:

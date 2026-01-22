@@ -1,5 +1,5 @@
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QLabel, QListView, QTableView, QTreeView
+from qtpy.QtWidgets import QComboBox, QLabel, QTreeView
 
 from forc2.app.menus import FileMenu, ViewMenu
 from qtpie import Window, new, window
@@ -39,18 +39,18 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu
 
-    label_test2: QLabel = new(bind="Length: {len(workspace?.collection?.items)}")
+    collections_headers: QLabel = new("Collections")
+    collections_tree: QTreeView = new(
+        bind="workspace?.collection?.items",
+        children="items",
+        format="{name}",
+    )
 
-    label1: QLabel = new("TREE:")
-    collections_tree: QTreeView = new(bind="workspace?.collection?.items", children="items", format="{name}")
-
-    label2: QLabel = new("LIST:")
-    collections_list: QListView = new(bind="workspace?.collection?.items", format="{name}")
-
-    label3: QLabel = new("TABLE:")
-    collections_table: QTableView = new(bind="workspace?.collection?.items")
-
-    label_another: QLabel = new("END")
+    environments_headers: QLabel = new("Environments")
+    environments_chooser: QComboBox = new(
+        bind="workspace?.environments",
+        format="{name}",
+    )
 
 
 #  treeview: QTreeView = new(

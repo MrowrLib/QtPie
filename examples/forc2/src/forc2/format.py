@@ -6,7 +6,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .domain import Collection, HttpMethod, KeyValue, Request
+from .domain import Collection, Environment, HttpMethod, KeyValue, Request
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -111,6 +111,62 @@ def load_request(path: Path) -> Request:
         request.body.value = data["body"]
 
     return request
+
+
+def load_environment(path: Path) -> Environment:
+    """Load an Environment from a YAML file."""
+    env = Environment()
+
+    # Track the file stem for save path resolution
+    env.filename.value = path.stem
+
+    with path.open() as f:
+        data = yaml.load(f)
+
+    if not data:
+        # Use filename as name when file is empty
+        env.name.value = path.stem
+        return env
+
+    if "name" in data:
+        env.name.value = data["name"]
+    else:
+        # Use filename as name
+        env.name.value = path.stem
+
+    if "variables" in data:
+        for v in data["variables"]:
+            env.variables.append(
+                KeyValue(
+                    key=v.get("key", ""),
+                    value=v.get("value", ""),
+                    enabled=v.get("enabled", True),
+                    secret=v.get("secret", False),
+                )
+            )
+
+    return env
+
+
+def save_environment(environment: Environment, path: Path) -> None:
+    """Save an Environment to a YAML file."""
+    data: dict[str, Any] = {
+        "name": environment.name.value,
+    }
+
+    if environment.variables.value:
+        variables_data: list[dict[str, Any]] = []
+        for v in environment.variables.value:
+            var_data: dict[str, Any] = {"key": v.key, "value": v.value}
+            if v.secret:
+                var_data["secret"] = True
+            if not v.enabled:
+                var_data["enabled"] = False
+            variables_data.append(var_data)
+        data["variables"] = variables_data
+
+    with path.open("w") as f:
+        yaml.dump(data, f)
 
 
 def save_collection(collection: Collection, path: Path) -> None:

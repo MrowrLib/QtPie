@@ -1213,6 +1213,132 @@ class _VariableDescriptor[T]:
             var.value = value
 
 
+def _resolve_var_for_state_expression(state_obj: Any, var_name: str) -> Any | None:
+    """Resolve a variable for State expression context, walking state_parent hierarchy.
+
+    Returns the resolved value ready for use in eval context:
+    - Variable -> unwrapped value
+    - Event -> .emit method (so it can be called directly)
+    - Other -> raw value
+
+    Returns None if not found.
+    """
+    from .event import Event
+
+    # Try on state_obj itself (exact name, then underscore prefix)
+    for attr_name in [var_name, f"_{var_name}"]:
+        if hasattr(state_obj, attr_name):
+            raw_attr: Any = getattr(state_obj, attr_name)
+            if isinstance(raw_attr, Variable):
+                return cast(Any, raw_attr.value)  # pyright: ignore[reportUnknownMemberType]
+            elif isinstance(raw_attr, Event):
+                return raw_attr.emit
+            else:
+                return raw_attr
+
+    # Walk state_parent hierarchy
+    from .state import State
+
+    if isinstance(state_obj, State):
+        current: State | None = state_obj.state_parent
+        while current is not None:
+            for attr_name in [var_name, f"_{var_name}"]:
+                if hasattr(current, attr_name):
+                    raw_attr = getattr(current, attr_name)
+                    if isinstance(raw_attr, Variable):
+                        return cast(Any, raw_attr.value)  # pyright: ignore[reportUnknownMemberType]
+                    elif isinstance(raw_attr, Event):
+                        return raw_attr.emit
+                    else:
+                        return raw_attr
+            current = current.state_parent
+
+    return None
+
+
+def _create_state_expression_handler(
+    state_obj: Any,
+    expression: str,
+) -> Callable[..., Any]:
+    """Create a handler from an expression string for State onChange callbacks.
+
+    Args:
+        state_obj: The State object that provides the context.
+        expression: The expression string like "{on_changed()}" or "{handle(#args)}".
+
+    Returns:
+        A handler function that can be registered as an onChange callback.
+
+    The expression is evaluated in the state_obj's namespace when the callback fires.
+    Supports:
+        - Method calls: {on_clicked()}, {handle_value(123)}
+        - Event emissions: {on_data_changed()}, {on_save(#args)}
+        - Full Python expressions with state variables
+        - #args placeholder to pass callback arguments: {handle(#args)}
+        - #self placeholder for the state_obj instance
+    """
+    from .bindings.format_binding import _BUILTINS, _extract_ast_names, _parse_format_fields  # pyright: ignore[reportPrivateUsage]
+
+    # Parse the expression to get the inner content
+    fields = _parse_format_fields(expression)
+    if not fields:
+        raise ValueError(f"Invalid signal expression: {expression}")
+
+    # We expect a single expression field
+    expr = fields[0].expression
+
+    # Check if expression uses special placeholders
+    uses_args = "#args" in expr
+    uses_self = "#self" in expr
+
+    # Replace special placeholders before AST extraction (they're not valid Python)
+    expr_for_ast = expr
+    if uses_args:
+        expr_for_ast = expr_for_ast.replace("#args", "_signal_args_placeholder_")
+    if uses_self:
+        expr_for_ast = expr_for_ast.replace("#self", "_state_ref_")
+
+    # Extract variable names from the expression for context building
+    var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
+    # Remove placeholder names we added
+    var_names.discard("_signal_args_placeholder_")
+    var_names.discard("_state_ref_")
+
+    def handler(*signal_args: Any) -> Any:
+        # Build context with state_obj's variables
+        context: dict[str, Any] = {}
+
+        # Add state_obj reference for #self placeholder
+        if uses_self:
+            context["state_ref"] = state_obj
+
+        # Add #args support
+        if uses_args:
+            context["signal_args"] = signal_args
+
+        # Add all variable values to context
+        for var_name in var_names:
+            resolved = _resolve_var_for_state_expression(state_obj, var_name)
+            if resolved is not None:
+                context[var_name] = resolved
+
+        # Replace special placeholders
+        eval_expr = expr
+        if uses_args:
+            eval_expr = eval_expr.replace("#args", "*signal_args")
+        if uses_self:
+            eval_expr = eval_expr.replace("#self", "state_ref")
+
+        # Evaluate the expression
+        try:
+            result = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
+            return result
+        except Exception as e:
+            raise RuntimeError(f"Error evaluating state expression '{expression}': {e}") from e
+
+    return handler
+
+
 def _wire_on_change_callback(
     obj: object,
     var: Variable[Any],
@@ -1224,22 +1350,37 @@ def _wire_on_change_callback(
     up the state_parent hierarchy to find it (lazily at emit time).
     If an Event is found, it emits.
 
+    Supports three forms:
+    - Method name: onChange="_some_function"
+    - Event name: onChange="on_data_changed" (uses emit_event for hierarchy search)
+    - Expression: onChange="{some_call(#args)}" (full expression support)
+
     Args:
         obj: The host object (Widget, State, etc.) that owns the method
         var: The Variable whose Observable to subscribe to
-        on_change: Method name (str) or callable to invoke on change
+        on_change: Method name (str), expression (str), or callable to invoke on change
     """
     import inspect
 
     from .event import Event
     from .state import State, resolve_from_state_hierarchy
 
+    observable = var.observable
+
+    # Handle expression syntax: onChange="{expression(#args)}"
+    if isinstance(on_change, str) and on_change.startswith("{") and on_change.endswith("}"):
+        handler = _create_state_expression_handler(obj, on_change)
+        if isinstance(observable, Observable):
+            observable.on_change(handler)
+        else:
+            observable.on_change(lambda: handler())  # type: ignore[arg-type]
+        return
+
     # For string callbacks on State, we need LAZY resolution because
     # the parent might not be set yet at wire time
     if isinstance(on_change, str) and isinstance(obj, State):
         callback_name = on_change
         state_obj = obj
-        observable = var.observable
 
         # Create lazy resolver that looks up callback at emit time
         def lazy_resolve_and_call(value: Any = None) -> None:
@@ -1253,7 +1394,8 @@ def _wire_on_change_callback(
             if callback is None:
                 return  # Not found anywhere - silently skip
 
-            # Handle Event - emit it
+            # Handle Event - emit it without arguments by default
+            # Use expression syntax {on_event(#args)} to pass value
             if isinstance(callback, Event):
                 callback.emit()
                 return
@@ -1296,9 +1438,6 @@ def _wire_on_change_callback(
         # Can't inspect - assume no value parameter
         accepts_value = False
 
-    # Get the underlying observable
-    observable = var.observable
-
     # Wire up based on observable type
     if isinstance(observable, Observable):
         # Observable[T] - on_change(callback) passes new value
@@ -1322,6 +1461,11 @@ def _wire_on_insert_callback(
     For State objects, resolution is lazy (at emit time) to support parent hierarchy.
     For ObservableList: callback receives (index: int, item: T)
     For ObservableDict: callback receives (key: K, value: V)
+
+    Supports three forms:
+    - Method name: onInsert="_some_function"
+    - Event name: onInsert="on_item_added" (uses emit_event for hierarchy search)
+    - Expression: onInsert="{some_call(#args)}" (full expression support)
     """
     import inspect
 
@@ -1329,6 +1473,15 @@ def _wire_on_insert_callback(
     from .state import State, resolve_from_state_hierarchy
 
     observable = var.observable
+
+    # Handle expression syntax: onInsert="{expression(#args)}"
+    if isinstance(on_insert, str) and on_insert.startswith("{") and on_insert.endswith("}"):
+        handler = _create_state_expression_handler(obj, on_insert)
+        if isinstance(observable, ObservableList):
+            observable.on_insert(lambda idx, item: handler(item, idx))
+        elif isinstance(observable, ObservableDict):
+            observable.on_insert(lambda key, val: handler(key, val))
+        return
 
     # For string callbacks on State, use LAZY resolution
     if isinstance(on_insert, str) and isinstance(obj, State):
@@ -1417,8 +1570,26 @@ def _wire_on_remove_callback(
     For ObservableList: callback receives (index: int, item: T)
     For ObservableSet: callback receives (item: T)
     For ObservableDict: callback receives (key: K, value: V)
+
+    Supports three forms:
+    - Method name: onRemove="_some_function"
+    - Event name: onRemove="on_item_removed" (uses emit_event for hierarchy search)
+    - Expression: onRemove="{some_call(#args)}" (full expression support)
     """
     import inspect
+
+    observable = var.observable
+
+    # Handle expression syntax: onRemove="{expression(#args)}"
+    if isinstance(on_remove, str) and on_remove.startswith("{") and on_remove.endswith("}"):
+        handler = _create_state_expression_handler(obj, on_remove)
+        if isinstance(observable, ObservableList):
+            observable.on_remove(lambda idx, item: handler(item, idx))
+        elif isinstance(observable, ObservableSet):
+            observable.on_remove(lambda item: handler(item))
+        elif isinstance(observable, ObservableDict):
+            observable.on_remove(lambda key, val: handler(key, val))
+        return
 
     if isinstance(on_remove, str):
         callback = getattr(obj, on_remove, None)
@@ -1426,8 +1597,6 @@ def _wire_on_remove_callback(
             return
     else:
         callback = on_remove
-
-    observable = var.observable
 
     try:
         sig = inspect.signature(callback)
@@ -1468,8 +1637,22 @@ def _wire_on_add_callback(
     """Wire up an onAdd callback to an ObservableSet.
 
     Callback receives (item: T)
+
+    Supports three forms:
+    - Method name: onAdd="_some_function"
+    - Event name: onAdd="on_item_added" (uses emit_event for hierarchy search)
+    - Expression: onAdd="{some_call(#args)}" (full expression support)
     """
     import inspect
+
+    observable = var.observable
+
+    # Handle expression syntax: onAdd="{expression(#args)}"
+    if isinstance(on_add, str) and on_add.startswith("{") and on_add.endswith("}"):
+        handler = _create_state_expression_handler(obj, on_add)
+        if isinstance(observable, ObservableSet):
+            observable.on_add(lambda item: handler(item))
+        return
 
     if isinstance(on_add, str):
         callback = getattr(obj, on_add, None)
@@ -1477,8 +1660,6 @@ def _wire_on_add_callback(
             return
     else:
         callback = on_add
-
-    observable = var.observable
 
     if isinstance(observable, ObservableSet):
         try:
@@ -1503,8 +1684,22 @@ def _wire_on_set_callback(
 
     Callback receives (key: K, value: V)
     Note: Maps to on_insert which fires for both new keys and updates.
+
+    Supports three forms:
+    - Method name: onSet="_some_function"
+    - Event name: onSet="on_item_set" (uses emit_event for hierarchy search)
+    - Expression: onSet="{some_call(#args)}" (full expression support)
     """
     import inspect
+
+    observable = var.observable
+
+    # Handle expression syntax: onSet="{expression(#args)}"
+    if isinstance(on_set, str) and on_set.startswith("{") and on_set.endswith("}"):
+        handler = _create_state_expression_handler(obj, on_set)
+        if isinstance(observable, ObservableDict):
+            observable.on_insert(lambda key, val: handler(key, val))
+        return
 
     if isinstance(on_set, str):
         callback = getattr(obj, on_set, None)
@@ -1512,8 +1707,6 @@ def _wire_on_set_callback(
             return
     else:
         callback = on_set
-
-    observable = var.observable
 
     if isinstance(observable, ObservableDict):
         try:

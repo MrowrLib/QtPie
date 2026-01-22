@@ -122,6 +122,7 @@ class NewField:
         # QTreeView-specific: children attribute name and expand behavior
         self.tree_children: str | None = None  # Attribute name for child items: "children"
         self.tree_expand: bool = False  # If True, expandAll() on init and when root changes
+        self.tree_header_hidden: bool = True  # If True, hide the header row (default: True)
         # QTreeView checkable: checkbox support for tree nodes
         # - None/False: no checkboxes (default)
         # - str without braces: two-way binding to bool field name
@@ -870,6 +871,8 @@ class NewField:
                     self.tree_children = self.kwargs.pop("children", None)
                     # expand= calls expandAll() on init and when root observable changes
                     self.tree_expand = self.kwargs.pop("expand", False)
+                    # headerHidden= hides the header row (default: True)
+                    self.tree_header_hidden = self.kwargs.pop("headerHidden", True)
                     # checkable= specifies checkbox for tree nodes
                     # - None/False: no checkboxes (default)
                     # - str without braces: two-way binding to bool field name

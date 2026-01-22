@@ -965,6 +965,10 @@ def apply_model_binding(
             # Expand all immediately after model is set (defer to let model populate)
             QTimer.singleShot(0, widget_instance.expandAll)  # type: ignore[attr-defined]
 
+        # Handle headerHidden= (default: True)
+        header_hidden = getattr(field_info, "tree_header_hidden", True)
+        widget_instance.setHeaderHidden(header_hidden)  # type: ignore[attr-defined]
+
         # Set up proxy watching for format= bindings so tree updates when item properties change
         if field_info.model_format is not None and not callable(field_info.model_format):
             from qtpie.models import ReactiveTreeModel

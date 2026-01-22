@@ -6,18 +6,15 @@ from pathlib import Path
 from qtpie import Event, State, Variable, new, state
 
 from .collection import Collection
+from .environment import Environment
 
 
 @state(on_save="_do_save")
 class Workspace(State):
-    """The root container for a Forc workspace.
-
-    A workspace has a path (directory) and a collection loaded from that path.
-    Setting the path reactively loads/unloads the collection.
-    """
-
     ### Variables ###
     collection: Variable[Collection | None] = new(None)
+    environments: Variable[list[Environment]] = new([])
+    active_environment: Variable[str | None] = new(None)
     path: Variable[Path | None] = new(None, onChange="_on_path_changed")
 
     ### Events ###
@@ -25,28 +22,53 @@ class Workspace(State):
 
     ### Methods ###
     def _on_path_changed(self) -> None:
-        """Load or unload collection when path changes."""
-        print("Workspace: Path changed, loading collection...")
-
-        from ..format import load_collection
+        """Load or unload collection and environments when path changes."""
+        from ..format import load_collection, load_environment
 
         path = self.path.value
-        if path is not None and path.exists():
-            collection = load_collection(path)
-            print(f"Workspace: Loaded collection from {path}")
-            print(f"Length: {len(collection.items())}")
+        if path is None or not path.exists():
+            if self.collection() is not None:
+                self.collection = None
+            if self.environments():
+                self.environments.value = []
+            return
+
+        # Load collections from 'collections/' subfolder
+        collections_path = path / "collections"
+        if collections_path.exists():
+            collection = load_collection(collections_path)
             collection.state_parent = self
             self.collection = collection
-            print(f"Workspace: Loaded collection from {path}")
-        elif self.collection() is not None:
-            # Only set to None if not already None (avoids recursion with
-            # ObservableProxy sibling notifications for None singleton)
-            self.collection = None
-            print("Workspace: Unloaded collection (path is None or does not exist)")
+
+        # Load environments from 'environments/' subfolder
+        environments_path = path / "environments"
+        if environments_path.exists():
+            envs: list[Environment] = []
+            for env_file in sorted(environments_path.iterdir()):
+                if env_file.suffix in (".yaml", ".yml"):
+                    env = load_environment(env_file)
+                    env.state_parent = self
+                    envs.append(env)
+            self.environments.value = envs
+
+    def get_environment(self, name: str) -> Environment | None:
+        """Get an environment by name."""
+        for env in self.environments.value:
+            if env.name.value == name:
+                return env
+        return None
+
+    def get_active_environment(self) -> Environment | None:
+        """Get the currently active environment."""
+        if self.active_environment.value:
+            return self.get_environment(self.active_environment.value)
+        return None
 
     def _do_save(self) -> None:
         """Save the collection to disk."""
         from ..format import save_collection
 
         if self.collection.value is not None and self.path.value is not None:
-            save_collection(self.collection.value, self.path.value)
+            # Save to 'collections/' subfolder within workspace path
+            collections_path = self.path.value / "collections"
+            save_collection(self.collection.value, collections_path)
