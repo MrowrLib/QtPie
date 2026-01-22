@@ -1209,6 +1209,42 @@ def _setup_dock_visible_binding(window: Window[Any], dock: Any, binding: str) ->
     dock_widget.visibilityChanged.connect(on_visibility_change)
 
 
+def _setup_dock_repeater_visible_binding(window: Window[Any], repeater: Any, binding: str) -> None:
+    """Set up binding between Variable/expression and dock repeater group visibility.
+
+    For simple Variable bindings (e.g., "_show_docks"), creates a one-way binding.
+    For expression bindings (e.g., "{workspace is not None}"), creates a one-way binding.
+
+    Unlike single dock visible bindings, this is always one-way because the "visibility"
+    is for the entire group, not individual docks.
+    """
+    from .bindings import is_format_string
+    from .bindings.expression import create_expression_binding
+    from .variable import _get_variable_observable
+
+    # Helper to update group visibility
+    def set_group_visible(visible: Any) -> None:
+        # Convert to bool in case we receive a non-bool value
+        visible_bool = bool(visible) if visible is not None else False
+        repeater.set_group_visible(visible_bool)
+
+    # Check if it's a format string expression
+    if is_format_string(binding):
+        # One-way binding from expression to group visibility
+        create_expression_binding(window, binding, set_group_visible)
+        return
+
+    # Simple Variable binding - one-way (group visibility doesn't sync back to Variable)
+    observable = _get_variable_observable(window, binding)
+    if observable is None:
+        return
+
+    # Variable -> Group visibility
+    observable.on_change(set_group_visible)
+    # Set initial state
+    set_group_visible(observable.get())
+
+
 def _setup_dock_floating_binding(window: Window[Any], dock: Any, binding: str) -> None:
     """Set up two-way binding between Variable and dock floating state."""
     from .variable import _get_variable_observable
@@ -2137,3 +2173,8 @@ def _create_variable_list_dock_field(
 
     # Store the repeater on the Variable's widget property
     var.widget = repeater  # type: ignore[assignment]
+
+    # Set up visible binding if specified
+    visible_binding = dock_info.get("dock_visible")
+    if visible_binding:
+        _setup_dock_repeater_visible_binding(window, repeater, visible_binding)

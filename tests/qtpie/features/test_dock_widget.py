@@ -2354,6 +2354,153 @@ class TestVariableListDock:
 
 
 @pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDockGroupVisibleBinding:
+    """Test visible= binding for Variable[list[T], Dock[W]] (group visibility)."""
+
+    def test_group_visible_expression_binding_initial_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible="{expr}" expression binding sets initial group visibility to False."""
+
+        @decorator
+        class TestClass(base_class):
+            workspace: Variable[str | None] = new(None)
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                visible="{workspace is not None}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Add some items
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # workspace is None, so visible should be False -> all docks should be hidden
+        assert instance._editors.widget[0].dock_widget.isHidden() is True
+        assert instance._editors.widget[1].dock_widget.isHidden() is True
+
+    def test_group_visible_expression_binding_reactive(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible="{expr}" expression binding reacts to Variable changes for all docks."""
+
+        @decorator
+        class TestClass(base_class):
+            workspace: Variable[str | None] = new(None)
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                visible="{workspace is not None}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items while hidden
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # All hidden
+        assert instance._editors.widget[0].dock_widget.isHidden() is True
+        assert instance._editors.widget[1].dock_widget.isHidden() is True
+
+        # Set workspace - should show all docks
+        instance.workspace.value = "my-workspace"
+        qt.process_events()
+        assert instance._editors.widget[0].is_visible is True
+        assert instance._editors.widget[1].is_visible is True
+
+        # Clear workspace - should hide all docks
+        instance.workspace.value = None
+        qt.process_events()
+        assert instance._editors.widget[0].dock_widget.isHidden() is True
+        assert instance._editors.widget[1].dock_widget.isHidden() is True
+
+    def test_new_dock_inherits_group_visibility(self, base_class, decorator, qt: QtDriver) -> None:
+        """New docks added to the group inherit the current visibility state."""
+
+        @decorator
+        class TestClass(base_class):
+            workspace: Variable[str | None] = new(None)
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                visible="{workspace is not None}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add item while hidden (workspace is None)
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        assert instance._editors.widget[0].dock_widget.isHidden() is True
+
+        # Make visible
+        instance.workspace.value = "my-workspace"
+        qt.process_events()
+        assert instance._editors.widget[0].is_visible is True
+
+        # Add another item - should inherit visible state
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+        assert instance._editors.widget[1].is_visible is True
+
+        # Hide again
+        instance.workspace.value = None
+        qt.process_events()
+
+        # Add another item - should inherit hidden state
+        instance._editors.append(EditorItem(name="File3"))
+        qt.process_events()
+        assert instance._editors.widget[2].dock_widget.isHidden() is True
+
+    def test_group_visible_simple_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """visible= with simple Variable binding works for group."""
+
+        @decorator
+        class TestClass(base_class):
+            _show_editors: Variable[bool] = new(False)
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                visible="_show_editors",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items while hidden
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # All hidden
+        assert instance._editors.widget[0].dock_widget.isHidden() is True
+        assert instance._editors.widget[1].dock_widget.isHidden() is True
+
+        # Show
+        instance._show_editors.value = True
+        qt.process_events()
+        assert instance._editors.widget[0].is_visible is True
+        assert instance._editors.widget[1].is_visible is True
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
 class TestVariableListDockGroupSelectedIndex:
     """Test groupSelectedIndex= binding for Variable[list[T], Dock[W]]."""
 

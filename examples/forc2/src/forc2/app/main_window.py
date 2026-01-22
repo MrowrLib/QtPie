@@ -56,13 +56,6 @@ class ForcWindow(Window):
     )
 
     ### Methods ###
-    def __setup__(self) -> None:
-        some_request = Request()  # (name="Sample Request")
-        self.editors.append(some_request)
-
-        another_request = Request()  # (name="Another Request")
-        self.editors.append(another_request)
-
     def _on_selected_sidebar_item_changed(self) -> None:
         logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
         #

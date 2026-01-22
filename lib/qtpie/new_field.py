@@ -373,8 +373,9 @@ class NewField:
                         self.variable_list_dock_widget_type = dock_args[0]
 
                         # Extract dock kwargs directly from self.kwargs (no chaining for this pattern)
-                        # Pattern: new(group="requests", dock="right", title="{name}")
-                        self._extract_dock_kwargs(self.kwargs)
+                        # Pattern: new(group="requests", dock="right", title="{name}", visible="...")
+                        # Use full=True to also extract visible=, floating=, etc.
+                        self._extract_dock_kwargs(self.kwargs, full=True)
 
                         # Extract selection bindings
                         self.selected_index = self.kwargs.pop("selectedIndex", None)
@@ -394,6 +395,7 @@ class NewField:
                             "dock_closable": self.dock_closable,
                             "dock_floatable": self.dock_floatable,
                             "dock_movable": self.dock_movable,
+                            "dock_visible": self.dock_visible,
                             "is_list_dock": True,
                             "list_dock_item_type": self.variable_list_dock_item_type,
                             "list_dock_widget_type": self.variable_list_dock_widget_type,

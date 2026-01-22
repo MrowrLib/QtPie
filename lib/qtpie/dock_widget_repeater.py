@@ -60,6 +60,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         selected_index_changed_callback: Callable[[int], None] | None = None,
         selected_item_changed_callback: Callable[[T | None], None] | None = None,
         selected_dock_changed_callback: Callable[[Dock[W] | None], None] | None = None,
+        initial_visible: bool = True,
     ) -> None:
         """Initialize the dock widget repeater.
 
@@ -83,6 +84,7 @@ class DockWidgetRepeater[T, W: QWidget]:
             selected_index_changed_callback: Callback when selected index changes.
             selected_item_changed_callback: Callback when selected item changes.
             selected_dock_changed_callback: Callback when selected dock changes.
+            initial_visible: Initial visibility state for all docks in the group.
         """
         self._obs_list = observable_list
         self._item_type = item_type
@@ -104,6 +106,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         self._selected_item_changed_cb = selected_item_changed_callback
         self._selected_dock_changed_cb = selected_dock_changed_callback
         self._updating_selection = False  # Prevent recursive updates
+        self._group_visible = initial_visible  # Track group visibility
 
         # Track: (dock, item_wrapper, index_holder)
         self._items: list[tuple[Dock[W], Observable[Any] | ObservableProxy[Any], list[int]]] = []
@@ -123,6 +126,22 @@ class DockWidgetRepeater[T, W: QWidget]:
 
         # Set up selection bindings after initial docks are created
         self._setup_selection_bindings()
+
+    def set_group_visible(self, visible: bool) -> None:
+        """Set visibility of all docks in the group.
+
+        This affects all existing docks and any new docks added in the future.
+
+        Args:
+            visible: Whether the docks should be visible.
+        """
+        self._group_visible = visible
+        for dock, _, _ in self._items:
+            dock_widget = dock.dock_widget
+            if visible and dock_widget.isHidden():
+                dock_widget.setVisible(True)
+            elif not visible and not dock_widget.isHidden():
+                dock_widget.setVisible(False)
 
     def _get_dock_area(self) -> Qt.DockWidgetArea:
         """Convert string dock area to Qt enum."""
@@ -377,6 +396,10 @@ class DockWidgetRepeater[T, W: QWidget]:
         # Update indices for items after this one
         for i in range(index + 1, len(self._items)):
             self._items[i][2][0] = i
+
+        # Apply group visibility to the new dock
+        if not self._group_visible:
+            dock_widget.setVisible(False)
 
         # Raise the new tab to front - defer to allow Qt to process tabification
         QTimer.singleShot(0, dock.raise_tab)
