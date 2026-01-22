@@ -6,11 +6,26 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .domain import Collection, Environment, HttpMethod, KeyValue, Request
+from .domain import Collection, Environment, HttpMethod, KeyValue, Request, Workspace
 
 yaml = YAML()
 yaml.preserve_quotes = True
 yaml.default_flow_style = False
+
+
+def load_workspace_config(workspace: Workspace, path: Path) -> None:
+    """Load workspace config from forc.yaml and apply to workspace."""
+    config_path = path / "forc.yaml"
+    if not config_path.exists():
+        return
+    with config_path.open() as f:
+        data = yaml.load(f)
+    if not data:
+        return
+    if "name" in data:
+        workspace.name.value = data["name"]
+    if "active_environment" in data:
+        workspace.active_environment.value = data["active_environment"]
 
 
 def load_collection(path: Path) -> Collection:

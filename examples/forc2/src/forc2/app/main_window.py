@@ -1,5 +1,5 @@
 from qtpy.QtCore import Signal
-from qtpy.QtWidgets import QComboBox, QLabel, QTreeView
+from qtpy.QtWidgets import QComboBox, QLabel, QListView, QTreeView
 
 from forc2.app.menus import FileMenu, ViewMenu
 from qtpie import Window, new, window
@@ -46,10 +46,18 @@ class ForcWindow(Window):
         format="{name}",
     )
 
-    environments_headers: QLabel = new("Environments")
+    environments_headers: QLabel = new("Environments (ComboBox)")
     environments_chooser: QComboBox = new(
         bind="workspace?.environments",
         format="{name}",
+        selectedText="workspace?.active_environment",
+    )
+
+    environments_headers2: QLabel = new("Environments (List)")
+    environments_chooser2: QListView = new(
+        bind="workspace?.environments",
+        format="{name}",
+        selectedText="workspace?.active_environment",
     )
 
 

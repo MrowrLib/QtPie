@@ -101,6 +101,7 @@ class NewField:
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
+        self.selected_text: str | None = None  # Variable name for selectedText binding (match by display text)
         self.selected_widget: str | None = None  # Variable name for selectedWidget binding (embedded widget)
         self.selected_dock: str | None = None  # Variable name for selectedDock binding (Dock wrapper)
         # Selection change callbacks (method names)
@@ -798,6 +799,7 @@ class NewField:
                 # Extract selection bindings for model widgets (QComboBox, QListView, QTableView)
                 self.selected_index = self.kwargs.pop("selectedIndex", None)
                 self.selected_item = self.kwargs.pop("selectedItem", None)
+                self.selected_text = self.kwargs.pop("selectedText", None)
                 self.selected_widget = self.kwargs.pop("selectedWidget", None)
                 # Extract QTableView-specific kwargs only if this is a QTableView
                 if self._is_qtableview_type():

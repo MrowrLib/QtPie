@@ -182,6 +182,20 @@ class ObservableDict[K, V]:
         self._notify_clear(removed)
         self._notify()
 
+    def replace(self, items: dict[K, V]) -> None:
+        """Replace all items atomically.
+
+        This replaces the entire dict and fires a single clear callback.
+        Unlike clear() + update(), this ensures len() is correct when
+        callbacks fire (important for Qt model bindings).
+        """
+        removed = dict(self._items)
+        self._items.clear()
+        self._items.update(items)
+        # Fire clear callback AFTER items are added
+        self._notify_clear(removed)
+        self._notify()
+
     def update(self, other: dict[K, V]) -> None:
         """Update with items from other dict."""
         for key, value in other.items():

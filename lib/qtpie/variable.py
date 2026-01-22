@@ -237,20 +237,14 @@ class Variable[T, W = None]:
         if isinstance(self._wrapper, Observable):
             self._wrapper.set(val)
         elif isinstance(self._wrapper, ObservableList):
-            # Replace entire list
-            self._wrapper.clear()
-            if isinstance(val, list):
-                self._wrapper.extend(cast(list[Any], val))
+            # Replace entire list atomically
+            self._wrapper.replace(cast(list[Any], val) if isinstance(val, list) else [])
         elif isinstance(self._wrapper, ObservableDict):
-            # Replace entire dict
-            self._wrapper.clear()
-            if isinstance(val, dict):
-                self._wrapper.update(cast(dict[Any, Any], val))
+            # Replace entire dict atomically
+            self._wrapper.replace(cast(dict[Any, Any], val) if isinstance(val, dict) else {})
         elif isinstance(self._wrapper, ObservableSet):
-            # Replace entire set
-            self._wrapper.clear()
-            if isinstance(val, set):
-                self._wrapper.update(cast(set[Any], val))
+            # Replace entire set atomically
+            self._wrapper.replace(cast(set[Any], val) if isinstance(val, set) else set())
         else:
             # Must be ObservableProxy - replace target object
             self._wrapper.replace_target(val)

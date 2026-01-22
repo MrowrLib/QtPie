@@ -76,6 +76,24 @@ class TestObservableDictBasics:
         obs.update({"b": 2, "c": 3})
         assert_that(obs.to_dict()).is_equal_to({"a": 1, "b": 2, "c": 3})
 
+    def test_replace(self) -> None:
+        """Replace all items atomically."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        obs.replace({"c": 3, "d": 4})
+        assert_that(obs.to_dict()).is_equal_to({"c": 3, "d": 4})
+
+    def test_replace_empty(self) -> None:
+        """Replace with empty dict."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        obs.replace({})
+        assert_that(len(obs)).is_equal_to(0)
+
+    def test_replace_from_empty(self) -> None:
+        """Replace empty dict with items."""
+        obs = ObservableDict[str, int]()
+        obs.replace({"a": 1, "b": 2})
+        assert_that(obs.to_dict()).is_equal_to({"a": 1, "b": 2})
+
     def test_setdefault(self) -> None:
         """Setdefault sets if missing."""
         obs = ObservableDict[str, int]({"a": 1})
@@ -159,6 +177,34 @@ class TestObservableDictCallbacks:
 
         obs.update({"a": 1})
         assert_that(changes).is_equal_to(["changed"])
+
+    def test_on_change_fires_on_replace(self) -> None:
+        """Callback fires on replace."""
+        obs = ObservableDict[str, int]({"a": 1})
+        changes: list[str] = []
+        obs.on_change(lambda: changes.append("changed"))
+
+        obs.replace({"b": 2, "c": 3})
+        assert_that(changes).is_equal_to(["changed"])
+
+    def test_on_clear_fires_on_replace(self) -> None:
+        """Clear callback fires on replace (with old items)."""
+        obs = ObservableDict[str, int]({"a": 1, "b": 2})
+        cleared: list[dict[str, int]] = []
+        obs.on_clear(lambda items: cleared.append(dict(items)))
+
+        obs.replace({"c": 3})
+        assert_that(cleared).is_equal_to([{"a": 1, "b": 2}])
+
+    def test_replace_no_insert_callbacks(self) -> None:
+        """Replace does NOT fire individual insert callbacks."""
+        obs = ObservableDict[str, int]({"a": 1})
+        inserts: list[str] = []
+        obs.on_insert(lambda k, v: inserts.append(k))
+
+        obs.replace({"b": 2, "c": 3})
+        # Should NOT have any insert callbacks - that's the point of replace
+        assert_that(inserts).is_empty()
 
     def test_on_change_fires_on_setdefault_new_key(self) -> None:
         """Callback fires on setdefault for new key."""

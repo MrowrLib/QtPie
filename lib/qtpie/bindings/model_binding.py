@@ -1006,6 +1006,7 @@ def apply_model_binding(
             field_info.selected_indexes,
             field_info.selected_items_list,
             field_info.selected_widget,
+            field_info.selected_text,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
         )
         # Set up embedded widget for QListView (not QComboBox)

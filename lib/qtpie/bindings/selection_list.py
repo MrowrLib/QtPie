@@ -1,11 +1,11 @@
 """Selection bindings for QComboBox and QListView."""
 
-from __future__ import annotations
+import logging
+from typing import Any
 
-from typing import TYPE_CHECKING, Any
+from qtpy.QtWidgets import QWidget
 
-if TYPE_CHECKING:
-    from qtpy.QtWidgets import QWidget
+logger = logging.getLogger("qtpie.bindings")
 
 
 def setup_selection_bindings(
@@ -17,6 +17,7 @@ def setup_selection_bindings(
     selected_indexes_path: str | None = None,
     selected_items_list_path: str | None = None,
     selected_widget_path: str | None = None,
+    selected_text_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
 ) -> None:
     """Set up two-way selection bindings for model widgets.
@@ -30,9 +31,10 @@ def setup_selection_bindings(
         selected_indexes_path: Variable path for multi-index binding (QListView only)
         selected_items_list_path: Variable path for multi-item binding (QListView only)
         selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
+        selected_text_path: Variable path for text binding - matches by display text (e.g., "_selected_name")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
     """
-    has_single = selected_index_path is not None or selected_item_path is not None
+    has_single = selected_index_path is not None or selected_item_path is not None or selected_text_path is not None
     has_multi = selected_indexes_path is not None or selected_items_list_path is not None
     has_widget = selected_widget_path is not None
     if not has_single and not has_multi and not has_widget:
@@ -78,11 +80,20 @@ def setup_selection_bindings(
         if isinstance(source, VarType):
             widget_var = source  # pyright: ignore[reportUnknownVariableType]
 
+    text_var: VarType[str] | None = None
+
+    if selected_text_path is not None:
+        source = resolve_or_create_variable_fn(host, selected_text_path, str)
+        if isinstance(source, VarType):
+            text_var = source  # pyright: ignore[reportUnknownVariableType]
+        elif isinstance(source, (Observable, ObservableProxy)):
+            text_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
+
     # ALWAYS call _setup_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers
     # (which are connected later in _connect_signals). The handler uses a mutable container
     # so it can access Variables that are resolved later when bindings are reapplied.
-    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var, widget_var)
+    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var, widget_var, text_var)
 
 
 def _setup_selection_bindings_impl(
@@ -94,6 +105,7 @@ def _setup_selection_bindings_impl(
     indexes_var: Any | None,  # Variable[list[int]] | None
     items_list_var: Any | None,  # Variable[list[Any]] | None
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
+    text_var: Any | None = None,  # Variable[str] | None - matches by display text
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
     from observant import Observable, ObservableProxy
@@ -107,11 +119,12 @@ def _setup_selection_bindings_impl(
     qtpie_state = getattr(host, "_qtpie", None)
     handler_connected = False
 
-    # Container for model, index_var, and item_var - allows updating references when bindings reapply
+    # Container for model, index_var, item_var, and text_var - allows updating references when bindings reapply
     binding_container: dict[str, Any] = {
         "model": model,
         "index_var": index_var,
         "item_var": item_var,
+        "text_var": text_var,
         "widget_var": widget_var,
         "is_observable": isinstance(item_var, Observable) if item_var is not None else False,
         "connected": False,
@@ -129,6 +142,7 @@ def _setup_selection_bindings_impl(
                 existing_dict["model"] = model
                 existing_dict["index_var"] = index_var
                 existing_dict["item_var"] = item_var
+                existing_dict["text_var"] = text_var
                 existing_dict["is_observable"] = isinstance(item_var, Observable) if item_var is not None else False
                 binding_container = existing_dict
                 handler_connected = bool(existing_dict.get("connected", False))
@@ -191,6 +205,35 @@ def _setup_selection_bindings_impl(
             current_model = binding_container["model"]
             for i in range(current_model.rowCount()):
                 if get_item_at_index(i) == item:
+                    return i
+            return -1
+        except RuntimeError:
+            # Model was deleted
+            return -1
+
+    # Helper to get the display text at index (uses model's format function)
+    def get_display_text_at_index(idx: int) -> str | None:
+        try:
+            current_model = binding_container["model"]
+            if idx < 0 or idx >= current_model.rowCount():
+                return None
+            model_index = current_model.index(idx, 0)
+            # Get the display text (Qt.DisplayRole)
+            text = current_model.data(model_index, Qt.ItemDataRole.DisplayRole)
+            return str(text) if text is not None else None
+        except RuntimeError:
+            # Model was deleted
+            return None
+
+    # Helper to find index by display text (matches the formatted text shown in widget)
+    def find_index_by_display_text(text: str | None) -> int:
+        if text is None:
+            return -1
+        try:
+            current_model = binding_container["model"]
+            for i in range(current_model.rowCount()):
+                display_text = get_display_text_at_index(i)
+                if display_text == text:
                     return i
             return -1
         except RuntimeError:
@@ -284,6 +327,51 @@ def _setup_selection_bindings_impl(
                 new_val = get_item_at_index(current_widget_idx)
                 set_item_var_value(new_val, current_widget_idx)
 
+        # text_var: Variable[str] or Observable[str] - matches by display text (formatted text shown in combo)
+        # Track whether text_var is Observable (uses .get()/.set()) vs Variable (uses .value)
+        binding_container["is_text_observable"] = isinstance(text_var, Observable) if text_var is not None else False
+
+        def get_text_var_value() -> str | None:
+            current_text_var = binding_container.get("text_var")
+            if current_text_var is None:
+                return None
+            if binding_container.get("is_text_observable", False):
+                return current_text_var.get()  # type: ignore[no-any-return]
+            return current_text_var.value  # type: ignore[no-any-return]
+
+        def set_text_var_value(val: str | None) -> None:
+            current_text_var = binding_container.get("text_var")
+            if current_text_var is None:
+                return
+            if binding_container.get("is_text_observable", False):
+                current_text_var.set(val)
+            else:
+                current_text_var.value = val
+
+        if text_var is not None:
+            initial_text = get_text_var_value()
+
+            # Store the intended text value - this is what we want to match when items are added later.
+            # We track this separately because widget auto-selection may overwrite text_var before
+            # rowsInserted fires.
+            binding_container["intended_text"] = initial_text
+
+            if initial_text is not None and initial_text != "":
+                # Set widget to match text if index/item didn't already set it
+                if index_var is None and item_var is None and set_current_index_fn is not None:
+                    idx = find_index_by_display_text(initial_text)
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+                        current_widget_idx = idx
+                        # Clear intended_text since we found a match
+                        binding_container["intended_text"] = None
+            else:
+                # Sync text Variable to widget's current selection's display text
+                display_text = get_display_text_at_index(current_widget_idx)
+                if display_text is not None:
+                    set_text_var_value(display_text)
+                    binding_container["intended_text"] = None
+
         # Variable → Widget binding (and cross-update between index/item vars)
         if index_var is not None and set_current_index_fn is not None:
 
@@ -324,6 +412,83 @@ def _setup_selection_bindings_impl(
 
             item_var.on_change(on_item_var_change_combo)
 
+        if text_var is not None and set_current_index_fn is not None:
+
+            def on_text_var_change_combo(new_text: str | None) -> None:
+                logger.debug(f"[selectedText] on_text_var_change_combo: new_text={new_text!r}")
+                if not is_model_valid():
+                    logger.debug("[selectedText] model not valid, returning")
+                    return
+                if updating["flag"]:
+                    logger.debug("[selectedText] already updating, returning")
+                    return
+                updating["flag"] = True
+                try:
+                    # Update intended_text for when items are added later
+                    binding_container["intended_text"] = new_text
+                    idx = find_index_by_display_text(new_text)
+                    logger.debug(f"[selectedText] find_index_by_display_text({new_text!r}) = {idx}")
+                    if idx >= 0:
+                        set_current_index_fn(idx)
+                        # Clear intended_text since we found a match
+                        binding_container["intended_text"] = None
+                        # Also update index_var if present
+                        if index_var is not None:
+                            index_var.value = idx
+                        # Also update item_var if present
+                        set_item_var_value(get_item_at_index(idx), idx)
+                    else:
+                        logger.debug(f"[selectedText] no match found, intended_text set to {new_text!r}")
+                finally:
+                    updating["flag"] = False
+
+            text_var.on_change(on_text_var_change_combo)
+            logger.debug(f"[selectedText] Connected on_change callback to text_var (widget id={id(widget)})")
+
+            # Also re-sync when model items change (e.g., items loaded after widget created)
+            def on_model_rows_inserted() -> None:
+                logger.debug("[selectedText] on_model_rows_inserted called")
+                if not is_model_valid():
+                    logger.debug("[selectedText] model not valid in rowsInserted")
+                    return
+                # Use intended_text (stored at setup time) instead of current text_var value,
+                # because widget auto-selection may have already overwritten text_var
+                intended_text = binding_container.get("intended_text")
+                logger.debug(f"[selectedText] intended_text={intended_text!r}")
+                updating["flag"] = True
+                try:
+                    if intended_text is not None and intended_text != "":
+                        # User had set a value - try to find and select it
+                        idx = find_index_by_display_text(intended_text)
+                        logger.debug(f"[selectedText] rowsInserted: find_index_by_display_text({intended_text!r}) = {idx}")
+                        if idx >= 0:
+                            set_current_index_fn(idx)
+                            # Verify it took
+                            actual_idx = current_widget_index_fn() if current_widget_index_fn else -999
+                            logger.debug(f"[selectedText] rowsInserted: set index {idx}, widget now shows {actual_idx}")
+                            # Update text_var to match (in case auto-selection changed it)
+                            set_text_var_value(intended_text)
+                            # Remember what we selected for re-selection if widget resets
+                            binding_container["last_selected_text"] = intended_text
+                            # Clear intended_text since we found a match
+                            binding_container["intended_text"] = None
+                    # else: No intended value set - leave widget and text_var as-is
+                finally:
+                    updating["flag"] = False
+
+            # Connect to model's rowsInserted and modelReset signals
+            # (modelReset fires when the entire list is replaced)
+            try:
+                model.rowsInserted.connect(on_model_rows_inserted)
+                logger.debug("[selectedText] Connected rowsInserted signal")
+            except AttributeError:
+                logger.debug("[selectedText] Model has no rowsInserted signal")
+            try:
+                model.modelReset.connect(on_model_rows_inserted)
+                logger.debug("[selectedText] Connected modelReset signal")
+            except AttributeError:
+                logger.debug("[selectedText] Model has no modelReset signal")
+
         # Widget → Variable binding
         # IMPORTANT: Always connect the handler on first setup, even if item_var is None.
         # This ensures the selection binding handler is connected BEFORE user's signal handlers,
@@ -331,15 +496,36 @@ def _setup_selection_bindings_impl(
         if current_index_changed is not None:
 
             def on_widget_selection_changed_combo(new_idx: int) -> None:
+                logger.debug(f"[selectedText] on_widget_selection_changed_combo: new_idx={new_idx}")
                 # Guard: check if model is still valid (not deleted when widget was recreated)
                 if not is_model_valid():
+                    logger.debug("[selectedText] widget change: model not valid")
                     return
                 if updating["flag"]:
+                    logger.debug("[selectedText] widget change: already updating, skipping")
                     return
-                # Get current item_var from container (may be None on first setup, valid later)
+
+                # Check if selection was unexpectedly reset (e.g., by rowsInserted shifting indices)
+                # If we have a "last selected text" and the new index doesn't match it, re-select
+                last_selected = binding_container.get("last_selected_text")
+                if new_idx == -1 and last_selected is not None and set_current_index_fn is not None:
+                    logger.debug(f"[selectedText] widget reset to -1, re-selecting '{last_selected}'")
+                    # Try to re-select the item we had selected
+                    idx = find_index_by_display_text(last_selected)
+                    if idx >= 0:
+                        updating["flag"] = True
+                        try:
+                            set_current_index_fn(idx)
+                            logger.debug(f"[selectedText] re-selected index {idx}")
+                        finally:
+                            updating["flag"] = False
+                        return
+
+                # Get current vars from container (may be None on first setup, valid later)
                 current_item_var = binding_container["item_var"]
                 current_index_var = binding_container.get("index_var")
-                if current_index_var is None and current_item_var is None:
+                current_text_var = binding_container.get("text_var")
+                if current_index_var is None and current_item_var is None and current_text_var is None:
                     # No bindings yet, nothing to do
                     return
                 updating["flag"] = True
@@ -347,6 +533,12 @@ def _setup_selection_bindings_impl(
                     if current_index_var is not None:
                         current_index_var.value = new_idx
                     set_item_var_value(get_item_at_index(new_idx), new_idx)
+                    if current_text_var is not None:
+                        display_text = get_display_text_at_index(new_idx)
+                        if display_text is not None:
+                            set_text_var_value(display_text)
+                            # Remember what we selected for re-selection if needed
+                            binding_container["last_selected_text"] = display_text
                 finally:
                     updating["flag"] = False
 

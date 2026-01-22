@@ -164,6 +164,20 @@ class ObservableSet[T]:
         self._notify_clear(removed)
         self._notify()
 
+    def replace(self, items: set[T]) -> None:
+        """Replace all items atomically.
+
+        This replaces the entire set and fires a single clear callback.
+        Unlike clear() + update(), this ensures len() is correct when
+        callbacks fire (important for Qt model bindings).
+        """
+        removed = set(self._items)
+        self._items.clear()
+        self._items.update(items)
+        # Fire clear callback AFTER items are added
+        self._notify_clear(removed)
+        self._notify()
+
     def update(self, *others: set[T]) -> None:
         """Update the set, adding elements from all others."""
         for other in others:

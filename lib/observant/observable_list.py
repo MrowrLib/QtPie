@@ -191,6 +191,21 @@ class ObservableList[T]:
         self._notify_clear(removed)
         self._notify()
 
+    def replace(self, items: list[T]) -> None:
+        """Replace all items atomically.
+
+        This replaces the entire list and fires a single clear callback.
+        Unlike clear() + extend(), this ensures rowCount() is correct when
+        callbacks fire (important for Qt model bindings).
+        """
+        removed = list(self._items)
+        self._items.clear()
+        self._items.extend(items)
+        # Fire clear callback AFTER items are added - this way rowCount() returns
+        # the correct count when ReactiveListModel emits modelReset
+        self._notify_clear(removed)
+        self._notify()
+
     @overload
     def __setitem__(self, index: int, value: T) -> None: ...
     @overload

@@ -63,6 +63,24 @@ class TestObservableListBasics:
         obs.clear()
         assert_that(len(obs)).is_equal_to(0)
 
+    def test_replace(self) -> None:
+        """Replace all items atomically."""
+        obs = ObservableList[int]([1, 2, 3])
+        obs.replace([4, 5])
+        assert_that(obs.to_list()).is_equal_to([4, 5])
+
+    def test_replace_empty(self) -> None:
+        """Replace with empty list."""
+        obs = ObservableList[int]([1, 2, 3])
+        obs.replace([])
+        assert_that(len(obs)).is_equal_to(0)
+
+    def test_replace_from_empty(self) -> None:
+        """Replace empty list with items."""
+        obs = ObservableList[int]()
+        obs.replace([1, 2, 3])
+        assert_that(obs.to_list()).is_equal_to([1, 2, 3])
+
     def test_setitem(self) -> None:
         """Set item at index."""
         obs = ObservableList[int]([1, 2, 3])
@@ -135,6 +153,34 @@ class TestObservableListCallbacks:
 
         obs.clear()
         assert_that(changes).is_equal_to(["changed"])
+
+    def test_on_change_fires_on_replace(self) -> None:
+        """Callback fires on replace."""
+        obs = ObservableList[int]([1, 2])
+        changes: list[str] = []
+        obs.on_change(lambda: changes.append("changed"))
+
+        obs.replace([3, 4, 5])
+        assert_that(changes).is_equal_to(["changed"])
+
+    def test_on_clear_fires_on_replace(self) -> None:
+        """Clear callback fires on replace (with old items)."""
+        obs = ObservableList[int]([1, 2])
+        cleared: list[list[int]] = []
+        obs.on_clear(lambda items: cleared.append(list(items)))
+
+        obs.replace([3, 4, 5])
+        assert_that(cleared).is_equal_to([[1, 2]])
+
+    def test_replace_no_insert_callbacks(self) -> None:
+        """Replace does NOT fire individual insert callbacks."""
+        obs = ObservableList[int]([1, 2])
+        inserts: list[int] = []
+        obs.on_insert(lambda idx, item: inserts.append(idx))
+
+        obs.replace([3, 4, 5])
+        # Should NOT have any insert callbacks - that's the point of replace
+        assert_that(inserts).is_empty()
 
     def test_multiple_callbacks(self) -> None:
         """Multiple callbacks all fire."""

@@ -2144,3 +2144,194 @@ class TestComboBoxSelectedItemDirtyStateAcrossSelections:
         # This test checks if dirty state is remembered per-item
         assert_that(instance._selected.value.name).is_equal_to("Alice Modified")
         assert_that(instance._selected.is_dirty.get()).is_true()
+
+
+# =============================================================================
+# selectedText= Binding Tests - Match by display text (format= output)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestComboBoxSelectedTextBinding:
+    """QComboBox with selectedText= binding - matches by display text.
+
+    This binding matches the Variable[str] against the formatted display text
+    shown in the combobox, rather than matching the item object directly.
+
+    Use case: When you have a list of objects with a format= template but want
+    to bind selection to a simple string (like Environment.name).
+    """
+
+    def test_selected_text_initial_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= sets initial selection from Variable matching display text."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5), Dog("Max", 7)])
+            _name: Variable[str] = new("Rex")  # Match by display text
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # "Rex" should match the second item
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+    def test_selected_text_variable_to_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing selectedText Variable updates QComboBox selection."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5), Dog("Max", 7)])
+            _name: Variable[str] = new("Fido")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+        instance._name.value = "Max"
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+        assert_that(instance._combo.currentText()).is_equal_to("Max")
+
+    def test_selected_text_widget_to_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing QComboBox selection updates selectedText Variable."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _name: Variable[str | None] = new(None)
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initial sync sets the display text
+        assert_that(instance._name.value).is_equal_to("Fido")
+
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._name.value).is_equal_to("Rex")
+
+    def test_selected_text_with_complex_format(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= works with complex format expressions."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _text: Variable[str | None] = new("Fido (3 years)")
+            _combo: QComboBox = new(bind="_dogs", format="{name} ({age} years)", selectedText="_text")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Should match "Fido (3 years)" which is the first item
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._text.value).is_equal_to("Rex (5 years)")
+
+    def test_selected_text_with_string_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= works with simple string lists (no format needed)."""
+
+        @decorator
+        class TestClass(base_class):
+            _options: Variable[list[str]] = new(["Development", "Production", "Staging"])
+            _env: Variable[str] = new("Production")
+            _combo: QComboBox = new(bind="_options", selectedText="_env")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Production")
+
+        instance._env.value = "Staging"
+        assert_that(instance._combo.currentIndex()).is_equal_to(2)
+
+    def test_selected_text_bare_variable_syncs(self, base_class, decorator, qt: QtDriver) -> None:
+        """Bare Variable[str] syncs from widget on init."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _name: Variable[str]  # Bare - no new()!
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Should sync to first item's display text
+        assert_that(instance._name.value).is_equal_to("Fido")
+
+    def test_selected_text_with_selected_index(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= and selectedIndex= work together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _idx: Variable[int] = new(1)
+            _name: Variable[str] = new("")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedIndex="_idx", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Index binding takes precedence for initial selection
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        # But text should sync
+        assert_that(instance._name.value).is_equal_to("Rex")
+
+        # Changing selection updates both
+        instance._combo.setCurrentIndex(0)
+        assert_that(instance._idx.value).is_equal_to(0)
+        assert_that(instance._name.value).is_equal_to("Fido")
+
+    def test_selected_text_with_selected_item(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= and selectedItem= work together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _dog: Variable[Dog | None] = new(None)
+            _name: Variable[str] = new("")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedItem="_dog", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        # Initial sync happens
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+        assert_that(instance._dog.value).is_not_none()
+        assert_that(instance._name.value).is_equal_to("Fido")
+
+        # Changing selection updates both
+        instance._combo.setCurrentIndex(1)
+        assert_that(instance._dog.value.name).is_equal_to("Rex")
+        assert_that(instance._name.value).is_equal_to("Rex")
+
+    def test_selected_text_no_match_keeps_current(self, base_class, decorator, qt: QtDriver) -> None:
+        """Setting selectedText to non-matching value doesn't change selection."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _name: Variable[str] = new("Fido")
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+        # Setting to non-matching value - widget should stay as is
+        instance._name.value = "NonExistent"
+        # Selection doesn't change when no match found
+        assert_that(instance._combo.currentIndex()).is_equal_to(0)
+
+    def test_selected_text_syncs_when_items_added_later(self, base_class, decorator, qt: QtDriver) -> None:
+        """selectedText= syncs correctly when items are added after widget creation."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([])  # Start empty!
+            _name: Variable[str] = new("Rex")  # Already set to "Rex"
+            _combo: QComboBox = new(bind="_dogs", format="{name}", selectedText="_name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially empty, no selection possible
+        assert_that(instance._combo.count()).is_equal_to(0)
+
+        # Add items - "Rex" should now be auto-selected
+        instance._dogs.append(Dog("Fido", 3))
+        instance._dogs.append(Dog("Rex", 5))
+        instance._dogs.append(Dog("Max", 7))
+
+        # Should have selected "Rex" (index 1)
+        assert_that(instance._combo.count()).is_equal_to(3)
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")

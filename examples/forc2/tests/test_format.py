@@ -3,11 +3,12 @@
 from pathlib import Path
 
 from assertpy import assert_that
-from forc2.domain import Collection, Environment, HttpMethod, KeyValue, Request
+from forc2.domain import Collection, Environment, HttpMethod, KeyValue, Request, Workspace
 from forc2.format import (
     load_collection,
     load_environment,
     load_request,
+    load_workspace_config,
     save_collection,
     save_environment,
     save_request,
@@ -452,3 +453,90 @@ class TestRoundTrip:
         # Find our new collection
         new = next((c for c in reloaded.items.value if c.name.value == "New Collection"), None)
         assert new is not None
+
+
+class TestLoadWorkspaceConfig:
+    """Tests for loading workspace config from forc.yaml."""
+
+    def test_load_workspace_config_with_name(self, tmp_path: Path) -> None:
+        """Load workspace name from forc.yaml."""
+        (tmp_path / "forc.yaml").write_text("name: My Workspace\n")
+
+        workspace = Workspace()
+        load_workspace_config(workspace, tmp_path)
+
+        assert_that(workspace.name.value).is_equal_to("My Workspace")
+
+    def test_load_workspace_config_with_active_environment(self, tmp_path: Path) -> None:
+        """Load active_environment from forc.yaml."""
+        (tmp_path / "forc.yaml").write_text("active_environment: Production\n")
+
+        workspace = Workspace()
+        load_workspace_config(workspace, tmp_path)
+
+        assert_that(workspace.active_environment.value).is_equal_to("Production")
+
+    def test_load_workspace_config_with_both_fields(self, tmp_path: Path) -> None:
+        """Load both name and active_environment from forc.yaml."""
+        (tmp_path / "forc.yaml").write_text("""
+name: JSONPlaceholder API
+active_environment: Development
+""")
+
+        workspace = Workspace()
+        load_workspace_config(workspace, tmp_path)
+
+        assert_that(workspace.name.value).is_equal_to("JSONPlaceholder API")
+        assert_that(workspace.active_environment.value).is_equal_to("Development")
+
+    def test_load_workspace_config_missing_file(self, tmp_path: Path) -> None:
+        """No error when forc.yaml doesn't exist."""
+        workspace = Workspace()
+        workspace.name.value = "Original"
+        workspace.active_environment.value = "Original Env"
+
+        load_workspace_config(workspace, tmp_path)
+
+        # Values should remain unchanged
+        assert_that(workspace.name.value).is_equal_to("Original")
+        assert_that(workspace.active_environment.value).is_equal_to("Original Env")
+
+    def test_load_workspace_config_empty_file(self, tmp_path: Path) -> None:
+        """No error when forc.yaml is empty."""
+        (tmp_path / "forc.yaml").write_text("")
+
+        workspace = Workspace()
+        workspace.name.value = "Original"
+
+        load_workspace_config(workspace, tmp_path)
+
+        # Value should remain unchanged
+        assert_that(workspace.name.value).is_equal_to("Original")
+
+    def test_load_workspace_config_partial_fields(self, tmp_path: Path) -> None:
+        """Only specified fields are updated."""
+        (tmp_path / "forc.yaml").write_text("name: New Name\n")
+
+        workspace = Workspace()
+        workspace.active_environment.value = "Should Stay"
+
+        load_workspace_config(workspace, tmp_path)
+
+        assert_that(workspace.name.value).is_equal_to("New Name")
+        assert_that(workspace.active_environment.value).is_equal_to("Should Stay")
+
+
+class TestLoadWorkspaceConfigFixtures:
+    """Tests that load the actual workspace config fixtures."""
+
+    def test_load_demo_api_workspace_config(self) -> None:
+        """Load the demo-api forc.yaml fixture."""
+        fixtures = Path("examples/forc2/fixtures/demo-api")
+        if not fixtures.exists():
+            return
+
+        workspace = Workspace()
+        load_workspace_config(workspace, fixtures)
+
+        assert_that(workspace.name.value).is_equal_to("JSONPlaceholder API")
+        assert_that(workspace.active_environment.value).is_equal_to("Production")

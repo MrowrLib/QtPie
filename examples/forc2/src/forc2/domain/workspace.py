@@ -12,18 +12,22 @@ from .environment import Environment
 @state(on_save="_do_save")
 class Workspace(State):
     ### Variables ###
+    name: Variable[str] = new("")
     collection: Variable[Collection | None] = new(None)
     environments: Variable[list[Environment]] = new([])
-    active_environment: Variable[str | None] = new(None)
+    active_environment: Variable[str | None] = new(None, onChange="_on_active_environment_changed")
     path: Variable[Path | None] = new(None, onChange="_on_path_changed")
 
     ### Events ###
     on_save: Event  # Fires to trigger save
 
     ### Methods ###
+    def _on_active_environment_changed(self) -> None:
+        print("On active environment changed to:", self.active_environment())
+
     def _on_path_changed(self) -> None:
         """Load or unload collection and environments when path changes."""
-        from ..format import load_collection, load_environment
+        from ..format import load_collection, load_environment, load_workspace_config
 
         path = self.path.value
         if path is None or not path.exists():
@@ -31,7 +35,12 @@ class Workspace(State):
                 self.collection = None
             if self.environments():
                 self.environments.value = []
+            self.name.value = ""
+            self.active_environment.value = None
             return
+
+        # Load workspace config from forc.yaml
+        load_workspace_config(self, path)
 
         # Load collections from 'collections/' subfolder
         collections_path = path / "collections"
@@ -51,6 +60,10 @@ class Workspace(State):
                     envs.append(env)
             self.environments.value = envs
 
+        # print out the active environment after loading
+        print("Loaded environments. Active environment is:", self.active_environment())
+
+    # TODO REMOVE THIS STUPID USELESS FUNCTION
     def get_environment(self, name: str) -> Environment | None:
         """Get an environment by name."""
         for env in self.environments.value:
@@ -58,6 +71,7 @@ class Workspace(State):
                 return env
         return None
 
+    # TODO REMOVE THIS STUPID USELESS FUNCTION
     def get_active_environment(self) -> Environment | None:
         """Get the currently active environment."""
         if self.active_environment.value:
