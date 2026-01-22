@@ -1037,6 +1037,7 @@ def apply_model_binding(
             field_info.selected_items,
             field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+            root_variable=root_variable,  # Pass root for nested path subscriptions
         )
 
         # Handle expand=True: expandAll immediately and on data changes
@@ -1072,6 +1073,7 @@ def apply_model_binding(
             field_info.selected_items,
             field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+            root_variable=root_variable,  # Pass root for nested path subscriptions
         )
         # Set up embedded widgets for QTableView columns
         if field_info.table_widget_columns:

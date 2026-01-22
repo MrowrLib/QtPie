@@ -18,7 +18,7 @@ Tests that QTableView bound to Variable[list] uses ReactiveTableModel
 and updates reactively when the list changes.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 from assertpy import assert_that
@@ -46,6 +46,16 @@ class Product:
     name: str
     price: float
     quantity: int
+
+
+@dataclass
+class TableWorkspace:
+    """Workspace for testing nested selectedItem/selectedRow bindings."""
+
+    name: str
+    items: list[Dog] = field(default_factory=list)
+    selected_item: Dog | None = None
+    selected_row: int = -1
 
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
@@ -2207,3 +2217,168 @@ class TestTableViewRegressionBugs:
 
         # Data should work correctly
         assert_that(model.rowCount()).is_equal_to(2)
+
+
+class TestTableViewSelectedItemNestedPath:
+    """Test selectedItem=/selectedRow= with nested paths like 'workspace?.selected_item'.
+
+    This tests the same bugs that were found in QTreeView:
+    1. Bug 1: ObservableProxy not handled in is_var_or_obs check
+    2. Bug 2: Root variable subscription missing for nested paths
+    """
+
+    def test_selectedItem_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path syncs initial value when workspace starts non-None.
+
+        Bug: ObservableProxy from nested path not recognized, so item_var is None.
+        """
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = TableWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_item=dog_b,  # Pre-select dog B
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[TableWorkspace | None] = new(initial_workspace)
+            _table: QTableView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be dog_b (row 1)
+        selection_model = instance._table.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedItem_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path should sync when root changes from None.
+
+        Bug: No root variable subscription, so selection not synced when workspace set.
+        """
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+        dog_c = Dog("Max", 2)
+
+        @widget
+        class TestWidget(Widget):
+            # Root variable starts as None
+            workspace: Variable[TableWorkspace | None] = new(None)
+
+            # Table bound to nested list
+            _table: QTableView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially no workspace, table should be empty
+        model = instance._table.model()
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Create workspace with items and a pre-selected item
+        workspace = TableWorkspace(
+            name="Test Workspace",
+            items=[dog_a, dog_b, dog_c],
+            selected_item=dog_b,  # Pre-select dog B
+        )
+
+        # Set workspace - this should:
+        # 1. Populate the table with items
+        # 2. Sync the selection to dog_b
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Table should now have items
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # The selection should be synced to dog_b (row 1)
+        selection_model = instance._table.selectionModel()
+        current_index = selection_model.currentIndex()
+
+        # Should have a valid selection at row 1 (dog_b)
+        assert_that(current_index.isValid()).is_true()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedRow_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedRow= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = TableWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_row=1,  # Pre-select row 1
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[TableWorkspace | None] = new(initial_workspace)
+            _table: QTableView = new(
+                bind="workspace?.items",
+                selectedRow="workspace?.selected_row",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be row 1
+        selection_model = instance._table.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedRow_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedRow= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[TableWorkspace | None] = new(None)
+            _table: QTableView = new(
+                bind="workspace?.items",
+                selectedRow="workspace?.selected_row",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Create workspace with items and a pre-selected row
+        workspace = TableWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_row=1,
+        )
+
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Selection should be synced to row 1
+        selection_model = instance._table.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.isValid()).is_true()
+        assert_that(current_index.row()).is_equal_to(1)

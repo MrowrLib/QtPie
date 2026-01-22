@@ -1,19 +1,25 @@
 import logging
 
-from qtpy.QtWidgets import QLabel
+from qtpy.QtWidgets import QLabel, QPushButton
 
 from forc2.app.menus import FileMenu, ViewMenu
 from forc2.app.widgets.request import RequestWidget
 from forc2.app.widgets.sidebar import SidebarWidget
 from forc2.domain.collection import Collection
 from forc2.domain.request import Request
-from qtpie import Var, Window, new, window
-from qtpie.dock import Dock
-from qtpie.event import Event
+from qtpie import Dock, Event, Stretch, Var, Widget, Window, new, widget, window
 
 logger = logging.getLogger(__name__)
 
 # TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
+
+
+@widget
+class CentralWidget(Widget):
+    app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
+    load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.")
+    load_workspace_button: QPushButton = new("Load Workspace")
+    stretch: Stretch
 
 
 @window(
@@ -38,9 +44,8 @@ class ForcWindow(Window):
     file_menu: FileMenu
     view_menu: ViewMenu  # = new(visible="{workspace is not None}")  # TODO visible= for menus!
 
-    label_example: QLabel = new("Forc - Free Open-source Rest Client", visible="{workspace is None}")
-
-    # workspace_value_label: QLabel = new(bind="Workspace: {workspace}")
+    ### Central Window Widget ###
+    central_widget: CentralWidget = new(visible="{workspace is None}")
 
     ### Docks / Widgets ###
     sidebar: Dock[SidebarWidget] = new(

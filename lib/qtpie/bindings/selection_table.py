@@ -22,12 +22,16 @@ def setup_table_selection_bindings(
     selected_items_path: str | None,
     selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
+    root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
 ) -> None:
     """Set up selection bindings specific to QTableView.
 
     Supports both single and multi-selection bindings:
     - Single: selectedRow, selectedColumn, selectedCell, selectedItem, selectedWidget
     - Multi: selectedRows, selectedColumns, selectedCells, selectedItems
+
+    Args:
+        root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.selected_row")
     """
     # Check if any binding is specified
     has_single = any([selected_row_path, selected_column_path, selected_cell_path, selected_item_path, selected_widget_path])
@@ -35,13 +39,13 @@ def setup_table_selection_bindings(
     if not has_single and not has_multi:
         return
 
-    from observant import Observable
+    from observant import Observable, ObservableProxy
 
     from qtpie.variable import Variable as VarType
 
-    # Helper to check if source is Variable or Observable
+    # Helper to check if source is Variable, Observable, or ObservableProxy
     def is_var_or_obs(source: Any) -> bool:
-        return isinstance(source, VarType) or isinstance(source, Observable)
+        return isinstance(source, (VarType, Observable, ObservableProxy))
 
     # Resolve all Variables (or Observables for record field bindings)
     row_var: Any | None = None
@@ -104,7 +108,24 @@ def setup_table_selection_bindings(
     # ALWAYS call _setup_table_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers.
     # The handler uses a mutable container so it can access Variables resolved later.
-    _setup_table_selection_bindings_impl(host, widget, model, row_var, column_var, cell_var, item_var, widget_var, rows_var, columns_var, cells_var, items_var)
+    _setup_table_selection_bindings_impl(
+        host,
+        widget,
+        model,
+        row_var,
+        column_var,
+        cell_var,
+        item_var,
+        widget_var,
+        rows_var,
+        columns_var,
+        cells_var,
+        items_var,
+        root_variable=root_variable,
+        selected_row_path=selected_row_path,
+        selected_item_path=selected_item_path,
+        resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+    )
 
 
 def _setup_table_selection_bindings_impl(
@@ -120,9 +141,13 @@ def _setup_table_selection_bindings_impl(
     columns_var: Any | None,  # Variable[list[int]] | None
     cells_var: Any | None,  # Variable[list[tuple[int, int]]] | None
     items_var: Any | None,  # Variable[list[Any]] | None
+    root_variable: Any = None,  # Root Variable for nested paths
+    selected_row_path: str | None = None,  # For re-resolution
+    selected_item_path: str | None = None,  # For re-resolution
+    resolve_or_create_variable_fn: Any = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of table selection bindings (called after Variables are resolved)."""
-    from observant import Observable
+    from observant import Observable, ObservableProxy
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
 
     # Flag to prevent circular updates
@@ -144,16 +169,21 @@ def _setup_table_selection_bindings_impl(
         "selection_model": None,
     }
 
-    # Helper to check if something is an Observable (from record fields)
+    # Helper to check if something is an Observable or ObservableProxy
     def is_observable(obj: Any) -> bool:
         return isinstance(obj, Observable)
 
-    # Helper to get value from Variable or Observable
+    def is_observable_proxy(obj: Any) -> bool:
+        return isinstance(obj, ObservableProxy)
+
+    # Helper to get value from Variable, Observable, or ObservableProxy
     def get_var_value(var: Any) -> Any:
         if var is None:
             return None
         if is_observable(var):
             return var.get()  # pyright: ignore[reportUnknownMemberType]
+        if is_observable_proxy(var):
+            return var.unwrap()  # pyright: ignore[reportUnknownMemberType]
         return var.value  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to set value on Variable or Observable
@@ -398,8 +428,18 @@ def _setup_table_selection_bindings_impl(
 
     if item_var is not None:
         effective_row = current_row if current_row >= 0 else 0
-        if get_var_value(item_var) is None:
+        initial_item = get_var_value(item_var)
+        if initial_item is None:
             set_var_value(item_var, get_item_at_row(effective_row))
+        else:
+            # Sync selection Widget to match the Variable value
+            m = container["model"]
+            if m is not None:
+                for row in range(m.rowCount()):
+                    if get_item_at_row(row) == initial_item:
+                        col = get_current_column()
+                        set_current_cell(row, col if col >= 0 else 0)
+                        break
 
     # Initialize widget_var to current selection's widget (read-only binding)
     if widget_var is not None:
@@ -450,6 +490,44 @@ def _setup_table_selection_bindings_impl(
 
         row_var.on_change(on_row_var_change)
 
+        # For nested paths like "workspace?.selected_row", subscribe to ROOT
+        # Variable changes. When root changes from None to a real object,
+        # we need to re-resolve the row_var path and sync the selection.
+        if root_variable is not None and selected_row_path is not None and resolve_or_create_variable_fn is not None:
+            from qtpie.variable import Variable as VarType
+
+            root_subscribed_key = f"row_root_subscribed_{id(widget)}"
+            if not container.get(root_subscribed_key, False):
+                container[root_subscribed_key] = True
+
+                def on_root_variable_change_row(*_args: Any) -> None:
+                    """Re-resolve row_var when root Variable changes."""
+                    if updating["flag"]:
+                        return
+
+                    assert selected_row_path is not None
+                    assert resolve_or_create_variable_fn is not None
+                    new_source = resolve_or_create_variable_fn(host, selected_row_path, int)
+                    if new_source is None:
+                        return
+
+                    new_row: int | None = None
+                    if isinstance(new_source, VarType):
+                        new_row = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                    elif isinstance(new_source, (Observable, ObservableProxy)):
+                        val = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+                        new_row = val if isinstance(val, int) else None
+
+                    if new_row is not None and new_row >= 0:
+                        updating["flag"] = True
+                        try:
+                            col = get_current_column()
+                            set_current_cell(new_row, col if col >= 0 else 0)  # pyright: ignore[reportUnknownArgumentType]
+                        finally:
+                            updating["flag"] = False
+
+                root_variable.on_change(on_root_variable_change_row)
+
     if column_var is not None:
 
         def on_column_var_change(new_col: int) -> None:
@@ -491,3 +569,46 @@ def _setup_table_selection_bindings_impl(
                 updating["flag"] = False
 
         cell_var.on_change(on_cell_var_change)
+
+    # For nested paths like "workspace?.selected_item", subscribe to ROOT Variable changes.
+    # When root changes from None to a real object, we need to re-resolve the item_var path
+    # and sync the selection to match the item value.
+    if item_var is not None and root_variable is not None and selected_item_path is not None and resolve_or_create_variable_fn is not None:
+        from qtpie.variable import Variable as VarType
+
+        root_subscribed_key = f"item_root_subscribed_{id(widget)}"
+        if not container.get(root_subscribed_key, False):
+            container[root_subscribed_key] = True
+
+            def on_root_variable_change_item(*_args: Any) -> None:
+                """Re-resolve item_var when root Variable changes."""
+                if updating["flag"]:
+                    return
+
+                assert selected_item_path is not None
+                assert resolve_or_create_variable_fn is not None
+                new_source = resolve_or_create_variable_fn(host, selected_item_path, None)
+                if new_source is None:
+                    return
+
+                new_item: Any = None
+                if isinstance(new_source, VarType):
+                    new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                elif isinstance(new_source, (Observable, ObservableProxy)):
+                    new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+
+                if new_item is not None:
+                    # Find the row for this item and select it
+                    updating["flag"] = True
+                    try:
+                        m = container["model"]
+                        if m is not None:
+                            for row in range(m.rowCount()):
+                                if get_item_at_row(row) == new_item:
+                                    col = get_current_column()
+                                    set_current_cell(row, col if col >= 0 else 0)
+                                    break
+                    finally:
+                        updating["flag"] = False
+
+            root_variable.on_change(on_root_variable_change_item)

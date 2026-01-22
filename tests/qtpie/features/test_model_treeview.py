@@ -46,6 +46,112 @@ class FileNode:
         return self.name
 
 
+@dataclass
+class Workspace:
+    """Workspace for testing nested selectedItem bindings."""
+
+    name: str
+    items: list[TreeNode] = field(default_factory=list)
+    selected_item: TreeNode | None = None
+
+
+class TestTreeViewSelectedItemNestedPath:
+    """Test selectedItem= with nested paths like 'workspace?.selected_item'.
+
+    This tests the scenario where:
+    1. A root Variable (workspace) starts as None
+    2. Tree items are bound to workspace?.items
+    3. selectedItem is bound to workspace?.selected_item
+    4. When workspace changes from None to a real object, the selection should sync
+
+    This is the same bug pattern that affected QComboBox selectedText bindings.
+    """
+
+    def test_selectedItem_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        node_a = TreeNode("Node A")
+        node_b = TreeNode("Node B")
+
+        initial_workspace = Workspace(
+            name="Test",
+            items=[node_a, node_b],
+            selected_item=node_b,  # Pre-select node B
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[Workspace | None] = new(initial_workspace)
+            _tree: QTreeView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be node_b (index 1)
+        selection_model = instance._tree.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedItem_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        node_a = TreeNode("Node A")
+        node_b = TreeNode("Node B")
+        node_c = TreeNode("Node C")
+
+        @widget
+        class TestWidget(Widget):
+            # Root variable starts as None
+            workspace: Variable[Workspace | None] = new(None)
+
+            # Tree bound to nested list
+            _tree: QTreeView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially no workspace, tree should be empty
+        model = instance._tree.model()
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Create workspace with items and a pre-selected item
+        workspace = Workspace(
+            name="Test Workspace",
+            items=[node_a, node_b, node_c],
+            selected_item=node_b,  # Pre-select node B
+        )
+
+        # Set workspace - this should:
+        # 1. Populate the tree with items
+        # 2. Sync the selection to node_b
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Tree should now have items
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # The selection should be synced to node_b (index 1)
+        # THIS IS THE BUG: without root variable subscription, this won't work
+        selection_model = instance._tree.selectionModel()
+        current_index = selection_model.currentIndex()
+
+        # Should have a valid selection at row 1 (node_b)
+        assert_that(current_index.isValid()).is_true()
+        assert_that(current_index.row()).is_equal_to(1)
+
+
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestTreeViewModelBinding:
     """Test QTreeView with bind= to hierarchical Variable[list]."""

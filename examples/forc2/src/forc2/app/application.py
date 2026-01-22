@@ -2,6 +2,8 @@ import logging
 from pathlib import Path
 from typing import override
 
+from qtpy.QtWidgets import QFileDialog
+
 # from qtpy.QtCore import Signal
 from forc2.app import ForcWindow
 from forc2.domain.workspace import Workspace
@@ -39,9 +41,9 @@ class ForcApp(App):
 
     def __setup__(self) -> None:
         # Call _load_the_workspace after  seconds with QTimer to reproduce some delay for fun
-        from qtpy.QtCore import QTimer
+        pass
 
-        QTimer.singleShot(1000, self._load_the_workspace)
+        # QTimer.singleShot(2000, self._load_the_workspace)
 
     def _load_the_workspace(self) -> None:
         workspace_path = self.loaded_workspace_path()
@@ -63,3 +65,14 @@ class ForcApp(App):
 
     # def _on_selected_request_changed(self) -> None:
     #     logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())
+
+    ### Methods ###
+    def _choose_workspace(self) -> None:
+        workspace_path = self.setting("loaded_workspace_path", str, None)
+        folder = QFileDialog.getExistingDirectory(
+            None,
+            "Select Workspace Folder",
+            workspace_path or "",
+        )
+        if folder:
+            self.emit_event("on_load_workspace", folder)

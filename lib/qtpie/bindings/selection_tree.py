@@ -19,6 +19,7 @@ def setup_tree_selection_bindings(
     selected_items_path: str | None,
     selected_widget_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
+    root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
 ) -> None:
     """Set up selection bindings for QTreeView.
 
@@ -30,17 +31,18 @@ def setup_tree_selection_bindings(
         selected_items_path: Variable path for multi-item binding (e.g., "_selected_nodes")
         selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
+        root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.selected_item")
     """
     if selected_item_path is None and selected_items_path is None and selected_widget_path is None:
         return
 
-    from observant import Observable
+    from observant import Observable, ObservableProxy
 
     from qtpie.variable import Variable as VarType
 
-    # Helper to check if source is Variable or Observable
+    # Helper to check if source is Variable, Observable, or ObservableProxy
     def is_var_or_obs(source: Any) -> bool:
-        return isinstance(source, VarType) or isinstance(source, Observable)
+        return isinstance(source, (VarType, Observable, ObservableProxy))
 
     # Resolve Variables (or Observables for record field bindings)
     item_var: Any | None = None
@@ -65,7 +67,17 @@ def setup_tree_selection_bindings(
     # ALWAYS call _setup_tree_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers.
     # The handler uses a mutable container so it can access Variables resolved later.
-    _setup_tree_selection_bindings_impl(host, widget, model, item_var, items_var, widget_var)
+    _setup_tree_selection_bindings_impl(
+        host,
+        widget,
+        model,
+        item_var,
+        items_var,
+        widget_var,
+        root_variable=root_variable,
+        selected_item_path=selected_item_path,
+        resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+    )
 
 
 def _setup_tree_selection_bindings_impl(
@@ -75,9 +87,12 @@ def _setup_tree_selection_bindings_impl(
     item_var: Any | None,  # Variable[Any] | None
     items_var: Any | None,  # Variable[list[Any]] | None
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
+    root_variable: Any = None,  # Root Variable for nested paths (from model_binding)
+    selected_item_path: str | None = None,  # Original path for re-resolution
+    resolve_or_create_variable_fn: Any = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of tree selection bindings (called after Variables are resolved)."""
-    from observant import Observable
+    from observant import Observable, ObservableProxy
     from qtpy.QtCore import QItemSelection, QItemSelectionModel, QModelIndex, Qt
 
     # Flag to prevent circular updates
@@ -93,16 +108,21 @@ def _setup_tree_selection_bindings_impl(
         "selection_model": None,
     }
 
-    # Helper to check if something is an Observable (from record fields)
+    # Helper to check if something is an Observable or ObservableProxy
     def is_observable(obj: Any) -> bool:
         return isinstance(obj, Observable)
 
-    # Helper to get value from Variable or Observable
+    def is_observable_proxy(obj: Any) -> bool:
+        return isinstance(obj, ObservableProxy)
+
+    # Helper to get value from Variable, Observable, or ObservableProxy
     def get_var_value(var: Any) -> Any:
         if var is None:
             return None
         if is_observable(var):
             return var.get()  # pyright: ignore[reportUnknownMemberType]
+        if is_observable_proxy(var):
+            return var.unwrap()  # pyright: ignore[reportUnknownMemberType]
         return var.value  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to set value on Variable or Observable
@@ -309,3 +329,52 @@ def _setup_tree_selection_bindings_impl(
                 updating["flag"] = False
 
         item_var.on_change(on_item_var_change)
+
+        # For nested paths like "workspace?.selected_item", subscribe to ROOT
+        # Variable changes. When root changes from None to a real object (or vice versa),
+        # we need to re-resolve the item_var path and sync the selection.
+        if root_variable is not None and selected_item_path is not None and resolve_or_create_variable_fn is not None:
+            from qtpie.variable import Variable as VarType
+
+            # Track if we've already subscribed to avoid duplicates
+            root_subscribed_key = f"item_root_subscribed_{id(widget)}"
+            if not container.get(root_subscribed_key, False):
+                container[root_subscribed_key] = True
+
+                def on_root_variable_change(*_args: Any) -> None:
+                    """Re-resolve item_var when root Variable changes (e.g., workspace None→Workspace)."""
+                    if updating["flag"]:
+                        return
+
+                    # Re-resolve the item path to get the new value
+                    assert selected_item_path is not None  # Checked above
+                    assert resolve_or_create_variable_fn is not None  # Checked above
+                    new_source = resolve_or_create_variable_fn(host, selected_item_path, None)
+                    if new_source is None:
+                        return
+
+                    # Get the new item value
+                    new_item: Any = None
+                    if isinstance(new_source, VarType):
+                        new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                    elif isinstance(new_source, (Observable, ObservableProxy)):
+                        new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+
+                    logger.debug(f"[selectedItem] on_root_variable_change: new_item={new_item!r}")
+
+                    if new_item is not None:
+                        # Try to select the item in the tree
+                        updating["flag"] = True
+                        try:
+                            sm = container["selection_model"]
+                            if sm is not None:
+                                idx = find_index_for_item(new_item)
+                                if idx.isValid():
+                                    sm.setCurrentIndex(  # pyright: ignore[reportUnknownMemberType]
+                                        idx, QItemSelectionModel.SelectionFlag.ClearAndSelect
+                                    )
+                        finally:
+                            updating["flag"] = False
+
+                root_variable.on_change(on_root_variable_change)
+                logger.debug(f"[selectedItem] Connected root variable change callback for path={selected_item_path}")

@@ -11,13 +11,14 @@
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
 # pyright: reportUnknownLambdaType=false
+# pyright: reportUnknownVariableType=false
 """Tests for QComboBox model binding with bind=.
 
 Tests that QComboBox bound to Variable[list] uses ReactiveListModel
 and updates reactively when the list changes.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 import pytest
@@ -44,6 +45,165 @@ class Product:
 
     name: str
     price: float
+
+
+@dataclass
+class ComboWorkspace:
+    """Workspace for testing nested selectedItem/selectedIndex bindings."""
+
+    name: str
+    items: list[Dog] = field(default_factory=list)
+    selected_item: Dog | None = None
+    selected_index: int = -1
+
+
+class TestComboBoxSelectedItemNestedPath:
+    """Test selectedItem=/selectedIndex= with nested paths like 'workspace?.selected_item'.
+
+    This tests the same bugs found in QTreeView, QTableView, and QListView:
+    1. Bug 1: ObservableProxy not handled in variable resolution
+    2. Bug 2: Root variable subscription missing for nested paths
+    3. Bug 3: Initial value not synced to widget when Variable has a value
+    """
+
+    def test_selectedItem_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = ComboWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_item=dog_b,  # Pre-select dog B
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ComboWorkspace | None] = new(initial_workspace)
+            _combo: QComboBox = new(
+                bind="workspace?.items",
+                format="{name}",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be dog_b (index 1)
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+    def test_selectedItem_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+        dog_c = Dog("Max", 2)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ComboWorkspace | None] = new(None)
+            _combo: QComboBox = new(
+                bind="workspace?.items",
+                format="{name}",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially no workspace, combo should be empty
+        assert_that(instance._combo.count()).is_equal_to(0)
+
+        # Create workspace with items and a pre-selected item
+        workspace = ComboWorkspace(
+            name="Test Workspace",
+            items=[dog_a, dog_b, dog_c],
+            selected_item=dog_b,
+        )
+
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Combo should now have items
+        assert_that(instance._combo.count()).is_equal_to(3)
+
+        # Selection should be synced to dog_b (index 1)
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+    def test_selectedIndex_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedIndex= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = ComboWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_index=1,  # Pre-select index 1
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ComboWorkspace | None] = new(initial_workspace)
+            _combo: QComboBox = new(
+                bind="workspace?.items",
+                format="{name}",
+                selectedIndex="workspace?.selected_index",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be index 1
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
+
+    def test_selectedIndex_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedIndex= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ComboWorkspace | None] = new(None)
+            _combo: QComboBox = new(
+                bind="workspace?.items",
+                format="{name}",
+                selectedIndex="workspace?.selected_index",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Create workspace with items and a pre-selected index
+        workspace = ComboWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_index=1,
+        )
+
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Selection should be synced to index 1
+        assert_that(instance._combo.currentIndex()).is_equal_to(1)
+        assert_that(instance._combo.currentText()).is_equal_to("Rex")
 
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)

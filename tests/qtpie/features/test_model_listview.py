@@ -40,6 +40,168 @@ class Dog:
     age: int
 
 
+@dataclass
+class ListWorkspace:
+    """Workspace for testing nested selectedItem/selectedIndex bindings."""
+
+    name: str
+    items: list[Dog] = field(default_factory=list)
+    selected_item: Dog | None = None
+    selected_index: int = -1
+
+
+class TestListViewSelectedItemNestedPath:
+    """Test selectedItem=/selectedIndex= with nested paths like 'workspace?.selected_item'.
+
+    This tests the same bugs found in QTreeView and QTableView:
+    1. Bug 1: ObservableProxy not handled in variable resolution
+    2. Bug 2: Root variable subscription missing for nested paths
+    3. Bug 3: Initial value not synced to widget when Variable has a value
+    """
+
+    def test_selectedItem_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = ListWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_item=dog_b,  # Pre-select dog B
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ListWorkspace | None] = new(initial_workspace)
+            _list: QListView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be dog_b (row 1)
+        selection_model = instance._list.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedItem_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedItem= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+        dog_c = Dog("Max", 2)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ListWorkspace | None] = new(None)
+            _list: QListView = new(
+                bind="workspace?.items",
+                selectedItem="workspace?.selected_item",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially no workspace, list should be empty
+        model = instance._list.model()
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Create workspace with items and a pre-selected item
+        workspace = ListWorkspace(
+            name="Test Workspace",
+            items=[dog_a, dog_b, dog_c],
+            selected_item=dog_b,
+        )
+
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # List should now have items
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Selection should be synced to dog_b (row 1)
+        selection_model = instance._list.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.isValid()).is_true()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedIndex_syncs_initial_value_when_workspace_not_none(self, qt: QtDriver) -> None:
+        """selectedIndex= with nested path syncs initial value when workspace starts non-None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        initial_workspace = ListWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_index=1,  # Pre-select index 1
+        )
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ListWorkspace | None] = new(initial_workspace)
+            _list: QListView = new(
+                bind="workspace?.items",
+                selectedIndex="workspace?.selected_index",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initial selection should be row 1
+        selection_model = instance._list.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.row()).is_equal_to(1)
+
+    def test_selectedIndex_syncs_when_root_variable_changes_from_none(self, qt: QtDriver) -> None:
+        """selectedIndex= with nested path should sync when root changes from None."""
+        from qtpie import Widget, widget
+
+        dog_a = Dog("Fido", 3)
+        dog_b = Dog("Rex", 5)
+
+        @widget
+        class TestWidget(Widget):
+            workspace: Variable[ListWorkspace | None] = new(None)
+            _list: QListView = new(
+                bind="workspace?.items",
+                selectedIndex="workspace?.selected_index",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Create workspace with items and a pre-selected index
+        workspace = ListWorkspace(
+            name="Test",
+            items=[dog_a, dog_b],
+            selected_index=1,
+        )
+
+        instance.workspace.value = workspace
+        qt.process_events()
+
+        # Selection should be synced to row 1
+        selection_model = instance._list.selectionModel()
+        current_index = selection_model.currentIndex()
+        assert_that(current_index.isValid()).is_true()
+        assert_that(current_index.row()).is_equal_to(1)
+
+
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestListViewModelBinding:
     """QListView with bind= to Variable[list]."""

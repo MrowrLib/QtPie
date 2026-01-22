@@ -106,6 +106,8 @@ def setup_selection_bindings(
         widget_var,
         text_var,
         root_variable=root_variable,
+        index_var_path=selected_index_path,
+        item_var_path=selected_item_path,
         text_var_path=selected_text_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
     )
@@ -122,6 +124,8 @@ def _setup_selection_bindings_impl(
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
     text_var: Any | None = None,  # Variable[str] | None - matches by display text
     root_variable: Any | None = None,  # Root Variable for nested paths (from model_binding)
+    index_var_path: str | None = None,  # Original path for re-resolution
+    item_var_path: str | None = None,  # Original path for re-resolution
     text_var_path: str | None = None,  # Original path for re-resolution
     resolve_or_create_variable_fn: Any | None = None,  # For re-resolving nested paths
 ) -> None:
@@ -144,7 +148,10 @@ def _setup_selection_bindings_impl(
         "item_var": item_var,
         "text_var": text_var,
         "widget_var": widget_var,
-        "is_observable": isinstance(item_var, Observable) if item_var is not None else False,
+        "is_item_observable": isinstance(item_var, Observable) if item_var is not None else False,
+        "is_item_proxy": isinstance(item_var, ObservableProxy) if item_var is not None else False,
+        "is_index_observable": isinstance(index_var, Observable) if index_var is not None else False,
+        "is_index_proxy": isinstance(index_var, ObservableProxy) if index_var is not None else False,
         "connected": False,
     }
 
@@ -161,7 +168,10 @@ def _setup_selection_bindings_impl(
                 existing_dict["index_var"] = index_var
                 existing_dict["item_var"] = item_var
                 existing_dict["text_var"] = text_var
-                existing_dict["is_observable"] = isinstance(item_var, Observable) if item_var is not None else False
+                existing_dict["is_item_observable"] = isinstance(item_var, Observable) if item_var is not None else False
+                existing_dict["is_item_proxy"] = isinstance(item_var, ObservableProxy) if item_var is not None else False
+                existing_dict["is_index_observable"] = isinstance(index_var, Observable) if index_var is not None else False
+                existing_dict["is_index_proxy"] = isinstance(index_var, ObservableProxy) if index_var is not None else False
                 binding_container = existing_dict
                 handler_connected = bool(existing_dict.get("connected", False))
             else:
@@ -170,6 +180,39 @@ def _setup_selection_bindings_impl(
 
     # Flag to prevent circular updates
     updating = {"flag": False}
+
+    # Helpers to get/set index_var value (handles Variable, Observable, and ObservableProxy)
+    def get_index_var_value() -> int | None:
+        current_index_var = binding_container["index_var"]
+        if current_index_var is None:
+            return None
+        if binding_container["is_index_observable"]:
+            return current_index_var.get()  # pyright: ignore[reportUnknownMemberType]
+        if binding_container["is_index_proxy"]:
+            return current_index_var.unwrap()  # pyright: ignore[reportUnknownMemberType]
+        return current_index_var.value  # pyright: ignore[reportUnknownMemberType]
+
+    def set_index_var_value(val: int) -> None:
+        current_index_var = binding_container["index_var"]
+        if current_index_var is None:
+            return
+        if binding_container["is_index_observable"]:
+            current_index_var.set(val)  # pyright: ignore[reportUnknownMemberType]
+        elif binding_container["is_index_proxy"]:
+            current_index_var.replace_target(val)  # pyright: ignore[reportUnknownMemberType]
+        else:
+            current_index_var.value = val  # pyright: ignore[reportUnknownMemberType]
+
+    # Helpers to get/set item_var value (handles Variable, Observable, and ObservableProxy)
+    def get_item_var_value() -> Any:
+        current_item_var = binding_container["item_var"]
+        if current_item_var is None:
+            return None
+        if binding_container["is_item_observable"]:
+            return current_item_var.get()  # pyright: ignore[reportUnknownMemberType]
+        if binding_container["is_item_proxy"]:
+            return current_item_var.unwrap()  # pyright: ignore[reportUnknownMemberType]
+        return current_item_var.value  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to check if model is still valid AND still the current model on the widget
     def is_model_valid() -> bool:
@@ -273,24 +316,14 @@ def _setup_selection_bindings_impl(
         current_widget_idx: int = current_widget_index_fn() if current_widget_index_fn else 0
 
         if index_var is not None and set_current_index_fn is not None:
-            initial_idx = index_var.value
+            initial_idx = get_index_var_value()
             # Variable[int] can have None value if no default provided
             if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
                 set_current_index_fn(initial_idx)
                 current_widget_idx = initial_idx  # Update for item_var sync below
             else:
                 # Sync Variable to widget's current state
-                index_var.value = current_widget_idx
-
-        # Helper to detect if item_var is Observable (uses .get()/.set()) vs Variable (uses .value)
-        # Use container so it can be updated when record changes
-        binding_container["is_observable"] = isinstance(item_var, Observable) if item_var is not None else False
-
-        def get_item_var_value() -> Any:
-            current_item_var = binding_container["item_var"]
-            if current_item_var is None:
-                return None
-            return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
+                set_index_var_value(current_widget_idx)
 
         def set_item_var_value(val: Any, idx: int = -1) -> None:
             """Set the item variable value, using replace_wrapper for complex objects.
@@ -308,8 +341,10 @@ def _setup_selection_bindings_impl(
             current_item_var = binding_container["item_var"]
             if current_item_var is None:
                 return
-            if binding_container["is_observable"]:
+            if binding_container["is_item_observable"]:
                 current_item_var.set(val)
+            elif binding_container["is_item_proxy"]:
+                current_item_var.replace_target(val)
             else:
                 # Only use replace_wrapper if:
                 # 1. Variable uses an ObservableProxy wrapper
@@ -408,6 +443,41 @@ def _setup_selection_bindings_impl(
 
             index_var.on_change(on_index_var_change_combo)
 
+            # For nested paths like "workspace?.selected_index", subscribe to ROOT Variable
+            if root_variable is not None and index_var_path is not None and resolve_or_create_variable_fn is not None:
+                from qtpie.variable import Variable as VarType
+
+                root_subscribed_key = f"combo_index_root_subscribed_{id(widget)}"
+                if not binding_container.get(root_subscribed_key, False):
+                    binding_container[root_subscribed_key] = True
+
+                    def on_root_variable_change_combo_index(*_args: Any) -> None:
+                        """Re-resolve index_var when root Variable changes."""
+                        if updating["flag"]:
+                            return
+                        assert index_var_path is not None
+                        assert resolve_or_create_variable_fn is not None
+                        assert set_current_index_fn is not None
+                        new_source = resolve_or_create_variable_fn(host, index_var_path, int)
+                        if new_source is None:
+                            return
+
+                        new_idx: int | None = None
+                        if isinstance(new_source, VarType):
+                            new_idx = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                        elif isinstance(new_source, (Observable, ObservableProxy)):
+                            val = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+                            new_idx = val if isinstance(val, int) else None
+
+                        if new_idx is not None and new_idx >= 0:
+                            updating["flag"] = True
+                            try:
+                                set_current_index_fn(new_idx)
+                            finally:
+                                updating["flag"] = False
+
+                    root_variable.on_change(on_root_variable_change_combo_index)
+
         if item_var is not None and set_current_index_fn is not None:
 
             def on_item_var_change_combo(*_args: Any) -> None:
@@ -424,11 +494,47 @@ def _setup_selection_bindings_impl(
                         set_current_index_fn(idx)
                         # Also update index_var if both bindings are present
                         if index_var is not None:
-                            index_var.value = idx
+                            set_index_var_value(idx)
                 finally:
                     updating["flag"] = False
 
             item_var.on_change(on_item_var_change_combo)
+
+            # For nested paths like "workspace?.selected_item", subscribe to ROOT Variable
+            if root_variable is not None and item_var_path is not None and resolve_or_create_variable_fn is not None:
+                from qtpie.variable import Variable as VarType
+
+                root_subscribed_key = f"combo_item_root_subscribed_{id(widget)}"
+                if not binding_container.get(root_subscribed_key, False):
+                    binding_container[root_subscribed_key] = True
+
+                    def on_root_variable_change_combo_item(*_args: Any) -> None:
+                        """Re-resolve item_var when root Variable changes."""
+                        if updating["flag"]:
+                            return
+                        assert item_var_path is not None
+                        assert resolve_or_create_variable_fn is not None
+                        assert set_current_index_fn is not None
+                        new_source = resolve_or_create_variable_fn(host, item_var_path, None)
+                        if new_source is None:
+                            return
+
+                        new_item: Any = None
+                        if isinstance(new_source, VarType):
+                            new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                        elif isinstance(new_source, (Observable, ObservableProxy)):
+                            new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+
+                        if new_item is not None:
+                            updating["flag"] = True
+                            try:
+                                idx = find_index_of_item(new_item)
+                                if idx >= 0:
+                                    set_current_index_fn(idx)
+                            finally:
+                                updating["flag"] = False
+
+                    root_variable.on_change(on_root_variable_change_combo_item)
 
         if text_var is not None and set_current_index_fn is not None:
 
@@ -458,7 +564,7 @@ def _setup_selection_bindings_impl(
                             binding_container.pop("intended_text", None)
                         # Also update index_var if present
                         if index_var is not None:
-                            index_var.value = idx
+                            set_index_var_value(idx)
                         # Also update item_var if present
                         set_item_var_value(get_item_at_index(idx), idx)
                     else:
@@ -615,7 +721,7 @@ def _setup_selection_bindings_impl(
                 updating["flag"] = True
                 try:
                     if current_index_var is not None:
-                        current_index_var.value = new_idx
+                        set_index_var_value(new_idx)
                     set_item_var_value(get_item_at_index(new_idx), new_idx)
                     if current_text_var is not None:
                         display_text = get_display_text_at_index(new_idx)
@@ -647,12 +753,16 @@ def _setup_selection_bindings_impl(
         if old_selection_model is not None and old_selection_model is not selection_model:
             handler_connected = False  # Force reconnect to new selection model
 
-        # Helper to get/set item_var value (handles both Variable and Observable)
+        # Helper to get/set item_var value (handles Variable, Observable, and ObservableProxy)
         def get_item_var_value_view() -> Any:
             current_item_var = binding_container["item_var"]
             if current_item_var is None:
                 return None
-            return current_item_var.get() if binding_container["is_observable"] else current_item_var.value
+            if binding_container["is_item_observable"]:
+                return current_item_var.get()  # pyright: ignore[reportUnknownMemberType]
+            if binding_container["is_item_proxy"]:
+                return current_item_var.unwrap()  # pyright: ignore[reportUnknownMemberType]
+            return current_item_var.value  # pyright: ignore[reportUnknownMemberType]
 
         def set_item_var_value_view(val: Any, idx: int = -1) -> None:
             """Set the item variable value, using replace_wrapper for complex objects.
@@ -670,8 +780,10 @@ def _setup_selection_bindings_impl(
             current_item_var = binding_container["item_var"]
             if current_item_var is None:
                 return
-            if binding_container["is_observable"]:
+            if binding_container["is_item_observable"]:
                 current_item_var.set(val)
+            elif binding_container["is_item_proxy"]:
+                current_item_var.replace_target(val)
             else:
                 proxy = get_proxy_at_index(idx) if idx >= 0 else None
                 current_wrapper = getattr(current_item_var, "_wrapper", None)
@@ -728,14 +840,14 @@ def _setup_selection_bindings_impl(
         current_row = get_current_row()
 
         if index_var is not None:
-            initial_idx = index_var.value
+            initial_idx = get_index_var_value()
             # Variable[int] can have None value if no default provided
             if initial_idx is not None:  # pyright: ignore[reportUnnecessaryComparison]
                 set_row_index(initial_idx)
                 current_row = initial_idx
             else:
                 # Sync Variable to widget's current state
-                index_var.value = current_row if current_row >= 0 else 0
+                set_index_var_value(current_row if current_row >= 0 else 0)
 
         if item_var is not None:
             initial_item = get_item_var_value_view()
@@ -821,6 +933,40 @@ def _setup_selection_bindings_impl(
 
             index_var.on_change(on_index_var_change_view)
 
+            # For nested paths like "workspace?.selected_index", subscribe to ROOT Variable
+            if root_variable is not None and index_var_path is not None and resolve_or_create_variable_fn is not None:
+                from qtpie.variable import Variable as VarType
+
+                root_subscribed_key = f"index_root_subscribed_{id(widget)}"
+                if not binding_container.get(root_subscribed_key, False):
+                    binding_container[root_subscribed_key] = True
+
+                    def on_root_variable_change_index(*_args: Any) -> None:
+                        """Re-resolve index_var when root Variable changes."""
+                        if updating["flag"]:
+                            return
+                        assert index_var_path is not None
+                        assert resolve_or_create_variable_fn is not None
+                        new_source = resolve_or_create_variable_fn(host, index_var_path, int)
+                        if new_source is None:
+                            return
+
+                        new_idx: int | None = None
+                        if isinstance(new_source, VarType):
+                            new_idx = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                        elif isinstance(new_source, (Observable, ObservableProxy)):
+                            val = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+                            new_idx = val if isinstance(val, int) else None
+
+                        if new_idx is not None and new_idx >= 0:
+                            updating["flag"] = True
+                            try:
+                                set_row_index(new_idx)  # pyright: ignore[reportUnknownArgumentType]
+                            finally:
+                                updating["flag"] = False
+
+                    root_variable.on_change(on_root_variable_change_index)
+
         if item_var is not None:
 
             def on_item_var_change_view(*_args: Any) -> None:
@@ -834,13 +980,47 @@ def _setup_selection_bindings_impl(
                     idx = find_index_of_item(new_item)
                     if idx >= 0:
                         set_row_index(idx)
-                        current_index_var = binding_container["index_var"]
-                        if current_index_var is not None:
-                            current_index_var.value = idx
+                        if binding_container["index_var"] is not None:
+                            set_index_var_value(idx)
                 finally:
                     updating["flag"] = False
 
             item_var.on_change(on_item_var_change_view)
+
+            # For nested paths like "workspace?.selected_item", subscribe to ROOT Variable
+            if root_variable is not None and item_var_path is not None and resolve_or_create_variable_fn is not None:
+                from qtpie.variable import Variable as VarType
+
+                root_subscribed_key = f"item_root_subscribed_{id(widget)}"
+                if not binding_container.get(root_subscribed_key, False):
+                    binding_container[root_subscribed_key] = True
+
+                    def on_root_variable_change_item(*_args: Any) -> None:
+                        """Re-resolve item_var when root Variable changes."""
+                        if updating["flag"]:
+                            return
+                        assert item_var_path is not None
+                        assert resolve_or_create_variable_fn is not None
+                        new_source = resolve_or_create_variable_fn(host, item_var_path, None)
+                        if new_source is None:
+                            return
+
+                        new_item: Any = None
+                        if isinstance(new_source, VarType):
+                            new_item = new_source.value  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                        elif isinstance(new_source, (Observable, ObservableProxy)):
+                            new_item = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+
+                        if new_item is not None:
+                            updating["flag"] = True
+                            try:
+                                idx = find_index_of_item(new_item)
+                                if idx >= 0:
+                                    set_row_index(idx)
+                            finally:
+                                updating["flag"] = False
+
+                    root_variable.on_change(on_root_variable_change_item)
 
         if text_var is not None:
 
@@ -858,9 +1038,8 @@ def _setup_selection_bindings_impl(
                         # Remember what we selected for re-selection after modelReset
                         binding_container["last_selected_text"] = new_text
                         # Update other bindings if present
-                        current_index_var = binding_container["index_var"]
-                        if current_index_var is not None:
-                            current_index_var.value = idx
+                        if binding_container["index_var"] is not None:
+                            set_index_var_value(idx)
                         current_item_var = binding_container["item_var"]
                         if current_item_var is not None:
                             set_item_var_value_view(get_item_at_index(idx), idx)
@@ -915,11 +1094,9 @@ def _setup_selection_bindings_impl(
                             # Clear intended_text since we found a match
                             binding_container.pop("intended_text", None)
                             # Update other bindings if present
-                            current_index_var = binding_container["index_var"]
-                            if current_index_var is not None:
-                                current_index_var.value = idx
-                            current_item_var = binding_container["item_var"]
-                            if current_item_var is not None:
+                            if binding_container["index_var"] is not None:
+                                set_index_var_value(idx)
+                            if binding_container["item_var"] is not None:
                                 set_item_var_value_view(get_item_at_index(idx), idx)
                         finally:
                             updating["flag"] = False
@@ -956,7 +1133,7 @@ def _setup_selection_bindings_impl(
             try:
                 row = current.row() if current.isValid() else -1
                 if current_index_var is not None:
-                    current_index_var.value = row
+                    set_index_var_value(row)
                 if current_item_var is not None:
                     set_item_var_value_view(get_item_at_index(row) if row >= 0 else None, row)
                 if current_widget_var is not None:

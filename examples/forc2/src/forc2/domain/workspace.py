@@ -59,9 +59,6 @@ def load_workspace(folder: Path) -> Workspace | None:
     workspace = Workspace()
     workspace.path = folder
 
-    # Load workspace config from forc.yaml
-    load_workspace_config(workspace, folder)
-
     # Load collections from 'collections/' subfolder
     collections_path = folder / "collections"
     if collections_path.exists():
@@ -80,10 +77,7 @@ def load_workspace(folder: Path) -> Workspace | None:
                 envs.append(env)
         workspace.environments = envs
 
-    if workspace.active_environment_name.value is not None:
-        for env in workspace.environments():
-            if env.name.value == workspace.active_environment_name.value:
-                workspace.active_environment = env
-                break
+    # Load workspace config from forc.yaml
+    load_workspace_config(workspace, folder)
 
     return workspace
