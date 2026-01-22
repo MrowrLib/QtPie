@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
+from .event import is_event_hint
 from .layout import GridPosition, Stretch
 from .setting import Setting
 from .utils.common import is_signal_on_type
@@ -47,6 +48,8 @@ class NewField:
         # Event handlers (not Qt signals, but handled via event filter)
         # Keys are event names like "onFocus", "onMouseEnter", etc.
         self.event_handlers: dict[str, str | Callable[..., Any]] = {}
+        # Event[T] connection - for new(on="handler") on Event annotations
+        self.event_on: str | Callable[..., Any] | None = None
         # Variable callbacks (onChange, onInsert, onRemove, etc.)
         self.on_change: str | Callable[..., Any] | None = None
         # List-specific callbacks
@@ -331,6 +334,17 @@ class NewField:
         # Get the type annotation
         hints = get_type_hints(owner)
         self.field_type = hints.get(name)
+
+        # If it's an Event[T], extract the on= handler and store it
+        # Keep the NewField on the class so __init_subclass__ can find it
+        # The event annotation processing code will:
+        # 1. Check if there's a NewField for this Event
+        # 2. Extract the on= handler and store it in config
+        # 3. Delete the NewField and create the Event/Signal
+        if is_event_hint(self.field_type):
+            self.event_on = self.kwargs.pop("on", None)
+            # NewField stays on class - will be processed by _process_event_annotations_for_*
+            return  # Don't process further - the Event annotation will be handled separately
 
         # If it's a Variable or Setting, replace self with a Variable descriptor
         origin = get_origin(self.field_type)

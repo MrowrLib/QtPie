@@ -42,7 +42,7 @@ __all__ = ["State", "state", "resolve_from_state_hierarchy"]
 class StateConfig:
     """Class-level configuration for a State."""
 
-    __slots__ = ("variable_names", "required_bindings", "init_wrapped", "event_names", "event_wiring")
+    __slots__ = ("variable_names", "required_bindings", "init_wrapped", "event_names", "event_wiring", "event_new_fields")
 
     def __init__(self) -> None:
         self.variable_names: list[str] = []
@@ -52,6 +52,8 @@ class StateConfig:
         self.event_names: list[str] = []
         # Event-to-handler wiring from decorator kwargs (e.g., {"on_save": "_persist"})
         self.event_wiring: dict[str, str] = {}
+        # Event[T] = new(on=...) fields - stores NewField for wiring
+        self.event_new_fields: dict[str, Any] = {}  # name -> NewField
 
 
 class StateInstance:
@@ -304,22 +306,38 @@ def _process_event_annotations_for_state(cls: type[State]) -> None:
 
     A bare annotation like `on_save: Event` or `on_changed: Event[int]`
     gets an Event() instance created on the class.
+
+    For Event = new(on=...) syntax, the NewField is removed and the
+    on= handler is stored in config for later wiring.
     """
     import typing
+
+    from .new_field import NewField
 
     # Get annotations including from parent classes
     hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
 
     for name, hint in hints.items():
-        # Skip if already has a value (e.g., on_save: Event = Event())
+        # Check if it's an Event annotation
+        if not is_event_hint(hint):
+            continue
+
+        # Check if there's a NewField on this name (Event = new(on=...))
+        existing = cls.__dict__.get(name)
+        if isinstance(existing, NewField):
+            # Extract the on= handler and store in config
+            if existing.event_on is not None:
+                cls._state_config.event_new_fields[name] = existing
+            # Remove the NewField so we can create the Event
+            delattr(cls, name)
+
+        # Skip if already has a non-NewField value (e.g., on_save: Event = Event())
         if name in cls.__dict__:
             continue
 
-        # Check if it's an Event annotation
-        if is_event_hint(hint):
-            # Create Event instance on the class
-            setattr(cls, name, Event())
-            cls._state_config.event_names.append(name)
+        # Create Event instance on the class
+        setattr(cls, name, Event())
+        cls._state_config.event_names.append(name)
 
 
 def _detect_required_bindings_for_state(cls: type[State]) -> None:
@@ -376,6 +394,9 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
         # Wire Events to handlers based on decorator kwargs
         _wire_events_for_state(self, config.event_wiring)
 
+        # Wire Events from new(on=...) fields
+        _wire_event_new_fields_for_state(self, config.event_new_fields)
+
         # Call __setup__ hook if defined
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -403,6 +424,46 @@ def _wire_events_for_state(instance: State, event_wiring: dict[str, str]) -> Non
             continue
 
         event.connect(handler)
+
+
+def _wire_event_new_fields_for_state(instance: State, event_new_fields: dict[str, Any]) -> None:
+    """Wire Events from new(on=...) fields to handlers.
+
+    For on_save: Event = new(on="_persist"), connects instance.on_save to instance._persist.
+    Supports:
+    - String method names: on="_persist"
+    - Callables: on=lambda: print("saved")
+    - Expression strings: on="{print('saved')}"
+    """
+    from .bindings import is_format_string
+    from .signals.expression_handler import create_signal_expression_handler
+
+    for event_name, field in event_new_fields.items():
+        if field.event_on is None:
+            continue
+
+        event = getattr(instance, event_name, None)
+        if event is None or not isinstance(event, Event):
+            continue
+
+        handler = field.event_on
+        if isinstance(handler, str):
+            # Check if it's an expression (format string with {})
+            if is_format_string(handler):
+                # Create expression handler for State context
+                expr_handler = create_signal_expression_handler(instance, handler, ["#state", "#self"])
+                event.connect(expr_handler)
+            else:
+                # Simple string handler - method name
+                target = getattr(instance, handler, None)
+                if target is None:
+                    raise AttributeError(f"{type(instance).__name__} has no method '{handler}' for Event connection {event_name} = new(on=\"{handler}\")")
+                if callable(target):
+                    event.connect(target)
+                else:
+                    raise AttributeError(f'{type(instance).__name__}.{handler} is not callable for Event connection {event_name} = new(on="{handler}")')
+        elif callable(handler):
+            event.connect(handler)
 
 
 def _setup_auto_parenting(instance: State) -> None:

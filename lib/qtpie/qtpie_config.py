@@ -28,6 +28,7 @@ class _QtPieConfig:
         "icon",
         "size",
         "signal_connections",
+        "event_new_fields",
     )
 
     def __init__(self) -> None:
@@ -46,3 +47,4 @@ class _QtPieConfig:
         self.icon: IconType = None  # Window icon (resolved at runtime)
         self.size: tuple[int, int] | None = None  # Initial size (width, height)
         self.signal_connections: dict[str, str] = {}  # Signal connections from decorator
+        self.event_new_fields: dict[str, NewField] = {}  # Event[T] fields with new(on=...)

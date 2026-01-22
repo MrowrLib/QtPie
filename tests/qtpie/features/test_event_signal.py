@@ -205,3 +205,144 @@ class TestEventAnnotationCreatesSignal:
         instance.send_data(42, "hello")
 
         assert_that(calls).is_equal_to([(42, "hello")])
+
+
+@pytest.mark.parametrize("base_class,decorator", SIGNAL_CLASS_TYPES)
+class TestEventNewOnSyntax:
+    """Event[T] = new(on=...) syntax for connecting handlers."""
+
+    def test_event_new_on_string_handler(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event = new(on="method_name") connects to method."""
+        calls: list[bool] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_test: Event = new(on="_on_test")
+
+            def _on_test(self) -> None:
+                calls.append(True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_typed_string_handler(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event[int] = new(on="method_name") passes args to method."""
+        calls: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_value: Event[int] = new(on="_on_value")
+
+            def _on_value(self, x: int) -> None:
+                calls.append(x)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_value.emit(42)
+
+        assert_that(calls).is_equal_to([42])
+
+    def test_event_new_on_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event = new(on=lambda) connects lambda handler."""
+        calls: list[bool] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_test: Event = new(on=lambda: calls.append(True))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_lambda_with_args(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event[int] = new(on=lambda x: ...) passes args to lambda."""
+        calls: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_value: Event[int] = new(on=lambda x: calls.append(x))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_value.emit(99)
+
+        assert_that(calls).is_equal_to([99])
+
+    def test_event_new_on_expression(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event = new(on="{method()}") connects via expression."""
+        calls: list[bool] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_test: Event = new(on="{_log()}")
+
+            def _log(self) -> None:
+                calls.append(True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_test.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_tuple_args(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event[tuple[int, str]] = new(on="handler") passes multiple args."""
+        calls: list[tuple[int, str]] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_data: Event[tuple[int, str]] = new(on="_on_data")
+
+            def _on_data(self, num: int, text: str) -> None:
+                calls.append((num, text))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_data.emit(10, "test")
+
+        assert_that(calls).is_equal_to([(10, "test")])
+
+    def test_event_new_on_multiple_events(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple Event = new(on=...) fields work together."""
+        first_calls: list[bool] = []
+        second_calls: list[int] = []
+
+        @decorator
+        class TestClass(base_class):
+            on_first: Event = new(on="_on_first")
+            on_second: Event[int] = new(on="_on_second")
+
+            def _on_first(self) -> None:
+                first_calls.append(True)
+
+            def _on_second(self, x: int) -> None:
+                second_calls.append(x)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_first.emit()
+        instance.on_second.emit(123)
+
+        assert_that(first_calls).is_equal_to([True])
+        assert_that(second_calls).is_equal_to([123])
+
+    def test_event_new_on_coexists_with_decorator_wiring(self, base_class, decorator, qt: QtDriver) -> None:
+        """Event new(on=...) and decorator wiring can coexist."""
+        new_calls: list[str] = []
+        decorator_calls: list[str] = []
+
+        @decorator(on_decorator="_on_decorator")
+        class TestClass(base_class):
+            on_new: Event = new(on="_on_new")
+            on_decorator: Event
+
+            def _on_new(self) -> None:
+                new_calls.append("new")
+
+            def _on_decorator(self) -> None:
+                decorator_calls.append("decorator")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.on_new.emit()
+        instance.on_decorator.emit()
+
+        assert_that(new_calls).is_equal_to(["new"])
+        assert_that(decorator_calls).is_equal_to(["decorator"])

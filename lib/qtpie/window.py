@@ -73,6 +73,8 @@ class WindowConfig:
     size: tuple[int, int] | None = None  # Initial size (width, height)
     # Signal connections from decorator: {signal_name: handler_name}
     signal_connections: dict[str, str] = field(default_factory=lambda: {})
+    # Event[T] = new(on=...) fields
+    event_new_fields: dict[str, NewField] = field(default_factory=lambda: {})
 
 
 class Window[T = None](QMainWindow, QtPieComponentBase):
@@ -230,6 +232,9 @@ def _process_event_annotations_for_window(cls: type[Window[Any]]) -> None:
 
     A bare annotation like `on_click: Event` or `on_changed: Event[int]`
     gets a real Qt Signal created on the class.
+
+    For Event = new(on=...) syntax, the NewField is removed and the
+    on= handler is stored in config for later wiring.
     """
     import typing
 
@@ -239,16 +244,27 @@ def _process_event_annotations_for_window(cls: type[Window[Any]]) -> None:
     hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
 
     for name, hint in hints.items():
-        # Skip if already has a value
+        # Check if it's an Event annotation
+        if not is_event_hint(hint):
+            continue
+
+        # Check if there's a NewField on this name (Event = new(on=...))
+        existing = cls.__dict__.get(name)
+        if isinstance(existing, NewField):
+            # Extract the on= handler and store in config
+            if existing.event_on is not None:
+                cls._qtpie_config.event_new_fields[name] = existing
+            # Remove the NewField so we can create the Signal
+            delattr(cls, name)
+
+        # Skip if already has a non-NewField value
         if name in cls.__dict__:
             continue
 
-        # Check if it's an Event annotation
-        if is_event_hint(hint):
-            # Extract signal argument types from Event[T]
-            args = extract_event_args(hint)
-            # Create real Qt Signal on the class
-            setattr(cls, name, Signal(*args))
+        # Extract signal argument types from Event[T]
+        args = extract_event_args(hint)
+        # Create real Qt Signal on the class
+        setattr(cls, name, Signal(*args))
 
 
 @overload
@@ -582,6 +598,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Connect signals from decorator (e.g., @window(on_reload="_on_reload"))
         _connect_decorator_signals(self, config)
 
+        # Connect Event[T] = new(on=...) fields
+        _connect_event_new_fields(self, config)
+
         # Auto-add QMenu fields to menu bar (in declaration order)
         # And track non-menu QWidget fields for central widget, plus layout items
         dock_field_names = set(config.dock_fields)
@@ -890,6 +909,44 @@ def _connect_decorator_signals(window: Window[Any], config: WindowConfig) -> Non
             raise AttributeError(f"Handler '{handler_name}' not found on {type(window).__name__} for signal '{signal_name}'")
 
         if callable(handler):
+            signal.connect(handler)
+
+
+def _connect_event_new_fields(window: Window[Any], config: WindowConfig) -> None:
+    """Connect Event[T] = new(on=...) fields to their handlers.
+
+    For example: on_save: Event = new(on="_on_save") connects window.on_save to window._on_save.
+    Supports:
+    - String method names: on="_on_save"
+    - Callables: on=lambda: print("saved")
+    - Expression strings: on="{print('saved')}"
+    """
+    from .bindings import is_format_string
+
+    for event_name, new_field in config.event_new_fields.items():
+        if new_field.event_on is None:
+            continue
+
+        signal = getattr(window, event_name, None)
+        if signal is None:
+            continue
+
+        handler = new_field.event_on
+        if isinstance(handler, str):
+            # Check if it's an expression (format string with {})
+            if is_format_string(handler):
+                expr_handler = _create_window_signal_expression_handler(window, handler)
+                signal.connect(expr_handler)
+            else:
+                # Simple string handler - method name
+                target = getattr(window, handler, None)
+                if target is None:
+                    raise AttributeError(f"{type(window).__name__} has no method '{handler}' for Event connection {event_name} = new(on=\"{handler}\")")
+                if callable(target):
+                    signal.connect(target)
+                else:
+                    raise AttributeError(f'{type(window).__name__}.{handler} is not callable for Event connection {event_name} = new(on="{handler}")')
+        elif callable(handler):
             signal.connect(handler)
 
 

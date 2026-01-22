@@ -134,6 +134,8 @@ class MenuConfig:
     item_order: list[str] = field(default_factory=lambda: list[str]())
     # Signal connections from decorator: {signal_name: handler_name}
     signal_connections: dict[str, str] = field(default_factory=lambda: dict[str, str]())
+    # Event[T] = new(on=...) fields
+    event_new_fields: dict[str, NewField] = field(default_factory=lambda: dict[str, NewField]())
 
 
 # =============================================================================
@@ -757,6 +759,9 @@ def _wrap_init_for_menu(cls: type[Menu[Any]], props: dict[str, Any]) -> None:
         # Connect signals from decorator (e.g., @menu(on_menu_action="_on_menu_action"))
         _connect_decorator_signals(self, config)
 
+        # Connect Event[T] = new(on=...) fields
+        _connect_event_new_fields(self, config)
+
         # Enable dirty/valid hooks
         state = self._qtpie  # pyright: ignore[reportPrivateUsage]
         state.enable_dirty_hook()
@@ -794,6 +799,44 @@ def _connect_decorator_signals(menu: Menu[Any], config: MenuConfig) -> None:
             raise AttributeError(f"Handler '{handler_name}' not found on {type(menu).__name__} for signal '{signal_name}'")
 
         if callable(handler):
+            signal.connect(handler)
+
+
+def _connect_event_new_fields(menu: Menu[Any], config: MenuConfig) -> None:
+    """Connect Event[T] = new(on=...) fields to their handlers.
+
+    For example: on_save: Event = new(on="_on_save") connects menu.on_save to menu._on_save.
+    Supports:
+    - String method names: on="_on_save"
+    - Callables: on=lambda: print("saved")
+    - Expression strings: on="{print('saved')}"
+    """
+    from .bindings import is_format_string
+
+    for event_name, new_field in config.event_new_fields.items():
+        if new_field.event_on is None:
+            continue
+
+        signal = getattr(menu, event_name, None)
+        if signal is None:
+            continue
+
+        handler = new_field.event_on
+        if isinstance(handler, str):
+            # Check if it's an expression (format string with {})
+            if is_format_string(handler):
+                expr_handler = _create_menu_signal_expression_handler(menu, handler)
+                signal.connect(expr_handler)
+            else:
+                # Simple string handler - method name
+                target = getattr(menu, handler, None)
+                if target is None:
+                    raise AttributeError(f"{type(menu).__name__} has no method '{handler}' for Event connection {event_name} = new(on=\"{handler}\")")
+                if callable(target):
+                    signal.connect(target)
+                else:
+                    raise AttributeError(f'{type(menu).__name__}.{handler} is not callable for Event connection {event_name} = new(on="{handler}")')
+        elif callable(handler):
             signal.connect(handler)
 
 
@@ -1181,24 +1224,39 @@ def _process_event_annotations_for_menu(cls: type[Menu[Any]]) -> None:
 
     A bare annotation like `on_click: Event` or `on_changed: Event[int]`
     gets a real Qt Signal created on the class.
+
+    For Event = new(on=...) syntax, the NewField is removed and the
+    on= handler is stored in config for later wiring.
     """
     import typing
 
     from qtpy.QtCore import Signal
 
     from .event import extract_event_args, is_event_hint
+    from .new_field import NewField
 
     # Get annotations including from parent classes
     hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
 
     for name, hint in hints.items():
-        # Skip if already has a value (e.g., on_click = Signal(int))
+        # Check if it's an Event annotation
+        if not is_event_hint(hint):
+            continue
+
+        # Check if there's a NewField on this name (Event = new(on=...))
+        existing = cls.__dict__.get(name)
+        if isinstance(existing, NewField):
+            # Extract the on= handler and store in config
+            if existing.event_on is not None:
+                cls._qtpie_config.event_new_fields[name] = existing
+            # Remove the NewField so we can create the Signal
+            delattr(cls, name)
+
+        # Skip if already has a non-NewField value (e.g., on_click = Signal(int))
         if name in cls.__dict__:
             continue
 
-        # Check if it's an Event annotation
-        if is_event_hint(hint):
-            # Extract signal argument types from Event[T]
-            args = extract_event_args(hint)
-            # Create real Qt Signal on the class
-            setattr(cls, name, Signal(*args))
+        # Extract signal argument types from Event[T]
+        args = extract_event_args(hint)
+        # Create real Qt Signal on the class
+        setattr(cls, name, Signal(*args))

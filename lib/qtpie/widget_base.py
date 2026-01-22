@@ -617,24 +617,39 @@ def _process_event_annotations_for_widget_base(cls: type[WidgetBase[Any]]) -> No
 
     A bare annotation like `on_click: Event` or `on_changed: Event[int]`
     gets a real Qt Signal created on the class.
+
+    For Event = new(on=...) syntax, the NewField is removed and the
+    on= handler is stored in config for later wiring.
     """
     import typing
 
     from qtpy.QtCore import Signal
 
     from .event import extract_event_args, is_event_hint
+    from .new_field import NewField
 
     # Get annotations including from parent classes
     hints = typing.get_type_hints(cls) if hasattr(cls, "__annotations__") else {}
 
     for name, hint in hints.items():
-        # Skip if already has a value (e.g., on_click = Signal(int))
+        # Check if it's an Event annotation
+        if not is_event_hint(hint):
+            continue
+
+        # Check if there's a NewField on this name (Event = new(on=...))
+        existing = cls.__dict__.get(name)
+        if isinstance(existing, NewField):
+            # Extract the on= handler and store in config
+            if existing.event_on is not None:
+                cls._qtpie_config.event_new_fields[name] = existing
+            # Remove the NewField so we can create the Signal
+            delattr(cls, name)
+
+        # Skip if already has a non-NewField value (e.g., on_click = Signal(int))
         if name in cls.__dict__:
             continue
 
-        # Check if it's an Event annotation
-        if is_event_hint(hint):
-            # Extract signal argument types from Event[T]
-            args = extract_event_args(hint)
-            # Create real Qt Signal on the class
-            setattr(cls, name, Signal(*args))
+        # Extract signal argument types from Event[T]
+        args = extract_event_args(hint)
+        # Create real Qt Signal on the class
+        setattr(cls, name, Signal(*args))

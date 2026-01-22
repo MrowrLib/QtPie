@@ -793,3 +793,159 @@ class TestStateDictCallbacks:
         del s.config["x"]
 
         assert_that(events).contains("change", "set:x=10", "remove:x")
+
+
+class TestStateEventNewOn:
+    """Test Event[T] = new(on=...) syntax for State."""
+
+    def test_event_new_on_string_handler(self) -> None:
+        """Event = new(on="method_name") connects to method."""
+        from qtpie import Event
+
+        calls: list[bool] = []
+
+        @state
+        class MyState(State):
+            on_save: Event = new(on="_on_save")
+
+            def _on_save(self) -> None:
+                calls.append(True)
+
+        s = MyState()
+        s.on_save.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_typed_handler(self) -> None:
+        """Event[int] = new(on="method_name") passes args to method."""
+        from qtpie import Event
+
+        calls: list[int] = []
+
+        @state
+        class MyState(State):
+            on_value: Event[int] = new(on="_on_value")
+
+            def _on_value(self, x: int) -> None:
+                calls.append(x)
+
+        s = MyState()
+        s.on_value.emit(42)
+
+        assert_that(calls).is_equal_to([42])
+
+    def test_event_new_on_lambda(self) -> None:
+        """Event = new(on=lambda) connects lambda handler."""
+        from qtpie import Event
+
+        calls: list[bool] = []
+
+        @state
+        class MyState(State):
+            on_save: Event = new(on=lambda: calls.append(True))
+
+        s = MyState()
+        s.on_save.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_lambda_with_args(self) -> None:
+        """Event[int] = new(on=lambda x: ...) passes args to lambda."""
+        from qtpie import Event
+
+        calls: list[int] = []
+
+        @state
+        class MyState(State):
+            on_value: Event[int] = new(on=lambda x: calls.append(x))
+
+        s = MyState()
+        s.on_value.emit(99)
+
+        assert_that(calls).is_equal_to([99])
+
+    def test_event_new_on_expression(self) -> None:
+        """Event = new(on="{method()}") connects via expression."""
+        from qtpie import Event
+
+        calls: list[bool] = []
+
+        @state
+        class MyState(State):
+            on_save: Event = new(on="{_log()}")
+
+            def _log(self) -> None:
+                calls.append(True)
+
+        s = MyState()
+        s.on_save.emit()
+
+        assert_that(calls).is_equal_to([True])
+
+    def test_event_new_on_tuple_args(self) -> None:
+        """Event[tuple[int, str]] = new(on="handler") passes multiple args."""
+        from qtpie import Event
+
+        calls: list[tuple[int, str]] = []
+
+        @state
+        class MyState(State):
+            on_data: Event[tuple[int, str]] = new(on="_on_data")
+
+            def _on_data(self, num: int, text: str) -> None:
+                calls.append((num, text))
+
+        s = MyState()
+        s.on_data.emit(10, "test")
+
+        assert_that(calls).is_equal_to([(10, "test")])
+
+    def test_event_new_on_multiple_events(self) -> None:
+        """Multiple Event = new(on=...) fields work together."""
+        from qtpie import Event
+
+        first_calls: list[bool] = []
+        second_calls: list[int] = []
+
+        @state
+        class MyState(State):
+            on_first: Event = new(on="_on_first")
+            on_second: Event[int] = new(on="_on_second")
+
+            def _on_first(self) -> None:
+                first_calls.append(True)
+
+            def _on_second(self, x: int) -> None:
+                second_calls.append(x)
+
+        s = MyState()
+        s.on_first.emit()
+        s.on_second.emit(123)
+
+        assert_that(first_calls).is_equal_to([True])
+        assert_that(second_calls).is_equal_to([123])
+
+    def test_event_new_on_coexists_with_decorator_wiring(self) -> None:
+        """Event new(on=...) and decorator wiring can coexist."""
+        from qtpie import Event
+
+        new_calls: list[str] = []
+        decorator_calls: list[str] = []
+
+        @state(on_decorator="_on_decorator")
+        class MyState(State):
+            on_new: Event = new(on="_on_new")
+            on_decorator: Event
+
+            def _on_new(self) -> None:
+                new_calls.append("new")
+
+            def _on_decorator(self) -> None:
+                decorator_calls.append("decorator")
+
+        s = MyState()
+        s.on_new.emit()
+        s.on_decorator.emit()
+
+        assert_that(new_calls).is_equal_to(["new"])
+        assert_that(decorator_calls).is_equal_to(["decorator"])
