@@ -4,8 +4,6 @@ from typing import override
 
 # from qtpy.QtCore import Signal
 from forc2.app import ForcWindow
-from forc2.domain.collection import Collection
-from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
 from qtpie import App, Event, Setting, Var, app, new
 
@@ -29,8 +27,7 @@ class ForcApp(App):
     loaded_workspace_path: Setting[str | None] = new("fixtures/demo-api")
 
     ### Variables ###
-    workspace: Var[Workspace | None] = new(default=Workspace())
-    selected_sidebar_item: Var[Collection | Request | None] = new(None, onChange="_on_selected_sidebar_item_changed")
+    workspace: Var[Workspace | None] = new(None)
 
     ### Window ###
     main_window: ForcWindow
@@ -53,5 +50,8 @@ class ForcApp(App):
         self.main_window.show()
         self.setQuitOnLastWindowClosed(True)
 
-    def _on_selected_sidebar_item_changed(self) -> None:
-        logger.warning("-----> Selected sidebar item changed to: %s", self.selected_sidebar_item())
+    # def _on_selected_sidebar_item_changed(self) -> None:
+    #     logger.warning("-----> Selected Collection ITEM changed to: %s", self.selected_sidebar_item())
+
+    # def _on_selected_request_changed(self) -> None:
+    #     logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())

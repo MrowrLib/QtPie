@@ -1,18 +1,17 @@
-from qtpy.QtCore import Signal
+import logging
 
 from forc2.app.menus import FileMenu, ViewMenu
-from forc2.app.widgets.sidebar import Sidebar
-from qtpie import Window, new, window
+from forc2.app.widgets.request import RequestWidget
+from forc2.app.widgets.sidebar import SidebarWidget
+from forc2.domain.collection import Collection
+from forc2.domain.request import Request
+from qtpie import Var, Window, new, window
 from qtpie.dock import Dock
+from qtpie.event import Event
 
-# @widget(layout="horizontal")
-# class TestStatusBar(Widget):
-#     label1: QLabel = new("Status: Ready")
-#     stretch: Stretch
-#     toggle_request_splitter_orientation_button: QPushButton = new(
-#         "Toggle Splitter Orientation", clicked="on_toggle_splitter_orientation"
-#     )
-#     label2: QLabel = new("Line 1, Col 1")
+logger = logging.getLogger(__name__)
+
+# TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
 
 
 @window(
@@ -25,43 +24,43 @@ from qtpie.dock import Dock
     size=(1600, 900),
 )
 class ForcWindow(Window):
-    ### Signals ###
-    on_current_workspace_item_changed = Signal()
+    ### Events ###
+    on_current_workspace_item_changed: Event
 
     ### Variables ###
-    # Ah, we should rename, current_workspace_item is just in the SIDEBAR selection, not e.g. the current tab! right?
-    # current_workspace_item: Variable[Collection | Request | None]  # TODO later: RENAME / move me
-    # selected_request_index: Variable[int]
-
-    ### Status Bar ###
-    # status_bar: TestStatusBar = new()
+    selected_sidebar_item: Var[Collection | Request | None] = new(None, onChange="_on_selected_sidebar_item_changed")
+    selected_request: Var[Request | None] = new(None, onChange="_on_selected_request_changed")
+    selected_request_index: Var[int]
 
     ### Menus ###
     file_menu: FileMenu
     view_menu: ViewMenu
 
-    # TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
-
     ### Docks / Widgets ###
-    sidebar: Dock[Sidebar] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
+    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
 
-    # editors: Variable[list[Request], Dock[RequestWidget]] = new(
-    #     group="requests",
-    #     dock="right",
-    #     title="{name} {'*' if #widget.is_dirty else ''}",
-    #     groupSelectedIndex="selected_request_index",
-    #     selectedItem="current_request",
-    # )
+    editors: Var[list[Request], Dock[RequestWidget]] = new(
+        group="requests",
+        dock="right",
+        title="{name} {'*' if #widget.is_dirty else ''}",
+        groupSelectedIndex="selected_request_index",
+        selectedItem="selected_request",
+    )
 
+    ### Methods ###
+    def _on_selected_sidebar_item_changed(self) -> None:
+        logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
+        #
+        item = self.selected_sidebar_item()
+        if isinstance(item, Request):
+            # If it's already added, then simply switch to that tab:
+            for index, editor in enumerate(self.editors.value):
+                if editor is item:
+                    self.selected_request_index.value = index  # TODO remove .value
+                    return
+            # Otherwise, add a new tab:
+            self.editors.append(item)
+            self.selected_request_index.value = len(self.editors) - 1
 
-# def _on_current_workspace_item_changed(self) -> None:
-#     item = self.current_workspace_item()
-#     if isinstance(item, Request):
-#         # If it's already added, then simply switch to that tab:
-#         for index, editor in enumerate(self.editors.value):
-#             if editor is item:
-#                 self.selected_request_index.value = index  # TODO remove .value
-#                 return
-#         # Otherwise, add a new tab:
-#         self.editors.append(item)
-#         self.selected_request_index.value = len(self.editors) - 1
+    def _on_selected_request_changed(self) -> None:
+        logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())

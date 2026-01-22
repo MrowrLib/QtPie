@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from assertpy import assert_that
-from forc2.domain import Collection, Environment, EnvironmentVariable, Header, HttpMethod, Request, Workspace
+from forc2.domain import Collection, Environment, EnvironmentVariable, HttpMethod, Request, RequestKeyValue, Workspace
 from forc2.format import (
     load_collection,
     load_environment,
@@ -235,8 +235,8 @@ class TestSaveRequest:
         req.name.value = "Test"
         req.method.value = HttpMethod.POST
         req.url.value = "https://api.example.com"
-        req.headers.append(Header(key="Content-Type", value="application/json"))
-        req.headers.append(Header(key="Authorization", value="Bearer token"))
+        req.headers.append(RequestKeyValue(key="Content-Type", value="application/json"))
+        req.headers.append(RequestKeyValue(key="Authorization", value="Bearer token"))
 
         yaml_file = tmp_path / "test.yaml"
         save_request(req, yaml_file)
@@ -395,7 +395,7 @@ class TestSaveEnvironment:
         """Save a simple environment."""
         env = Environment()
         env.name.value = "Test"
-        env.variables.value["URL"] = EnvironmentVariable(value="http://localhost")
+        env.variables["URL"] = EnvironmentVariable(value="http://localhost")
 
         yaml_file = tmp_path / "test.yaml"
         save_environment(env, yaml_file)
@@ -410,8 +410,8 @@ class TestSaveEnvironment:
         """Save an environment with secret variables."""
         env = Environment()
         env.name.value = "Secrets"
-        env.variables.value["PUBLIC"] = EnvironmentVariable(value="visible")
-        env.variables.value["SECRET"] = EnvironmentVariable(value="hidden", secret=True)
+        env.variables["PUBLIC"] = EnvironmentVariable(value="visible")
+        env.variables["SECRET"] = EnvironmentVariable(value="hidden", secret=True)
 
         yaml_file = tmp_path / "secrets.yaml"
         save_environment(env, yaml_file)

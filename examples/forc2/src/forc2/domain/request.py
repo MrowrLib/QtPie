@@ -5,7 +5,10 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from qtpie import Event, State, Variable, new, state
+from qtpie import Event, State, Var, new, state
+
+from .auth import Auth
+from .body import BodyType
 
 
 class HttpMethod(Enum):
@@ -21,9 +24,7 @@ class HttpMethod(Enum):
 
 
 @dataclass
-class Header:
-    """A header or query parameter for HTTP requests."""
-
+class RequestKeyValue:
     key: str = ""
     value: str = ""
     enabled: bool = True
@@ -32,16 +33,19 @@ class Header:
 @state(on_save="_do_save")
 class Request(State):
     ### Variables ###
-    name: Variable[str] = new("")
-    method: Variable[HttpMethod] = new(HttpMethod.GET)
-    url: Variable[str] = new("")
-    headers: Variable[list[Header]] = new([])
-    query_params: Variable[list[Header]] = new([])
-    body: Variable[str] = new("")
-    filename: Variable[str | None] = new(None)
+    name: Var[str] = new("")
+    method: Var[HttpMethod] = new(HttpMethod.GET)
+    url: Var[str] = new("")
+    headers: Var[list[RequestKeyValue]] = new([])
+    query_params: Var[list[RequestKeyValue]] = new([])
+    body: Var[str] = new("")
+    body_type: Var[BodyType] = new(BodyType.NONE)
+    body_fields: Var[list[RequestKeyValue]] = new([])  # For form bodies
+    auth: Var[Auth | None] = new(None)
+    filename: Var[str | None] = new(None)
 
     # Events
-    on_save: Event  # Fires to trigger save
+    on_save: Event
 
     ### Methods ###
     def _get_full_path(self) -> Path | None:

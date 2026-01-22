@@ -1,3 +1,3 @@
-from .sidebar import Sidebar
+from .sidebar import SidebarWidget
 
-__all__ = ["Sidebar"]
+__all__ = ["SidebarWidget"]

@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-from qtpie import Event, State, Variable, new, state
+from qtpie import Event, State, Var, new, state
 
 from .collection import Collection
 from .environment import Environment
@@ -12,12 +12,12 @@ from .environment import Environment
 @state(on_save="_do_save")
 class Workspace(State):
     ### Variables ###
-    name: Variable[str] = new("")
-    collection: Variable[Collection | None] = new(None)
-    environments: Variable[list[Environment]] = new([])
-    active_environment: Variable[Environment | None] = new(None)
-    active_environment_name: Variable[str | None] = new(None, onChange="_on_active_environment_changed")
-    path: Variable[Path | None] = new(None, onChange="_on_path_changed")
+    name: Var[str] = new("")
+    collection: Var[Collection | None] = new(None)
+    environments: Var[list[Environment]] = new([])
+    active_environment: Var[Environment | None] = new(None)
+    active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_changed")
+    path: Var[Path | None] = new(None, onChange="_on_path_changed")
 
     ### Events ###
     on_save: Event  # Fires to trigger save

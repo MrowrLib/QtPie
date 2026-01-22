@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from qtpie import State, Variable, new, state
+from qtpie import State, Var, new, state
 
 
 @dataclass
@@ -17,6 +17,6 @@ class EnvironmentVariable:
 @state
 class Environment(State):
     ### Variables ###
-    name: Variable[str] = new("")
-    variables: Variable[dict[str, EnvironmentVariable]] = new({})
-    filename: Variable[str | None] = new(None)
+    name: Var[str] = new("")
+    variables: Var[dict[str, EnvironmentVariable]] = new({})
+    filename: Var[str | None] = new(None)

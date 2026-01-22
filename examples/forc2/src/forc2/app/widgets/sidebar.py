@@ -4,7 +4,7 @@ from qtpie import Widget, new, widget
 
 
 @widget
-class Sidebar(Widget):
+class SidebarWidget(Widget):
     collections_headers: QLabel = new(bind="workspace?.name")
     collections_tree: QTreeView = new(
         bind="workspace?.collection?.items",

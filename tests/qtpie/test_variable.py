@@ -2,6 +2,7 @@
 # pyright: reportUnknownMemberType=false
 # pyright: reportUnknownArgumentType=false
 # pyright: reportAttributeAccessIssue=false
+# pyright: reportOptionalMemberAccess=false
 """Tests for Variable[T] with new() and @new_fields."""
 
 from dataclasses import dataclass
@@ -618,3 +619,108 @@ class TestRecordVariableFieldShadowing:
         rv = RecordVariable(proxy)
 
         assert_that(rv.update).is_equal_to("pending")
+
+
+class TestVariableUnionWithNone:
+    """Test Variable[T | None] with complex types."""
+
+    def test_complex_union_none_with_new_empty_constructs_type(self) -> None:
+        """Variable[ComplexType | None] = new() should construct ComplexType()."""
+
+        @dataclass
+        class Workspace:
+            name: str = "default"
+
+        @new_fields
+        class MyClass:
+            _workspace: Variable[Workspace | None] = new()
+
+        obj = MyClass()
+        # Should have constructed Workspace() automatically
+        assert_that(obj._workspace.value).is_not_none()
+        assert_that(obj._workspace.value.name).is_equal_to("default")
+
+    def test_complex_union_none_with_explicit_value(self) -> None:
+        """Variable[ComplexType | None] = new(ComplexType(...)) works."""
+
+        @dataclass
+        class Workspace:
+            name: str = "default"
+
+        @new_fields
+        class MyClass:
+            _workspace: Variable[Workspace | None] = new(Workspace("custom"))
+
+        obj = MyClass()
+        assert_that(obj._workspace.value.name).is_equal_to("custom")
+
+    def test_primitive_union_none_with_new_empty_is_none(self) -> None:
+        """Variable[str | None] = new() should default to None."""
+
+        @new_fields
+        class MyClass:
+            _value: Variable[str | None] = new()
+
+        obj = MyClass()
+        assert_that(obj._value.value).is_none()
+
+    def test_primitive_union_none_with_explicit_value(self) -> None:
+        """Variable[int | None] = new(42) should have value 42."""
+
+        @new_fields
+        class MyClass:
+            _count: Variable[int | None] = new(42)
+
+        obj = MyClass()
+        assert_that(obj._count.value).is_equal_to(42)
+
+    def test_complex_union_none_can_be_set_to_none(self) -> None:
+        """Variable[ComplexType | None] can be set to None after construction."""
+
+        @dataclass
+        class Workspace:
+            name: str = "default"
+
+        @new_fields
+        class MyClass:
+            _workspace: Variable[Workspace | None] = new()
+
+        obj = MyClass()
+        assert_that(obj._workspace.value).is_not_none()
+
+        obj._workspace.value = None  # pyright: ignore[reportArgumentType]
+        assert_that(obj._workspace.value).is_none()
+
+    def test_complex_union_none_with_kwargs(self) -> None:
+        """Variable[ComplexType | None] = new(field=value) passes kwargs to constructor."""
+
+        @dataclass
+        class Config:
+            host: str = "localhost"
+            port: int = 8080
+
+        @new_fields
+        class MyClass:
+            _config: Variable[Config | None] = new(host="example.com", port=443)
+
+        obj = MyClass()
+        assert_that(obj._config.value.host).is_equal_to("example.com")
+        assert_that(obj._config.value.port).is_equal_to(443)
+
+    def test_complex_union_none_is_reactive(self) -> None:
+        """Variable[ComplexType | None] changes trigger callbacks."""
+
+        @dataclass
+        class Workspace:
+            name: str = "default"
+
+        @new_fields
+        class MyClass:
+            _workspace: Variable[Workspace | None] = new()
+
+        obj = MyClass()
+        changes: list[str] = []
+        obj._workspace.on_change(lambda: changes.append("changed"))
+
+        obj._workspace.name = "updated"  # pyright: ignore[reportAttributeAccessIssue]
+        assert_that(changes).is_equal_to(["changed"])

@@ -88,19 +88,38 @@ def _create_observable_for_type(
         except ImportError:
             pass
 
-    # Union types (e.g., str | None, int | None) → Observable if all members are primitives
+    # Union types (e.g., str | None, int | None, MyClass | None)
     if isinstance(inner_type, types.UnionType):
         type_args = get_args(inner_type)
         # Check if all args are primitive types (including None)
         if all(is_primitive_type(t) for t in type_args):
             return Observable(None if no_default_provided else default)
 
+        # For T | None unions with complex type T, extract T and construct it
+        if no_default_provided:
+            non_none_types = [t for t in type_args if t is not type(None)]
+            if len(non_none_types) == 1:
+                # It's T | None - try to construct T()
+                concrete_type = non_none_types[0]
+                if isinstance(concrete_type, type):
+                    try:
+                        if inner_kwargs:
+                            default = concrete_type(**inner_kwargs)
+                        else:
+                            default = concrete_type()
+                    except TypeError as e:
+                        raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default={concrete_type.__name__}(...)) or provide constructor args.") from e
+                    return ObservableProxy(default)
+            # Multi-type union like T1 | T2 | None - can't know which to construct
+            raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default=...) or provide constructor args.")
+        # Has a default value - wrap it in ObservableProxy
+        return ObservableProxy(default)
+
     # Complex types → ObservableProxy
     # Need to create an instance if no default was provided
     if no_default_provided:
-        # UnionType can't be instantiated
-        if isinstance(inner_type, types.UnionType):
-            raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default=...) or provide constructor args.")
+        # inner_type is a regular type here (not UnionType)
+        assert isinstance(inner_type, type)
         # Try to instantiate with inner_kwargs (or no args if none provided)
         try:
             if inner_kwargs:

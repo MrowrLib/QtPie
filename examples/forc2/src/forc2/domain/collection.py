@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from qtpie import State, Variable, new, state
+from qtpie import State, Var, new, state
 
 if TYPE_CHECKING:
     from .request import Request
@@ -17,9 +17,9 @@ type TreeItem = Request | Collection
 @state
 class Collection(State):
     ### Variables ###
-    name: Variable[str] = new("")
-    items: Variable[list[TreeItem]] = new([])
-    filename: Variable[str | None] = new(None)
+    name: Var[str] = new("")
+    items: Var[list[TreeItem]] = new([])
+    filename: Var[str | None] = new(None)
 
     ### Methods ###
     def add_request(self, name: str = "") -> Request:

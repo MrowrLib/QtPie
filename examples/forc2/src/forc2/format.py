@@ -6,7 +6,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .domain import Collection, Environment, EnvironmentVariable, Header, HttpMethod, Request, Workspace
+from .domain import Collection, Environment, EnvironmentVariable, HttpMethod, Request, RequestKeyValue, Workspace
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -103,7 +103,7 @@ def load_request(path: Path) -> Request:
     if "headers" in data:
         for h in data["headers"]:
             request.headers.append(
-                Header(
+                RequestKeyValue(
                     key=h.get("key", ""),
                     value=h.get("value", ""),
                     enabled=h.get("enabled", True),
@@ -113,7 +113,7 @@ def load_request(path: Path) -> Request:
     if "query_params" in data:
         for p in data["query_params"]:
             request.query_params.append(
-                Header(
+                RequestKeyValue(
                     key=p.get("key", ""),
                     value=p.get("value", ""),
                     enabled=p.get("enabled", True),
