@@ -1915,3 +1915,137 @@ class TestTableViewDictKeyColumn:
         item = model.data(model.index(0, 0), Qt.ItemDataRole.UserRole)
         assert_that(item).is_instance_of(EnvironmentVariable)
         assert_that(item.value).is_equal_to("http://localhost")
+
+
+# =============================================================================
+# State Object Binding Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewStateBinding:
+    """QTableView with bind= to list[State] - auto-detect Variable fields as columns."""
+
+    def test_table_binds_to_list_of_state_objects(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with bind=list[State] auto-detects Variable fields as columns."""
+        from qtpie import State, state
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new([])
+            _table: QTableView = new(bind="_people")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Add some people
+        person1 = Person()
+        person1.name = "Alice"
+        person1.age = 30
+        person2 = Person()
+        person2.name = "Bob"
+        person2.age = 25
+        instance._people.value = [person1, person2]
+
+        model = instance._table.model()
+
+        # Should have 2 rows
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Columns should be auto-detected from State's Variable fields
+        assert_that(model.columnCount()).is_greater_than_or_equal_to(2)
+
+        # Check headers match Variable field names
+        headers = [model.headerData(col, Qt.Orientation.Horizontal) for col in range(model.columnCount())]
+        assert_that("Name" in headers or "name" in headers).is_true()
+        assert_that("Age" in headers or "age" in headers).is_true()
+
+        # Check data - find the name column
+        name_col = None
+        age_col = None
+        for col in range(model.columnCount()):
+            header = model.headerData(col, Qt.Orientation.Horizontal)
+            if header and header.lower() == "name":
+                name_col = col
+            elif header and header.lower() == "age":
+                age_col = col
+
+        assert_that(name_col).is_not_none()
+        assert_that(age_col).is_not_none()
+
+        # DisplayRole returns strings
+        assert_that(model.data(model.index(0, name_col))).is_equal_to("Alice")
+        assert_that(str(model.data(model.index(0, age_col)))).is_equal_to("30")
+        assert_that(model.data(model.index(1, name_col))).is_equal_to("Bob")
+        assert_that(str(model.data(model.index(1, age_col)))).is_equal_to("25")
+
+    def test_table_with_explicit_columns_for_state(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columns= works for State objects."""
+        from qtpie import State, state
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+            email: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new([])
+            _table: QTableView = new(bind="_people", columns=["name", "email"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        person = Person()
+        person.name = "Charlie"
+        person.age = 35
+        person.email = "charlie@example.com"
+        instance._people.value = [person]
+
+        model = instance._table.model()
+
+        # Should have 2 columns (name, email only)
+        assert_that(model.columnCount()).is_equal_to(2)
+
+        # Check data
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Charlie")
+        assert_that(model.data(model.index(0, 1))).is_equal_to("charlie@example.com")
+
+    def test_table_updates_when_state_variable_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView updates when a State object's Variable changes."""
+        from qtpie import State, state
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new([])
+            _table: QTableView = new(bind="_people", columns=["name", "age"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        person = Person()
+        person.name = "Diana"
+        person.age = 28
+        instance._people.value = [person]
+
+        model = instance._table.model()
+
+        # Initial values (DisplayRole returns strings)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Diana")
+        assert_that(str(model.data(model.index(0, 1)))).is_equal_to("28")
+
+        # Change the Variable
+        person.name = "Diana Updated"
+        person.age = 29
+
+        # Values should update
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Diana Updated")
+        assert_that(str(model.data(model.index(0, 1)))).is_equal_to("29")

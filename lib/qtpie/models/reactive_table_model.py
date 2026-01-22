@@ -548,7 +548,15 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self.dataChanged.emit(top_left, bottom_right)
 
     def _on_clear(self, items: list[T]) -> None:
-        """Handle list clear."""
+        """Handle list clear (also called on replace).
+
+        Note: ObservableList.replace() fires on_clear AFTER the new items are added,
+        so len(self._obs_list) reflects the new list at callback time.
+        """
+        # Re-detect columns if we had none and columns weren't explicit
+        # This handles the case where list starts empty and is replaced with items
+        if not self._columns_explicit and not self._columns:
+            self._columns = self._auto_detect_columns()
         self.beginResetModel()
         self.endResetModel()
 
