@@ -17,6 +17,7 @@ class SidebarWidget(Widget):
     environments_chooser: QComboBox = new(
         bind="workspace?.environments",
         format="{name}",
+        # selectedItem="workspace?.active_environment",
         selectedText="workspace?.active_environment_name",
     )
 

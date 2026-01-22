@@ -38,10 +38,17 @@ class ForcApp(App):
         self.main_window.show()
 
     def __setup__(self) -> None:
+        # Call _load_the_workspace after  seconds with QTimer to reproduce some delay for fun
+        from qtpy.QtCore import QTimer
+
+        QTimer.singleShot(1000, self._load_the_workspace)
+
+    def _load_the_workspace(self) -> None:
         workspace_path = self.loaded_workspace_path()
         if workspace_path is not None:
             print("Loading workspace from path:", workspace_path)
             self.workspace = Workspace.load(Path(workspace_path))
+            print("  -> Loaded workspace")
 
     def _on_reload_window(self) -> None:
         """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""

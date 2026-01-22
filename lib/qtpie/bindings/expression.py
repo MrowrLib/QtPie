@@ -333,11 +333,17 @@ def create_expression_binding(
             if hasattr(context, "record") and hasattr(context.record, "observable"):
                 record_proxy_for_subscriptions = context.record.observable
 
+    # Track Variables found via resolve_binding_source that came from parent hierarchy/QApplication
+    # (since resolve_binding_source searches parents/app but compute() needs these in a dict)
+    resolved_var_sources: dict[str, Variable[Any]] = {}
+
     for var_name in var_names:
         source = resolve_binding_source(context, var_name)  # type: ignore[arg-type]
         if source is not None:
             found_on_context.add(var_name)
             if isinstance(source, Variable):
+                # Track this Variable for use in compute()
+                resolved_var_sources[var_name] = source
                 obs: Any = source.observable
                 if isinstance(obs, Observable):
                     observables.append(cast(Observable[Any], obs))
@@ -355,6 +361,7 @@ def create_expression_binding(
                     raw_attr: Any = getattr(context, attr_name)
                     if isinstance(raw_attr, Variable):
                         found_on_context.add(var_name)
+                        resolved_var_sources[var_name] = raw_attr
                         obs = raw_attr.observable  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
                         if isinstance(obs, Observable):
                             observables.append(cast(Observable[Any], obs))
@@ -507,7 +514,12 @@ def create_expression_binding(
         eval_context: dict[str, Any] = {}
 
         for var_name in var_names:
-            # First check if we found this in parent hierarchy
+            # First check if we resolved this Variable during setup (from context, parent, or QApplication)
+            if var_name in resolved_var_sources:
+                eval_context[var_name] = resolved_var_sources[var_name].value  # pyright: ignore[reportUnknownMemberType]
+                continue
+
+            # Fallback: check if we found this in parent hierarchy (legacy path)
             if var_name in parent_var_sources:
                 eval_context[var_name] = parent_var_sources[var_name].value  # pyright: ignore[reportUnknownMemberType]
                 continue

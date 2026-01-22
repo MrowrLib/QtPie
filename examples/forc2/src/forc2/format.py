@@ -23,9 +23,9 @@ def load_workspace_config(workspace: Workspace, path: Path) -> None:
     if not data:
         return
     if "name" in data:
-        workspace.name.value = data["name"]
+        workspace.name = data["name"]
     if "active_environment" in data:
-        workspace.active_environment_name.value = data["active_environment"]
+        workspace.active_environment_name = data["active_environment"]
 
 
 def load_collection(path: Path) -> Collection:
@@ -43,7 +43,7 @@ def load_collection(path: Path) -> Collection:
     collection = Collection()
 
     # Track the folder name for save path resolution
-    collection.filename.value = path.name
+    collection.filename = path.name
 
     # Load collection metadata
     meta_file = path / "_collection.yaml"
@@ -51,10 +51,10 @@ def load_collection(path: Path) -> Collection:
         with meta_file.open() as f:
             data = yaml.load(f)
             if data and "name" in data:
-                collection.name.value = data["name"]
+                collection.name = data["name"]
     else:
         # Use folder name as collection name
-        collection.name.value = path.name
+        collection.name = path.name
 
     # Load items (requests and sub-collections)
     for item_path in sorted(path.iterdir()):
@@ -80,7 +80,7 @@ def load_request(path: Path) -> Request:
     request = Request()
 
     # Track the file stem for save path resolution
-    request.filename.value = path.stem
+    request.filename = path.stem
 
     with path.open() as f:
         data = yaml.load(f)
@@ -89,16 +89,16 @@ def load_request(path: Path) -> Request:
         return request
 
     if "name" in data:
-        request.name.value = data["name"]
+        request.name = data["name"]
     else:
         # Use filename as name
-        request.name.value = path.stem
+        request.name = path.stem
 
     if "method" in data:
-        request.method.value = HttpMethod(data["method"])
+        request.method = HttpMethod(data["method"])
 
     if "url" in data:
-        request.url.value = data["url"]
+        request.url = data["url"]
 
     if "headers" in data:
         for h in data["headers"]:
@@ -121,7 +121,7 @@ def load_request(path: Path) -> Request:
             )
 
     if "body" in data:
-        request.body.value = data["body"]
+        request.body = data["body"]
 
     return request
 
@@ -131,21 +131,21 @@ def load_environment(path: Path) -> Environment:
     env = Environment()
 
     # Track the file stem for save path resolution
-    env.filename.value = path.stem
+    env.filename = path.stem
 
     with path.open() as f:
         data = yaml.load(f)
 
     if not data:
         # Use filename as name when file is empty
-        env.name.value = path.stem
+        env.name = path.stem
         return env
 
     if "name" in data:
-        env.name.value = data["name"]
+        env.name = data["name"]
     else:
         # Use filename as name
-        env.name.value = path.stem
+        env.name = path.stem
 
     if "variables" in data:
         # Build the dict first, then assign to trigger reactivity
@@ -156,7 +156,7 @@ def load_environment(path: Path) -> Environment:
                 enabled=v.get("enabled", True),
                 secret=v.get("secret", False),
             )
-        env.variables.value = variables
+        env.variables = variables
 
     return env
 

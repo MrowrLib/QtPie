@@ -1,5 +1,7 @@
 import logging
 
+from qtpy.QtWidgets import QLabel
+
 from forc2.app.menus import FileMenu, ViewMenu
 from forc2.app.widgets.request import RequestWidget
 from forc2.app.widgets.sidebar import SidebarWidget
@@ -34,7 +36,9 @@ class ForcWindow(Window):
 
     ### Menus ###
     file_menu: FileMenu
-    view_menu: ViewMenu
+    view_menu: ViewMenu  # = new(visible="{workspace is not None}")  # TODO visible= for menus!
+
+    label_example: QLabel = new("Forc - Free Open-source Rest Client", visible="{workspace is None}")
 
     # workspace_value_label: QLabel = new(bind="Workspace: {workspace}")
 
@@ -43,7 +47,7 @@ class ForcWindow(Window):
         dock="left",
         title="Explorer",
         hideTitleBar=True,
-        # visible="{workspace is not None}",
+        visible="{workspace is not None}",
     )(maximumWidth=400)
 
     editors: Var[list[Request], Dock[RequestWidget]] = new(
@@ -52,7 +56,7 @@ class ForcWindow(Window):
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
-        # visible="{workspace is not None}",
+        visible="{workspace is not None}",
     )
 
     ### Methods ###

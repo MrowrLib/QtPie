@@ -19,7 +19,7 @@ class Workspace(State):
     environments: Var[list[Environment]] = new([])
     active_environment: Var[Environment | None] = new(None)
     active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_changed")
-    path: Var[Path | None] = new(None, onChange="_on_path_changed")
+    path: Var[Path | None] = new(None)
 
     ### Events ###
     on_save: Event
@@ -36,10 +36,8 @@ class Workspace(State):
         for env in self.environments():
             if env.name.value == active_name:
                 self.active_environment = env
+                print("  -> Active environment set to:", env.name())
                 return
-
-    def _on_path_changed(self) -> None:
-        print("Workspace path changed to:", self.path())
 
     def _do_save(self) -> None:
         """Save the collection to disk."""
@@ -81,5 +79,11 @@ def load_workspace(folder: Path) -> Workspace | None:
                 env.state_parent = workspace
                 envs.append(env)
         workspace.environments = envs
+
+    if workspace.active_environment_name.value is not None:
+        for env in workspace.environments():
+            if env.name.value == workspace.active_environment_name.value:
+                workspace.active_environment = env
+                break
 
     return workspace

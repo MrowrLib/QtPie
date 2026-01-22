@@ -81,6 +81,7 @@ def setup_selection_bindings(
             widget_var = source  # pyright: ignore[reportUnknownVariableType]
 
     text_var: VarType[str] | None = None
+    text_var_root_variable: VarType[Any] | None = None  # Root Variable for nested paths
 
     if selected_text_path is not None:
         source = resolve_or_create_variable_fn(host, selected_text_path, str)
@@ -89,11 +90,52 @@ def setup_selection_bindings(
         elif isinstance(source, (Observable, ObservableProxy)):
             text_var = source  # type: ignore[assignment] - Observable/Proxy has .value and .on_change
 
+        # For nested paths like "workspace?.active_environment_name", find the ROOT Variable
+        # so we can re-resolve and sync when it changes from None to a real object
+        path_normalized = selected_text_path.replace("?.", ".")
+        if "." in path_normalized:
+            root_name = path_normalized.split(".")[0]
+            # Search parent hierarchy for root Variable (mirrors model_binding.py logic)
+            from qtpy.QtWidgets import QApplication
+
+            root_attr: Any = getattr(host, root_name, None)
+            if root_attr is None:
+                root_attr = getattr(host, f"_{root_name}", None)
+            if root_attr is None:
+                current: Any = host
+                while root_attr is None:
+                    if not hasattr(current, "parent") or not callable(current.parent):
+                        break
+                    parent_widget: Any = current.parent()
+                    if parent_widget is None:
+                        break
+                    root_attr = getattr(parent_widget, root_name, None)
+                    current = parent_widget
+                if root_attr is None:
+                    app = QApplication.instance()
+                    if app is not None:
+                        root_attr = getattr(app, root_name, None)
+            if root_attr is not None and isinstance(root_attr, VarType):
+                text_var_root_variable = root_attr  # pyright: ignore[reportUnknownVariableType]
+
     # ALWAYS call _setup_selection_bindings_impl to connect the signal handler early.
     # This ensures the selection binding handler is connected BEFORE user's signal handlers
     # (which are connected later in _connect_signals). The handler uses a mutable container
     # so it can access Variables that are resolved later when bindings are reapplied.
-    _setup_selection_bindings_impl(host, widget, model, index_var, item_var, indexes_var, items_list_var, widget_var, text_var)
+    _setup_selection_bindings_impl(
+        host,
+        widget,
+        model,
+        index_var,
+        item_var,
+        indexes_var,
+        items_list_var,
+        widget_var,
+        text_var,
+        text_var_root_variable=text_var_root_variable,
+        text_var_path=selected_text_path,
+        resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+    )
 
 
 def _setup_selection_bindings_impl(
@@ -106,6 +148,9 @@ def _setup_selection_bindings_impl(
     items_list_var: Any | None,  # Variable[list[Any]] | None
     widget_var: Any | None = None,  # Variable[QWidget | None] | None
     text_var: Any | None = None,  # Variable[str] | None - matches by display text
+    text_var_root_variable: Any | None = None,  # Root Variable for nested text paths
+    text_var_path: str | None = None,  # Original path for re-resolution
+    resolve_or_create_variable_fn: Any | None = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
     from observant import Observable, ObservableProxy
@@ -508,6 +553,52 @@ def _setup_selection_bindings_impl(
                 logger.debug("[selectedText] Connected modelReset signal")
             except AttributeError:
                 logger.debug("[selectedText] Model has no modelReset signal")
+
+            # For nested paths like "workspace?.active_environment_name", subscribe to ROOT
+            # Variable changes. When root changes from None to a real object (or vice versa),
+            # we need to re-resolve the text_var path and sync the selection.
+            if text_var_root_variable is not None and text_var_path is not None and resolve_or_create_variable_fn is not None:
+                from qtpie.variable import Variable as VarType
+
+                # Track if we've already subscribed to avoid duplicates
+                root_subscribed_key = f"text_root_subscribed_{id(widget)}"
+                if not binding_container.get(root_subscribed_key, False):
+                    binding_container[root_subscribed_key] = True
+
+                    def on_root_variable_change(*_args: Any) -> None:
+                        """Re-resolve text_var when root Variable changes (e.g., workspace None→Workspace)."""
+                        if updating["flag"]:
+                            return
+
+                        # Re-resolve the text path to get the new Observable
+                        assert text_var_path is not None  # Checked above
+                        assert resolve_or_create_variable_fn is not None  # Checked above
+                        new_source = resolve_or_create_variable_fn(host, text_var_path, str)
+                        if new_source is None:
+                            return
+
+                        # Get the new text value
+                        new_text: str | None = None
+                        if isinstance(new_source, VarType):
+                            new_text = new_source.value  # type: ignore[assignment]
+                        elif isinstance(new_source, (Observable, ObservableProxy)):
+                            val: Any = new_source.get() if isinstance(new_source, Observable) else new_source.unwrap()  # pyright: ignore[reportUnknownVariableType]
+                            new_text = str(val) if val is not None else None  # pyright: ignore[reportUnknownArgumentType]
+
+                        logger.debug(f"[selectedText] on_root_variable_change: new_text={new_text!r}")
+
+                        if new_text is not None and new_text != "":
+                            # Update intended_text and try to select
+                            binding_container["intended_text"] = new_text
+                            # Use existing logic from on_text_var_change_combo
+                            on_text_var_change_combo(new_text)  # pyright: ignore[reportUnknownArgumentType]
+                        else:
+                            # Root became None - clear intended_text
+                            binding_container["intended_text"] = None
+                            binding_container.pop("last_selected_text", None)
+
+                    text_var_root_variable.on_change(on_root_variable_change)
+                    logger.debug(f"[selectedText] Connected root variable change callback for path={text_var_path}")
 
         # Widget → Variable binding
         # IMPORTANT: Always connect the handler on first setup, even if item_var is None.
