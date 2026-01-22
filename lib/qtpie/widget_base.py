@@ -34,14 +34,26 @@ class _RecordDescriptor[T]:
 
         state = obj._qtpie
         if state._record is None:
+            import types
+            from typing import Union
+
             from observant import ObservableProxy
 
-            try:
-                wrapper = _create_observable_for_type(self._record_type, NO_DEFAULT)
-            except ValueError:
-                # Type requires constructor args - create proxy with None target
-                # User must set it in __setup__ or later
+            # Check if record_type is a Union type (e.g., Person | None or Union[A, B])
+            # If so, we can't auto-create - user must set it explicitly
+            origin = get_origin(self._record_type)
+            is_union = origin is Union or origin is types.UnionType
+
+            if is_union:
+                # Union type - don't auto-create, start with None target
                 wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
+            else:
+                try:
+                    wrapper = _create_observable_for_type(self._record_type, NO_DEFAULT)
+                except ValueError:
+                    # Type requires constructor args - create proxy with None target
+                    # User must set it in __setup__ or later
+                    wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
             record_var = RecordVariable(cast(ObservableProxy[T], wrapper))
             state._record = record_var
             state.register_variable("record", record_var)

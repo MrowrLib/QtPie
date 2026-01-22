@@ -59,52 +59,6 @@ class Section:
 # =============================================================================
 
 
-class _MenuRecordDescriptor[T]:
-    """Descriptor for auto-created record on Menu[T].
-
-    Lazily creates the record Variable on first access.
-    """
-
-    def __init__(self, record_type: type[T]) -> None:
-        self._record_type = record_type
-
-    def __get__(self, obj: "Menu[T] | None", objtype: type | None = None) -> RecordVariable[T]:  # noqa: UP037
-        if obj is None:
-            return self  # type: ignore[return-value]
-
-        if not hasattr(obj, "_qtpie"):
-            obj._qtpie = QtPieState(obj)
-
-        state = obj._qtpie
-        if state._record is None:
-            try:
-                # Try to create instance with no args
-                instance = self._record_type()
-                wrapper: ObservableProxy[T] = ObservableProxy(instance)
-            except TypeError:
-                # Type requires constructor args - create proxy with None target
-                wrapper = ObservableProxy[T](None)  # type: ignore[arg-type]
-            record_var: RecordVariable[T] = RecordVariable(wrapper)
-            state._record = record_var
-            state.register_variable("record", record_var)
-
-        return state._record  # type: ignore[return-value]
-
-    def __set__(self, obj: "Menu[T]", value: T | RecordVariable[T]) -> None:  # noqa: UP037
-        if not hasattr(obj, "_qtpie"):
-            obj._qtpie = QtPieState(obj)
-
-        if isinstance(value, RecordVariable):
-            obj._qtpie._record = value
-            obj._qtpie.register_variable("record", value)  # type: ignore[arg-type]
-        else:
-            # Setting a value - create a new ObservableProxy with the value
-            wrapper: ObservableProxy[T] = ObservableProxy(value)
-            record_var: RecordVariable[T] = RecordVariable(wrapper)
-            obj._qtpie._record = record_var
-            obj._qtpie.register_variable("record", record_var)
-
-
 # =============================================================================
 # Menu Configuration
 # =============================================================================
@@ -201,7 +155,9 @@ class Menu[T = None](QMenu):
         # Check if user explicitly declared a record field
         has_explicit_record = "record" in cls.__dict__
         if cls._qtpie_config.record_type is not None and not has_explicit_record:
-            cls.record = _MenuRecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
+            from .widget import _RecordDescriptor
+
+            cls.record = _RecordDescriptor(cls._qtpie_config.record_type)  # type: ignore[assignment]
 
     if TYPE_CHECKING:
         # Lie to pyright: say record returns T for field autocomplete

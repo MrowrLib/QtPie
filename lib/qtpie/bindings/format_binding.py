@@ -808,6 +808,7 @@ def create_format_binding(
     uses_var = any("#var" in f.expression for f in fields)
     uses_widget = any("#widget" in f.expression or "#window" in f.expression for f in fields)
     uses_app = any("#app" in f.expression for f in fields)
+    uses_record = any("#record" in f.expression for f in fields)
 
     # Get ROOT names for building eval context
     root_names = _get_root_names(var_names)
@@ -830,6 +831,14 @@ def create_format_binding(
         else:
             # variable is Observable/ObservableList/ObservableDict/ObservableSet/ObservableProxy
             all_observables.append(variable)
+
+    # If #record is used, subscribe to the record's ObservableProxy for reactivity
+    if uses_record and hasattr(widget, "_qtpie_config"):
+        config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+        if config.record_type is not None and hasattr(widget, "record"):
+            # record is a RecordVariable, .observable is the ObservableProxy
+            record_proxy = widget.record.observable
+            all_observables.append(record_proxy)
 
     # Build the compute function
     def compute() -> str:
@@ -857,6 +866,19 @@ def create_format_binding(
         # Add #var - always the variable's value (only valid when variable provided)
         if uses_var and variable is not None:
             context["var"] = get_observable_value(variable)
+
+        # Add #record - returns the unwrapped record value for direct field access
+        # We use the raw value (not ObservableProxy) so method calls like .name.upper() work
+        if uses_record:
+            if hasattr(widget, "_qtpie_config"):
+                config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+                if config.record_type is not None and hasattr(widget, "record"):
+                    # record is a RecordVariable, .value gives the raw dataclass
+                    context["record_ref"] = widget.record.value
+                else:
+                    context["record_ref"] = None
+            else:
+                context["record_ref"] = None
 
         # Add all variable values to context using root names
         # Resolution order: exact match -> record -> underscore fallback -> parent hierarchy
@@ -974,6 +996,7 @@ def create_format_binding(
                 eval_expr = eval_expr.replace("#widget", "widget_ref")
                 eval_expr = eval_expr.replace("#window", "widget_ref")
                 eval_expr = eval_expr.replace("#app", "app_ref")
+                eval_expr = eval_expr.replace("#record", "record_ref")
 
                 # Evaluate the expression
                 try:

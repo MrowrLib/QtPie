@@ -310,9 +310,27 @@ def create_expression_binding(
     if expr.startswith("{") and expr.endswith("}"):
         expr = expr[1:-1].strip()
 
+    # Detect special placeholder usage
+    uses_widget = "#widget" in expr or "#window" in expr
+    uses_app = "#app" in expr
+    uses_record = "#record" in expr
+
+    # Replace special placeholders with valid Python identifiers for AST extraction
+    expr_for_ast = expr
+    if uses_widget:
+        expr_for_ast = expr_for_ast.replace("#widget", "_widget_ref_").replace("#window", "_widget_ref_")
+    if uses_app:
+        expr_for_ast = expr_for_ast.replace("#app", "_app_ref_")
+    if uses_record:
+        expr_for_ast = expr_for_ast.replace("#record", "_record_ref_")
+
     # Extract variable names from the expression
-    ast_names = _extract_ast_names(expr)
+    ast_names = _extract_ast_names(expr_for_ast)
     var_names = ast_names - _BUILTINS
+    # Remove placeholder names we added
+    var_names.discard("_widget_ref_")
+    var_names.discard("_app_ref_")
+    var_names.discard("_record_ref_")
 
     # Collect all reactive objects to subscribe to
     # Observable has on_change(callback: Callable[[T], None])
@@ -513,6 +531,25 @@ def create_expression_binding(
         # Build context with current values
         eval_context: dict[str, Any] = {}
 
+        # Add special placeholders to context
+        if uses_widget:
+            eval_context["widget_ref"] = context
+
+        if uses_app:
+            from qtpy.QtWidgets import QApplication
+
+            eval_context["app_ref"] = QApplication.instance()
+
+        if uses_record:
+            # #record returns the actual record value (unwrapped from proxy)
+            # This allows expressions like "#record is not None" to work correctly
+            # For field access like "#record.name", the raw value works fine
+            if record_proxy is not None:
+                target = object.__getattribute__(record_proxy, "_target")
+                eval_context["record_ref"] = target
+            else:
+                eval_context["record_ref"] = None
+
         for var_name in var_names:
             # First check if we resolved this Variable during setup (from context, parent, or QApplication)
             if var_name in resolved_var_sources:
@@ -572,16 +609,25 @@ def create_expression_binding(
                 if var_name in module_globals:
                     eval_context[var_name] = module_globals[var_name]
 
+        # Replace special placeholders with valid Python identifiers
+        eval_expr = expr
+        if uses_widget:
+            eval_expr = eval_expr.replace("#widget", "widget_ref").replace("#window", "widget_ref")
+        if uses_app:
+            eval_expr = eval_expr.replace("#app", "app_ref")
+        if uses_record:
+            eval_expr = eval_expr.replace("#record", "record_ref")
+
         # Evaluate the expression
         try:
             # Handle ?. optional chaining by converting to safe navigation
-            if "?." in expr:
+            if "?." in eval_expr:
                 from qtpie.bindings.format_binding import (
                     _eval_with_optional_chaining,  # pyright: ignore[reportPrivateUsage]
                 )
 
-                return _eval_with_optional_chaining(expr, eval_context)
-            value = eval(expr, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
+                return _eval_with_optional_chaining(eval_expr, eval_context)
+            value = eval(eval_expr, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
             return value
         except Exception:
             return None

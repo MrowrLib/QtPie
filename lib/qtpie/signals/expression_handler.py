@@ -228,6 +228,7 @@ def create_signal_expression_handler(
     # Check if expression uses special placeholders
     uses_args = "#args" in expr
     uses_self = any(placeholder in expr for placeholder in self_placeholders)
+    uses_record = "#record" in expr
 
     # Check if this is a statement (assignment, etc.)
     is_stmt = _is_statement(expr)
@@ -242,6 +243,8 @@ def create_signal_expression_handler(
     if uses_self:
         for placeholder in self_placeholders:
             expr_for_ast = expr_for_ast.replace(placeholder, "_context_ref_")
+    if uses_record:
+        expr_for_ast = expr_for_ast.replace("#record", "_record_ref_")
 
     # Extract variable names from the expression for context building
     # For assignments, we also need to extract names from the value expression
@@ -253,12 +256,15 @@ def create_signal_expression_handler(
         if uses_self:
             for placeholder in self_placeholders:
                 value_expr_for_ast = value_expr_for_ast.replace(placeholder, "_context_ref_")
+        if uses_record:
+            value_expr_for_ast = value_expr_for_ast.replace("#record", "_record_ref_")
         var_names = _extract_ast_names(value_expr_for_ast) - _BUILTINS
     else:
         var_names = _extract_ast_names(expr_for_ast) - _BUILTINS
     # Remove placeholder names we added
     var_names.discard("_signal_args_placeholder_")
     var_names.discard("_context_ref_")
+    var_names.discard("_record_ref_")
 
     def handler(*signal_args: Any) -> Any:
         # Build context with context_obj's variables
@@ -271,6 +277,19 @@ def create_signal_expression_handler(
         # Add #args support
         if uses_args:
             context["signal_args"] = signal_args
+
+        # Add #record support - returns the ObservableProxy for mutations (like #record.count += 1)
+        # and reactive field access. Signal handlers often need to modify record fields.
+        if uses_record:
+            if hasattr(context_obj, "_qtpie_config"):
+                config = context_obj._qtpie_config
+                if config.record_type is not None and hasattr(context_obj, "record"):
+                    # Use ObservableProxy so mutations like #record.count += 1 work
+                    context["record_ref"] = context_obj.record.observable
+                else:
+                    context["record_ref"] = None
+            else:
+                context["record_ref"] = None
 
         # Add all variable values to context
         for var_name in var_names:
@@ -285,6 +304,8 @@ def create_signal_expression_handler(
         if uses_self:
             for placeholder in self_placeholders:
                 eval_expr = eval_expr.replace(placeholder, "context_ref")
+        if uses_record:
+            eval_expr = eval_expr.replace("#record", "record_ref")
 
         # Execute/evaluate the expression
         try:

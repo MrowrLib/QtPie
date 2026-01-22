@@ -35,6 +35,7 @@ class CentralWidget(Widget):
 class ForcWindow(Window[Workspace | None]):
     label: QLabel = new("Forc Main Window")
     workspace_name_label: QLabel = new(bind="Workspace is: {name}", visible="{#record is not None}")
+    # the_record_label: QLabel = new(bind="The record is: {#record}")
     stretch: Stretch
 
 
