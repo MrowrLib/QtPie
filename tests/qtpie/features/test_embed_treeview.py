@@ -487,3 +487,116 @@ class TestTreeViewSelectedWidget:
 
         # Check it's a NodeLabel instance
         assert_that(instance._selected_widget.value).is_instance_of(NodeLabel)
+
+
+# Type alias for testing TypeAliasType support (Python 3.12+ 'type' statement)
+# This tests that Widget[TypeAlias] works with union types
+@dataclass
+class Folder:
+    """Folder node in tree."""
+
+    name: str
+    items: list[FolderOrFile] = field(default_factory=list)
+
+
+@dataclass
+class File:
+    """File leaf node in tree."""
+
+    name: str
+    size: int = 0
+    items: list[FolderOrFile] = field(default_factory=list)  # empty for files
+
+
+# The type alias - this is what was broken before the TypeAliasType fix
+type FolderOrFile = Folder | File
+
+
+# Widget that uses the type alias
+@widget
+class FolderOrFileLabel(Widget[FolderOrFile]):
+    """Widget for FolderOrFile union type using Python 3.12 type alias."""
+
+    _label: QLabel = new(bind="Item: {name}")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTreeViewTypeAlias:
+    """Tests for type alias support (Python 3.12+ 'type X = A | B' syntax).
+
+    These tests verify that Widget[TypeAlias] works correctly when the type alias
+    is defined using Python 3.12's 'type' statement. The key issue was that
+    TypeAliasType objects need special handling in _get_all_annotations() and
+    _RecordDescriptor to resolve the underlying union type.
+    """
+
+    def test_type_alias_widget_shows_record_field(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget[TypeAlias] correctly binds to record fields from union members."""
+        items: list[FolderOrFile] = [
+            Folder("Documents"),
+            File("readme.txt", 1024),
+        ]
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[FolderOrFile]] = new(items)
+            _tree: QTreeView = new(bind="_items", children="items", widget=FolderOrFileLabel)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Verify model has correct number of items
+        model = instance._tree.model()
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Verify the embedded widgets show the correct names
+        index0 = model.index(0, 0)
+        index1 = model.index(1, 0)
+
+        widget0 = instance._tree.indexWidget(index0)
+        widget1 = instance._tree.indexWidget(index1)
+
+        assert_that(widget0).is_instance_of(FolderOrFileLabel)
+        assert_that(widget1).is_instance_of(FolderOrFileLabel)
+
+        # Check the label text shows the record name
+        assert_that(widget0._label.text()).is_equal_to("Item: Documents")
+        assert_that(widget1._label.text()).is_equal_to("Item: readme.txt")
+
+    def test_type_alias_nested_children(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget[TypeAlias] works with nested children of mixed types."""
+        items: list[FolderOrFile] = [
+            Folder(
+                "src",
+                items=[
+                    File("main.py", 2048),
+                    Folder(
+                        "utils",
+                        items=[
+                            File("helpers.py", 512),
+                        ],
+                    ),
+                ],
+            ),
+        ]
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[FolderOrFile]] = new(items)
+            _tree: QTreeView = new(bind="_items", children="items", widget=FolderOrFileLabel)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._tree.model()
+
+        # Root has 1 item (src folder)
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # src folder has 2 children
+        src_index = model.index(0, 0)
+        assert_that(model.rowCount(src_index)).is_equal_to(2)
+
+        # Check root widget
+        root_widget = instance._tree.indexWidget(src_index)
+        assert_that(root_widget._label.text()).is_equal_to("Item: src")

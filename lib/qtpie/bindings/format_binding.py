@@ -11,23 +11,44 @@ from observant import Observable, ObservableDict, ObservableList, ObservableProx
 from .path import BindingSource, resolve_binding_source
 
 
+def _resolve_type_alias(record_type: type[Any]) -> type[Any]:
+    """Resolve a TypeAliasType to its underlying value.
+
+    Python 3.12+ 'type X = Y' syntax creates TypeAliasType objects.
+    This function unwraps them to get the actual type.
+
+    Note: pyright thinks type[Any] can never be TypeAliasType, but at runtime
+    when you use 'type TreeItem = X | Y', the record_type IS a TypeAliasType.
+    """
+    from typing import TypeAliasType
+
+    # pyright thinks this is unnecessary, but at runtime TypeAliasType is possible
+    if isinstance(record_type, TypeAliasType):  # pyright: ignore[reportUnnecessaryIsInstance]
+        return record_type.__value__  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType,reportReturnType]
+    return record_type
+
+
 def _get_all_annotations(record_type: type[Any]) -> dict[str, Any]:
     """Get all annotations from a type, including Union members.
 
     For simple types like `class Foo`, returns Foo.__annotations__.
     For Union types like `Foo | Bar`, returns the merged annotations from all members.
+    For TypeAliasType (e.g., `type TreeItem = Request | Collection`), unwraps to get the union.
     """
+    # Resolve TypeAliasType first (Python 3.12+ 'type X = Y' syntax)
+    resolved_type = _resolve_type_alias(record_type)
+
     # Check if it's a Union type (types.UnionType for X | Y, or typing.Union)
-    origin = get_origin(record_type)
+    origin = get_origin(resolved_type)
     if origin is types.UnionType:
         # It's a Union type - merge annotations from all members
         merged: dict[str, Any] = {}
-        for member_type in get_args(record_type):
+        for member_type in get_args(resolved_type):
             member_annotations = getattr(member_type, "__annotations__", {})
             merged.update(member_annotations)
         return merged
     # Regular type
-    return getattr(record_type, "__annotations__", {})
+    return getattr(resolved_type, "__annotations__", {})
 
 
 if TYPE_CHECKING:

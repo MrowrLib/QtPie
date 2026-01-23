@@ -35,13 +35,19 @@ class _RecordDescriptor[T]:
         state = obj._qtpie
         if state._record is None:
             import types
-            from typing import Union
+            from typing import TypeAliasType, Union
 
             from observant import ObservableProxy
 
+            # Resolve TypeAliasType first (Python 3.12+ 'type X = Y' syntax)
+            # Note: pyright thinks type[T] can never be TypeAliasType, but at runtime it can be
+            resolved_type = self._record_type
+            if isinstance(resolved_type, TypeAliasType):  # pyright: ignore[reportUnnecessaryIsInstance]
+                resolved_type = resolved_type.__value__  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+
             # Check if record_type is a Union type (e.g., Person | None or Union[A, B])
             # If so, we can't auto-create - user must set it explicitly
-            origin = get_origin(self._record_type)
+            origin = get_origin(resolved_type)
             is_union = origin is Union or origin is types.UnionType
 
             if is_union:

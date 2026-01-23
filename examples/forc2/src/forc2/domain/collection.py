@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from qtpie import State, Var, new, state
 
-if TYPE_CHECKING:
-    from .request import Request
-
+# Import Request at runtime (not just TYPE_CHECKING) because the 'type TreeItem = ...'
+# statement is evaluated lazily and needs Request to be in scope when resolved.
+from .request import Request
 
 # Type alias for tree items
 type TreeItem = Request | Collection
