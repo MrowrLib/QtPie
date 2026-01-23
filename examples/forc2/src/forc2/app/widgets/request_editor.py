@@ -1,5 +1,6 @@
 from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPushButton, QTableView, QTabWidget
 
+from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyLocation, Auth, AuthType
 from forc2.domain.request import HttpMethod, Request
 from qtpie import Stretch, Widget, new, widget
 
@@ -21,14 +22,36 @@ class RequestParamsWidget(Widget[Request]):
 @widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
     ### Widgets ###
-    header: QLabel = new("Headers:")
     table: QTableView = new(bind="headers")
+
+
+@widget(layout="form")
+class RequestAuthFormWidget(Widget[Auth]):
+    ### Widgets ###
+    hmm: QLabel = new(bind="THE AUTH TYPE IS: {type.name}", label="Auth Type:")
+    # Basic Auth
+    basic_username: QLineEdit = new(bind="username", label="Username:", visible="{type.name == 'BASIC'}")
+    basic_password: QLineEdit = new(bind="password", label="Password:", echoMode=QLineEdit.EchoMode.Password, visible="{type.name == 'BASIC'}")
+    # Bearer Auth
+    bearer_token: QLineEdit = new(bind="token", label="Token:", visible="{type.name == 'BEARER'}")
+    # API Key Auth
+    api_key_name: QLineEdit = new(bind="key", label="API Key:", visible="{type.name == 'API_KEY'}")
+    api_key_value: QLineEdit = new(bind="value", label="Value:", visible="{type.name == 'API_KEY'}")
+    api_key_location: QComboBox = new(
+        bind=ApiKeyLocation,
+        format=API_KEY_LOCATION_LABELS.get,
+        selectedItem="location",
+        label="Location:",
+        visible="{type.name == 'API_KEY'}",
+    )
 
 
 @widget(title="Auth")
 class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     header: QLabel = new("Authentication:")
+    auth_type_chooser: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth.type")
+    auth_form: RequestAuthFormWidget = new(bind="auth")
 
 
 @widget(title="Body")

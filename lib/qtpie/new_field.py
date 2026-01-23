@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast, get_args, get_origin, get_type_hints
+from typing import Any, Literal, cast, get_args, get_origin, get_type_hints
 
 from .event import is_event_hint
 from .layout import GridPosition, Stretch
@@ -26,6 +26,13 @@ from .utils.type_checks import (
     is_qwidget,
 )
 from .variable import NO_DEFAULT, Variable, create_variable_descriptor
+
+# Column resize modes for QTableView (maps to QHeaderView.ResizeMode)
+# - "interactive": User can resize columns (Qt default)
+# - "fixed": Columns cannot be resized
+# - "stretch": Columns distribute space equally (QtPie default)
+# - "resize_to_contents": Columns fit content, no user resize
+ColumnResizeMode = Literal["interactive", "fixed", "stretch", "resize_to_contents"]
 
 
 class NewField:
@@ -108,6 +115,9 @@ class NewField:
         # Editable columns for QTableView (default is editable, like other Qt widgets)
         self.table_editable: list[str | int] | bool | None = None  # Editable columns: True=all, list=specific, False=none
         self.table_readonly: bool | None = None  # readOnly=True sets editable=False (alias for consistency with other widgets)
+        # Column resize mode for QTableView (header configuration)
+        self.table_column_resize_mode: ColumnResizeMode | None = None  # columnResizeMode= (default: "stretch")
+        self.table_stretch_last_column: bool | None = None  # stretchLastColumn= shortcut
         # Selection bindings for model widgets (QComboBox, QListView, etc.)
         self.selected_index: str | None = None  # Variable name for selectedIndex binding
         self.selected_item: str | None = None  # Variable name for selectedItem binding
@@ -905,6 +915,14 @@ class NewField:
                     self.table_editable = self.kwargs.pop("editable", None)
                     # readOnly= is an alias for editable=False (matches QLineEdit, QTextEdit, etc.)
                     self.table_readonly = self.kwargs.pop("readOnly", None)
+                    # columnResizeMode= specifies how columns are resized
+                    # - "stretch" (QtPie default): columns distribute space equally
+                    # - "interactive" (Qt default): user can resize columns
+                    # - "fixed": columns cannot be resized
+                    # - "resize_to_contents": columns fit content
+                    self.table_column_resize_mode = self.kwargs.pop("columnResizeMode", None)
+                    # stretchLastColumn= shortcut for horizontalHeader().setStretchLastSection()
+                    self.table_stretch_last_column = self.kwargs.pop("stretchLastColumn", None)
                 # Extract QListView-specific kwargs only if this is a QListView
                 elif self._is_qlistview_type():
                     # widget= specifies a Widget class to embed in each list item

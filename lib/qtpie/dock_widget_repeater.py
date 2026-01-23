@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Callable
 from typing import Any, cast, override
@@ -19,8 +18,6 @@ from .bindings.format_binding import (
 from .dock import Dock
 from .repeaters.utils import create_item_wrapper, rebind_child_widgets
 from .variable import Variable
-
-logger = logging.getLogger("qtpie.dock_widget_repeater")
 
 
 class DockWidgetRepeater[T, W: QWidget]:
@@ -385,8 +382,6 @@ class DockWidgetRepeater[T, W: QWidget]:
         # other docks (like a sidebar) lose their configured sizes.
         is_first_dock = not self._items
 
-        logger.debug("DockWidgetRepeater._create_and_add_dock: is_first_dock=%s, initial_width=%s, initial_height=%s", is_first_dock, initial_width, initial_height)
-
         # Store configured size as property so other docks can read it
         if initial_width is not None:
             dock_widget.setProperty("_qtpie_configured_width", initial_width)
@@ -411,11 +406,9 @@ class DockWidgetRepeater[T, W: QWidget]:
                 dock: QDockWidget = dock_widget,
             ) -> None:
                 # Resolve fractional values to pixels based on window size
-                logger.debug("DockWidgetRepeater.apply_dock_size: w=%s, h=%s, window.width=%s", w, h, main_window.width())
                 if w is not None:
                     if isinstance(w, float) and 0.0 < w < 1.0:
                         w = int(main_window.width() * w)
-                        logger.debug("DockWidgetRepeater resolved w to %s pixels", w)
                     # Gather ALL visible horizontal docks and resize together to maintain proportions
                     # Use CONFIGURED sizes (from property) to preserve intentional layout
                     all_h_docks: list[QDockWidget] = []
@@ -431,13 +424,11 @@ class DockWidgetRepeater[T, W: QWidget]:
                                     # Use configured size if available, otherwise current size
                                     size = _resolve_configured_size(d, "_qtpie_configured_width", main_window.width())
                                     all_h_sizes.append(size)
-                    logger.debug("DockWidgetRepeater resizing %d horizontal docks: %s", len(all_h_docks), all_h_sizes)
                     if all_h_docks:
                         main_window.resizeDocks(all_h_docks, all_h_sizes, Qt.Orientation.Horizontal)
                 if h is not None:
                     if isinstance(h, float) and 0.0 < h < 1.0:
                         h = int(main_window.height() * h)
-                        logger.debug("DockWidgetRepeater resolved h to %s pixels", h)
                     # Same for vertical docks
                     all_v_docks: list[QDockWidget] = []
                     all_v_sizes: list[int] = []

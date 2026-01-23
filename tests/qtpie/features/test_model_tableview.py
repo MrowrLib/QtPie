@@ -2437,3 +2437,154 @@ class TestTableViewSelectedItemNestedPath:
         current_index = selection_model.currentIndex()
         assert_that(current_index.isValid()).is_true()
         assert_that(current_index.row()).is_equal_to(1)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewColumnResizeMode:
+    """QTableView column resize mode configuration (columnResizeMode=, stretchLastColumn=)."""
+
+    def test_default_column_resize_mode_is_stretch(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView defaults to columnResizeMode='stretch' (QtPie default)."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        # Default should be Stretch (QtPie default, not Qt default)
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.Stretch)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Stretch)
+
+    def test_column_resize_mode_stretch_explicit(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columnResizeMode='stretch' stretches all columns equally."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columnResizeMode="stretch")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.Stretch)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Stretch)
+
+    def test_column_resize_mode_interactive(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columnResizeMode='interactive' allows user to resize columns."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columnResizeMode="interactive")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.Interactive)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Interactive)
+
+    def test_column_resize_mode_fixed(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columnResizeMode='fixed' prevents column resizing."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columnResizeMode="fixed")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.Fixed)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Fixed)
+
+    def test_column_resize_mode_resize_to_contents(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with columnResizeMode='resize_to_contents' fits content."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", columnResizeMode="resize_to_contents")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.ResizeToContents)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.ResizeToContents)
+
+    def test_stretch_last_column_true(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with stretchLastColumn=True stretches the last column."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", stretchLastColumn=True)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.stretchLastSection()).is_true()
+
+    def test_stretch_last_column_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with stretchLastColumn=False explicitly disables stretch."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", stretchLastColumn=False)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        assert_that(header.stretchLastSection()).is_false()
+
+    def test_resize_to_contents_with_stretch_last_column(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with resize_to_contents + stretchLastColumn=True is a common combo."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columnResizeMode="resize_to_contents",
+                stretchLastColumn=True,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        # Columns should resize to content
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.ResizeToContents)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.ResizeToContents)
+        # But last column also stretches
+        assert_that(header.stretchLastSection()).is_true()
+
+    def test_interactive_with_stretch_last_column(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTableView with interactive + stretchLastColumn=True allows resize with stretch."""
+        from PySide6.QtWidgets import QHeaderView
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columnResizeMode="interactive",
+                stretchLastColumn=True,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        header = instance._table.horizontalHeader()
+
+        # Columns should be interactive
+        assert_that(header.sectionResizeMode(0)).is_equal_to(QHeaderView.ResizeMode.Interactive)
+        assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Interactive)
+        # But last column also stretches
+        assert_that(header.stretchLastSection()).is_true()

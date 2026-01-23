@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
@@ -28,8 +27,6 @@ from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget import IconType, _validate_layout_params
-
-logger = logging.getLogger("qtpie.window")
 
 
 @dataclass
@@ -1114,7 +1111,6 @@ def _create_dock_fields(window: Window[Any], config: WindowConfig) -> None:
         #
         # Store configured size as property so other docks can read it when resizing
         # (needed to maintain proportions when multiple docks call resizeDocks)
-        logger.debug("Dock[T] _create_dock_fields: name=%s, initial_width=%s, initial_height=%s", name, fld.initial_width, fld.initial_height)
         if fld.initial_width is not None:
             dock_widget.setProperty("_qtpie_configured_width", fld.initial_width)
         if fld.initial_height is not None:
@@ -1132,16 +1128,13 @@ def _create_dock_fields(window: Window[Any], config: WindowConfig) -> None:
                 dock: QDockWidget = dock_widget,
             ) -> None:
                 # Resolve fractional values to pixels based on window size
-                logger.debug("Dock[T] apply_dock_size: w=%s, h=%s, window.width=%s, window.height=%s", w, h, window.width(), window.height())
                 if w is not None:
                     if isinstance(w, float) and 0.0 < w < 1.0:
                         w = int(window.width() * w)
-                        logger.debug("Dock[T] resolved w to %s pixels", w)
                     window.resizeDocks([dock], [int(w)], Qt.Orientation.Horizontal)
                 if h is not None:
                     if isinstance(h, float) and 0.0 < h < 1.0:
                         h = int(window.height() * h)
-                        logger.debug("Dock[T] resolved h to %s pixels", h)
                     window.resizeDocks([dock], [int(h)], Qt.Orientation.Vertical)
 
             QTimer.singleShot(0, apply_dock_size)
@@ -2325,7 +2318,6 @@ def _create_variable_list_dock_field(
     movable_val = dock_info.get("dock_movable")
 
     # Create the DockWidgetRepeater
-    logger.debug("_create_variable_list_dock_field: name=%s, widget_kwargs=%s", name, dock_info.get("widget_kwargs"))
     repeater: DockWidgetRepeater[Any, QWidget] = DockWidgetRepeater(
         observable_list=obs_list,
         item_type=dock_info.get("list_dock_item_type"),

@@ -15,6 +15,7 @@ from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .messagebox import MessageBoxResult, confirm, messagebox
 from .new import new, none
+from .new_field import ColumnResizeMode
 from .new_fields import new_fields
 from .ref import Ref, ref
 from .set_widget_repeater import SetWidgetRepeater
@@ -46,6 +47,7 @@ __all__ = [
     "AppConfig",
     "ButtonInfo",
     "ColorScheme",
+    "ColumnResizeMode",
     "Dialog",
     "Event",
     "DialogButton",

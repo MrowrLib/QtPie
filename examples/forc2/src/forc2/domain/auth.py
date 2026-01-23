@@ -13,11 +13,25 @@ class AuthType(Enum):
     API_KEY = "api_key"
 
 
+AUTH_TYPE_LABELS: dict[AuthType, str] = {
+    AuthType.NONE: "No Auth",
+    AuthType.BASIC: "Basic Auth",
+    AuthType.BEARER: "Bearer Token",
+    AuthType.API_KEY: "API Key",
+}
+
+
 class ApiKeyLocation(Enum):
     """Where to send the API key."""
 
     HEADER = "header"
     QUERY = "query"
+
+
+API_KEY_LOCATION_LABELS: dict[ApiKeyLocation, str] = {
+    ApiKeyLocation.HEADER: "Header",
+    ApiKeyLocation.QUERY: "Query Param",
+}
 
 
 @dataclass

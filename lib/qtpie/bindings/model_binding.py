@@ -84,6 +84,46 @@ def _apply_edit_triggers(
     view.setEditTriggers(triggers)
 
 
+def _apply_table_header_config(
+    view: QWidget,
+    column_resize_mode: str | None,
+    stretch_last_column: bool | None,
+) -> None:
+    """Apply QTableView header configuration (columnResizeMode, stretchLastColumn).
+
+    Args:
+        view: The QTableView widget
+        column_resize_mode: Resize mode string ("interactive", "fixed", "stretch", "resize_to_contents")
+                           Defaults to "stretch" (QtPie default) if not specified.
+        stretch_last_column: If True/False, explicitly set stretchLastSection.
+                            If None, no change from Qt default (unless columnResizeMode is "stretch").
+    """
+    from qtpy.QtWidgets import QHeaderView, QTableView
+
+    if not isinstance(view, QTableView):
+        return
+
+    header = view.horizontalHeader()
+
+    # Map string literals to QHeaderView.ResizeMode enum
+    resize_mode_map: dict[str, QHeaderView.ResizeMode] = {
+        "interactive": QHeaderView.ResizeMode.Interactive,
+        "fixed": QHeaderView.ResizeMode.Fixed,
+        "stretch": QHeaderView.ResizeMode.Stretch,
+        "resize_to_contents": QHeaderView.ResizeMode.ResizeToContents,
+    }
+
+    # Default to "stretch" if not specified (QtPie opinion: tables should fill their space)
+    effective_resize_mode = column_resize_mode if column_resize_mode is not None else "stretch"
+
+    if effective_resize_mode in resize_mode_map:
+        header.setSectionResizeMode(resize_mode_map[effective_resize_mode])
+
+    # Apply stretchLastColumn if explicitly set
+    if stretch_last_column is not None:
+        header.setStretchLastSection(stretch_last_column)
+
+
 def _setup_tree_proxy_watching(
     model: ReactiveTreeModel[Any],
     obs_list: ObservableList[Any],
@@ -785,6 +825,14 @@ def apply_model_binding(
         widget_instance.setModel(proxy)  # type: ignore[attr-defined]
     else:
         widget_instance.setModel(model)  # type: ignore[attr-defined]
+
+    # Apply QTableView header configuration (columnResizeMode, stretchLastColumn)
+    if use_table_model and is_table_view_fn(widget_instance):
+        _apply_table_header_config(
+            widget_instance,
+            column_resize_mode=field_info.table_column_resize_mode,
+            stretch_last_column=field_info.table_stretch_last_column,
+        )
 
     # For nested paths, subscribe to ROOT Variable to re-sync when it changes
     # Also handle expand=True for QTreeView

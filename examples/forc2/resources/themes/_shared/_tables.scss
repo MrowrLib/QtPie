@@ -102,11 +102,13 @@ QTreeView::branch:has-children:has-siblings:open {
     image: url(:/arrow-down.svg);
 }
 
-// Inline editor (QLineEdit spawned when editing tree items)
-QTreeView QLineEdit {
-    padding: 2px 4px;
+// Inline editor (QLineEdit spawned when editing tree/table items)
+QTreeView QLineEdit,
+QTableView QLineEdit,
+QAbstractItemView QLineEdit {
+    padding: 0px;
     margin: 0px;
-    min-height: 20px;
+    min-height: 22px;
 }
 
 // List view
