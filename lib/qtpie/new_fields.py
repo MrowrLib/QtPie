@@ -1,10 +1,13 @@
 """new_fields - Decorator that processes new() fields."""
 
+import logging
 from typing import Any, get_origin
 
 from .new_field import NewField
 from .utils.type_checks import is_model_widget
 from .variable import AnyObservable, RecordVariable, Variable
+
+logger = logging.getLogger("qtpie.new_fields")
 
 # Default property mapping for common widget types
 # Used to determine which property to set for positional Translatable args
@@ -425,10 +428,12 @@ def _is_variable_reference(parent: Any, value: str) -> bool:
     """Check if value is a reference to a Variable or RecordVariable on parent.
 
     Returns True if value is a simple identifier that matches a Variable/RecordVariable on parent,
-    or if it's a required binding on the parent class (may not be populated yet).
+    or if it's a required binding on the parent class (may not be populated yet),
+    or if it's a path through the parent's record (for Widget[T] parents).
     """
-    # Must be a valid Python identifier
-    if not value.isidentifier():
+    # Must be a valid Python identifier (or dot-separated path like "auth.type")
+    parts = value.replace("?.", ".").split(".")
+    if not all(p.isidentifier() for p in parts):
         return False
 
     # Check if parent has this as a Variable or RecordVariable (already populated)
@@ -444,6 +449,16 @@ def _is_variable_reference(parent: Any, value: str) -> bool:
         if value in required:
             return True
 
+        # Check if this is a path through the parent's record (for Widget[T])
+        record_type = getattr(config, "record_type", None)
+        if record_type is not None:
+            # The parent is a Widget[T], check if value is a field on its record
+            first_part = parts[0]
+            if hasattr(record_type, "__annotations__"):
+                annotations = record_type.__annotations__
+                if first_part in annotations:
+                    return True
+
     return False
 
 
@@ -456,8 +471,19 @@ def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_v
     If the parent's Variable doesn't exist yet (it's a required binding that
     will be populated later), we store a deferred binding to be resolved after
     the parent's bindings are applied.
+
+    Also handles paths through the parent's record (for Widget[T] parents),
+    e.g., binding "auth" to a child when parent.record.auth exists.
     """
-    from observant import Observable
+    from observant import Observable, ObservableProxy
+
+    logger.debug(
+        "_apply_direct_binding: parent=%s, child=%s, child_var_name=%r, parent_var_name=%r",
+        type(parent).__name__,
+        type(child).__name__,
+        child_var_name,
+        parent_var_name,
+    )
 
     # Try to get the parent's Variable/RecordVariable
     parent_var: Variable[Any] | RecordVariable[Any] | Observable[Any] | None = None
@@ -466,16 +492,20 @@ def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_v
     except AttributeError:
         pass
 
+    logger.debug("  parent_var = %s (type=%s)", parent_var, type(parent_var).__name__ if parent_var else None)
+
     if parent_var is not None:
         # Check for RecordVariable first (specialized type for records)
         if isinstance(parent_var, RecordVariable):
             # Share the ObservableProxy - create a RecordVariable for the child
+            logger.debug("  -> parent_var is RecordVariable, sharing proxy")
             child_record_var: RecordVariable[Any] = RecordVariable(parent_var.observable)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
             setattr(child, child_var_name, child_record_var)
             return
 
         if isinstance(parent_var, (Variable, Observable)):  # pyright: ignore[reportUnnecessaryIsInstance]
             # Parent has the Variable - share its Observable
+            logger.debug("  -> parent_var is Variable/Observable, sharing observable")
             parent_observable: AnyObservable[Any]
             if isinstance(parent_var, Variable):
                 parent_observable = parent_var.observable
@@ -494,8 +524,59 @@ def _apply_direct_binding(parent: Any, child: Any, child_var_name: str, parent_v
         required: set[str] = getattr(config, "required_bindings", set())
         if parent_var_name in required:
             # Store deferred binding to be resolved later
+            logger.debug("  -> required binding not yet populated, deferring")
             _store_deferred_binding(parent, child, child_var_name, parent_var_name)
             return
+
+        # Check if this is a path through the parent's record (for Widget[T])
+        record_type = getattr(config, "record_type", None)
+        if record_type is not None:
+            logger.debug("  -> parent is Widget[%s], checking record path", record_type.__name__ if hasattr(record_type, "__name__") else record_type)
+            # Parent is a Widget[T], try to resolve path through its record
+            parts = parent_var_name.replace("?.", ".").split(".")
+            first_part = parts[0]
+            if hasattr(record_type, "__annotations__"):
+                annotations = record_type.__annotations__
+                if first_part in annotations:
+                    logger.debug("  -> %r is a field on record_type", first_part)
+                    # This is a record field path - get the ObservableProxy for it
+                    try:
+                        record = parent.record
+                        proxy = record.observable
+                        logger.debug("  -> parent.record.observable = %s (id=%d)", proxy, id(proxy))
+                        # Get the observable for this path
+                        field_proxy = proxy.observable_for_path(parent_var_name)
+                        logger.debug("  -> field_proxy = %s (type=%s)", field_proxy, type(field_proxy).__name__)
+                        if isinstance(field_proxy, ObservableProxy):
+                            # Share the ObservableProxy with the child's record
+                            logger.debug("  -> field_proxy is ObservableProxy, creating RecordVariable for child")
+                            child_record_var = RecordVariable(field_proxy)  # pyright: ignore[reportUnknownArgumentType]
+                            setattr(child, child_var_name, child_record_var)
+                            logger.debug("  -> setattr(child, %r, child_record_var) done", child_var_name)
+
+                            # Register child for field binding updates when parent's record changes.
+                            # This is needed because when a new record is set on the parent,
+                            # replace_target is called on the parent's proxy, but the child
+                            # needs its nested field proxy updated too.
+                            field_children: list[tuple[Any, str, str]]
+                            if not hasattr(parent, "_qtpie_field_bound_children"):
+                                field_children = []
+                                parent._qtpie_field_bound_children = field_children  # pyright: ignore[reportAttributeAccessIssue]
+                            else:
+                                field_children = parent._qtpie_field_bound_children  # pyright: ignore[reportAttributeAccessIssue]
+                            field_children.append((child, child_var_name, parent_var_name))
+                            logger.debug("  -> registered child for field binding updates")
+                            return
+                        # Field observable exists but value is None (e.g., auth: Auth | None = None)
+                        # Defer the binding - it will be resolved when the parent's record is set
+                        logger.debug("  -> field_proxy is not ObservableProxy, deferring")
+                        _store_deferred_binding(parent, child, child_var_name, parent_var_name)
+                        return
+                    except (AttributeError, ValueError) as e:
+                        # Record not set up yet or path invalid - defer
+                        logger.debug("  -> exception accessing record: %s", e)
+                        _store_deferred_binding(parent, child, child_var_name, parent_var_name)
+                        return
 
     # Not found and not a required binding
     raise AttributeError(f"Cannot bind '{child_var_name}' to '{parent_var_name}': '{parent_var_name}' not found on {type(parent).__name__}")
@@ -563,14 +644,20 @@ def _resolve_deferred_bindings(widget: Any) -> None:
     If a parent variable still doesn't exist (because the parent itself has
     unresolved required bindings), those bindings are kept deferred for later
     resolution when the parent's binding is eventually resolved.
+
+    Also handles record paths (e.g., "auth" -> widget.record.auth) for Widget[T].
     """
-    from observant import Observable
+    from observant import Observable, ObservableProxy
+
+    logger.debug("_resolve_deferred_bindings: widget=%s", type(widget).__name__)
 
     deferred: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_deferred_bindings", None)
     if not deferred:
         # Still need to check expression bindings even if no regular deferred bindings
+        logger.debug("  -> no _qtpie_deferred_bindings")
         _resolve_deferred_expression_bindings(widget)
         return
+    logger.debug("  -> found %d deferred bindings", len(deferred))
 
     # Track which bindings couldn't be resolved yet
     still_deferred: list[tuple[Any, str, str]] = []
@@ -578,6 +665,56 @@ def _resolve_deferred_bindings(widget: Any) -> None:
     for child, child_var_name, parent_var_name in deferred:
         # Check if the parent's Variable exists now
         parent_var = getattr(widget, parent_var_name, None)
+
+        # If not found directly, try record path (for Widget[T])
+        if parent_var is None:
+            config = getattr(type(widget), "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+            if config is not None:
+                record_type = getattr(config, "record_type", None)
+                if record_type is not None:
+                    # Check if this is a record field path
+                    parts = parent_var_name.replace("?.", ".").split(".")
+                    first_part = parts[0]
+                    if hasattr(record_type, "__annotations__"):
+                        annotations = record_type.__annotations__
+                        if first_part in annotations:
+                            # Try to resolve through record
+                            try:
+                                record = widget.record
+                                proxy = record.observable
+                                field_proxy = proxy.observable_for_path(parent_var_name)
+                                if isinstance(field_proxy, ObservableProxy):
+                                    # For record binding to child Widget[T], share the proxy
+                                    child_record_var: RecordVariable[Any] = RecordVariable(field_proxy)  # pyright: ignore[reportUnknownArgumentType]
+                                    setattr(child, child_var_name, child_record_var)
+
+                                    # Register child for field binding updates when parent's
+                                    # record changes (e.g., user clicks different request)
+                                    field_bound_children: list[tuple[Any, str, str]]
+                                    if not hasattr(widget, "_qtpie_field_bound_children"):
+                                        field_bound_children = []
+                                        widget._qtpie_field_bound_children = field_bound_children  # pyright: ignore[reportAttributeAccessIssue]
+                                    else:
+                                        field_bound_children = widget._qtpie_field_bound_children  # pyright: ignore[reportAttributeAccessIssue]
+                                    field_bound_children.append((child, child_var_name, parent_var_name))
+                                    logger.debug("  -> registered child for field binding updates (deferred)")
+
+                                    # Re-apply auto-bindings on child now that its record is set
+                                    # This is needed because format bindings were set up with no record
+                                    child_config = getattr(type(child), "_qtpie_config", None)  # pyright: ignore[reportUnknownArgumentType]
+                                    if child_config is not None:
+                                        from .bindings.apply import apply_auto_bindings
+                                        from .bindings.expression import create_expression_binding
+
+                                        apply_auto_bindings(child, child_config, create_expression_binding_fn=create_expression_binding)
+
+                                    # Recursively resolve any deferred bindings on the child
+                                    _resolve_deferred_bindings(child)
+                                    _apply_pending_bindings(child)
+                                    continue
+                            except (AttributeError, ValueError):
+                                pass  # Fall through to still_deferred
+
         if parent_var is None:
             # Parent variable still doesn't exist (parent has unresolved required binding)
             # Keep this binding deferred for later resolution

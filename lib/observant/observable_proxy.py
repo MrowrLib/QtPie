@@ -384,6 +384,10 @@ class ObservableProxy[T]:
         for name, proxy in nested_proxies.items():
             if hasattr(target, name):
                 current_target_value = getattr(target, name)
+                # If target value is a Variable-like object, get its actual value.
+                # The nested proxy wraps the Variable's VALUE, not the Variable itself.
+                if hasattr(current_target_value, "value") and hasattr(current_target_value, "observable"):
+                    current_target_value = current_target_value.value
                 current_proxy_target = object.__getattribute__(proxy, "_target")
                 logger.warning(
                     "DEBUG _sync_from_target: nested '%s' current=%s (id=%d), target=%s (id=%d), same=%s",
@@ -398,10 +402,10 @@ class ObservableProxy[T]:
                 if current_proxy_target is not current_target_value:
                     logger.warning("DEBUG _sync_from_target: updating nested proxy '%s' target", name)
                     object.__setattr__(proxy, "_target", current_target_value)
-                    # Don't call proxy._notify_change() here - the parent's _notify_change(_from_sibling=True)
-                    # already happens after _sync_from_target, and that will trigger binding recomputation.
-                    # Calling it here would cause on_nested_change to fire, which calls parent._notify_change()
-                    # without _from_sibling=True, causing an infinite sibling notification loop.
+                    # Notify this nested proxy's listeners so widgets bound to it get updated.
+                    # This is safe because _sync_from_target is called from sibling notification,
+                    # and we're propagating the change DOWN to nested proxies.
+                    proxy._notify_change()
 
     def _update_dirty_state(self) -> None:
         """Update aggregated dirty state from all fields."""
@@ -871,6 +875,13 @@ class ObservableProxy[T]:
         if hasattr(value, "observable"):
             inner_obs = getattr(value, "observable", None)
             if isinstance(inner_obs, (Observable, ObservableList, ObservableDict, ObservableProxy)):
+                # Register Variable's inner ObservableProxy in _nested_proxies so it gets
+                # updated when this proxy's target is replaced (via _sync_from_target).
+                # This is critical for State objects with Var[T] fields.
+                if isinstance(inner_obs, ObservableProxy):
+                    nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+                    if name not in nested_proxies:
+                        nested_proxies[name] = inner_obs
                 return inner_obs  # pyright: ignore[reportUnknownVariableType]
 
         # For callables (methods, functions), return directly without wrapping

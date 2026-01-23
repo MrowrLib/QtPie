@@ -6,7 +6,22 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from .domain import Collection, Environment, EnvironmentVariable, HttpMethod, Request, RequestKeyValue, Workspace
+from .domain import (
+    ApiKeyAuth,
+    ApiKeyLocation,
+    Auth,
+    AuthType,
+    BasicAuth,
+    BearerAuth,
+    BodyType,
+    Collection,
+    Environment,
+    EnvironmentVariable,
+    HttpMethod,
+    Request,
+    RequestKeyValue,
+    Workspace,
+)
 
 yaml = YAML()
 yaml.preserve_quotes = True
@@ -123,6 +138,42 @@ def load_request(path: Path) -> Request:
     if "body" in data:
         request.body = data["body"]
 
+    if "body_type" in data:
+        request.body_type = BodyType(data["body_type"])
+
+    if "body_fields" in data:
+        for f in data["body_fields"]:
+            request.body_fields.append(
+                RequestKeyValue(
+                    key=f.get("key", ""),
+                    value=f.get("value", ""),
+                    enabled=f.get("enabled", True),
+                )
+            )
+
+    if "auth" in data and data["auth"] is not None:
+        auth_data = data["auth"]
+        auth_type = AuthType(auth_data.get("type", "none"))
+        match auth_type:
+            case AuthType.NONE:
+                request.auth = Auth()
+            case AuthType.BASIC:
+                request.auth = BasicAuth(
+                    username=auth_data.get("username", ""),
+                    password=auth_data.get("password", ""),
+                )
+            case AuthType.BEARER:
+                request.auth = BearerAuth(token=auth_data.get("token", ""))
+            case AuthType.API_KEY:
+                request.auth = ApiKeyAuth(
+                    key=auth_data.get("key", ""),
+                    value=auth_data.get("value", ""),
+                    location=ApiKeyLocation(auth_data.get("location", "header")),
+                )
+    else:
+        # Default to Auth() instead of None so the UI has something to bind to
+        request.auth = Auth()
+
     return request
 
 
@@ -224,6 +275,31 @@ def save_request(request: Request, path: Path) -> None:
 
     if request.body.value:
         data["body"] = request.body.value
+
+    if request.body_type.value != BodyType.NONE:
+        data["body_type"] = request.body_type.value.value
+
+    if request.body_fields.value:
+        data["body_fields"] = [{"key": f.key, "value": f.value} for f in request.body_fields.value if f.enabled]
+
+    # Save auth if not NONE
+    auth = request.auth.value
+    if auth is not None and auth.type != AuthType.NONE:
+        auth_data: dict[str, Any] = {"type": auth.type.value}
+        match auth.type:
+            case AuthType.BASIC:
+                assert isinstance(auth, BasicAuth)
+                auth_data["username"] = auth.username
+                auth_data["password"] = auth.password
+            case AuthType.BEARER:
+                assert isinstance(auth, BearerAuth)
+                auth_data["token"] = auth.token
+            case AuthType.API_KEY:
+                assert isinstance(auth, ApiKeyAuth)
+                auth_data["key"] = auth.key
+                auth_data["value"] = auth.value
+                auth_data["location"] = auth.location.value
+        data["auth"] = auth_data
 
     with path.open("w") as f:
         yaml.dump(data, f)

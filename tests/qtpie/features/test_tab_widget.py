@@ -845,3 +845,264 @@ class TestTabWidgetRecordPropagation:
         # Access to record.status would fail if record isn't a Response
         # The label should show the static text since binding couldn't resolve
         assert_that(response_tab._label.text()).is_equal_to("Response placeholder")
+
+
+# =============================================================================
+# Field Binding with Different Record Type Tests (bind="field")
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTabWidgetFieldBindingDifferentRecordType:
+    """Test child Widget[T] inside tabs with bind='field' to parent record's field.
+
+    This is the pattern used in Forc where:
+    - RequestAuthWidget (Widget[Request]) is a tab
+    - RequestAuthFormWidget (Widget[Auth]) is a child with bind="auth"
+    - Auth is a field on Request, so the child gets Request.auth as its record
+    """
+
+    def test_child_widget_binds_to_parent_record_field(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Auth] with bind='auth' gets parent's auth field as its record."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Auth:
+            username: str = ""
+            password: str = ""
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            """Child widget that expects Auth as its record."""
+
+            _username_label: QLabel = new(bind="Username: {username}")
+            _password_label: QLabel = new(bind="Password: {password}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            """Tab widget that has Request as its record, contains AuthFormWidget."""
+
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(record=Request(url="http://example.com", auth=Auth("admin", "secret123")))
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Get the auth tab and its child form
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        # The child's record should be the Auth object from parent's auth field
+        assert_that(auth_form._username_label.text()).is_equal_to("Username: admin")
+        assert_that(auth_form._password_label.text()).is_equal_to("Password: secret123")
+
+    def test_child_widget_updates_when_parent_record_field_changes(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child updates when parent's record.auth field is modified."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Auth:
+            token: str = ""
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            _token_label: QLabel = new(bind="Token: {token}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(record=Request(url="http://example.com", auth=Auth("initial-token")))
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        assert_that(auth_form._token_label.text()).is_equal_to("Token: initial-token")
+
+        # Modify the token via parent's record proxy
+        instance.record.auth.token = "new-token"
+        assert_that(auth_form._token_label.text()).is_equal_to("Token: new-token")
+
+    @pytest.mark.xfail(reason="Replacing entire record via Variable doesn't propagate to field-bound children yet")
+    def test_child_widget_updates_when_parent_record_replaced(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child updates when entire parent record is replaced (e.g., user clicks different request)."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Auth:
+            auth_type: str = ""
+
+        @dataclass
+        class Request:
+            name: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            _type_label: QLabel = new(bind="Auth Type: {auth_type}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @widget
+        class RequestEditorWidget(Widget[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        @decorator
+        class TestClass(base_class):
+            _request: Variable[Request | None] = new(None)
+            _editor: RequestEditorWidget = new(bind="_request")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initially no request
+        auth_tab = instance._editor._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        # Set first request with Basic auth
+        instance._request.value = Request(name="Login", auth=Auth("BASIC"))
+        assert_that(auth_form._type_label.text()).is_equal_to("Auth Type: BASIC")
+
+        # Switch to different request with Bearer auth
+        instance._request.value = Request(name="Profile", auth=Auth("BEARER"))
+        assert_that(auth_form._type_label.text()).is_equal_to("Auth Type: BEARER")
+
+    def test_child_widget_with_format_binding_using_record_placeholder(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Auth] can use {#record} placeholder in format bindings."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Auth:
+            auth_type: str = "NONE"
+
+            def __str__(self) -> str:  # type: ignore[override]
+                return f"Auth({self.auth_type})"
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            _record_label: QLabel = new(bind="Record: {#record}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(record=Request(url="http://example.com", auth=Auth("API_KEY")))
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        assert_that(auth_form._record_label.text()).is_equal_to("Record: Auth(API_KEY)")
+
+    @pytest.mark.xfail(reason="Setting field from None to value doesn't propagate to field-bound children yet")
+    def test_child_widget_with_null_field_initially(self, base_class, decorator, qt: QtDriver) -> None:
+        """Child Widget[Auth] handles null auth field gracefully."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Auth:
+            username: str = ""
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None  # Starts as None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            _username_label: QLabel = new(bind="User: {username}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(record=Request(url="http://example.com", auth=None))
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        # When auth is None, the binding should show empty or placeholder
+        # (depends on how format binding handles None)
+        _ = auth_form._username_label.text()  # Capture initial text (unused)
+
+        # Now set auth
+        instance.record.auth = Auth("admin")
+        assert_that(auth_form._username_label.text()).is_equal_to("User: admin")
+
+    def test_deeply_nested_child_bindings(self, base_class, decorator, qt: QtDriver) -> None:
+        """Test nested child widgets with bind='field' pattern."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class Credentials:
+            api_key: str = ""
+
+        @dataclass
+        class Auth:
+            auth_type: str = ""
+            credentials: Credentials | None = None
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class CredentialsFormWidget(Widget[Credentials]):
+            _key_label: QLabel = new(bind="API Key: {api_key}")
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            _type_label: QLabel = new(bind="Type: {auth_type}")
+            _credentials: CredentialsFormWidget = new(bind="credentials")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(
+            record=Request(
+                url="http://example.com",
+                auth=Auth(auth_type="API_KEY", credentials=Credentials("secret-key-123")),
+            )
+        )
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+        credentials_form = auth_form._credentials
+
+        assert_that(auth_form._type_label.text()).is_equal_to("Type: API_KEY")
+        assert_that(credentials_form._key_label.text()).is_equal_to("API Key: secret-key-123")

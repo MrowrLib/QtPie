@@ -117,6 +117,11 @@ def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
     should share the parent's record. This handles widgets created dynamically
     via tabs= which don't go through the normal NewField auto-record-bind flow.
     """
+    import logging
+
+    logger = logging.getLogger("qtpie.tab_binding")
+    logger.debug("_propagate_record_to_child: host=%s, child=%s", type(host).__name__, type(child).__name__)
+
     from qtpie.bindings.apply import apply_auto_bindings
     from qtpie.variable import RecordVariable
 
@@ -147,6 +152,12 @@ def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
         child.record = child_record_var  # type: ignore[union-attr]
         # Re-apply bindings on child now that record is set
         apply_auto_bindings(child, child_config)  # type: ignore[arg-type]
+
+        # Resolve deferred bindings on child (e.g., Widget[Auth] with bind="auth")
+        # These may have been deferred because the parent's record was not set during init
+        from qtpie.new_fields import _resolve_deferred_bindings  # type: ignore[reportPrivateUsage]
+
+        _resolve_deferred_bindings(child)
 
         # Recreate list widget fields that may have been created with stale record data
         # When child was first created, it may have used a default record with empty values.

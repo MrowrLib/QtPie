@@ -190,6 +190,13 @@ class _RecordDescriptor[T]:
         config = getattr(type(obj), "_qtpie_config", None)
         if config is not None:
             _propagate_record_to_tab_children(obj, config)
+            # Also propagate to child Widget[T] with same record type
+            # (their tabs and field-bound children also need updating)
+            _propagate_model_bindings_to_children(obj, config)
+
+        # Update children that are bound to fields on this record
+        # (e.g., Widget[Auth] child with bind="auth" on Widget[Request] parent)
+        _update_field_bound_children(obj)
 
 
 class Widget[T = None](QWidget, QtPieComponentBase):
@@ -1064,6 +1071,64 @@ def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # 
             var.add_validator(validator_name, validator_fn)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _update_field_bound_children(widget: Widget[Any]) -> None:
+    """Update children that are bound to fields on this widget's record.
+
+    When a Widget[Request] has a child Widget[Auth] with bind="auth", the child
+    should update when the parent's record changes. This function finds such
+    children and updates their record proxies.
+    """
+    import logging
+
+    from observant import ObservableProxy
+
+    from .variable import RecordVariable
+
+    logger = logging.getLogger("qtpie.widget")
+    logger.debug("_update_field_bound_children called for %s", type(widget).__name__)
+
+    # Get children registered for field binding updates
+    field_bound_children: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_field_bound_children", None)
+    if not field_bound_children:
+        logger.debug("  -> no _qtpie_field_bound_children registered")
+        return
+    logger.debug("  -> found %d field_bound_children", len(field_bound_children))
+
+    # Get parent's record proxy
+    parent_record = getattr(widget, "record", None)
+    if parent_record is None:
+        return
+    parent_proxy = parent_record.observable
+    if not isinstance(parent_proxy, ObservableProxy):
+        return
+
+    import logging
+
+    logger = logging.getLogger("qtpie.widget")
+
+    for child, child_var_name, parent_field_path in field_bound_children:
+        try:
+            # Get the new field proxy from parent
+            new_field_proxy = parent_proxy.observable_for_path(parent_field_path)
+            if isinstance(new_field_proxy, ObservableProxy):
+                # Get new target
+                new_target = object.__getattribute__(new_field_proxy, "_target")
+                # Get child's record
+                child_record = getattr(child, child_var_name, None)
+                if child_record is not None and isinstance(child_record, RecordVariable):
+                    child_obs: ObservableProxy[Any] = child_record.observable  # pyright: ignore[reportAssignmentType,reportUnknownVariableType]
+                    if isinstance(child_obs, ObservableProxy):  # pyright: ignore[reportUnnecessaryIsInstance]
+                        logger.debug(
+                            "_update_field_bound_children: updating %s.%s to %s",
+                            type(child).__name__,
+                            child_var_name,
+                            new_target,
+                        )
+                        child_obs.replace_target(new_target)
+        except (AttributeError, ValueError) as e:
+            logger.debug("_update_field_bound_children: error updating %s: %s", type(child).__name__, e)
+
+
 def _propagate_record_to_tab_children(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Propagate record to child tab widgets after record is set.
 
@@ -1127,6 +1192,11 @@ def _propagate_model_bindings_to_children(widget: Widget[Any], config: _QtPieCon
 
         # Apply model bindings on the child (and recurse into its children)
         _apply_model_bindings_for_record(child_widget, child_config)  # type: ignore[arg-type]
+        # Propagate to tab children inside this child widget
+        _propagate_record_to_tab_children(child_widget, child_config)  # type: ignore[arg-type]
+        # Also update any field-bound children (e.g., Widget[Auth] with bind="auth")
+        _update_field_bound_children(child_widget)  # type: ignore[arg-type]
+        # Recurse into nested children
         _propagate_model_bindings_to_children(child_widget, child_config)  # type: ignore[arg-type]
 
 

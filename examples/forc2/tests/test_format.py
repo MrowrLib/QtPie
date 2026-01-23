@@ -3,7 +3,21 @@
 from pathlib import Path
 
 from assertpy import assert_that
-from forc2.domain import Collection, Environment, EnvironmentVariable, HttpMethod, Request, RequestKeyValue, Workspace
+from forc2.domain import (
+    ApiKeyAuth,
+    ApiKeyLocation,
+    AuthType,
+    BasicAuth,
+    BearerAuth,
+    BodyType,
+    Collection,
+    Environment,
+    EnvironmentVariable,
+    HttpMethod,
+    Request,
+    RequestKeyValue,
+    Workspace,
+)
 from forc2.format import (
     load_collection,
     load_environment,
@@ -94,6 +108,147 @@ url: https://example.com
         req = load_request(yaml_file)
 
         assert_that(req.name.value).is_equal_to("my-request")
+
+    def test_load_request_with_body_type(self, tmp_path: Path) -> None:
+        """Load a request with body_type."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: JSON Body
+method: POST
+url: https://api.example.com
+body: '{"name": "test"}'
+body_type: json
+""")
+        req = load_request(yaml_file)
+
+        assert_that(req.body_type.value).is_equal_to(BodyType.JSON)
+
+    def test_load_request_with_body_fields(self, tmp_path: Path) -> None:
+        """Load a request with body_fields for form data."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: Form Data
+method: POST
+url: https://api.example.com
+body_type: form_urlencoded
+body_fields:
+  - key: username
+    value: john
+  - key: password
+    value: secret
+""")
+        req = load_request(yaml_file)
+
+        assert_that(req.body_type.value).is_equal_to(BodyType.FORM_URLENCODED)
+        assert_that(list(req.body_fields.value)).is_length(2)
+        assert_that(req.body_fields.value[0].key).is_equal_to("username")
+        assert_that(req.body_fields.value[0].value).is_equal_to("john")
+
+    def test_load_request_with_basic_auth(self, tmp_path: Path) -> None:
+        """Load a request with basic auth."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: Basic Auth Request
+method: GET
+url: https://api.example.com
+auth:
+  type: basic
+  username: admin
+  password: secret123
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert isinstance(req.auth.value, BasicAuth)
+        assert_that(req.auth.value.type).is_equal_to(AuthType.BASIC)
+        assert_that(req.auth.value.username).is_equal_to("admin")
+        assert_that(req.auth.value.password).is_equal_to("secret123")
+
+    def test_load_request_with_bearer_auth(self, tmp_path: Path) -> None:
+        """Load a request with bearer auth."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: Bearer Auth Request
+method: GET
+url: https://api.example.com
+auth:
+  type: bearer
+  token: my-jwt-token
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert isinstance(req.auth.value, BearerAuth)
+        assert_that(req.auth.value.type).is_equal_to(AuthType.BEARER)
+        assert_that(req.auth.value.token).is_equal_to("my-jwt-token")
+
+    def test_load_request_with_api_key_auth(self, tmp_path: Path) -> None:
+        """Load a request with API key auth."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: API Key Request
+method: GET
+url: https://api.example.com
+auth:
+  type: api_key
+  key: X-API-Key
+  value: secret-key-123
+  location: header
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert isinstance(req.auth.value, ApiKeyAuth)
+        assert_that(req.auth.value.type).is_equal_to(AuthType.API_KEY)
+        assert_that(req.auth.value.key).is_equal_to("X-API-Key")
+        assert_that(req.auth.value.value).is_equal_to("secret-key-123")
+        assert_that(req.auth.value.location).is_equal_to(ApiKeyLocation.HEADER)
+
+    def test_load_request_with_api_key_query_param(self, tmp_path: Path) -> None:
+        """Load a request with API key in query param."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: API Key Query Request
+method: GET
+url: https://api.example.com
+auth:
+  type: api_key
+  key: api_key
+  value: my-key
+  location: query
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert isinstance(req.auth.value, ApiKeyAuth)
+        assert_that(req.auth.value.location).is_equal_to(ApiKeyLocation.QUERY)
+
+    def test_load_request_with_empty_auth(self, tmp_path: Path) -> None:
+        """Load a request with empty auth: field defaults to Auth()."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: No Auth Request
+method: GET
+url: https://api.example.com
+auth:
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert_that(req.auth.value.type).is_equal_to(AuthType.NONE)
+
+    def test_load_request_defaults_auth_to_none_type(self, tmp_path: Path) -> None:
+        """Load a request without auth field defaults to Auth() with NONE type."""
+        yaml_file = tmp_path / "test.yaml"
+        yaml_file.write_text("""
+name: Simple Request
+method: GET
+url: https://api.example.com
+""")
+        req = load_request(yaml_file)
+
+        assert req.auth.value is not None
+        assert_that(req.auth.value.type).is_equal_to(AuthType.NONE)
 
 
 class TestLoadCollection:
@@ -258,6 +413,104 @@ class TestSaveRequest:
 
         loaded = load_request(yaml_file)
         assert_that(loaded.body.value).is_equal_to('{"name": "test"}')
+
+    def test_save_request_with_body_type(self, tmp_path: Path) -> None:
+        """Save a request with body_type."""
+        req = Request()
+        req.name = "JSON Request"
+        req.method = HttpMethod.POST
+        req.url = "/create"
+        req.body = '{"name": "test"}'
+        req.body_type = BodyType.JSON
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        loaded = load_request(yaml_file)
+        assert_that(loaded.body_type.value).is_equal_to(BodyType.JSON)
+
+    def test_save_request_with_body_fields(self, tmp_path: Path) -> None:
+        """Save a request with body_fields."""
+        req = Request()
+        req.name = "Form Request"
+        req.method = HttpMethod.POST
+        req.url = "/form"
+        req.body_type = BodyType.FORM_URLENCODED
+        req.body_fields.append(RequestKeyValue(key="name", value="test"))
+        req.body_fields.append(RequestKeyValue(key="email", value="test@example.com"))
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        loaded = load_request(yaml_file)
+        assert_that(list(loaded.body_fields.value)).is_length(2)
+        assert_that(loaded.body_fields.value[0].key).is_equal_to("name")
+
+    def test_save_request_with_basic_auth(self, tmp_path: Path) -> None:
+        """Save a request with basic auth."""
+        req = Request()
+        req.name = "Basic Auth"
+        req.method = HttpMethod.GET
+        req.url = "/protected"
+        req.auth = BasicAuth(username="admin", password="secret")
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        loaded = load_request(yaml_file)
+        assert loaded.auth.value is not None
+        assert isinstance(loaded.auth.value, BasicAuth)
+        assert_that(loaded.auth.value.username).is_equal_to("admin")
+        assert_that(loaded.auth.value.password).is_equal_to("secret")
+
+    def test_save_request_with_bearer_auth(self, tmp_path: Path) -> None:
+        """Save a request with bearer auth."""
+        req = Request()
+        req.name = "Bearer Auth"
+        req.method = HttpMethod.GET
+        req.url = "/protected"
+        req.auth = BearerAuth(token="jwt-token-here")
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        loaded = load_request(yaml_file)
+        assert loaded.auth.value is not None
+        assert isinstance(loaded.auth.value, BearerAuth)
+        assert_that(loaded.auth.value.token).is_equal_to("jwt-token-here")
+
+    def test_save_request_with_api_key_auth(self, tmp_path: Path) -> None:
+        """Save a request with API key auth."""
+        req = Request()
+        req.name = "API Key Auth"
+        req.method = HttpMethod.GET
+        req.url = "/protected"
+        req.auth = ApiKeyAuth(key="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER)
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        loaded = load_request(yaml_file)
+        assert loaded.auth.value is not None
+        assert isinstance(loaded.auth.value, ApiKeyAuth)
+        assert_that(loaded.auth.value.key).is_equal_to("X-API-Key")
+        assert_that(loaded.auth.value.value).is_equal_to("secret-key")
+        assert_that(loaded.auth.value.location).is_equal_to(ApiKeyLocation.HEADER)
+
+    def test_save_request_with_no_auth_does_not_include_auth_field(self, tmp_path: Path) -> None:
+        """Save a request with no auth - should not include auth in YAML."""
+        req = Request()
+        req.name = "No Auth"
+        req.method = HttpMethod.GET
+        req.url = "/public"
+        # Default auth is Auth() with type=NONE
+
+        yaml_file = tmp_path / "test.yaml"
+        save_request(req, yaml_file)
+
+        # Read raw YAML to verify auth field is not present
+        content = yaml_file.read_text()
+        assert_that(content).does_not_contain("auth:")
 
 
 class TestSaveCollection:
