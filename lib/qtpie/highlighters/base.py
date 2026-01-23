@@ -76,11 +76,11 @@ class SyntaxHighlighter(QSyntaxHighlighter):
             for match in rule.pattern.finditer(text):
                 self.setFormat(match.start(), match.end() - match.start(), rule.format)
 
-        # Handle multi-line rules
-        self.setCurrentBlockState(0)
-
-        for ml_rule in self.multiline_rules:
-            self._apply_multiline_rule(text, ml_rule)
+        # Only set block state for multi-line rules
+        if self.multiline_rules:
+            self.setCurrentBlockState(0)
+            for ml_rule in self.multiline_rules:
+                self._apply_multiline_rule(text, ml_rule)
 
     def _apply_multiline_rule(self, text: str, rule: MultiLineRule) -> None:
         """Apply a multi-line highlighting rule."""

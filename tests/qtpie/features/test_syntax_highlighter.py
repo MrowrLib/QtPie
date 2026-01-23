@@ -138,6 +138,19 @@ class TestDynamicHighlighterBinding:
 class TestContentTypeBinding:
     """Tests for content_type= MIME type binding."""
 
+    def test_static_content_type(self, base_class, decorator, qt: QtDriver) -> None:
+        """content_type='application/json' (static string) applies highlighter."""
+
+        @decorator
+        class TestClass(base_class):
+            _editor: QPlainTextEdit = new(content_type="application/json")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # JSON highlighter should be active from static MIME type
+        instance._editor.setPlainText('{"key": "value"}')
+        assert_that(instance._editor.toPlainText()).is_equal_to('{"key": "value"}')
+
     def test_content_type_selects_highlighter(self, base_class, decorator, qt: QtDriver) -> None:
         """content_type='var_name' selects highlighter based on MIME type."""
 

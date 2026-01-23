@@ -124,8 +124,16 @@ def apply_text_editor_bindings(
 
             create_format_binding(host, content_type_path, make_content_type_setter(editor))  # type: ignore[arg-type]
         else:
-            # Simple variable binding
-            var = resolve_or_create_variable_fn(host, content_type_path)
+            # Check if this looks like a variable name (identifier, optionally with underscore/dot)
+            # MIME types like "application/json" contain "/" which is not valid in identifiers
+            # Must not contain "/" and after stripping _/. must be a valid identifier
+            looks_like_variable = "/" not in content_type_path and content_type_path.replace("_", "").replace(".", "").isidentifier()
+
+            if looks_like_variable:
+                # Try to resolve as Variable binding
+                var = resolve_or_create_variable_fn(host, content_type_path)
+            else:
+                var = None
 
             if var is not None:
                 if isinstance(var, VarType):
@@ -163,3 +171,8 @@ def apply_text_editor_bindings(
                         return update_from_mime
 
                     var.on_change(make_mime_callback_obs(editor, var))  # pyright: ignore[reportUnknownMemberType]
+            else:
+                # Not a Variable - treat as static MIME type string
+                # e.g., content_type="application/json"
+                highlighter_class = get_highlighter_for_mime(content_type_path)
+                _set_highlighter_on_editor(editor, highlighter_class)

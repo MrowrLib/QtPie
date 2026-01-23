@@ -4,6 +4,7 @@ from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyL
 from forc2.domain.body import BODY_TYPE_LABELS, BodyType
 from forc2.domain.request import HttpMethod, Request, RequestKeyValue
 from qtpie import Event, Stretch, Widget, new, widget
+from qtpie.variable import Var
 
 # TODO: update all to use _private names for the widgets, simple names, but private to avoid conflicts with the record's attributes
 
@@ -95,11 +96,11 @@ class RequestBodyWidget(Widget[Request]):
     ### Events ###
     on_delete: Event = new(on="_on_delete")
 
-    body_type_name: QLabel = new(bind="Body Type: {body_type.name}")
+    content_type: Var[str] = new("application/xml")
 
     ### Widgets ###
     body_type_chooser: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
-    body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}")
+    body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}", content_type="content_type")
     add_button: QPushButton = new("+ Add Field", clicked="_on_add_field", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", classes=["add-button"])
     body_fields_table: QTableView = new(bind="body_fields", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget])
 

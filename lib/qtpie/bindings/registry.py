@@ -162,11 +162,17 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
     registry.set_default_prop(QTextEdit, "text")
 
     # QPlainTextEdit - text
+    def _set_plain_text_edit(w: QPlainTextEdit, v: Any) -> None:
+        text = str(v) if v is not None else ""
+        # Only set if different to avoid triggering highlighter loop
+        if w.toPlainText() != text:
+            w.setPlainText(text)
+
     registry.add(
         BindingKey(QPlainTextEdit, "text"),
         BindingAdapter(
             getter=lambda w: w.toPlainText(),
-            setter=lambda w, v: w.setPlainText(str(v) if v is not None else ""),
+            setter=_set_plain_text_edit,
             signal_name="textChanged",
         ),
     )

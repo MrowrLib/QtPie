@@ -37,8 +37,12 @@ def get_registered_mime_types() -> list[str]:
 
 def _register_default_highlighters() -> None:
     """Register built-in highlighters for common MIME types."""
+    from qtpie.highlighters.css import CssHighlighter
     from qtpie.highlighters.html import HtmlHighlighter
+    from qtpie.highlighters.javascript import JavaScriptHighlighter
     from qtpie.highlighters.json import JsonHighlighter
+    from qtpie.highlighters.xml import XmlHighlighter
+    from qtpie.highlighters.yaml import YamlHighlighter
 
     # JSON
     register_highlighter("application/json", JsonHighlighter)
@@ -47,6 +51,34 @@ def _register_default_highlighters() -> None:
     # HTML
     register_highlighter("text/html", HtmlHighlighter)
     register_highlighter("application/xhtml+xml", HtmlHighlighter)
+
+    # XML
+    register_highlighter("application/xml", XmlHighlighter)
+    register_highlighter("text/xml", XmlHighlighter)
+
+    # YAML
+    register_highlighter("application/yaml", YamlHighlighter)
+    register_highlighter("application/x-yaml", YamlHighlighter)
+    register_highlighter("text/yaml", YamlHighlighter)
+    register_highlighter("text/x-yaml", YamlHighlighter)
+
+    # CSS/SCSS
+    register_highlighter("text/css", CssHighlighter)
+    register_highlighter("text/x-scss", CssHighlighter)
+    register_highlighter("text/x-sass", CssHighlighter)
+
+    # JavaScript/TypeScript
+    register_highlighter("application/javascript", JavaScriptHighlighter)
+    register_highlighter("text/javascript", JavaScriptHighlighter)
+    register_highlighter("application/x-javascript", JavaScriptHighlighter)
+    register_highlighter("application/typescript", JavaScriptHighlighter)
+    register_highlighter("text/typescript", JavaScriptHighlighter)
+
+    # Python
+    from qtpie.highlighters.python import PythonHighlighter
+
+    register_highlighter("text/x-python", PythonHighlighter)
+    register_highlighter("application/x-python", PythonHighlighter)
 
 
 # Register defaults on import
