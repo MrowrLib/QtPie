@@ -6,8 +6,8 @@ from qtpie import Widget, new, widget
 
 @widget
 class SidebarWidget(Widget[Workspace | None]):
-    collections_headers: QLabel = new(bind="{name}")  # TODO: bind="name" should work ???
-    collections_tree: QTreeView = new(
+    collection_name_label: QLabel = new(bind="name")
+    collection_tree: QTreeView = new(
         bind="collection?.items",
         children="items",
         format="{name}",
@@ -15,12 +15,11 @@ class SidebarWidget(Widget[Workspace | None]):
         clicked="{on_collection_item_clicked()}",
     )
 
-    environments_headers: QLabel = new("Environment")
-    environments_chooser: QComboBox = new(
+    environment_label: QLabel = new("Environment")
+    environment_chooser: QComboBox = new(
         bind="environments",
         format="{name}",
-        # selectedItem="workspace?.active_environment",
-        selectedText="active_environment_name",
+        selectedItem="active_environment",
     )
 
     btn_test: QPushButton = new("Test Button", clicked="{print(selected_sidebar_item)}")

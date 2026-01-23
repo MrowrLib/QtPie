@@ -982,3 +982,158 @@ class TestSignalHandlerOrderSimpleWidgets:
 
         assert_that(call_count["value"]).is_equal_to(1)
         assert_that(seen_values).is_equal_to([75])
+
+
+# =============================================================================
+# Widget[T | None] Record Binding - bind="name" vs bind="{name}"
+# =============================================================================
+
+
+class TestRecordNoneBinding:
+    """Test that bind= works correctly when Widget[T | None] has record=None initially.
+
+    This reproduces the issue where:
+    - bind="{name}" (format string) works - subscribes to proxy, re-evaluates when target changes
+    - bind="name" (simple string) fails - resolve_binding_source skips when target is None
+    """
+
+    def test_bind_format_string_works_when_record_none_then_set(self, qt: QtDriver) -> None:
+        """bind='{name}' correctly updates when record changes from None to a value.
+
+        This is the WORKING case - format binding subscribes to the proxy and
+        re-evaluates when the target changes.
+        """
+        from qtpie import State, Var, Widget, state, widget
+
+        @state
+        class PersonState(State):
+            name: Var[str] = new("Alice")
+
+        @widget
+        class ChildWidget(Widget[PersonState | None]):
+            label: QLabel = new(bind="{name}")
+
+        @widget
+        class OuterWidget(Widget):
+            person_state: Var[PersonState | None] = new(None)
+            child: ChildWidget = new(bind="person_state")
+
+        instance = OuterWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initially record is None, label should be empty
+        assert_that(instance.child.label.text()).is_equal_to("")
+
+        # Set a record - with bind="{name}", this WILL update the label
+        instance.person_state = PersonState()
+
+        # This works!
+        assert_that(instance.child.label.text()).is_equal_to("Alice")
+
+    def test_bind_simple_string_when_record_none_then_set(self, qt: QtDriver) -> None:
+        """bind='name' updates when record changes from None to a value.
+
+        This tests deferred binding - when record is initially None, the binding
+        should be set up later when the record becomes available.
+        """
+        from qtpie import State, Var, Widget, state, widget
+
+        @state
+        class PersonState(State):
+            name: Var[str] = new("Bob")
+
+        @widget
+        class ChildWidget(Widget[PersonState | None]):
+            label: QLabel = new(bind="name")
+
+        @widget
+        class OuterWidget(Widget):
+            person_state: Var[PersonState | None] = new(None)
+            child: ChildWidget = new(bind="person_state")
+
+        instance = OuterWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initially record is None, label should be empty
+        assert_that(instance.child.label.text()).is_equal_to("")
+
+        # Set a record - binding should now connect and update the label
+        instance.person_state = PersonState()
+
+        # Label should now show the record's name
+        assert_that(instance.child.label.text()).is_equal_to("Bob")
+
+        # Reactivity should work - changing the record field updates the label
+        instance.person_state.value.name = "Changed"  # type: ignore[union-attr]
+        assert_that(instance.child.label.text()).is_equal_to("Changed")
+
+    def test_bind_simple_string_works_when_record_set_in_decorator(self, qt: QtDriver) -> None:
+        """bind='name' works when record is provided in decorator (not None initially).
+
+        This confirms bind="name" works fine when record is available at init time.
+        """
+        from qtpie import State, Var, Widget, state, widget
+
+        @state
+        class PersonState(State):
+            name: Var[str] = new("Charlie")
+
+        @widget(record=PersonState())
+        class DirectWidget(Widget[PersonState]):
+            label: QLabel = new(bind="name")
+
+        instance = DirectWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Record was set in decorator, so binding works immediately
+        assert_that(instance.label.text()).is_equal_to("Charlie")
+
+        # And reactivity works too
+        instance.record.name = "Dave"
+        assert_that(instance.label.text()).is_equal_to("Dave")
+
+    def test_bind_simple_string_two_way_when_record_none_then_set(self, qt: QtDriver) -> None:
+        """bind='name' supports two-way binding when record changes from None to a value.
+
+        Two-way binding means:
+        1. Record field changes -> widget updates
+        2. Widget changes -> record field updates
+        """
+        from qtpie import State, Var, Widget, state, widget
+
+        @state
+        class PersonState(State):
+            name: Var[str] = new("Initial")
+
+        @widget
+        class ChildWidget(Widget[PersonState | None]):
+            name_input: QLineEdit = new(bind="name")
+
+        @widget
+        class OuterWidget(Widget):
+            person_state: Var[PersonState | None] = new(None)
+            child: ChildWidget = new(bind="person_state")
+
+        instance = OuterWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initially record is None, input should be empty
+        assert_that(instance.child.name_input.text()).is_equal_to("")
+
+        # Set a record - binding should now connect
+        instance.person_state = PersonState()
+
+        # Input should show the record's name
+        assert_that(instance.child.name_input.text()).is_equal_to("Initial")
+
+        # Two-way binding: record -> widget
+        instance.person_state.value.name = "FromRecord"  # type: ignore[union-attr]
+        assert_that(instance.child.name_input.text()).is_equal_to("FromRecord")
+
+        # Two-way binding: widget -> record
+        instance.child.name_input.setText("FromWidget")
+        assert_that(instance.person_state.value.name()).is_equal_to("FromWidget")  # type: ignore[union-attr]

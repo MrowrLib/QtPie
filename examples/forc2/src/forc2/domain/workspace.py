@@ -17,8 +17,8 @@ class Workspace(State):
     name: Var[str] = new("")
     collection: Var[Collection | None] = new(None)
     environments: Var[list[Environment]] = new([])
-    active_environment: Var[Environment | None] = new(None)
-    active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_changed")
+    active_environment: Var[Environment | None] = new(None, onChange="_on_active_environment_changed")
+    active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_name_changed")
     path: Var[Path | None] = new(None)
 
     ### Events ###
@@ -30,14 +30,24 @@ class Workspace(State):
         return load_workspace(folder)
 
     ### Methods ###
-    def _on_active_environment_changed(self) -> None:
-        print("On active environment changed to:", self.active_environment_name())
+    def _on_active_environment_name_changed(self) -> None:
+        self._updating_active_environment = True  # Guard against recursion
         active_name = self.active_environment_name()
-        for env in self.environments():
-            if env.name.value == active_name:
-                self.active_environment = env
-                print("  -> Active environment set to:", env.name())
-                return
+        if active_name is not None:
+            for env in self.environments():
+                if env.name.value == active_name:
+                    self.active_environment = env
+                    print("  -> Active environment set to:", env.name())
+                    break
+        self._updating_active_environment = False
+
+    def _on_active_environment_changed(self) -> None:
+        if self._updating_active_environment:
+            return
+        active_env = self.active_environment()
+        if active_env is not None:
+            self.active_environment_name = active_env.name.value
+            print("  -> Active environment name set to:", active_env.name())
 
     def _do_save(self) -> None:
         """Save the collection to disk."""

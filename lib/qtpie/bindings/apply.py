@@ -14,6 +14,7 @@ logger = logging.getLogger("qtpie.bindings")
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from qtpie.bindings.path import BindingSource
     from qtpie.new_field import NewField
 
 
@@ -51,6 +52,107 @@ def _is_tree_view(widget: QWidget) -> bool:
     from qtpy.QtWidgets import QTreeView
 
     return isinstance(widget, QTreeView)
+
+
+def _apply_simple_binding(
+    host: QWidget,
+    widget_instance: QWidget,
+    source: BindingSource,
+    bind_path: str,
+) -> None:
+    """Apply a simple binding (non-model widget) with two-way support.
+
+    This is used for deferred bindings when record was initially None.
+    Handles both Observable and ObservableProxy sources with two-way binding.
+
+    Note: source is typed as Observable | ObservableProxy but callers pass BindingSource.
+    We only handle Observable and ObservableProxy here - ObservableList/Dict/Set are not
+    supported for simple widgets and should use model binding instead.
+    """
+    from qtpie.bindings import resolve_binding_source
+    from qtpie.bindings.registry import get_binding_registry
+
+    # Skip non-simple binding sources - they should use model binding
+    if not isinstance(source, (Observable, ObservableProxy)):
+        return
+
+    registry = get_binding_registry()
+    default_prop = registry.get_default_prop(widget_instance)
+    adapter = registry.get(widget_instance, default_prop)
+
+    if adapter is None or adapter.setter is None:
+        return
+
+    # Flag to prevent circular updates
+    updating: dict[str, bool] = {"flag": False}
+    setter = adapter.setter
+
+    # Get initial value and set it
+    if isinstance(source, Observable):
+        initial_value = source.get()
+    else:
+        initial_value = source.unwrap()
+    setter(widget_instance, initial_value)
+
+    # Subscribe to source changes -> update widget
+    if isinstance(source, Observable):
+
+        def make_obs_to_widget(s: Any, w: QWidget, upd: dict[str, bool]) -> Any:
+            def on_change(v: Any) -> None:
+                if upd["flag"]:
+                    return
+                upd["flag"] = True
+                try:
+                    s(w, v)
+                finally:
+                    upd["flag"] = False
+
+            return on_change
+
+        source.on_change(make_obs_to_widget(setter, widget_instance, updating))
+    else:
+        # ObservableProxy - on_change takes no args
+
+        def make_proxy_to_widget(s: Any, w: QWidget, src: ObservableProxy[Any], upd: dict[str, bool]) -> Any:
+            def on_change() -> None:
+                if upd["flag"]:
+                    return
+                upd["flag"] = True
+                try:
+                    s(w, src.unwrap())
+                finally:
+                    upd["flag"] = False
+
+            return on_change
+
+        source.on_change(make_proxy_to_widget(setter, widget_instance, source, updating))
+
+    # Two-way binding: widget changes -> update source
+    if adapter.signal_name is not None and adapter.getter is not None:
+        signal = getattr(widget_instance, adapter.signal_name, None)
+        getter = adapter.getter
+
+        # For record bindings, use re-resolving handler since the Observable
+        # may change when the record changes
+        def make_widget_to_source(h: QWidget, bp: str, g: Any, w: QWidget, upd: dict[str, bool]) -> Any:
+            def on_widget_change() -> None:
+                if upd["flag"]:
+                    return
+                resolved = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                if resolved is None:
+                    return
+                upd["flag"] = True
+                try:
+                    if isinstance(resolved, Observable):
+                        resolved.set(g(w))
+                    # ObservableProxy doesn't have set() - it's read-only at top level
+                finally:
+                    upd["flag"] = False
+
+            return on_widget_change
+
+        if signal is not None:
+            signal.connect(make_widget_to_source(host, bind_path, getter, widget_instance, updating))
 
 
 def pre_create_selection_variables(host: QWidget, config: BindingConfig) -> None:
@@ -634,47 +736,67 @@ def apply_auto_bindings(
                                 pass
 
                     if record_is_none and record_observable is not None:
-                        # Create an empty model initially so the widget has something to show
-                        empty_list: ObservableList[Any] = ObservableList()
-                        apply_model_binding(
-                            host,
-                            widget_instance,
-                            empty_list,
-                            bind_path,
-                            field_info,
-                            is_table_view_fn=_is_table_view,
-                            is_tree_view_fn=_is_tree_view,
-                            resolve_or_create_variable_fn=_resolve_or_create_variable,
-                        )
+                        if _is_model_widget(widget_instance):
+                            # Create an empty model initially so the widget has something to show
+                            empty_list: ObservableList[Any] = ObservableList()
+                            apply_model_binding(
+                                host,
+                                widget_instance,
+                                empty_list,
+                                bind_path,
+                                field_info,
+                                is_table_view_fn=_is_table_view,
+                                is_tree_view_fn=_is_tree_view,
+                                resolve_or_create_variable_fn=_resolve_or_create_variable,
+                            )
 
-                        # Listen to record Observable changes and re-apply binding with real data
-                        applied_record: dict[str, bool] = {"done": False}
+                            # Listen to record Observable changes and re-apply binding with real data
+                            applied_record: dict[str, bool] = {"done": False}
 
-                        def make_record_listener(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool]) -> Callable[[], None]:
-                            def on_record_change() -> None:
-                                if app["done"]:
-                                    return
-                                # Re-attempt resolution now that record may have a value
-                                deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
-                                if deferred_source is not None:
-                                    app["done"] = True
-                                    apply_model_binding(
-                                        h,
-                                        w,
-                                        deferred_source,
-                                        bp,
-                                        fi,
-                                        is_table_view_fn=_is_table_view,
-                                        is_tree_view_fn=_is_tree_view,
-                                        resolve_or_create_variable_fn=_resolve_or_create_variable,
-                                    )
+                            def make_record_listener(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool]) -> Callable[[], None]:
+                                def on_record_change() -> None:
+                                    if app["done"]:
+                                        return
+                                    # Re-attempt resolution now that record may have a value
+                                    deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                                    if deferred_source is not None:
+                                        app["done"] = True
+                                        apply_model_binding(
+                                            h,
+                                            w,
+                                            deferred_source,
+                                            bp,
+                                            fi,
+                                            is_table_view_fn=_is_table_view,
+                                            is_tree_view_fn=_is_tree_view,
+                                            resolve_or_create_variable_fn=_resolve_or_create_variable,
+                                        )
 
-                            return on_record_change
+                                return on_record_change
 
-                        # Note: record_observable is actually an ObservableProxy which takes Callable[[], None]
-                        # but we cast it to Observable[Any] above for type compatibility
-                        record_observable.on_change(make_record_listener(widget_instance, host, bind_path, field_info, applied_record))  # type: ignore[arg-type]
-                        logger.debug("Registered record change listener for deferred model binding: bind_path=%s", bind_path)
+                            # Note: record_observable is actually an ObservableProxy which takes Callable[[], None]
+                            # but we cast it to Observable[Any] above for type compatibility
+                            record_observable.on_change(make_record_listener(widget_instance, host, bind_path, field_info, applied_record))  # type: ignore[arg-type]
+                            logger.debug("Registered record change listener for deferred model binding: bind_path=%s", bind_path)
+                        else:
+                            # Non-model widget (QLabel, QLineEdit, etc.) - set up deferred binding
+                            # Listen to record Observable changes and apply binding when record becomes available
+                            applied_simple: dict[str, bool] = {"done": False}
+
+                            def make_simple_record_listener(w: QWidget, h: QWidget, bp: str, app: dict[str, bool]) -> Callable[[], None]:
+                                def on_record_change() -> None:
+                                    if app["done"]:
+                                        return
+                                    # Re-attempt resolution now that record may have a value
+                                    deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                                    if deferred_source is not None:
+                                        app["done"] = True
+                                        _apply_simple_binding(h, w, deferred_source, bp)
+
+                                return on_record_change
+
+                            record_observable.on_change(make_simple_record_listener(widget_instance, host, bind_path, applied_simple))  # type: ignore[arg-type]
+                            logger.debug("Registered record change listener for deferred simple binding: bind_path=%s", bind_path)
                     else:
                         # Fallback: schedule deferred retries for parenting case.
                         # Use multiple attempts with increasing delays because the parent
@@ -709,6 +831,52 @@ def apply_auto_bindings(
                         # Try immediately, then at 0ms, 10ms, 50ms, 100ms
                         retry_delays = [0, 10, 50, 100]
                         QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info, applied_flag, retry_delays))
+
+                continue
+
+            # Non-model widget (QLabel, QLineEdit, etc.) with source=None
+            # Check if this is a Widget[T | None] with record currently None
+            host_config = getattr(host, "_qtpie_config", None)
+            has_record_type = host_config is not None and getattr(host_config, "record_type", None) is not None
+
+            if has_record_type:
+                record_is_none = False
+                record_observable: Observable[Any] | None = None
+
+                # Access _qtpie state to get the record's Observable
+                qtpie_state = getattr(host, "_qtpie", None)
+                if qtpie_state is not None:
+                    try:
+                        record_state = qtpie_state.record_state
+                        if record_state is not None and hasattr(record_state, "observable"):
+                            obs_proxy = record_state.observable
+                            # Check if the underlying target is None
+                            if isinstance(obs_proxy, ObservableProxy):
+                                target = object.__getattribute__(cast(ObservableProxy[Any], obs_proxy), "_target")
+                                record_is_none = target is None
+                                # The ObservableProxy is what we listen to
+                                record_observable = cast(Observable[Any], obs_proxy)
+                    except (AttributeError, TypeError):
+                        pass
+
+                if record_is_none and record_observable is not None:
+                    # Set up deferred binding - listen to record changes and apply binding when ready
+                    applied_simple: dict[str, bool] = {"done": False}
+
+                    def make_simple_record_listener_nonmodel(w: QWidget, h: QWidget, bp: str, app: dict[str, bool]) -> Callable[[], None]:
+                        def on_record_change() -> None:
+                            if app["done"]:
+                                return
+                            # Re-attempt resolution now that record may have a value
+                            deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                            if deferred_source is not None:
+                                app["done"] = True
+                                _apply_simple_binding(h, w, deferred_source, bp)
+
+                        return on_record_change
+
+                    record_observable.on_change(make_simple_record_listener_nonmodel(widget_instance, host, bind_path, applied_simple))  # type: ignore[arg-type]
+                    logger.debug("Registered record change listener for deferred simple binding (non-model): bind_path=%s", bind_path)
 
             continue
 
