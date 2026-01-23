@@ -67,6 +67,14 @@ class WindowConfig:
     dock_tabs_drag_to_undock: bool = False  # Drag tab outside tab bar to float dock
     dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
     dock_tabs_middle_click_close: bool = True  # Middle-click on tab closes dock
+    # Dock tab context menu configuration
+    dock_menu: bool = True  # Enable/disable dock tab context menu
+    dock_menu_close: bool = True  # Show "Close" action
+    dock_menu_close_others: bool = True  # Show "Close Others" action
+    dock_menu_close_right: bool = True  # Show "Close to the Right" action
+    dock_menu_close_left: bool = True  # Show "Close to the Left" action
+    dock_menu_close_all: bool = True  # Show "Close All" action
+    dock_menu_prepend_actions: bool = False  # Prepend built-in actions to custom menus
     # Window icon (resolved at runtime)
     icon: IconType = None
     # Window size
@@ -297,6 +305,14 @@ def window[W: Window[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    # Dock tab context menu options
+    dockMenu: bool = True,
+    dockMenuClose: bool = True,
+    dockMenuCloseOthers: bool = True,
+    dockMenuCloseRight: bool = True,
+    dockMenuCloseLeft: bool = True,
+    dockMenuCloseAll: bool = True,
+    dockMenuPrependActions: bool = False,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
 
@@ -326,6 +342,14 @@ def window[W: Window[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    # Dock tab context menu options
+    dockMenu: bool = True,
+    dockMenuClose: bool = True,
+    dockMenuCloseOthers: bool = True,
+    dockMenuCloseRight: bool = True,
+    dockMenuCloseLeft: bool = True,
+    dockMenuCloseAll: bool = True,
+    dockMenuPrependActions: bool = False,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator for Window classes.
@@ -404,6 +428,13 @@ def window[W: Window[Any]](
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
         config.dock_tabs_middle_click_close = dockTabsMiddleClickClose
+        config.dock_menu = dockMenu
+        config.dock_menu_close = dockMenuClose
+        config.dock_menu_close_others = dockMenuCloseOthers
+        config.dock_menu_close_right = dockMenuCloseRight
+        config.dock_menu_close_left = dockMenuCloseLeft
+        config.dock_menu_close_all = dockMenuCloseAll
+        config.dock_menu_prepend_actions = dockMenuPrependActions
         config.icon = icon
         config.size = size
         config.signal_connections = signal_connections
@@ -1429,6 +1460,7 @@ def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[Q
     Currently supports:
     - hide_title_bar: Always hide title bar for this dock
     - hide_title_bar_when_tabbed: Override window's dockTabsHideTitleBar for this dock
+    - context_menu: Custom context menu class for this dock
     """
     from .dock import Dock
 
@@ -1445,6 +1477,8 @@ def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[Q
                     dock_overrides["hide_title_bar"] = field.dock_hide_title_bar
                 if field.dock_hide_title_bar_when_tabbed is not None:
                     dock_overrides["hide_title_bar_when_tabbed"] = field.dock_hide_title_bar_when_tabbed
+                if field.dock_context_menu is not None:
+                    dock_overrides["context_menu"] = field.dock_context_menu
                 if dock_overrides:
                     overrides[dock_obj.dock_widget] = dock_overrides
 
@@ -1461,6 +1495,8 @@ def _collect_dock_overrides(window: Window[Any], config: WindowConfig) -> dict[Q
                         dock_overrides_var["hide_title_bar"] = field.dock_hide_title_bar
                     if field.dock_hide_title_bar_when_tabbed is not None:
                         dock_overrides_var["hide_title_bar_when_tabbed"] = field.dock_hide_title_bar_when_tabbed
+                    if field.dock_context_menu is not None:
+                        dock_overrides_var["context_menu"] = field.dock_context_menu
                     if dock_overrides_var:
                         overrides[dock_attr.dock_widget] = dock_overrides_var
 
@@ -2121,6 +2157,7 @@ def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             selected_index_changed_callback=selected_index_changed_cb,
             selected_item_changed_callback=selected_item_changed_cb,
             selected_dock_changed_callback=selected_dock_changed_cb,
+            context_menu=field.dock_context_menu,
         )
 
         # Store on window instance
@@ -2227,6 +2264,7 @@ def _create_variable_list_dock_field(
         selected_index_changed_callback=selected_index_changed_cb,
         selected_item_changed_callback=selected_item_changed_cb,
         selected_dock_changed_callback=selected_dock_changed_cb,
+        context_menu=dock_info.get("dock_context_menu"),
     )
 
     # Store the repeater on the Variable's widget property

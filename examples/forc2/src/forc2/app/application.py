@@ -32,7 +32,7 @@ class ForcApp(App):
     workspace: Var[Workspace | None] = new(None)
 
     ### Window ###
-    main_window: ForcWindow = new(bind="workspace")
+    main_window: ForcWindow  # = new(bind="workspace")
 
     ### Methods ###
     @override

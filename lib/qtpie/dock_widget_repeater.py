@@ -61,6 +61,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         selected_item_changed_callback: Callable[[T | None], None] | None = None,
         selected_dock_changed_callback: Callable[[Dock[W] | None], None] | None = None,
         initial_visible: bool = True,
+        context_menu: type | None = None,
     ) -> None:
         """Initialize the dock widget repeater.
 
@@ -85,6 +86,7 @@ class DockWidgetRepeater[T, W: QWidget]:
             selected_item_changed_callback: Callback when selected item changes.
             selected_dock_changed_callback: Callback when selected dock changes.
             initial_visible: Initial visibility state for all docks in the group.
+            context_menu: Custom context menu class for docks in this repeater.
         """
         self._obs_list = observable_list
         self._item_type = item_type
@@ -107,6 +109,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         self._selected_dock_changed_cb = selected_dock_changed_callback
         self._updating_selection = False  # Prevent recursive updates
         self._group_visible = initial_visible  # Track group visibility
+        self._context_menu = context_menu  # Custom context menu class
 
         # Track: (dock, item_wrapper, index_holder)
         self._items: list[tuple[Dock[W], Observable[Any] | ObservableProxy[Any], list[int]]] = []
@@ -343,6 +346,10 @@ class DockWidgetRepeater[T, W: QWidget]:
         dock_widget = QDockWidget(title, self._window)
         dock_widget.setWidget(widget)
         dock_widget.setFeatures(self._create_dock_features())
+
+        # Store custom context menu class as property for DockTabEventFilter to find
+        if self._context_menu is not None:
+            dock_widget.setProperty("_qtpie_context_menu", self._context_menu)
 
         # Subscribe to title property changes for reactive updates
         self._subscribe_to_title_changes(item, wrapper, dock_widget, widget)

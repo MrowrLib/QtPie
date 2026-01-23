@@ -32,7 +32,7 @@ class CentralWidget(Widget):
     dockTabsDragToUndock=True,
     size=(1600, 900),
 )
-class ForcWindow(Window[Workspace | None]):
+class ForcWindowTwo(Window[Workspace | None]):
     ### Menus ###
     file_menu: FileMenu
     view_menu: ViewMenu = new(visible="{#record is not None}")
@@ -68,7 +68,7 @@ class ForcWindow(Window[Workspace | None]):
     dockTabsDragToUndock=True,
     size=(1600, 900),
 )
-class ForcWindowOne(Window):
+class ForcWindow(Window):
     ### Events ###
     on_current_workspace_item_changed: Event
 
@@ -89,7 +89,7 @@ class ForcWindowOne(Window):
         dock="left",
         title="Explorer",
         hideTitleBar=True,
-        visible="{workspace is not None}",
+        # visible="{workspace is not None}",
     )(maximumWidth=400)
 
     editors: Var[list[Request], Dock[RequestWidget]] = new(
@@ -98,7 +98,7 @@ class ForcWindowOne(Window):
         title="{name} {'*' if #widget.is_dirty else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
-        visible="{workspace is not None}",
+        # visible="{workspace is not None}",
     )
 
     ### Methods ###

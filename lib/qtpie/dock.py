@@ -198,6 +198,109 @@ class Dock[W: QWidget]:
         return self._dock_widget.allowedAreas()  # pyright: ignore[reportReturnType]
 
     # -------------------------------------------------------------------------
+    # Tab group properties (for context menu visibility logic)
+    # -------------------------------------------------------------------------
+
+    @property
+    def tab_count(self) -> int:
+        """Number of tabs in the same group (including this one)."""
+        main_window = self._get_main_window()
+        if main_window is None:
+            return 1
+
+        for tab_bar in main_window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == self._dock_widget.windowTitle():
+                    return tab_bar.count()
+        return 1
+
+    @property
+    def has_tabs_to_right(self) -> bool:
+        """Whether there are tabs to the right of this one."""
+        my_index = self.tab_index
+        if my_index < 0:
+            return False
+        return my_index < self.tab_count - 1
+
+    @property
+    def has_tabs_to_left(self) -> bool:
+        """Whether there are tabs to the left of this one."""
+        my_index = self.tab_index
+        return my_index > 0
+
+    # -------------------------------------------------------------------------
+    # Tab group close methods (for context menu actions)
+    # -------------------------------------------------------------------------
+
+    def close_others(self) -> None:
+        """Close all tabs in the same group except this one."""
+        main_window = self._get_main_window()
+        if main_window is None:
+            return
+
+        siblings = main_window.tabifiedDockWidgets(self._dock_widget)
+        for sibling in siblings:
+            sibling.close()
+
+    def close_to_right(self) -> None:
+        """Close all tabs to the right in the tab bar."""
+        main_window = self._get_main_window()
+        if main_window is None:
+            return
+
+        my_index = self.tab_index
+        if my_index < 0:
+            return
+
+        for tab_bar in main_window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == self._dock_widget.windowTitle():
+                    # Found our tab bar - close all tabs to the right (reverse order)
+                    for j in range(tab_bar.count() - 1, my_index, -1):
+                        tab_title = tab_bar.tabText(j)
+                        for dock in main_window.findChildren(QDockWidget):
+                            if dock.windowTitle() == tab_title:
+                                dock.close()
+                                break
+                    return
+
+    def close_to_left(self) -> None:
+        """Close all tabs to the left in the tab bar."""
+        main_window = self._get_main_window()
+        if main_window is None:
+            return
+
+        my_index = self.tab_index
+        if my_index < 0:
+            return
+
+        for tab_bar in main_window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == self._dock_widget.windowTitle():
+                    # Found our tab bar - close all tabs to the left (reverse order)
+                    for j in range(my_index - 1, -1, -1):
+                        tab_title = tab_bar.tabText(j)
+                        for dock in main_window.findChildren(QDockWidget):
+                            if dock.windowTitle() == tab_title:
+                                dock.close()
+                                break
+                    return
+
+    def close_all(self) -> None:
+        """Close all tabs in the same group including this one."""
+        main_window = self._get_main_window()
+        if main_window is None:
+            self._dock_widget.close()
+            return
+
+        # Get all tabified docks (siblings) + self
+        siblings = list(main_window.tabifiedDockWidgets(self._dock_widget))
+        siblings.append(self._dock_widget)
+
+        for dock in siblings:
+            dock.close()
+
+    # -------------------------------------------------------------------------
     # Helper methods
     # -------------------------------------------------------------------------
 

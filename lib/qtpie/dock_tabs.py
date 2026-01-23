@@ -14,7 +14,7 @@ from typing import Any, Protocol, cast, override
 
 from qtpy.QtCore import QEvent, QObject, QPoint, Qt, QTimer
 from qtpy.QtGui import QMouseEvent
-from qtpy.QtWidgets import QDockWidget, QMainWindow, QTabBar, QTabWidget, QWidget
+from qtpy.QtWidgets import QDockWidget, QMainWindow, QMenu, QTabBar, QTabWidget, QWidget
 
 
 class DockTabConfig(Protocol):
@@ -28,6 +28,14 @@ class DockTabConfig(Protocol):
     dock_tabs_drag_to_undock: bool
     dock_tabs_drag_margin: int
     dock_tabs_middle_click_close: bool
+    # Context menu configuration
+    dock_menu: bool
+    dock_menu_close: bool
+    dock_menu_close_others: bool
+    dock_menu_close_right: bool
+    dock_menu_close_left: bool
+    dock_menu_close_all: bool
+    dock_menu_prepend_actions: bool
 
 
 # Map user-friendly position names to Qt tab positions
@@ -84,7 +92,7 @@ def install_dock_tab_features(
     any_dock_has_hide_titlebar = any(d.get("hide_title_bar") is True for d in overrides.values())
 
     # Need to install event filter if:
-    # - Any tab feature is enabled (closable, drag-to-undock, hide title bar, middle-click close)
+    # - Any tab feature is enabled (closable, drag-to-undock, hide title bar, middle-click close, context menu)
     # - OR if movable is explicitly False (need to override Qt's default of True)
     # - OR if any per-dock override wants to hide title bar
     needs_customization = any(
@@ -93,6 +101,7 @@ def install_dock_tab_features(
             config.dock_tabs_drag_to_undock,
             config.dock_tabs_hide_title_bar,
             config.dock_tabs_middle_click_close,
+            config.dock_menu,
             any_dock_wants_hide_titlebar,
             any_dock_has_hide_titlebar,
             not config.dock_tabs_movable,  # Need to disable Qt's default movable=True
@@ -202,6 +211,22 @@ class DockTabEventFilter(QObject):
 
             if self._config.dock_tabs_drag_to_undock or self._config.dock_tabs_middle_click_close:
                 tab_bar.installEventFilter(self)
+
+            # Enable context menu if configured
+            if self._config.dock_menu:
+                tab_bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+                # Use a closure to capture tab_bar correctly
+                # Need to define handler outside lambda for proper typing
+                def make_context_menu_handler(
+                    tb: QTabBar,
+                ) -> Callable[[QPoint], None]:
+                    def handler(pos: QPoint) -> None:
+                        self._on_tab_context_menu(tb, pos)
+
+                    return handler
+
+                tab_bar.customContextMenuRequested.connect(make_context_menu_handler(tab_bar))
 
             tab_bar.setProperty("_qtpie_customized", True)
 
@@ -317,6 +342,196 @@ class DockTabEventFilter(QObject):
 
         dock.close()
         return True
+
+    # -------------------------------------------------------------------------
+    # Context menu handling
+    # -------------------------------------------------------------------------
+
+    def _on_tab_context_menu(self, tab_bar: QTabBar, pos: QPoint) -> None:
+        """Handle context menu request on tab bar."""
+        # Get the tab index at the click position
+        tab_index = tab_bar.tabAt(pos)
+        if tab_index < 0:
+            return  # Click was not on a tab
+
+        tab_title = tab_bar.tabText(tab_index)
+        tab_count = tab_bar.count()
+
+        # Find the QDockWidget for this tab
+        dock_widget: QDockWidget | None = None
+        for dock in self._window.findChildren(QDockWidget):
+            if dock.windowTitle() == tab_title:
+                dock_widget = dock
+                break
+
+        if dock_widget is None:
+            return
+
+        # Check for custom context menu on this dock (from overrides or property)
+        custom_menu_class = self._dock_overrides.get(dock_widget, {}).get("context_menu")
+        if custom_menu_class is None:
+            # Also check dock property (for repeater docks)
+            custom_menu_class = dock_widget.property("_qtpie_context_menu")
+
+        if custom_menu_class is not None:
+            # Use custom menu
+            menu = self._create_custom_context_menu(dock_widget, custom_menu_class, tab_index, tab_count)
+        else:
+            # Use built-in menu
+            menu = self._create_builtin_context_menu(dock_widget, tab_index, tab_count)
+
+        if menu.actions():
+            menu.exec(tab_bar.mapToGlobal(pos))
+
+    def _create_builtin_context_menu(
+        self,
+        dock_widget: QDockWidget,
+        tab_index: int,
+        tab_count: int,
+    ) -> QMenu:
+        """Create the built-in context menu with close actions."""
+        menu = QMenu()
+        config = self._config
+
+        # Close action (always visible unless disabled)
+        if config.dock_menu_close:
+            close_action = menu.addAction("Close")
+            close_action.triggered.connect(dock_widget.close)
+
+        # Close Others (only if >1 tab)
+        if config.dock_menu_close_others and tab_count > 1:
+            close_others_action = menu.addAction("Close Others")
+            close_others_action.triggered.connect(lambda: self._close_others(dock_widget))
+
+        # Close to the Right (only if tabs to the right)
+        if config.dock_menu_close_right and tab_index < tab_count - 1:
+            close_right_action = menu.addAction("Close to the Right")
+            close_right_action.triggered.connect(lambda: self._close_to_right(dock_widget, tab_index))
+
+        # Close to the Left (only if tabs to the left)
+        if config.dock_menu_close_left and tab_index > 0:
+            close_left_action = menu.addAction("Close to the Left")
+            close_left_action.triggered.connect(lambda: self._close_to_left(dock_widget, tab_index))
+
+        # Close All (only if >1 tab)
+        if config.dock_menu_close_all and tab_count > 1:
+            if menu.actions():
+                menu.addSeparator()
+            close_all_action = menu.addAction("Close All")
+            close_all_action.triggered.connect(lambda: self._close_all(dock_widget))
+
+        return menu
+
+    def _create_custom_context_menu(
+        self,
+        dock_widget: QDockWidget,
+        menu_class: type[QMenu],
+        tab_index: int,
+        tab_count: int,
+    ) -> QMenu:
+        """Create a custom menu, optionally prepending built-in actions."""
+        # Create the custom menu instance
+        custom_menu = menu_class()
+
+        # Prepend built-in actions if configured
+        if self._config.dock_menu_prepend_actions:
+            # Get existing custom actions before modifying
+            custom_actions = list(custom_menu.actions())
+            first_custom_action = custom_actions[0] if custom_actions else None
+
+            # Add built-in actions directly to custom_menu (not from another menu)
+            # This ensures proper Qt ownership
+            config = self._config
+
+            # Close action
+            if config.dock_menu_close:
+                close_action = custom_menu.addAction("Close")
+                close_action.triggered.connect(dock_widget.close)
+                if first_custom_action:
+                    custom_menu.removeAction(close_action)
+                    custom_menu.insertAction(first_custom_action, close_action)
+
+            # Close Others (only if >1 tab)
+            if config.dock_menu_close_others and tab_count > 1:
+                close_others_action = custom_menu.addAction("Close Others")
+                close_others_action.triggered.connect(lambda: self._close_others(dock_widget))
+                if first_custom_action:
+                    custom_menu.removeAction(close_others_action)
+                    custom_menu.insertAction(first_custom_action, close_others_action)
+
+            # Close to the Right (only if tabs to the right)
+            if config.dock_menu_close_right and tab_index < tab_count - 1:
+                close_right_action = custom_menu.addAction("Close to the Right")
+                close_right_action.triggered.connect(lambda: self._close_to_right(dock_widget, tab_index))
+                if first_custom_action:
+                    custom_menu.removeAction(close_right_action)
+                    custom_menu.insertAction(first_custom_action, close_right_action)
+
+            # Close to the Left (only if tabs to the left)
+            if config.dock_menu_close_left and tab_index > 0:
+                close_left_action = custom_menu.addAction("Close to the Left")
+                close_left_action.triggered.connect(lambda: self._close_to_left(dock_widget, tab_index))
+                if first_custom_action:
+                    custom_menu.removeAction(close_left_action)
+                    custom_menu.insertAction(first_custom_action, close_left_action)
+
+            # Close All (only if >1 tab)
+            if config.dock_menu_close_all and tab_count > 1:
+                close_all_action = custom_menu.addAction("Close All")
+                close_all_action.triggered.connect(lambda: self._close_all(dock_widget))
+                if first_custom_action:
+                    custom_menu.removeAction(close_all_action)
+                    custom_menu.insertAction(first_custom_action, close_all_action)
+
+            # Add separator between built-in and custom (if we added any built-in actions)
+            if first_custom_action:
+                # Check if we actually added anything
+                current_actions = custom_menu.actions()
+                if current_actions[0] is not first_custom_action:
+                    custom_menu.insertSeparator(first_custom_action)
+
+        return custom_menu
+
+    def _close_others(self, dock_widget: QDockWidget) -> None:
+        """Close all docks in the same tab group except the given one."""
+        siblings = self._window.tabifiedDockWidgets(dock_widget)
+        for sibling in siblings:
+            sibling.close()
+
+    def _close_to_right(self, dock_widget: QDockWidget, current_index: int) -> None:
+        """Close all tabs to the right of the given dock."""
+        for tab_bar in self._window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == dock_widget.windowTitle():
+                    # Found our tab bar - close tabs to the right (reverse order)
+                    for j in range(tab_bar.count() - 1, current_index, -1):
+                        tab_title = tab_bar.tabText(j)
+                        for dock in self._window.findChildren(QDockWidget):
+                            if dock.windowTitle() == tab_title:
+                                dock.close()
+                                break
+                    return
+
+    def _close_to_left(self, dock_widget: QDockWidget, current_index: int) -> None:
+        """Close all tabs to the left of the given dock."""
+        for tab_bar in self._window.findChildren(QTabBar):
+            for i in range(tab_bar.count()):
+                if tab_bar.tabText(i) == dock_widget.windowTitle():
+                    # Found our tab bar - close tabs to the left (reverse order)
+                    for j in range(current_index - 1, -1, -1):
+                        tab_title = tab_bar.tabText(j)
+                        for dock in self._window.findChildren(QDockWidget):
+                            if dock.windowTitle() == tab_title:
+                                dock.close()
+                                break
+                    return
+
+    def _close_all(self, dock_widget: QDockWidget) -> None:
+        """Close all tabs in the same group including the given dock."""
+        siblings = list(self._window.tabifiedDockWidgets(dock_widget))
+        siblings.append(dock_widget)
+        for dock in siblings:
+            dock.close()
 
 
 def _setup_title_bar_hooks(

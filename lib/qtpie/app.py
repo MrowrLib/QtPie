@@ -61,6 +61,14 @@ class AppConfig:
     dock_tabs_drag_to_undock: bool = False  # Drag tab outside tab bar to float dock
     dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
     dock_tabs_middle_click_close: bool = True  # Middle-click on tab closes dock
+    # Dock tab context menu configuration
+    dock_menu: bool = True  # Enable/disable dock tab context menu
+    dock_menu_close: bool = True  # Show "Close" action
+    dock_menu_close_others: bool = True  # Show "Close Others" action
+    dock_menu_close_right: bool = True  # Show "Close to the Right" action
+    dock_menu_close_left: bool = True  # Show "Close to the Left" action
+    dock_menu_close_all: bool = True  # Show "Close All" action
+    dock_menu_prepend_actions: bool = False  # Prepend built-in actions to custom menus
 
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
@@ -608,6 +616,14 @@ def app[A: AppBase[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    # Dock tab context menu options
+    dockMenu: bool = True,
+    dockMenuClose: bool = True,
+    dockMenuCloseOthers: bool = True,
+    dockMenuCloseRight: bool = True,
+    dockMenuCloseLeft: bool = True,
+    dockMenuCloseAll: bool = True,
+    dockMenuPrependActions: bool = False,
     **kwargs: Any,
 ) -> Callable[[type[A]], type[A]]: ...
 
@@ -650,6 +666,14 @@ def app[A: AppBase[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    # Dock tab context menu options
+    dockMenu: bool = True,
+    dockMenuClose: bool = True,
+    dockMenuCloseOthers: bool = True,
+    dockMenuCloseRight: bool = True,
+    dockMenuCloseLeft: bool = True,
+    dockMenuCloseAll: bool = True,
+    dockMenuPrependActions: bool = False,
     **kwargs: Any,
 ) -> type[A] | Callable[[type[A]], type[A]]:
     """Decorator for App/AppBase classes with declarative features.
@@ -736,6 +760,13 @@ def app[A: AppBase[Any]](
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
         config.dock_tabs_middle_click_close = dockTabsMiddleClickClose
+        config.dock_menu = dockMenu
+        config.dock_menu_close = dockMenuClose
+        config.dock_menu_close_others = dockMenuCloseOthers
+        config.dock_menu_close_right = dockMenuCloseRight
+        config.dock_menu_close_left = dockMenuCloseLeft
+        config.dock_menu_close_all = dockMenuCloseAll
+        config.dock_menu_prepend_actions = dockMenuPrependActions
         config.size = size
         config.signal_connections = signal_connections
         config.org = org
@@ -2558,6 +2589,7 @@ def _create_variable_list_dock_field_for_app(
         selected_index_changed_callback=selected_index_changed_cb,
         selected_item_changed_callback=selected_item_changed_cb,
         selected_dock_changed_callback=selected_dock_changed_cb,
+        context_menu=dock_info.get("dock_context_menu"),
     )
 
     # Store the repeater on the Variable's widget property
