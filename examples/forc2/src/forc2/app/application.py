@@ -3,19 +3,13 @@ from typing import override
 
 from qtpy.QtWidgets import QFileDialog
 
-# from qtpy.QtCore import Signal
-from forc2.app import ForcWindow
-from forc2.domain.workspace import Workspace
+from forc2.app import MainWindow
+from forc2.domain import Workspace
 from qtpie import App, Event, Setting, Var, app, new
 
 
-@app(
-    app_name="Forc",
-    org="MrowrPurr",
-    title="Forc :: Free Open-source Rest Client",
-    icon=":/icon.png",
-)
-class ForcApp(App):
+@app(app_name="Forc", org="MrowrPurr", title="Forc :: Free Open-source Rest Client", icon=":/icon.png")
+class Application(App):
     ### Events ###
     on_quit: Event = new(on="quit")
     on_reload_window: Event = new(on="_on_reload_window")
@@ -29,7 +23,7 @@ class ForcApp(App):
     workspace: Var[Workspace | None] = new(None)
 
     ### Window ###
-    main_window: ForcWindow = new(bind="workspace")
+    main_window: MainWindow = new(bind="workspace")
 
     ### Methods ###
     @override
@@ -46,7 +40,7 @@ class ForcApp(App):
         # Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh).
         self.setQuitOnLastWindowClosed(False)
         self.main_window.close()
-        self.main_window = self.build(ForcWindow)
+        self.main_window = self.build(MainWindow)
         self.main_window.show()
         self.setQuitOnLastWindowClosed(True)
 

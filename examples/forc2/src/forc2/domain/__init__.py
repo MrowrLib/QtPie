@@ -2,7 +2,7 @@
 
 from .auth import ApiKeyAuth, ApiKeyLocation, Auth, AuthType, BasicAuth, BearerAuth
 from .body import BodyType
-from .collection import Collection
+from .collection import Collection, TreeItem
 from .environment import Environment, EnvironmentVariable
 from .request import HttpMethod, Request, RequestKeyValue
 from .response import Cookie, Response
@@ -20,6 +20,7 @@ __all__ = [
     "BodyType",
     # Collection
     "Collection",
+    "TreeItem",
     # Environment
     "Environment",
     "EnvironmentVariable",

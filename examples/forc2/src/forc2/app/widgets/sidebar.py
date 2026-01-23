@@ -14,9 +14,8 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
     method_chip: QLabel = new(
         bind="{method?.value}",
         classes=["method-badge", "method-{method?.value}"],
-        visible="{method is not None}",
-        # visible="{#record?.method is not None}",
-        onEnterKey="start_editing",  # <--- this does not trigger, probably consumed by the qtreeview
+        visible="{#record?.method is not None}",
+        onEnterKey="start_editing",
     )
     text_label: QLabel = new(bind="{name}", visible="{not is_editing}", onMouseDoubleClick="{start_editing()}")
     text_edit: QLineEdit = new(
@@ -43,13 +42,12 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
 class SidebarWidget(Widget[Workspace | None]):
     collection_name_label: QLabel = new(bind="name")
     collection_tree: QTreeView = new(
-        bind="collection?.items",  # <--- items is a list of TreeItem
+        bind="collection?.items",
         children="items",
         headerHidden=True,
         widget=CollectionsTreeWidgetRow,
         expand=True,
         selectedItem="selected_sidebar_item",
-        clicked="{on_collection_item_clicked()}",
     )
     environment_label: QLabel = new("Environment")
     environment_chooser: QComboBox = new(bind="environments", format="{name}", selectedItem="active_environment")

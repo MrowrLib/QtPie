@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Any, cast, override
@@ -18,6 +19,8 @@ from .bindings.format_binding import (
 from .dock import Dock
 from .repeaters.utils import create_item_wrapper, rebind_child_widgets
 from .variable import Variable
+
+logger = logging.getLogger("qtpie.dock_widget_repeater")
 
 
 class DockWidgetRepeater[T, W: QWidget]:
@@ -313,8 +316,13 @@ class DockWidgetRepeater[T, W: QWidget]:
         wrapper = create_item_wrapper(item, self._item_type)
         index_holder = [index]
 
+        # Extract width=/height= before passing to widget constructor
+        widget_kwargs = dict(self._widget_kwargs)
+        initial_width = widget_kwargs.pop("width", None)
+        initial_height = widget_kwargs.pop("height", None)
+
         # Create the content widget
-        widget = self._widget_type(*self._widget_args, **self._widget_kwargs)
+        widget = self._widget_type(*self._widget_args, **widget_kwargs)
 
         # If the widget is a Widget[T] with a record type, assign the wrapper as its record
         # This ensures the widget and the repeater share the same ObservableProxy,
@@ -367,6 +375,86 @@ class DockWidgetRepeater[T, W: QWidget]:
             main_window.tabifyDockWidget(first_dock.dock_widget, dock_widget)
         else:
             main_window.addDockWidget(area, dock_widget)
+
+        # Apply initial size (width=/height=) via resizeDocks() deferred
+        # ONLY apply on the first dock in a group - subsequent docks share the same tabbed area
+        # Float values (0.0-1.0) are interpreted as percentage of window size.
+        #
+        # IMPORTANT: When resizing docks, we must resize ALL docks in the same orientation
+        # at once to maintain proper proportions. Otherwise Qt redistributes sizes and
+        # other docks (like a sidebar) lose their configured sizes.
+        is_first_dock = not self._items
+
+        logger.debug("DockWidgetRepeater._create_and_add_dock: is_first_dock=%s, initial_width=%s, initial_height=%s", is_first_dock, initial_width, initial_height)
+
+        # Store configured size as property so other docks can read it
+        if initial_width is not None:
+            dock_widget.setProperty("_qtpie_configured_width", initial_width)
+        if initial_height is not None:
+            dock_widget.setProperty("_qtpie_configured_height", initial_height)
+
+        if is_first_dock and (initial_width is not None or initial_height is not None):
+
+            def _resolve_configured_size(d: QDockWidget, prop: str, window_size: int) -> int:
+                """Get the configured size for a dock, resolving fractional values."""
+                configured = d.property(prop)
+                if configured is not None:
+                    if isinstance(configured, float) and 0.0 < configured < 1.0:
+                        return int(window_size * configured)
+                    return int(configured)
+                # No configured size - use current size
+                return d.width() if "width" in prop else d.height()
+
+            def apply_dock_size(
+                w: int | float | None = initial_width,
+                h: int | float | None = initial_height,
+                dock: QDockWidget = dock_widget,
+            ) -> None:
+                # Resolve fractional values to pixels based on window size
+                logger.debug("DockWidgetRepeater.apply_dock_size: w=%s, h=%s, window.width=%s", w, h, main_window.width())
+                if w is not None:
+                    if isinstance(w, float) and 0.0 < w < 1.0:
+                        w = int(main_window.width() * w)
+                        logger.debug("DockWidgetRepeater resolved w to %s pixels", w)
+                    # Gather ALL visible horizontal docks and resize together to maintain proportions
+                    # Use CONFIGURED sizes (from property) to preserve intentional layout
+                    all_h_docks: list[QDockWidget] = []
+                    all_h_sizes: list[int] = []
+                    for d in main_window.findChildren(QDockWidget):
+                        if d.isVisible() and not d.isFloating():
+                            dock_area = main_window.dockWidgetArea(d)
+                            if dock_area in (Qt.DockWidgetArea.LeftDockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea):
+                                all_h_docks.append(d)
+                                if d is dock:
+                                    all_h_sizes.append(int(w))
+                                else:
+                                    # Use configured size if available, otherwise current size
+                                    size = _resolve_configured_size(d, "_qtpie_configured_width", main_window.width())
+                                    all_h_sizes.append(size)
+                    logger.debug("DockWidgetRepeater resizing %d horizontal docks: %s", len(all_h_docks), all_h_sizes)
+                    if all_h_docks:
+                        main_window.resizeDocks(all_h_docks, all_h_sizes, Qt.Orientation.Horizontal)
+                if h is not None:
+                    if isinstance(h, float) and 0.0 < h < 1.0:
+                        h = int(main_window.height() * h)
+                        logger.debug("DockWidgetRepeater resolved h to %s pixels", h)
+                    # Same for vertical docks
+                    all_v_docks: list[QDockWidget] = []
+                    all_v_sizes: list[int] = []
+                    for d in main_window.findChildren(QDockWidget):
+                        if d.isVisible() and not d.isFloating():
+                            dock_area = main_window.dockWidgetArea(d)
+                            if dock_area in (Qt.DockWidgetArea.TopDockWidgetArea, Qt.DockWidgetArea.BottomDockWidgetArea):
+                                all_v_docks.append(d)
+                                if d is dock:
+                                    all_v_sizes.append(int(h))
+                                else:
+                                    size = _resolve_configured_size(d, "_qtpie_configured_height", main_window.height())
+                                    all_v_sizes.append(size)
+                    if all_v_docks:
+                        main_window.resizeDocks(all_v_docks, all_v_sizes, Qt.Orientation.Vertical)
+
+            QTimer.singleShot(0, apply_dock_size)
 
         # Create Dock wrapper
         dock: Dock[W] = Dock(widget, dock_widget)

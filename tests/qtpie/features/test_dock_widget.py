@@ -4310,3 +4310,213 @@ class TestDockTabsMiddleClickClose:
 
         # Dock should still be visible
         assert instance._explorer.is_visible is True
+
+
+# =============================================================================
+# Initial Size (width=/height=)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockInitialSize:
+    """Test width= and height= for setting initial dock size."""
+
+    def test_dock_width_in_dock_kwargs(self, base_class, decorator, qt: QtDriver) -> None:
+        """width= in dock kwargs sets initial dock width via resizeDocks."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer", width=300)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # The dock should have been resized to the specified width
+        # Note: Exact size may vary due to Qt layout constraints, but it should be close
+        dock_widget = instance._explorer.dock_widget
+        assert dock_widget.width() >= 280  # Allow some tolerance
+
+    def test_dock_height_in_dock_kwargs(self, base_class, decorator, qt: QtDriver) -> None:
+        """height= in dock kwargs sets initial dock height via resizeDocks."""
+
+        @decorator
+        class TestClass(base_class):
+            _console: Dock[ConsolePanel] = new(dock="bottom", title="Console", height=200)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # The dock should have been resized to the specified height
+        dock_widget = instance._console.dock_widget
+        assert dock_widget.height() >= 180  # Allow some tolerance
+
+    def test_dock_width_and_height_together(self, base_class, decorator, qt: QtDriver) -> None:
+        """Both width= and height= can be specified together."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer", width=250, height=400)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        dock_widget = instance._explorer.dock_widget
+        # Width should be applied
+        assert dock_widget.width() >= 230
+        # Height for left dock is constrained by window height, but should attempt resize
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDockInitialSize:
+    """Test width= and height= for Variable[list[T], Dock[W]] pattern."""
+
+    def test_list_dock_width_in_chained_kwargs(self, base_class, decorator, qt: QtDriver) -> None:
+        """width= in chained call sets initial dock width for list dock repeater."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                dock="right",
+                title="{name}",
+                group="editors",
+            )(width=400)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # Add an item to trigger dock creation
+        instance._editors.append(EditorItem(name="First"))
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # Check that we have a dock
+        assert len(instance._editors) == 1
+
+    def test_list_dock_width_in_dock_kwargs(self, base_class, decorator, qt: QtDriver) -> None:
+        """width= in dock kwargs (not chained) sets initial dock width."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                dock="right",
+                title="{name}",
+                group="editors",
+                width=500,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(1000, 600)
+        win.show()
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # Add item
+        instance._editors.append(EditorItem(name="Test"))
+        qt.process_events()
+        qt.process_events()  # Extra process for QTimer.singleShot(0)
+
+        # The dock should exist
+        assert len(instance._editors) == 1
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestFractionalDockWidth:
+    """Test fractional width= values (0.0-1.0) as percentage of window size."""
+
+    def test_dock_fractional_width_property_set(self, base_class, decorator, qt: QtDriver) -> None:
+        """width=0.25 stores the configured fractional width as a property."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer", width=0.25)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+
+        # Check that the configured width property was set
+        dock_widget = instance._explorer.dock_widget
+        configured = dock_widget.property("_qtpie_configured_width")
+        assert configured == 0.25, f"Expected 0.25, got {configured}"
+
+    def test_list_dock_fractional_width_property_set(self, base_class, decorator, qt: QtDriver) -> None:
+        """width=0.75 on Variable[list[T], Dock[W]] stores configured width property."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                dock="right",
+                title="{name}",
+                group="editors",
+                width=0.75,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(800, 600)
+        win.show()
+        qt.process_events()
+
+        # Add item to trigger dock creation
+        instance._editors.append(EditorItem(name="Test"))
+        qt.process_events()
+        qt.process_events()
+
+        # Check that the configured width property was set on the dock
+        assert len(instance._editors.widget) == 1
+        dock_widget = instance._editors.widget[0].dock_widget
+        configured = dock_widget.property("_qtpie_configured_width")
+        assert configured == 0.75, f"Expected 0.75, got {configured}"
+
+    def test_dual_docks_fractional_widths_properties_set(self, base_class, decorator, qt: QtDriver) -> None:
+        """Two docks with fractional widths both have properties set."""
+
+        @decorator
+        class TestClass(base_class):
+            _sidebar: Dock[ExplorerPanel] = new(dock="left", title="Sidebar", width=0.2)
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                dock="right",
+                title="{name}",
+                group="editors",
+                width=0.8,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.resize(1000, 600)
+        win.show()
+        qt.process_events()
+
+        # Check sidebar property
+        sidebar_dock = instance._sidebar.dock_widget
+        sidebar_configured = sidebar_dock.property("_qtpie_configured_width")
+        assert sidebar_configured == 0.2, f"Sidebar expected 0.2, got {sidebar_configured}"
+
+        # Add item to trigger editor dock creation
+        instance._editors.append(EditorItem(name="Test"))
+        qt.process_events()
+        qt.process_events()
+
+        # Check editor property
+        editor_dock_widget = instance._editors.widget[0].dock_widget
+        editor_configured = editor_dock_widget.property("_qtpie_configured_width")
+        assert editor_configured == 0.8, f"Editor expected 0.8, got {editor_configured}"

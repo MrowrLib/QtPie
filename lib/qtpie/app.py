@@ -1766,6 +1766,34 @@ def _create_dock_fields_for_app(
                 window.addDockWidget(area, dock_widget)
                 window.splitDockWidget(dock_widget, ref_dock.dock_widget, QtCore.Orientation.Horizontal)
 
+        # Apply initial size (width=/height=) via resizeDocks() deferred
+        # Float values (0.0-1.0) are interpreted as percentage of window size.
+        # Store configured size as property so other docks can read it when resizing
+        if fld.initial_width is not None:
+            dock_widget.setProperty("_qtpie_configured_width", fld.initial_width)
+        if fld.initial_height is not None:
+            dock_widget.setProperty("_qtpie_configured_height", fld.initial_height)
+
+        if fld.initial_width is not None or fld.initial_height is not None:
+            from qtpy.QtCore import Qt, QTimer
+
+            def apply_dock_size(
+                w: int | float | None = fld.initial_width,
+                h: int | float | None = fld.initial_height,
+                dock: QDockWidget = dock_widget,
+            ) -> None:
+                # Resolve fractional values to pixels based on window size
+                if w is not None:
+                    if isinstance(w, float) and 0.0 < w < 1.0:
+                        w = int(window.width() * w)
+                    window.resizeDocks([dock], [int(w)], Qt.Orientation.Horizontal)
+                if h is not None:
+                    if isinstance(h, float) and 0.0 < h < 1.0:
+                        h = int(window.height() * h)
+                    window.resizeDocks([dock], [int(h)], Qt.Orientation.Vertical)
+
+            QTimer.singleShot(0, apply_dock_size)
+
     # Handle group tabification
     for _group_name, dock_names in groups.items():
         if len(dock_names) < 2:
@@ -2585,8 +2613,8 @@ def _create_variable_list_dock_field_for_app(
         closable=closable_val if isinstance(closable_val, bool) else True,
         floatable=floatable_val if isinstance(floatable_val, bool) else True,
         movable=movable_val if isinstance(movable_val, bool) else True,
-        widget_args=(),
-        widget_kwargs={},
+        widget_args=dock_info.get("widget_args") or (),
+        widget_kwargs=dock_info.get("widget_kwargs") or {},
         selected_index_observable=selected_index_obs,
         selected_item_observable=selected_item_obs,
         selected_item_variable=selected_item_var,

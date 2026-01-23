@@ -217,6 +217,40 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             else:
                                 set_classes(instance, field.css_classes)
 
+                        # Apply initial size (width=/height=) via resize()
+                        # Float values (0.0-1.0) are interpreted as percentage of window size.
+                        if field.initial_width is not None or field.initial_height is not None:
+                            init_w = field.initial_width
+                            init_h = field.initial_height
+
+                            # Check if we need to resolve fractional values
+                            needs_window = (isinstance(init_w, float) and 0.0 < init_w < 1.0) or (isinstance(init_h, float) and 0.0 < init_h < 1.0)
+
+                            if needs_window:
+                                # Defer until window is available for fractional sizing
+                                from qtpy.QtCore import QTimer
+
+                                def apply_size(
+                                    w: int | float | None = init_w,
+                                    h: int | float | None = init_h,
+                                    widget: QWidget = instance,
+                                ) -> None:
+                                    win = widget.window()
+                                    if isinstance(w, float) and 0.0 < w < 1.0:
+                                        w = int(win.width() * w)
+                                    if isinstance(h, float) and 0.0 < h < 1.0:
+                                        h = int(win.height() * h)
+                                    final_w = int(w) if w is not None else widget.width()
+                                    final_h = int(h) if h is not None else widget.height()
+                                    widget.resize(final_w, final_h)
+
+                                QTimer.singleShot(0, apply_size)
+                            else:
+                                # Absolute pixel values - apply immediately
+                                w = int(init_w) if init_w is not None else instance.width()
+                                h = int(init_h) if init_h is not None else instance.height()
+                                instance.resize(w, h)
+
                         # Apply input validator (QLineEdit, QComboBox, etc.)
                         if field.validator is not None:
                             if hasattr(instance, "setValidator"):

@@ -1,33 +1,41 @@
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QLabel, QPushButton
 
 from forc2.app.menus import FileMenu, ViewMenu
-from forc2.app.widgets.request import RequestWidget
-from forc2.app.widgets.sidebar import SidebarWidget
-from forc2.domain.collection import Collection
-from forc2.domain.request import Request
-from forc2.domain.workspace import Workspace
-from qtpie import Dock, Event, Stretch, Var, Widget, Window, new, widget, window
+from forc2.app.widgets import RequestWidget, SidebarWidget
+from forc2.domain import Request, TreeItem, Workspace
+from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 
 
 @widget
-class CentralWidget(Widget):
+class CentralWidget(Widget[Workspace | None]):
     app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
-    load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.")
-    load_workspace_button: QPushButton = new("Load Workspace", clicked="on_choose_workspace")
+    load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.", visible="{#record is None}")
+    load_workspace_button: QPushButton = new("Load Workspace", clicked="on_choose_workspace", visible="{#record is None}")
+    label_if_workspace_loaded: QLabel = new("Workspace loaded. Please select or create a request to get started.", visible="{#record is not None}")
     stretch: Stretch
 
 
-@window(dockTabsClosable=True, dockTabsHideTitleBar=True, dockTabsMovable=True, dockTabsDragToUndock=True, size=(1600, 900))
-class ForcWindow(Window[Workspace | None]):
+@window(dockTabsClosable=True, dockTabsHideTitleBar=True, dockTabsMovable=True, dockTabsDragToUndock=True, size=(1920, 1080))
+class MainWindow(Window[Workspace | None]):
     ### Menus ###
     file_menu: FileMenu
     view_menu: ViewMenu = new(visible="{#record is not None}")
 
-    ### Events ###
-    on_collection_item_clicked: Event = new(on="_on_collection_item_clicked")
+    ### Variables ###
+    selected_sidebar_item: Var[TreeItem | None] = new(None, onChange="_on_selected_sidebar_item_changed")
+    selected_request_index: Var[int]
+    current_request: Var[Request | None]
+    request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Horizontal)
 
     ### Docks ###
-    sidebar_dock: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True, visible="{#record is not None}")(maximumWidth=400)
+    sidebar_dock: Dock[SidebarWidget] = new(
+        dock="left",
+        title="Explorer",
+        hideTitleBar=True,
+        visible="{#record is not None}",
+        width=0.25,
+    )
     editor_docked_tabs: Var[list[Request], Dock[RequestWidget]] = new(
         group="requests",
         dock="right",
@@ -35,68 +43,21 @@ class ForcWindow(Window[Workspace | None]):
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
         visible="{workspace is not None}",
+        width=0.75,
     )
 
     ### Widgets ###
-    label: QLabel = new("Forc Main Window")
-    workspace_name_label: QLabel = new(bind="Workspace is: {name}", visible="{#record is not None}")
-    stretch: Stretch
-
-    ### Methods ###
-    def _on_collection_item_clicked(self) -> None:
-        print("Collection item clicked!")
-
-
-#####################
-#####################
-#####################
-#####################
-#####################
-
-
-@window(
-    dockTabsClosable=True,
-    dockTabsHideTitleBar=True,
-    dockTabsMovable=True,
-    dockTabsDragToUndock=True,
-    size=(1600, 900),
-)
-class ForcWindow_OneDraft(Window):
-    ### Events ###
-    on_current_workspace_item_changed: Event
-
-    ### Variables ###
-    selected_sidebar_item: Var[Collection | Request | None] = new(None, onChange="_on_selected_sidebar_item_changed")
-    selected_request: Var[Request | None] = new(None, onChange="_on_selected_request_changed")
-    selected_request_index: Var[int]
-
-    ### Menus ###
-    file_menu: FileMenu
-    view_menu: ViewMenu  # = new(visible="{workspace is not None}")  # TODO visible= for menus!
-
-    ### Central Window Widget ###
-    central_widget: CentralWidget = new(visible="{workspace is None}")
-
-    ### Docks / Widgets ###
-    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
-    editors: Var[list[Request], Dock[RequestWidget]] = new(
-        group="requests", dock="right", title="{name} {'*' if #widget.is_dirty else ''}", groupSelectedIndex="selected_request_index", selectedItem="selected_request"
-    )
+    central_widget: CentralWidget = new(visible="{workspace is None or len(editor_docked_tabs) == 0}")
 
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
-        # logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
-        #
         item = self.selected_sidebar_item()
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:
-            for index, editor in enumerate(self.editors.value):
+            for index, editor in enumerate(self.editor_docked_tabs()):
                 if editor is item:
-                    self.selected_request_index.value = index  # TODO remove .value
+                    self.selected_request_index = index
                     return
             # Otherwise, add a new tab:
-            self.editors.append(item)
-            self.selected_request_index.value = len(self.editors) - 1
-
-    # def _on_selected_request_changed(self) -> None:
-    #     logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())
+            self.editor_docked_tabs.append(item)
+            self.selected_request_index = len(self.editor_docked_tabs) - 1

@@ -87,6 +87,10 @@ class NewField:
         # Object name and CSS classes
         self.object_name: str | None = None  # objectName for the widget
         self.css_classes: list[str] = []  # CSS classes for the widget
+        # Initial size (width/height) - applied via resize() after widget creation
+        # int = absolute pixels, float (0.0-1.0) = percentage of window size
+        self.initial_width: int | float | None = None  # width= for initial width
+        self.initial_height: int | float | None = None  # height= for initial height
         # Property bindings (visible="_is_visible", enabled="{_count > 0}")
         self.property_bindings: dict[str, str] = {}  # prop_name -> binding expression
         # Model format for QComboBox/QListView/etc. with bind= to list
@@ -387,10 +391,26 @@ class NewField:
                         self.variable_list_dock_item_type = inner_args[0] if inner_args else None
                         self.variable_list_dock_widget_type = dock_args[0]
 
-                        # Extract dock kwargs directly from self.kwargs (no chaining for this pattern)
+                        # Extract dock kwargs directly from self.kwargs
                         # Pattern: new(group="requests", dock="right", title="{name}", visible="...")
+                        # Chained call )(widget_kwargs) provides widget constructor kwargs
                         # Use full=True to also extract visible=, floating=, etc.
                         self._extract_dock_kwargs(self.kwargs, full=True)
+
+                        # Extract widget_args/kwargs from chained call if present
+                        widget_args: tuple[Any, ...] = ()
+                        widget_kwargs: dict[str, Any] = {}
+                        if self._chain_calls:
+                            widget_args, widget_kwargs = self._chain_calls[0]
+
+                        # Also check for width=/height= in dock kwargs (self.kwargs)
+                        # This allows: new(dock="right", width=400) without chaining
+                        dock_width = self.kwargs.pop("width", None)
+                        dock_height = self.kwargs.pop("height", None)
+                        if dock_width is not None and "width" not in widget_kwargs:
+                            widget_kwargs["width"] = dock_width
+                        if dock_height is not None and "height" not in widget_kwargs:
+                            widget_kwargs["height"] = dock_height
 
                         # Extract selection bindings
                         self.selected_index = self.kwargs.pop("selectedIndex", None)
@@ -421,6 +441,8 @@ class NewField:
                             "selected_index_changed": self.selected_index_changed,
                             "selected_item_changed": self.selected_item_changed,
                             "selected_dock_changed": self.selected_dock_changed,
+                            "widget_args": widget_args,
+                            "widget_kwargs": widget_kwargs,
                         }
                         # Don't create a widget - this is a repeater, widget_type stays None
                         widget_type = None
@@ -485,6 +507,10 @@ class NewField:
             # Extract name= and classes= for widget configuration (not constructor params)
             object_name: str | None = widget_kwargs_copy.pop("name", None)
             css_classes: list[str] = widget_kwargs_copy.pop("classes", None) or []
+
+            # Extract width= and height= for initial size (handled in variable.py)
+            widget_kwargs_copy.pop("width", None)
+            widget_kwargs_copy.pop("height", None)
 
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
@@ -588,6 +614,11 @@ class NewField:
             # layout=False doesn't apply to docks (they're not in layouts)
             # But pop it anyway to avoid passing to constructor
             dock_kwargs.pop("layout", None)
+
+            # Extract width= and height= for initial size (applied via resize())
+            # Can be in dock_kwargs (new(width=...)) or widget_kwargs (new()(width=...))
+            self.initial_width = dock_kwargs.pop("width", None) or widget_kwargs.pop("width", None)
+            self.initial_height = dock_kwargs.pop("height", None) or widget_kwargs.pop("height", None)
 
             # Store widget args/kwargs for content widget creation
             self.widget_args = widget_args
@@ -1008,6 +1039,10 @@ class NewField:
             classes = self.kwargs.pop("classes", None)
             if classes is not None:
                 self.css_classes = classes
+
+            # Extract width= and height= for initial size (applied via resize())
+            self.initial_width = self.kwargs.pop("width", None)
+            self.initial_height = self.kwargs.pop("height", None)
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()

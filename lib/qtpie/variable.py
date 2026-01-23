@@ -1106,6 +1106,10 @@ class _VariableDescriptor[T]:
                     # Extract validator= for input validation (QLineEdit, QComboBox, etc.)
                     validator_spec = widget_kwargs_copy.pop("validator", None)
 
+                    # Extract width= and height= for initial size (applied via resize())
+                    initial_width = widget_kwargs_copy.pop("width", None)
+                    initial_height = widget_kwargs_copy.pop("height", None)
+
                     try:
                         widget_instance = self._widget_type(*self._widget_args, **widget_kwargs_copy)
                     except (TypeError, AttributeError) as e:
@@ -1113,6 +1117,38 @@ class _VariableDescriptor[T]:
 
                     # Apply objectName (computed earlier with priority logic)
                     widget_instance.setObjectName(computed_object_name)
+
+                    # Apply initial size (width=/height=) via resize()
+                    # Float values (0.0-1.0) are interpreted as percentage of window size.
+                    if initial_width is not None or initial_height is not None:
+                        # Check if we need to resolve fractional values
+                        needs_window = (isinstance(initial_width, float) and 0.0 < initial_width < 1.0) or (isinstance(initial_height, float) and 0.0 < initial_height < 1.0)
+
+                        if needs_window:
+                            # Defer until window is available for fractional sizing
+                            from qtpy.QtCore import QTimer
+                            from qtpy.QtWidgets import QWidget as QW
+
+                            def apply_size(
+                                w: int | float | None = initial_width,
+                                h: int | float | None = initial_height,
+                                wgt: QW = widget_instance,
+                            ) -> None:
+                                win = wgt.window()
+                                if isinstance(w, float) and 0.0 < w < 1.0:
+                                    w = int(win.width() * w)
+                                if isinstance(h, float) and 0.0 < h < 1.0:
+                                    h = int(win.height() * h)
+                                final_w = int(w) if w is not None else wgt.width()
+                                final_h = int(h) if h is not None else wgt.height()
+                                wgt.resize(final_w, final_h)
+
+                            QTimer.singleShot(0, apply_size)
+                        else:
+                            # Absolute pixel values - apply immediately
+                            w = int(initial_width) if initial_width is not None else widget_instance.width()
+                            h = int(initial_height) if initial_height is not None else widget_instance.height()
+                            widget_instance.resize(w, h)
 
                     # Apply CSS classes if specified
                     if self._css_classes:

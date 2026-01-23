@@ -1,5 +1,5 @@
 """Forc2 application."""
 
-from .main_window import ForcWindow
+from .main_window import MainWindow
 
-__all__ = ["ForcWindow"]
+__all__ = ["MainWindow"]

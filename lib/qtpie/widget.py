@@ -361,6 +361,8 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     title: str | None = None,
     icon: IconType = None,
     size: tuple[int, int] | None = None,
+    width: int | None = None,
+    height: int | None = None,
     record: Any | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
@@ -377,6 +379,8 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     title: str | None = None,
     icon: IconType = None,
     size: tuple[int, int] | None = None,
+    width: int | None = None,
+    height: int | None = None,
     record: Any | None = None,
     stylesheet: str | None = None,
     **kwargs: Any,
@@ -430,6 +434,11 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     # stylesheet is an alias for styleSheet
     if stylesheet is not None:
         kwargs["styleSheet"] = stylesheet
+    # width/height merge into size (size takes precedence if both provided)
+    if size is None and (width is not None or height is not None):
+        # Need to defer actual size computation until widget exists
+        # For now, store as size tuple with None placeholders
+        size = (width or 0, height or 0)  # 0 means "keep default"
 
     def decorator(target: type[W]) -> type[W]:
         from qtpie.utils.common import is_signal_on_type
@@ -969,9 +978,15 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
         if inherited_icon is not None:
             widget.setWindowIcon(inherited_icon)
 
-    # Apply initial size
+    # Apply initial size (handles partial width/height via 0 placeholder)
     if config.size is not None:
-        widget.resize(*config.size)
+        w, h = config.size
+        # 0 means "keep current size" (used when only width= or height= was provided)
+        if w == 0:
+            w = widget.width()
+        if h == 0:
+            h = widget.height()
+        widget.resize(w, h)
 
     # Apply widget properties, skipping reactive ones
     def skip_reactive(prop_name: str, value: Any) -> bool:
