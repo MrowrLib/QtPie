@@ -1,5 +1,3 @@
-import logging
-
 from qtpy.QtWidgets import QLabel, QPushButton
 
 from forc2.app.menus import FileMenu, ViewMenu
@@ -10,10 +8,6 @@ from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
 from qtpie import Dock, Event, Stretch, Var, Widget, Window, new, widget, window
 
-logger = logging.getLogger(__name__)
-
-# TODO: Dock tabs should have a context menu with "Close other tabs", "Close tabs to the right", etc.
-
 
 @widget
 class CentralWidget(Widget):
@@ -23,15 +17,7 @@ class CentralWidget(Widget):
     stretch: Stretch
 
 
-@window(
-    title="Forc :: Free Open-source Rest Client",
-    icon=":/icon.png",
-    dockTabsClosable=True,
-    dockTabsHideTitleBar=True,
-    dockTabsMovable=True,
-    dockTabsDragToUndock=True,
-    size=(1600, 900),
-)
+@window(dockTabsClosable=True, dockTabsHideTitleBar=True, dockTabsMovable=True, dockTabsDragToUndock=True, size=(1600, 900))
 class ForcWindow(Window[Workspace | None]):
     ### Menus ###
     file_menu: FileMenu
@@ -41,12 +27,15 @@ class ForcWindow(Window[Workspace | None]):
     on_collection_item_clicked: Event = new(on="_on_collection_item_clicked")
 
     ### Docks ###
-    sidebar: Dock[SidebarWidget] = new(
-        dock="left",
-        title="Explorer",
-        hideTitleBar=True,
-        visible="{#record is not None}",
-    )(maximumWidth=400)
+    sidebar_dock: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True, visible="{#record is not None}")(maximumWidth=400)
+    editor_docked_tabs: Var[list[Request], Dock[RequestWidget]] = new(
+        group="requests",
+        dock="right",
+        title="{name} {'*' if #widget.is_dirty else ''}",
+        groupSelectedIndex="selected_request_index",
+        selectedItem="selected_request",
+        visible="{workspace is not None}",
+    )
 
     ### Widgets ###
     label: QLabel = new("Forc Main Window")
@@ -58,9 +47,14 @@ class ForcWindow(Window[Workspace | None]):
         print("Collection item clicked!")
 
 
+#####################
+#####################
+#####################
+#####################
+#####################
+
+
 @window(
-    title="Forc :: Free Open-source Rest Client",
-    icon=":/icon.png",
     dockTabsClosable=True,
     dockTabsHideTitleBar=True,
     dockTabsMovable=True,
@@ -84,25 +78,14 @@ class ForcWindow_OneDraft(Window):
     central_widget: CentralWidget = new(visible="{workspace is None}")
 
     ### Docks / Widgets ###
-    sidebar: Dock[SidebarWidget] = new(
-        dock="left",
-        title="Explorer",
-        hideTitleBar=True,
-        # visible="{workspace is not None}",
-    )(maximumWidth=400)
-
+    sidebar: Dock[SidebarWidget] = new(dock="left", title="Explorer", hideTitleBar=True)(maximumWidth=400)
     editors: Var[list[Request], Dock[RequestWidget]] = new(
-        group="requests",
-        dock="right",
-        title="{name} {'*' if #widget.is_dirty else ''}",
-        groupSelectedIndex="selected_request_index",
-        selectedItem="selected_request",
-        # visible="{workspace is not None}",
+        group="requests", dock="right", title="{name} {'*' if #widget.is_dirty else ''}", groupSelectedIndex="selected_request_index", selectedItem="selected_request"
     )
 
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
-        logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
+        # logger.warning("--> Selected collection item changed to: %s", self.selected_sidebar_item())
         #
         item = self.selected_sidebar_item()
         if isinstance(item, Request):
@@ -115,5 +98,5 @@ class ForcWindow_OneDraft(Window):
             self.editors.append(item)
             self.selected_request_index.value = len(self.editors) - 1
 
-    def _on_selected_request_changed(self) -> None:
-        logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())
+    # def _on_selected_request_changed(self) -> None:
+    #     logger.warning("-----> Selected REQUEST changed to: %s", self.selected_request())

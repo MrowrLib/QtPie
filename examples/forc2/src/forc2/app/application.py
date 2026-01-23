@@ -1,8 +1,6 @@
-import logging
 from pathlib import Path
 from typing import override
 
-from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import QFileDialog
 
 # from qtpy.QtCore import Signal
@@ -10,13 +8,12 @@ from forc2.app import ForcWindow
 from forc2.domain.workspace import Workspace
 from qtpie import App, Event, Setting, Var, app, new
 
-logger = logging.getLogger(__name__)
-
 
 @app(
     app_name="Forc",
     org="MrowrPurr",
-    title="Forc - Free Open-source Rest Client",
+    title="Forc :: Free Open-source Rest Client",
+    icon=":/icon.png",
 )
 class ForcApp(App):
     ### Events ###
@@ -42,13 +39,11 @@ class ForcApp(App):
     def __setup__(self) -> None:
         workspace_path = self.loaded_workspace_path()
         if workspace_path is not None:
-            # Call this after 2500ms for testing a delay:
-            # self._on_load_workspace(workspace_path)
-            QTimer.singleShot(2500, lambda: self._on_load_workspace(workspace_path))
+            self._on_load_workspace(workspace_path)
 
     ### Methods ###
     def _on_reload_window(self) -> None:
-        """Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh)."""
+        # Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh).
         self.setQuitOnLastWindowClosed(False)
         self.main_window.close()
         self.main_window = self.build(ForcWindow)
@@ -57,15 +52,10 @@ class ForcApp(App):
 
     def _on_choose_workspace(self) -> None:
         workspace_path = self.loaded_workspace_path()
-        folder = QFileDialog.getExistingDirectory(
-            self.main_window,
-            "Select Workspace Folder",
-            str(workspace_path) or "",
-        )
+        folder = QFileDialog.getExistingDirectory(self.main_window, "Select Workspace Folder", str(workspace_path) or "")
         if folder:
             self.on_load_workspace.emit(folder)
 
     def _on_load_workspace(self, folder: str) -> None:
         self.workspace = Workspace.load(Path(folder))
         self.loaded_workspace_path = folder
-        logger.info(f"Loaded workspace from: {folder}")

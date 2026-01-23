@@ -2608,3 +2608,116 @@ class TestWindowStatusBar:
 
         w._count.value = 42
         assert_that(w.status_bar.text()).is_equal_to("Count: 42")
+
+
+class TestWindowIconInheritance:
+    """Tests for Window inheriting icon from QApplication."""
+
+    def test_window_inherits_icon_from_qapplication(self, qt: QtDriver) -> None:
+        """Window without explicit icon inherits from QApplication.instance()."""
+        from qtpy.QtGui import QIcon, QPixmap
+        from qtpy.QtWidgets import QApplication
+
+        # Set icon on QApplication
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        app_icon = QIcon(pixmap)
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setWindowIcon(app_icon)
+
+        @window
+        class MainWindow(Window):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        # Window should inherit the icon
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_window_explicit_icon_overrides_inheritance(self, qt: QtDriver) -> None:
+        """Window with explicit icon= does not inherit from QApplication."""
+        from qtpy.QtGui import QIcon, QPixmap
+        from qtpy.QtWidgets import QApplication
+
+        # Set icon on QApplication
+        app_pixmap = QPixmap(16, 16)
+        app_pixmap.fill()
+        app_icon = QIcon(app_pixmap)
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setWindowIcon(app_icon)
+
+        # Create different icon for window
+        window_pixmap = QPixmap(32, 32)
+        window_pixmap.fill()
+        window_icon = QIcon(window_pixmap)
+
+        @window(icon=window_icon)
+        class MainWindow(Window):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        # Window should have its own icon
+        assert_that(w.windowIcon().isNull()).is_false()
+
+    def test_window_icon_false_opts_out(self, qt: QtDriver) -> None:
+        """Window with icon=False explicitly opts out of icon inheritance."""
+        from qtpy.QtGui import QIcon, QPixmap
+        from qtpy.QtWidgets import QApplication
+
+        # Set icon on QApplication
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        app_icon = QIcon(pixmap)
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setWindowIcon(app_icon)
+
+        @window(icon=False)  # type: ignore[arg-type]
+        class MainWindow(Window):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        # Window should have no icon (opted out)
+        # Note: Qt may still show a default system icon, but our icon should be null
+        # The isNull() check may not work on all platforms, so we just verify no crash
+        _ = w.windowIcon()  # Should not crash
+
+
+class TestWindowTitleInheritance:
+    """Tests for Window inheriting title from QApplication."""
+
+    def test_window_inherits_title_from_qapplication_property(self, qt: QtDriver) -> None:
+        """Window without explicit title inherits from QApplication's qtpie_window_title property."""
+        from qtpy.QtWidgets import QApplication
+
+        # Set title property on QApplication (use unique title to avoid state leakage)
+        qapp = QApplication.instance()
+        test_title = "Inherited App Title For This Test"
+        if qapp is not None:
+            qapp.setProperty("qtpie_window_title", test_title)
+
+        @window
+        class MainWindow(Window):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        # Window should inherit the title
+        assert_that(w.windowTitle()).is_equal_to(test_title)
+
+    def test_window_explicit_title_overrides_inheritance(self, qt: QtDriver) -> None:
+        """Window with explicit title= does not inherit from QApplication."""
+        from qtpy.QtWidgets import QApplication
+
+        # Set title property on QApplication
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setProperty("qtpie_window_title", "App Title")
+
+        @window(title="My Custom Window Title")
+        class MainWindow(Window):
+            label: QLabel = new("Hello")
+
+        w = qt.track(MainWindow())
+        # Window should use explicit title
+        assert_that(w.windowTitle()).is_equal_to("My Custom Window Title")

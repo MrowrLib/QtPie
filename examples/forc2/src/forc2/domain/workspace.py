@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from qtpie import Event, State, Var, new, state
+from qtpie import State, Var, new, state
 
 from .collection import Collection
 from .environment import Environment
 
 
-@state(on_save="_do_save")
+@state
 class Workspace(State):
     ### Variables ###
     name: Var[str] = new("")
@@ -22,7 +22,7 @@ class Workspace(State):
     path: Var[Path | None] = new(None)
 
     ### Events ###
-    on_save: Event
+    # on_save: Event
 
     ### Static Methods ###
     @staticmethod
@@ -31,32 +31,30 @@ class Workspace(State):
 
     ### Methods ###
     def _on_active_environment_name_changed(self) -> None:
-        self._updating_active_environment = True  # Guard against recursion
+        self._updating_active_environment = True  # Guard against recursion (for when changing active_environment_name)
         active_name = self.active_environment_name()
         if active_name is not None:
             for env in self.environments():
                 if env.name.value == active_name:
                     self.active_environment = env
-                    print("  -> Active environment set to:", env.name())
                     break
         self._updating_active_environment = False
 
     def _on_active_environment_changed(self) -> None:
         if self._updating_active_environment:
+            # Guard against recursion (for when changing active_environment_name)
             return
         active_env = self.active_environment()
         if active_env is not None:
             self.active_environment_name = active_env.name.value
-            print("  -> Active environment name set to:", active_env.name())
 
-    def _do_save(self) -> None:
-        """Save the collection to disk."""
-        from ..format import save_collection
+    # def _do_save(self) -> None:
+    #     from ..format import save_collection
 
-        if self.collection.value is not None and self.path.value is not None:
-            # Save to 'collections/' subfolder within workspace path
-            collections_path = self.path.value / "collections"
-            save_collection(self.collection.value, collections_path)
+    #     if self.collection.value is not None and self.path.value is not None:
+    #         # Save to 'collections/' subfolder within workspace path
+    #         collections_path = self.path.value / "collections"
+    #         save_collection(self.collection.value, collections_path)
 
 
 def load_workspace(folder: Path) -> Workspace | None:

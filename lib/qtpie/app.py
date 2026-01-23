@@ -800,6 +800,8 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
                 variable_kwargs[var_name] = kwargs.pop(var_name)
 
         # Call original __init__ (QApplication MUST be initialized first)
+        # NOTE: Icon and title inheritance is handled in new_fields._setup_app_inheritance_properties
+        # which runs AFTER QApplication.__init__ but BEFORE child widgets are created
         original_init(self, *args, **kwargs)
 
         # Set organization/application names for QSettings (before any Settings are created)
@@ -1067,10 +1069,13 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
         # For AppBase testing, use class name as title
         window.setWindowTitle(type(app).__name__)
 
-    # Set window icon
+    # Set window icon (also set on QApplication for inheritance by children)
     resolved_icon = resolve_icon(config.window_icon) or resolve_icon(config.icon)
     if resolved_icon:
         window.setWindowIcon(resolved_icon)
+        # Set on QApplication so children can inherit via QApplication.instance()
+        if qapp is not None:
+            qapp.setWindowIcon(resolved_icon)
 
     # Apply initial size
     if config.size is not None:

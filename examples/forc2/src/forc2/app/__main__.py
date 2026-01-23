@@ -1,17 +1,9 @@
 import logging
 import os
 
-os.environ["QTPIE_DEBUG"] = "1"  # Must be set before importing qtpie
+os.environ["QTPIE_DEBUG"] = "1"
 
-# Set up file logging for debug output
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler("forc_debug.log", mode="w"),
-        logging.StreamHandler(),  # Also log to console
-    ],
-)
+logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s", handlers=[logging.FileHandler("forc_debug.log", mode="w"), logging.StreamHandler()])
 
 from forc2.app.application import ForcApp  # noqa: E402
 from forc2.app.qrc_resources import qt_resource_data  # noqa: E402

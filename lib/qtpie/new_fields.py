@@ -32,6 +32,36 @@ def _get_default_prop(widget: Any) -> str | None:
     return None
 
 
+def _setup_app_inheritance_properties(app: Any, cls: type[Any]) -> None:
+    """Set icon and title on QApplication so child widgets can inherit them.
+
+    Called right after QApplication.__init__ but before child widgets are created.
+    """
+    from qtpy.QtWidgets import QApplication
+
+    if not isinstance(app, QApplication):
+        return
+
+    config = getattr(cls, "_qtpie_config", None)
+    if config is None:
+        return
+
+    # Set icon on QApplication for inheritance
+    from .utils.layouts import resolve_icon
+
+    window_icon = getattr(config, "window_icon", None)
+    icon = getattr(config, "icon", None)
+    resolved_icon = resolve_icon(window_icon) or resolve_icon(icon)
+    if resolved_icon:
+        app.setWindowIcon(resolved_icon)
+
+    # Set title as property for inheritance (QApplication doesn't have windowTitle)
+    widget_props = getattr(config, "widget_props", {})
+    window_title = widget_props.get("windowTitle")
+    if window_title:
+        app.setProperty("qtpie_window_title", window_title)
+
+
 def new_fields[T](cls: type[T]) -> type[T]:
     """Decorator that processes NewField instances for non-Variable types.
 
@@ -72,6 +102,10 @@ def new_fields[T](cls: type[T]) -> type[T]:
         # because Qt requires QApplication to exist before any QWidget can be created
         if is_qapp_subclass and original_init is not None:
             original_init(self, *args, **kwargs)
+
+            # Set QApplication icon/title EARLY so child widgets can inherit them
+            # (must happen AFTER original_init but BEFORE creating child widgets)
+            _setup_app_inheritance_properties(self, cls)
 
         # Initialize record_default BEFORE processing child fields
         # This ensures child widgets can bind to parent.record

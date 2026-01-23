@@ -1640,3 +1640,146 @@ class TestAppOrgAndAppName:
 
         assert_that(MyApp._qtpie_config.org).is_equal_to("MyCompany")
         assert_that(MyApp._qtpie_config.app_name).is_equal_to("MyProduct")
+
+
+class TestAppChildWindowInheritance:
+    """Tests for child Window inheriting icon and title from @app."""
+
+    def test_child_window_inherits_icon_from_app(self, qt: QtDriver) -> None:
+        """Child Window without explicit icon inherits from @app's icon.
+
+        Note: This only works with App (QApplication subclass), not AppBase.
+        For AppBase, the icon must be set manually on QApplication.
+        """
+        from qtpy.QtGui import QIcon, QPixmap
+        from qtpy.QtWidgets import QApplication
+
+        from qtpie import Window, window
+
+        # Create and set icon on QApplication (simulating what App would do)
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        app_icon = QIcon(pixmap)
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setWindowIcon(app_icon)
+
+        @window
+        class ChildWindow(Window):
+            label: QLabel = new("Child")
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            child: ChildWindow = new()
+
+        instance = MyApp()
+        # Child window should inherit the icon from QApplication
+        assert_that(instance.child.windowIcon().isNull()).is_false()
+
+    def test_child_window_inherits_title_from_app(self, qt: QtDriver) -> None:
+        """Child Window without explicit title inherits from @app's title.
+
+        Note: This only works with App (QApplication subclass), not AppBase.
+        For AppBase, the title must be set manually on QApplication.
+        """
+        from qtpy.QtWidgets import QApplication
+
+        from qtpie import Window, window
+
+        test_title = "Parent App Title For Inheritance Test"
+
+        # Manually set the title property since AppBase isn't a QApplication
+        qapp = QApplication.instance()
+        if qapp is not None:
+            qapp.setProperty("qtpie_window_title", test_title)
+
+        @window
+        class ChildWindow(Window):
+            label: QLabel = new("Child")
+
+        @app(show=False, system_tray=False, window=False)
+        class MyApp(AppBase):
+            child: ChildWindow = new()
+
+        instance = MyApp()
+        # Child window should inherit the title from QApplication property
+        assert_that(instance.child.windowTitle()).is_equal_to(test_title)
+
+    def test_child_window_explicit_icon_overrides_app(self, qt: QtDriver) -> None:
+        """Child Window with explicit icon= does not inherit from @app."""
+        from qtpy.QtGui import QIcon, QPixmap
+
+        from qtpie import Window, window
+
+        # Create different icons
+        app_pixmap = QPixmap(16, 16)
+        app_pixmap.fill()
+        app_icon = QIcon(app_pixmap)
+
+        child_pixmap = QPixmap(32, 32)
+        child_pixmap.fill()
+        child_icon = QIcon(child_pixmap)
+
+        @window(icon=child_icon)
+        class ChildWindow(Window):
+            label: QLabel = new("Child")
+
+        @app(show=False, system_tray=False, window=False, icon=app_icon)
+        class MyApp(AppBase):
+            child: ChildWindow = new()
+
+        instance = MyApp()
+        # Child window should have its own icon (not null)
+        assert_that(instance.child.windowIcon().isNull()).is_false()
+
+    def test_child_window_explicit_title_overrides_app(self, qt: QtDriver) -> None:
+        """Child Window with explicit title= does not inherit from @app."""
+        from qtpie import Window, window
+
+        @window(title="My Child Window")
+        class ChildWindow(Window):
+            label: QLabel = new("Child")
+
+        @app(show=False, system_tray=False, window=False, title="Parent App Title")
+        class MyApp(AppBase):
+            child: ChildWindow = new()
+
+        instance = MyApp()
+        # Child window should use its explicit title
+        assert_that(instance.child.windowTitle()).is_equal_to("My Child Window")
+
+    def test_app_icon_stored_in_config(self, qt: QtDriver) -> None:
+        """@app(icon=...) stores icon in config.
+
+        Note: The actual setting of QApplication.windowIcon()
+        only happens for real App (QApplication subclass), not AppBase.
+        AppBase stores the icon in config for use by auto-window.
+        """
+        from qtpy.QtGui import QIcon, QPixmap
+
+        pixmap = QPixmap(16, 16)
+        pixmap.fill()
+        app_icon = QIcon(pixmap)
+
+        @app(show=False, system_tray=False, window=False, icon=app_icon)
+        class MyApp(AppBase):
+            _count: Variable[int] = new(0)
+
+        # Icon should be stored in config
+        assert_that(MyApp._qtpie_config.icon).is_same_as(app_icon)
+
+    def test_app_title_stored_in_config(self, qt: QtDriver) -> None:
+        """@app(title=...) stores windowTitle in widget_props config.
+
+        Note: The actual setting of QApplication.property("qtpie_window_title")
+        only happens for real App (QApplication subclass), not AppBase.
+        AppBase stores the title in config for use by auto-window.
+        """
+        test_title = "My App Title For Config Test"
+
+        @app(show=False, system_tray=False, window=False, title=test_title)
+        class MyApp(AppBase):
+            _count: Variable[int] = new(0)
+
+        # Title should be stored in config
+        assert_that(MyApp._qtpie_config.widget_props.get("windowTitle")).is_equal_to(test_title)

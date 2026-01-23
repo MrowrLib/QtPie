@@ -604,10 +604,49 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         apply_widget_props(self, config.widget_props, skip_filter=skip_reactive_or_translatable)
 
         # Apply icon at runtime (when Qt resources are available)
-        if config.icon is not None:
+        # - None: inherit from active window or QApplication
+        # - False: explicitly no icon (opt-out)
+        # - other: use specified icon
+        if config.icon is False:
+            pass  # Explicit opt-out, no icon
+        elif config.icon is not None:
             resolved_icon = resolve_icon(config.icon)
             if resolved_icon is not None:
                 self.setWindowIcon(resolved_icon)
+        else:
+            # Try to inherit icon from active window, fallback to QApplication
+            from qtpy.QtGui import QIcon
+            from qtpy.QtWidgets import QApplication
+
+            inherited_icon: QIcon | None = None
+            active_window = QApplication.activeWindow()
+            if active_window is not None:
+                parent_icon = active_window.windowIcon()
+                if not parent_icon.isNull():
+                    inherited_icon = parent_icon
+
+            # Fallback to QApplication icon (set by @app decorator)
+            if inherited_icon is None:
+                qapp = QApplication.instance()
+                if qapp is not None and isinstance(qapp, QApplication):
+                    app_icon = qapp.windowIcon()
+                    if not app_icon.isNull():
+                        inherited_icon = app_icon
+
+            if inherited_icon is not None:
+                self.setWindowIcon(inherited_icon)
+
+        # Apply title inheritance (if no explicit title set)
+        # - None in widget_props: inherit from QApplication's qtpie_window_title property
+        # - explicit value: already applied by apply_widget_props above
+        if "windowTitle" not in config.widget_props:
+            from qtpy.QtWidgets import QApplication
+
+            qapp = QApplication.instance()
+            if qapp is not None:
+                app_title = qapp.property("qtpie_window_title")
+                if app_title:
+                    self.setWindowTitle(str(app_title))
 
         # Apply initial size
         if config.size is not None:
