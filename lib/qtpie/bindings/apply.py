@@ -572,9 +572,13 @@ def apply_auto_bindings(
                 # first segment (Variable) and re-apply binding when it changes.
                 from qtpie.variable import Variable as VarType
 
+                # Check if path starts with #record - if so, skip Variable lookup
+                # and go directly to record handling
+                path_starts_with_record = bind_path.startswith("#record")
+
                 # Parse path to get first segment
                 first_segment = bind_path.split(".")[0].split("?")[0].lstrip("_")
-                var_source = getattr(host, first_segment, None) or getattr(host, f"_{first_segment}", None)
+                var_source = None if path_starts_with_record else (getattr(host, first_segment, None) or getattr(host, f"_{first_segment}", None))
 
                 if isinstance(var_source, VarType):
                     # Listen to Variable changes and re-apply binding
@@ -605,39 +609,106 @@ def apply_auto_bindings(
 
                     var_source.on_change(make_var_listener(widget_instance, host, bind_path, field_info, applied))
                 else:
-                    # Fallback: schedule deferred retries for parenting case.
-                    # Use multiple attempts with increasing delays because the parent
-                    # hierarchy might not be established until after several event loops.
-                    from qtpy.QtCore import QTimer
+                    # Check if this is a Widget[T | None] with the record currently being None.
+                    # If so, listen to the record Observable for changes and re-apply binding.
+                    host_config = getattr(host, "_qtpie_config", None)
+                    has_record_type = host_config is not None and getattr(host_config, "record_type", None) is not None
+                    record_is_none = False
+                    record_observable: Observable[Any] | None = None
 
-                    applied_flag: dict[str, bool] = {"done": False}
+                    if has_record_type:
+                        # Access _qtpie state to get the record's Observable
+                        qtpie_state = getattr(host, "_qtpie", None)
+                        if qtpie_state is not None:
+                            try:
+                                record_state = qtpie_state.record_state
+                                if record_state is not None and hasattr(record_state, "observable"):
+                                    obs_proxy = record_state.observable
+                                    # Check if the underlying target is None
+                                    if isinstance(obs_proxy, ObservableProxy):
+                                        target = object.__getattribute__(cast(ObservableProxy[Any], obs_proxy), "_target")
+                                        record_is_none = target is None
+                                        # The ObservableProxy is what we listen to
+                                        record_observable = cast(Observable[Any], obs_proxy)
+                            except (AttributeError, TypeError):
+                                pass
 
-                    def make_deferred_model_bind(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool], delays: list[int]) -> Callable[[], None]:
-                        def retry_bind() -> None:
-                            if app["done"]:
-                                return
-                            deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
-                            if deferred_source is not None:
-                                app["done"] = True
-                                apply_model_binding(
-                                    h,
-                                    w,
-                                    deferred_source,
-                                    bp,
-                                    fi,
-                                    is_table_view_fn=_is_table_view,
-                                    is_tree_view_fn=_is_tree_view,
-                                    resolve_or_create_variable_fn=_resolve_or_create_variable,
-                                )
-                            elif delays:
-                                # Try again with next delay
-                                QTimer.singleShot(delays[0], make_deferred_model_bind(w, h, bp, fi, app, delays[1:]))
+                    if record_is_none and record_observable is not None:
+                        # Create an empty model initially so the widget has something to show
+                        empty_list: ObservableList[Any] = ObservableList()
+                        apply_model_binding(
+                            host,
+                            widget_instance,
+                            empty_list,
+                            bind_path,
+                            field_info,
+                            is_table_view_fn=_is_table_view,
+                            is_tree_view_fn=_is_tree_view,
+                            resolve_or_create_variable_fn=_resolve_or_create_variable,
+                        )
 
-                        return retry_bind
+                        # Listen to record Observable changes and re-apply binding with real data
+                        applied_record: dict[str, bool] = {"done": False}
 
-                    # Try immediately, then at 0ms, 10ms, 50ms, 100ms
-                    retry_delays = [0, 10, 50, 100]
-                    QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info, applied_flag, retry_delays))
+                        def make_record_listener(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool]) -> Callable[[], None]:
+                            def on_record_change() -> None:
+                                if app["done"]:
+                                    return
+                                # Re-attempt resolution now that record may have a value
+                                deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                                if deferred_source is not None:
+                                    app["done"] = True
+                                    apply_model_binding(
+                                        h,
+                                        w,
+                                        deferred_source,
+                                        bp,
+                                        fi,
+                                        is_table_view_fn=_is_table_view,
+                                        is_tree_view_fn=_is_tree_view,
+                                        resolve_or_create_variable_fn=_resolve_or_create_variable,
+                                    )
+
+                            return on_record_change
+
+                        # Note: record_observable is actually an ObservableProxy which takes Callable[[], None]
+                        # but we cast it to Observable[Any] above for type compatibility
+                        record_observable.on_change(make_record_listener(widget_instance, host, bind_path, field_info, applied_record))  # type: ignore[arg-type]
+                        logger.debug("Registered record change listener for deferred model binding: bind_path=%s", bind_path)
+                    else:
+                        # Fallback: schedule deferred retries for parenting case.
+                        # Use multiple attempts with increasing delays because the parent
+                        # hierarchy might not be established until after several event loops.
+                        from qtpy.QtCore import QTimer
+
+                        applied_flag: dict[str, bool] = {"done": False}
+
+                        def make_deferred_model_bind(w: QWidget, h: QWidget, bp: str, fi: Any, app: dict[str, bool], delays: list[int]) -> Callable[[], None]:
+                            def retry_bind() -> None:
+                                if app["done"]:
+                                    return
+                                deferred_source = resolve_binding_source(h, bp)  # type: ignore[arg-type]
+                                if deferred_source is not None:
+                                    app["done"] = True
+                                    apply_model_binding(
+                                        h,
+                                        w,
+                                        deferred_source,
+                                        bp,
+                                        fi,
+                                        is_table_view_fn=_is_table_view,
+                                        is_tree_view_fn=_is_tree_view,
+                                        resolve_or_create_variable_fn=_resolve_or_create_variable,
+                                    )
+                                elif delays:
+                                    # Try again with next delay
+                                    QTimer.singleShot(delays[0], make_deferred_model_bind(w, h, bp, fi, app, delays[1:]))
+
+                            return retry_bind
+
+                        # Try immediately, then at 0ms, 10ms, 50ms, 100ms
+                        retry_delays = [0, 10, 50, 100]
+                        QTimer.singleShot(0, make_deferred_model_bind(widget_instance, host, bind_path, field_info, applied_flag, retry_delays))
 
             continue
 

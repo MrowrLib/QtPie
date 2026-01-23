@@ -1,24 +1,40 @@
-from qtpy.QtWidgets import QComboBox, QLabel, QPushButton, QTreeView
+from qtpy.QtWidgets import QComboBox, QLabel, QListView, QPushButton, QTableView, QTreeView
 
+from forc2.domain.workspace import Workspace
 from qtpie import Widget, new, widget
 
 
 @widget
-class SidebarWidget(Widget):
-    collections_headers: QLabel = new(bind="workspace?.name")
+class SidebarWidget(Widget[Workspace | None]):
+    the_record_label: QLabel = new(bind="The record is: {#record}")
+
+    collections_headers: QLabel = new(bind="{name}")  # TODO: bind="name" should work
     collections_tree: QTreeView = new(
-        bind="workspace?.collection?.items",
+        bind="collection?.items",
         children="items",
         format="{name}",
-        selectedItem="selected_sidebar_item",
+        # selectedItem="selected_sidebar_item",
     )
+
+    # Let's try it as a ListView...
+    collections_list: QListView = new(
+        bind="collection?.items",
+        format="{name}",
+    )
+
+    # Let's try it as a TableView:
+    collections_table: QTableView = new(
+        bind="collection?.items",
+    )
+
+    collection_items_count_label: QLabel = new(bind="Items: {len(collection?.items) if collection is not None else 0}")
 
     environments_headers: QLabel = new("Environment")
     environments_chooser: QComboBox = new(
-        bind="workspace?.environments",
+        bind="environments",
         format="{name}",
         # selectedItem="workspace?.active_environment",
-        selectedText="workspace?.active_environment_name",
+        selectedText="active_environment_name",
     )
 
     btn_test: QPushButton = new("Test Button", clicked="{print(selected_sidebar_item)}")

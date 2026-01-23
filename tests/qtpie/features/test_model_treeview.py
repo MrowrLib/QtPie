@@ -2171,3 +2171,150 @@ class TestTreeViewOnEdited:
         assert_that(callback_calls).is_length(1)
         assert_that(callback_calls[0][1]).is_equal_to("Original")
         assert_that(callback_calls[0][2]).is_equal_to("Modified")
+
+
+# =============================================================================
+# QTreeView with Widget[T | None] Record Type and Nested bind= Path
+# =============================================================================
+
+
+@dataclass
+class Container:
+    """Container with a nested list for tree binding."""
+
+    name: str = ""
+    items: list[TreeNode] = field(default_factory=list)
+
+
+@dataclass
+class WorkspaceWithContainer:
+    """Workspace-like record with a nullable Container field."""
+
+    name: str = ""
+    collection: Container | None = None
+
+
+class TestTreeViewWidgetRecordNullable:
+    """Test QTreeView bind= with Widget[T | None] where T has nested paths.
+
+    This reproduces the bug where:
+    1. Widget[WorkspaceWithContainer | None] - record is nullable
+    2. bind="collection?.items" - path goes through the record
+    3. When record starts as None and later becomes non-None, tree should populate
+
+    Previously this only worked with Variable[Workspace | None] (a Variable on Widget),
+    but NOT with Widget[Workspace | None] (record type itself being nullable).
+    """
+
+    def test_tree_populates_when_record_changes_from_none(self, qt: QtDriver) -> None:
+        """QTreeView with bind= through record should populate when record changes from None."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget[WorkspaceWithContainer | None]):
+            _tree: QTreeView = new(
+                bind="collection?.items",
+                children="children",
+                format="{name}",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially record is None, tree should be empty
+        model = instance._tree.model()
+        assert model is not None, "Model should be created even when record is None"
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Create workspace with collection and items
+        node_a = TreeNode("Node A")
+        node_b = TreeNode("Node B", children=[TreeNode("Child B1")])
+        container = Container(name="My Collection", items=[node_a, node_b])
+        workspace = WorkspaceWithContainer(name="My Workspace", collection=container)
+
+        # Set the record - this should trigger the tree to populate
+        instance.record = workspace  # type: ignore[assignment]
+        qt.process_events()
+
+        # Get the new model (a new model is created when the binding is re-applied)
+        model = instance._tree.model()
+        assert model is not None
+
+        # Tree should now have items
+        assert_that(model.rowCount()).is_equal_to(2)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Node A")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Node B")
+
+        # Child should also be accessible
+        parent_idx = model.index(1, 0)
+        assert_that(model.rowCount(parent_idx)).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0, parent_idx))).is_equal_to("Child B1")
+
+    def test_tree_works_when_record_starts_non_none(self, qt: QtDriver) -> None:
+        """QTreeView works when Widget[T] record starts with a value (not None)."""
+        from qtpie import Widget, widget
+
+        node_a = TreeNode("Node A")
+        node_b = TreeNode("Node B")
+        initial_container = Container(name="Initial", items=[node_a, node_b])
+        initial_workspace = WorkspaceWithContainer(name="Workspace", collection=initial_container)
+
+        @widget(record=initial_workspace)
+        class TestWidget(Widget[WorkspaceWithContainer]):
+            _tree: QTreeView = new(
+                bind="collection?.items",
+                children="children",
+                format="{name}",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Should have 2 items immediately
+        model = instance._tree.model()
+        assert model is not None
+        assert_that(model.rowCount()).is_equal_to(2)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Node A")
+        assert_that(model.data(model.index(1, 0))).is_equal_to("Node B")
+
+    def test_tree_with_direct_record_path_bind(self, qt: QtDriver) -> None:
+        """QTreeView with bind='#record?.collection?.items' works correctly."""
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget[WorkspaceWithContainer | None]):
+            # Using explicit #record prefix
+            _tree: QTreeView = new(
+                bind="#record?.collection?.items",
+                children="children",
+                format="{name}",
+            )
+
+        instance = TestWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially record is None, tree should be empty
+        model = instance._tree.model()
+        assert model is not None
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Set record with data
+        node_a = TreeNode("Node A")
+        container = Container(name="Collection", items=[node_a])
+        workspace = WorkspaceWithContainer(name="Workspace", collection=container)
+        instance.record = workspace  # type: ignore[assignment]
+        qt.process_events()
+
+        # Get the new model (a new model is created when the binding is re-applied)
+        model = instance._tree.model()
+        assert model is not None
+
+        # Tree should populate
+        assert_that(model.rowCount()).is_equal_to(1)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Node A")

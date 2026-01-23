@@ -39,6 +39,36 @@ def resolve_binding_source(widget: Widget[Any] | Window[Any], path: str) -> Bind
     """
     from qtpie.variable import Variable
 
+    # Handle #record prefix - strip it and resolve through record directly
+    # e.g., "#record?.collection?.items" -> resolve "collection?.items" on the record
+    if path.startswith("#record"):
+        # Strip "#record" and any following "." or "?."
+        record_path = path[7:]  # len("#record") == 7
+        if record_path.startswith("?."):
+            record_path = record_path[2:]
+        elif record_path.startswith("."):
+            record_path = record_path[1:]
+
+        # If there's a path after #record, resolve it on the record proxy
+        if record_path and hasattr(widget, "_qtpie_config"):
+            config = widget._qtpie_config
+            if config.record_type is not None:
+                record = widget.record
+                proxy = record.observable
+                target = object.__getattribute__(proxy, "_target")
+                if target is not None:
+                    try:
+                        return proxy.observable_for_path(record_path)
+                    except ValueError:
+                        return None
+        # If just "#record" with no path, return the record proxy itself
+        elif not record_path and hasattr(widget, "_qtpie_config"):
+            config = widget._qtpie_config
+            if config.record_type is not None:
+                record = widget.record
+                return record.observable
+        return None
+
     # Keep original path for exact matching, strip for fallback lookup
     original_path = path
     lookup_path = path.lstrip("_")

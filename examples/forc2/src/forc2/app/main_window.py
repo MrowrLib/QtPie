@@ -37,6 +37,15 @@ class ForcWindow(Window[Workspace | None]):
     file_menu: FileMenu
     view_menu: ViewMenu = new(visible="{#record is not None}")
 
+    ### Docks ###
+    sidebar: Dock[SidebarWidget] = new(
+        bind="#record",  # <-- I think this happens by default, maybe not in Dock?
+        dock="left",
+        title="Explorer",
+        hideTitleBar=True,
+        # visible="{#record is not None}",
+    )(maximumWidth=400)
+
     ### Widgets ###
     label: QLabel = new("Forc Main Window")
     workspace_name_label: QLabel = new(bind="Workspace is: {name}", visible="{#record is not None}")
