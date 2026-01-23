@@ -1140,16 +1140,55 @@ def apply_model_binding(
                 all_widget_columns.append((col_idx + prepend_offset, widget_cls, embed_cfg))
 
         # Append widget columns (offset = total columns - append columns length)
-        if field_info.table_append_widget_columns:
-            # model._columns contains the merged columns after creation
+        # NOTE: If model needs to re-detect columns (empty list), we must defer this
+        # until columns are known. We'll handle this after checking _needs_redetect_from_items.
+        append_widget_columns = field_info.table_append_widget_columns
+
+        # Check if model needs column re-detection (empty list with prepend/append)
+        needs_redetect = getattr(model, "_needs_redetect_from_items", False)
+
+        if append_widget_columns and not needs_redetect:
+            # Columns are already known - calculate offset now
             total_cols = len(model._columns)  # type: ignore[attr-defined]
             append_len = len(field_info.table_append_columns or [])
             append_offset = total_cols - append_len
-            for col_idx, widget_cls, embed_cfg in field_info.table_append_widget_columns:
+            for col_idx, widget_cls, embed_cfg in append_widget_columns:
                 all_widget_columns.append((col_idx + append_offset, widget_cls, embed_cfg))
 
-        if all_widget_columns:
+        if all_widget_columns and not needs_redetect:
             _setup_table_widget_columns(host, widget_instance, model, obs_list, all_widget_columns)
+        elif needs_redetect:
+            # Defer widget column setup until columns are detected
+            # Connect to modelReset which fires when columns are re-detected
+            def setup_deferred_widget_columns() -> None:
+                # Disconnect after first call - we only need to set up once
+                model.modelReset.disconnect(setup_deferred_widget_columns)
+
+                # Now calculate correct column indices
+                deferred_widget_columns: list[tuple[int, type, Any | None]] = []
+
+                # Prepend columns (indices are correct, start from 0)
+                if field_info.table_prepend_widget_columns:
+                    deferred_widget_columns.extend(field_info.table_prepend_widget_columns)
+
+                # Main columns= widget columns (offset by prepend length)
+                if field_info.table_widget_columns:
+                    prepend_off = len(field_info.table_prepend_columns or [])
+                    for c_idx, w_cls, e_cfg in field_info.table_widget_columns:
+                        deferred_widget_columns.append((c_idx + prepend_off, w_cls, e_cfg))
+
+                # Append widget columns (now columns are known)
+                if append_widget_columns:
+                    total = len(model._columns)  # type: ignore[attr-defined]
+                    append_len = len(field_info.table_append_columns or [])
+                    append_off = total - append_len
+                    for c_idx, w_cls, e_cfg in append_widget_columns:
+                        deferred_widget_columns.append((c_idx + append_off, w_cls, e_cfg))
+
+                if deferred_widget_columns:
+                    _setup_table_widget_columns(host, widget_instance, model, obs_list, deferred_widget_columns)
+
+            model.modelReset.connect(setup_deferred_widget_columns)
     else:
         # QComboBox/QListView selection bindings
         setup_selection_bindings(

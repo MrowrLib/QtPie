@@ -111,8 +111,8 @@ class TestHttpClientHeaders:
 
         req = Request()
         req.url = "https://example.com"
-        req.headers.append(RequestKeyValue(key="X-Custom", value="value"))
-        req.headers.append(RequestKeyValue(key="X-Another", value="other"))
+        req.headers.append(RequestKeyValue(name="X-Custom", value="value"))
+        req.headers.append(RequestKeyValue(name="X-Another", value="other"))
 
         resp = await http.send(req)
 
@@ -130,8 +130,8 @@ class TestHttpClientHeaders:
 
         req = Request()
         req.url = "https://example.com"
-        req.headers.append(RequestKeyValue(key="X-Enabled", value="yes", enabled=True))
-        req.headers.append(RequestKeyValue(key="X-Disabled", value="no", enabled=False))
+        req.headers.append(RequestKeyValue(name="X-Enabled", value="yes", enabled=True))
+        req.headers.append(RequestKeyValue(name="X-Disabled", value="no", enabled=False))
 
         await http.send(req)
 
@@ -149,8 +149,8 @@ class TestHttpClientQueryParams:
 
         req = Request()
         req.url = "https://example.com/items"
-        req.query_params.append(RequestKeyValue(key="page", value="1"))
-        req.query_params.append(RequestKeyValue(key="limit", value="10"))
+        req.query_params.append(RequestKeyValue(name="page", value="1"))
+        req.query_params.append(RequestKeyValue(name="limit", value="10"))
 
         await http.send(req)
 
@@ -166,8 +166,8 @@ class TestHttpClientQueryParams:
 
         req = Request()
         req.url = "https://example.com"
-        req.query_params.append(RequestKeyValue(key="enabled", value="yes", enabled=True))
-        req.query_params.append(RequestKeyValue(key="disabled", value="no", enabled=False))
+        req.query_params.append(RequestKeyValue(name="enabled", value="yes", enabled=True))
+        req.query_params.append(RequestKeyValue(name="disabled", value="no", enabled=False))
 
         await http.send(req)
 
@@ -216,7 +216,7 @@ class TestHttpClientAuth:
 
         req = Request()
         req.url = "https://example.com"
-        req.auth = ApiKeyAuth(key="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER)
+        req.auth = ApiKeyAuth(name="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER)
 
         await http.send(req)
 
@@ -231,7 +231,7 @@ class TestHttpClientAuth:
 
         req = Request()
         req.url = "https://example.com"
-        req.auth = ApiKeyAuth(key="api_key", value="secret-key", location=ApiKeyLocation.QUERY)
+        req.auth = ApiKeyAuth(name="api_key", value="secret-key", location=ApiKeyLocation.QUERY)
 
         await http.send(req)
 
@@ -249,7 +249,7 @@ class TestHttpClientBodyTypes:
         req = Request()
         req.method = HttpMethod.POST
         req.url = "https://example.com"
-        req.body_fields.append(RequestKeyValue(key="key", value="value"))
+        req.body_fields.append(RequestKeyValue(name="key", value="value"))
         req.body_type = BodyType.FORM_URLENCODED
 
         await http.send(req)
@@ -300,7 +300,7 @@ class TestHttpClientBodyTypes:
         req = Request()
         req.method = HttpMethod.POST
         req.url = "https://example.com"
-        req.headers.append(RequestKeyValue(key="Content-Type", value="application/custom"))
+        req.headers.append(RequestKeyValue(name="Content-Type", value="application/custom"))
         req.body = "data"
         req.body_type = BodyType.JSON
 

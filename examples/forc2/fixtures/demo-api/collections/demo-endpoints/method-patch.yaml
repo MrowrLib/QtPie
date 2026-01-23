@@ -2,7 +2,7 @@ name: PATCH Example
 method: PATCH
 url: ${BASE_URL}/demo/echo
 headers:
-  - key: Content-Type
+  - name: Content-Type
     value: application/json
 body:
   type: json

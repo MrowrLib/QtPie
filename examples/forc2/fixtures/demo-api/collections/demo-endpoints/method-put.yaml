@@ -2,7 +2,7 @@ name: PUT Example
 method: PUT
 url: ${BASE_URL}/demo/echo
 headers:
-  - key: Content-Type
+  - name: Content-Type
     value: application/json
 body:
   type: json

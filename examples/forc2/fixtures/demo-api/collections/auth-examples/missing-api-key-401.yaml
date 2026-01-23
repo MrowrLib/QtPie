@@ -2,7 +2,7 @@ name: Missing API Key (401)
 method: POST
 url: ${BASE_URL}/data/secure
 headers:
-- key: Accept
+- name: Accept
   value: application/json
   enabled: true
   secret: false

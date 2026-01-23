@@ -2,5 +2,5 @@ name: Get Users
 method: GET
 url: ${BASE_URL}/users
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json

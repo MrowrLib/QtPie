@@ -2,11 +2,11 @@ name: Check Cookies 123 456
 method: PATCH
 url: ${BASE_URL}/demo/cookies/check
 headers:
-- key: Accept
+- name: Accept
   value: application/json
   enabled: true
   secret: false
-- key: Cookie
+- name: Cookie
   value: simple=test_value; session=abc123
   enabled: true
   secret: false

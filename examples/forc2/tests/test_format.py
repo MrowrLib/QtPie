@@ -54,17 +54,17 @@ name: Test
 method: POST
 url: https://api.example.com
 headers:
-  - key: Content-Type
+  - name: Content-Type
     value: application/json
-  - key: Authorization
+  - name: Authorization
     value: Bearer token123
 """)
         req = load_request(yaml_file)
 
         assert_that(list(req.headers.value)).is_length(2)
-        assert_that(req.headers.value[0].key).is_equal_to("Content-Type")
+        assert_that(req.headers.value[0].name).is_equal_to("Content-Type")
         assert_that(req.headers.value[0].value).is_equal_to("application/json")
-        assert_that(req.headers.value[1].key).is_equal_to("Authorization")
+        assert_that(req.headers.value[1].name).is_equal_to("Authorization")
 
     def test_load_request_with_query_params(self, tmp_path: Path) -> None:
         """Load a request with query parameters."""
@@ -74,15 +74,15 @@ name: Search
 method: GET
 url: https://api.example.com/search
 query_params:
-  - key: q
+  - name: q
     value: hello
-  - key: limit
+  - name: limit
     value: "10"
 """)
         req = load_request(yaml_file)
 
         assert_that(list(req.query_params.value)).is_length(2)
-        assert_that(req.query_params.value[0].key).is_equal_to("q")
+        assert_that(req.query_params.value[0].name).is_equal_to("q")
         assert_that(req.query_params.value[0].value).is_equal_to("hello")
 
     def test_load_request_with_body(self, tmp_path: Path) -> None:
@@ -132,16 +132,16 @@ method: POST
 url: https://api.example.com
 body_type: form_urlencoded
 body_fields:
-  - key: username
+  - name: username
     value: john
-  - key: password
+  - name: password
     value: secret
 """)
         req = load_request(yaml_file)
 
         assert_that(req.body_type.value).is_equal_to(BodyType.FORM_URLENCODED)
         assert_that(list(req.body_fields.value)).is_length(2)
-        assert_that(req.body_fields.value[0].key).is_equal_to("username")
+        assert_that(req.body_fields.value[0].name).is_equal_to("username")
         assert_that(req.body_fields.value[0].value).is_equal_to("john")
 
     def test_load_request_with_basic_auth(self, tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ method: GET
 url: https://api.example.com
 auth:
   type: api_key
-  key: X-API-Key
+  name: X-API-Key
   value: secret-key-123
   location: header
 """)
@@ -200,7 +200,7 @@ auth:
         assert req.auth.value is not None
         assert isinstance(req.auth.value, ApiKeyAuth)
         assert_that(req.auth.value.type).is_equal_to(AuthType.API_KEY)
-        assert_that(req.auth.value.key).is_equal_to("X-API-Key")
+        assert_that(req.auth.value.name).is_equal_to("X-API-Key")
         assert_that(req.auth.value.value).is_equal_to("secret-key-123")
         assert_that(req.auth.value.location).is_equal_to(ApiKeyLocation.HEADER)
 
@@ -213,7 +213,7 @@ method: GET
 url: https://api.example.com
 auth:
   type: api_key
-  key: api_key
+  name: api_key
   value: my-key
   location: query
 """)
@@ -390,15 +390,15 @@ class TestSaveRequest:
         req.name.value = "Test"
         req.method.value = HttpMethod.POST
         req.url.value = "https://api.example.com"
-        req.headers.append(RequestKeyValue(key="Content-Type", value="application/json"))
-        req.headers.append(RequestKeyValue(key="Authorization", value="Bearer token"))
+        req.headers.append(RequestKeyValue(name="Content-Type", value="application/json"))
+        req.headers.append(RequestKeyValue(name="Authorization", value="Bearer token"))
 
         yaml_file = tmp_path / "test.yaml"
         save_request(req, yaml_file)
 
         loaded = load_request(yaml_file)
         assert_that(list(loaded.headers.value)).is_length(2)
-        assert_that(loaded.headers.value[0].key).is_equal_to("Content-Type")
+        assert_that(loaded.headers.value[0].name).is_equal_to("Content-Type")
 
     def test_save_request_with_body(self, tmp_path: Path) -> None:
         """Save a request with body."""
@@ -436,15 +436,15 @@ class TestSaveRequest:
         req.method = HttpMethod.POST
         req.url = "/form"
         req.body_type = BodyType.FORM_URLENCODED
-        req.body_fields.append(RequestKeyValue(key="name", value="test"))
-        req.body_fields.append(RequestKeyValue(key="email", value="test@example.com"))
+        req.body_fields.append(RequestKeyValue(name="name", value="test"))
+        req.body_fields.append(RequestKeyValue(name="email", value="test@example.com"))
 
         yaml_file = tmp_path / "test.yaml"
         save_request(req, yaml_file)
 
         loaded = load_request(yaml_file)
         assert_that(list(loaded.body_fields.value)).is_length(2)
-        assert_that(loaded.body_fields.value[0].key).is_equal_to("name")
+        assert_that(loaded.body_fields.value[0].name).is_equal_to("name")
 
     def test_save_request_with_basic_auth(self, tmp_path: Path) -> None:
         """Save a request with basic auth."""
@@ -485,7 +485,7 @@ class TestSaveRequest:
         req.name = "API Key Auth"
         req.method = HttpMethod.GET
         req.url = "/protected"
-        req.auth = ApiKeyAuth(key="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER)
+        req.auth = ApiKeyAuth(name="X-API-Key", value="secret-key", location=ApiKeyLocation.HEADER)
 
         yaml_file = tmp_path / "test.yaml"
         save_request(req, yaml_file)
@@ -493,7 +493,7 @@ class TestSaveRequest:
         loaded = load_request(yaml_file)
         assert loaded.auth.value is not None
         assert isinstance(loaded.auth.value, ApiKeyAuth)
-        assert_that(loaded.auth.value.key).is_equal_to("X-API-Key")
+        assert_that(loaded.auth.value.name).is_equal_to("X-API-Key")
         assert_that(loaded.auth.value.value).is_equal_to("secret-key")
         assert_that(loaded.auth.value.location).is_equal_to(ApiKeyLocation.HEADER)
 

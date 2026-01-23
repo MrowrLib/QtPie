@@ -66,7 +66,7 @@ class BearerAuth(Auth):
 class ApiKeyAuth(Auth):
     """API Key authentication."""
 
-    key: str = ""
+    name: str = ""
     value: str = ""
     location: ApiKeyLocation = ApiKeyLocation.HEADER
 

@@ -2,7 +2,7 @@ name: Get User by ID
 method: GET
 url: ${BASE_URL}/users/1
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
 auth:
   type: bearer

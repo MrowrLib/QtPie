@@ -2,5 +2,5 @@ name: Set Cookies
 method: GET
 url: ${BASE_URL}/demo/cookies/set
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json

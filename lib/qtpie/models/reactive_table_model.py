@@ -94,6 +94,14 @@ class ReactiveTableModel[T](QAbstractTableModel):
             self._columns = list(columns)
         else:
             self._columns = self._auto_detect_columns()
+
+        # Track if we need to re-detect columns when items are added.
+        # This is True if columns weren't explicitly provided AND we couldn't auto-detect
+        # (empty list with no item_type hint). We need to re-detect even if prepend/append
+        # columns give us a non-empty _columns list.
+        auto_detected = self._columns  # Columns before merging prepend/append
+        self._needs_redetect_from_items = not self._columns_explicit and not auto_detected
+
         # Merge prepend/append columns (works with both explicit and auto-detected)
         self._columns = self._merge_prepend_append_columns(self._columns)
 
@@ -551,14 +559,18 @@ class ReactiveTableModel[T](QAbstractTableModel):
 
     def _on_insert(self, index: int, item: T) -> None:
         """Handle item insertion."""
-        # Re-detect columns if we had none and columns weren't explicit
-        if not self._columns_explicit and not self._columns:
+        # Re-detect columns if we need to (couldn't auto-detect at creation time)
+        # This handles the case where list started empty and items are added later.
+        # We use _needs_redetect_from_items instead of checking _columns because
+        # _columns may contain prepend/append columns even when no data columns detected.
+        if self._needs_redetect_from_items:
             new_columns = self._auto_detect_columns()
-            new_columns = self._merge_prepend_append_columns(new_columns)
             if new_columns:
+                # Successfully detected columns from items - merge with prepend/append
+                new_columns = self._merge_prepend_append_columns(new_columns)
                 self.beginResetModel()
                 self._columns = new_columns
-                # Note: _auto_detect_columns() now sets appropriate headers internally
+                self._needs_redetect_from_items = False  # Only re-detect once
                 self.endResetModel()
                 return  # Reset already handles the insert
         self.beginInsertRows(QModelIndex(), index, index)
@@ -581,11 +593,13 @@ class ReactiveTableModel[T](QAbstractTableModel):
         Note: ObservableList.replace() fires on_clear AFTER the new items are added,
         so len(self._obs_list) reflects the new list at callback time.
         """
-        # Re-detect columns if we had none and columns weren't explicit
+        # Re-detect columns if we need to (couldn't auto-detect at creation time)
         # This handles the case where list starts empty and is replaced with items
-        if not self._columns_explicit and not self._columns:
-            self._columns = self._auto_detect_columns()
-            self._columns = self._merge_prepend_append_columns(self._columns)
+        if self._needs_redetect_from_items:
+            new_columns = self._auto_detect_columns()
+            if new_columns:
+                self._columns = self._merge_prepend_append_columns(new_columns)
+                self._needs_redetect_from_items = False
         self.beginResetModel()
         self.endResetModel()
 

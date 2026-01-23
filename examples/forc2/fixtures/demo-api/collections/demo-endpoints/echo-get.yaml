@@ -2,12 +2,12 @@ name: Echo (GET)
 method: GET
 url: ${BASE_URL}/demo/echo
 query_params:
-  - key: foo
+  - name: foo
     value: bar
-  - key: test
+  - name: test
     value: "123"
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
-  - key: X-Custom-Header
+  - name: X-Custom-Header
     value: custom-value

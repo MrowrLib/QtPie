@@ -28,7 +28,9 @@ class RequestParamsWidget(Widget[Request]):
     ### Widgets ###
     header: QLabel = new("Query Parameters:")
     add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
-    table: QTableView = new(bind="query_params")  # , columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
+    table: QTableView = new(bind="query_params", appendColumns=[DeleteRequestKeyValueWidget])
+
+    label_query_params: QLabel = new(bind="Query Parameters: {query_params}")  # Example of binding to show current params
 
     ### Methods ###
     def _on_add(self) -> None:
@@ -41,7 +43,7 @@ class RequestParamsWidget(Widget[Request]):
 @widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
     ### Widgets ###
-    table: QTableView = new(bind="headers")  # , columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
+    table: QTableView = new(bind="headers", appendColumns=[DeleteRequestKeyValueWidget])
 
 
 @widget(layout="form")
@@ -53,7 +55,7 @@ class RequestAuthFormWidget(Widget[Auth]):
     # Bearer Auth
     bearer_token: QLineEdit = new(bind="token", label="Token:", visible="{type.name == 'BEARER'}")
     # API Key Auth
-    api_key_name: QLineEdit = new(bind="key", label="API Key:", visible="{type.name == 'API_KEY'}")
+    api_key_name: QLineEdit = new(bind="name", label="Name:", visible="{type.name == 'API_KEY'}")
     api_key_value: QLineEdit = new(bind="value", label="Value:", visible="{type.name == 'API_KEY'}")
     api_key_location: QComboBox = new(
         bind=ApiKeyLocation,

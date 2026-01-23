@@ -2,10 +2,10 @@ name: Get Post Comments
 method: GET
 url: ${BASE_URL}/posts/1/comments
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
 query_params:
-  - key: limit
+  - name: limit
     value: "10"
-  - key: offset
+  - name: offset
     value: "0"

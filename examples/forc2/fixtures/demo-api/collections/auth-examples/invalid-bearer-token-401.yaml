@@ -2,7 +2,7 @@ name: Invalid Bearer Token (401)
 method: GET
 url: ${BASE_URL}/auth/profile
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
 auth:
   type: bearer

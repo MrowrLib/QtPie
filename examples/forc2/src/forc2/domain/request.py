@@ -23,10 +23,9 @@ class HttpMethod(Enum):
     OPTIONS = "OPTIONS"
 
 
-# TODO: please refactor to 'Name' and 'Value' instead of 'Key' and 'Value'
 @dataclass
 class RequestKeyValue:
-    key: str = ""
+    name: str = ""
     value: str = ""
     enabled: bool = True
 

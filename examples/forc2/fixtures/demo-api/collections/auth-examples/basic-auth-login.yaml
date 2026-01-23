@@ -2,7 +2,7 @@ name: Basic Auth Login
 method: POST
 url: ${BASE_URL}/auth/login
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
 auth:
   type: basic

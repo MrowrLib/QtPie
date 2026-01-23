@@ -125,13 +125,13 @@ class HttpClient:
         headers: dict[str, str] = {}
         for h in request.headers():
             if h.enabled:
-                headers[h.key] = self._resolve(h.value)
+                headers[h.name] = self._resolve(h.value)
 
         # Build query params (resolve variables in values)
         params: dict[str, str] = {}
         for p in request.query_params():
             if p.enabled:
-                params[p.key] = self._resolve(p.value)
+                params[p.name] = self._resolve(p.value)
 
         # Build body (resolve variables)
         content: str | bytes | None = None
@@ -155,10 +155,10 @@ class HttpClient:
                 if "Content-Type" not in headers and "content-type" not in headers:
                     headers["Content-Type"] = "text/plain"
             case BodyType.FORM_URLENCODED:
-                data = {h.key: self._resolve(h.value) for h in request.body_fields() if h.enabled}
+                data = {h.name: self._resolve(h.value) for h in request.body_fields() if h.enabled}
             case BodyType.FORM_DATA:
                 # Multipart form data
-                files = [(h.key, ("", self._resolve(h.value))) for h in request.body_fields() if h.enabled]
+                files = [(h.name, ("", self._resolve(h.value))) for h in request.body_fields() if h.enabled]
 
         # Handle auth (resolve variables in auth values)
         auth: httpx.BasicAuth | None = None
@@ -173,9 +173,9 @@ class HttpClient:
                 headers["Authorization"] = f"Bearer {self._resolve(request_auth.token)}"
             elif isinstance(request_auth, ApiKeyAuth):
                 if request_auth.location == ApiKeyLocation.HEADER:
-                    headers[request_auth.key] = self._resolve(request_auth.value)
+                    headers[request_auth.name] = self._resolve(request_auth.value)
                 else:
-                    params[request_auth.key] = self._resolve(request_auth.value)
+                    params[request_auth.name] = self._resolve(request_auth.value)
 
         # Send request with timing
         client.cookies = self._build_httpx_cookies()

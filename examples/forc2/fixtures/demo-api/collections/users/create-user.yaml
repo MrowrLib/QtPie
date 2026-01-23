@@ -2,9 +2,9 @@ name: Create User
 method: POST
 url: ${BASE_URL}/users
 headers:
-  - key: Content-Type
+  - name: Content-Type
     value: application/json
-  - key: Accept
+  - name: Accept
     value: application/json
 body: |
   {

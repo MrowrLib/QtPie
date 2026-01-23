@@ -2,9 +2,9 @@ name: Echo (POST)
 method: POST
 url: ${BASE_URL}/demo/echo
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
-  - key: Content-Type
+  - name: Content-Type
     value: application/json
 body: |
   {

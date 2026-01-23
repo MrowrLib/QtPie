@@ -2,5 +2,5 @@ name: Get All Posts
 method: GET
 url: ${BASE_URL}/posts
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json

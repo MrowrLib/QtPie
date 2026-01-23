@@ -119,7 +119,7 @@ def load_request(path: Path) -> Request:
         for h in data["headers"]:
             request.headers.append(
                 RequestKeyValue(
-                    key=h.get("key", ""),
+                    name=h.get("name", ""),
                     value=h.get("value", ""),
                     enabled=h.get("enabled", True),
                 )
@@ -129,7 +129,7 @@ def load_request(path: Path) -> Request:
         for p in data["query_params"]:
             request.query_params.append(
                 RequestKeyValue(
-                    key=p.get("key", ""),
+                    name=p.get("name", ""),
                     value=p.get("value", ""),
                     enabled=p.get("enabled", True),
                 )
@@ -145,7 +145,7 @@ def load_request(path: Path) -> Request:
         for f in data["body_fields"]:
             request.body_fields.append(
                 RequestKeyValue(
-                    key=f.get("key", ""),
+                    name=f.get("name", ""),
                     value=f.get("value", ""),
                     enabled=f.get("enabled", True),
                 )
@@ -166,7 +166,7 @@ def load_request(path: Path) -> Request:
                 request.auth = BearerAuth(token=auth_data.get("token", ""))
             case AuthType.API_KEY:
                 request.auth = ApiKeyAuth(
-                    key=auth_data.get("key", ""),
+                    name=auth_data.get("name", ""),
                     value=auth_data.get("value", ""),
                     location=ApiKeyLocation(auth_data.get("location", "header")),
                 )
@@ -268,10 +268,10 @@ def save_request(request: Request, path: Path) -> None:
     }
 
     if request.headers.value:
-        data["headers"] = [{"key": h.key, "value": h.value} for h in request.headers.value if h.enabled]
+        data["headers"] = [{"name": h.name, "value": h.value} for h in request.headers.value if h.enabled]
 
     if request.query_params.value:
-        data["query_params"] = [{"key": p.key, "value": p.value} for p in request.query_params.value if p.enabled]
+        data["query_params"] = [{"name": p.name, "value": p.value} for p in request.query_params.value if p.enabled]
 
     if request.body.value:
         data["body"] = request.body.value
@@ -280,7 +280,7 @@ def save_request(request: Request, path: Path) -> None:
         data["body_type"] = request.body_type.value.value
 
     if request.body_fields.value:
-        data["body_fields"] = [{"key": f.key, "value": f.value} for f in request.body_fields.value if f.enabled]
+        data["body_fields"] = [{"name": f.name, "value": f.value} for f in request.body_fields.value if f.enabled]
 
     # Save auth if not NONE
     auth = request.auth.value
@@ -296,7 +296,7 @@ def save_request(request: Request, path: Path) -> None:
                 auth_data["token"] = auth.token
             case AuthType.API_KEY:
                 assert isinstance(auth, ApiKeyAuth)
-                auth_data["key"] = auth.key
+                auth_data["name"] = auth.name
                 auth_data["value"] = auth.value
                 auth_data["location"] = auth.location.value
         data["auth"] = auth_data

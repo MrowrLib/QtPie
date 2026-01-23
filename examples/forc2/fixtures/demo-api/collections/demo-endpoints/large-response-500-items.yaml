@@ -2,8 +2,8 @@ name: Large Response (500 items)
 method: GET
 url: ${BASE_URL}/demo/large
 query_params:
-  - key: size
+  - name: size
     value: "500"
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json

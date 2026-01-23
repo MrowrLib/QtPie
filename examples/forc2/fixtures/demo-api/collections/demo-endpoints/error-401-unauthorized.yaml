@@ -2,5 +2,5 @@ name: Error 401 (Unauthorized)
 method: GET
 url: ${BASE_URL}/demo/error/401
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json

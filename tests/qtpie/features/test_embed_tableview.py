@@ -392,6 +392,47 @@ class TestTableViewAppendColumns:
         assert_that(model.data(model.index(0, 0))).is_equal_to("Fido")
         assert_that(str(model.data(model.index(0, 1)))).is_equal_to("3")
 
+    def test_append_columns_with_initially_empty_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """appendColumns works when list starts empty and data is added later.
+
+        This tests the bug where widget column delegates are set on wrong column index
+        when auto-detected columns aren't known yet (empty list).
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([])  # Start empty!
+            _table: QTableView = new(bind="_dogs", appendColumns=[DogActions])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Add items after table is created
+        instance._dogs.append(Dog("Fido", 3))
+        instance._dogs.append(Dog("Rex", 5))
+        qt.process_events()
+
+        model = instance._table.model()
+        # Auto-detected columns: name, age (2) + appended: DogActions (1) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Text columns should still work - THIS IS THE BUG!
+        # The widget delegate was incorrectly set on column 0 instead of column 2
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 1)))).is_equal_to("3")
+
+        # Verify the widget delegate is on the CORRECT column (2), not column 0
+        # The bug was: delegate set on col 0, hiding the "name" data column
+        from qtpie.delegates import QtPieWidgetDelegate
+
+        delegate_col0 = instance._table.itemDelegateForColumn(0)
+        delegate_col2 = instance._table.itemDelegateForColumn(2)
+        # Column 0 (name) should NOT have a widget delegate
+        assert_that(isinstance(delegate_col0, QtPieWidgetDelegate)).is_false()
+        # Column 2 (DogActions) SHOULD have a widget delegate
+        assert_that(isinstance(delegate_col2, QtPieWidgetDelegate)).is_true()
+
     def test_append_columns_with_embed_config(self, base_class, decorator, qt: QtDriver) -> None:
         """appendColumns=[embed(Widget, ...)] works with embed config."""
 
@@ -472,6 +513,46 @@ class TestTableViewPrependColumns:
         # Text columns are now at indices 1 and 2 (after prepended widget)
         assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
         assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+    def test_prepend_columns_with_initially_empty_list(self, base_class, decorator, qt: QtDriver) -> None:
+        """prependColumns works when list starts empty and data is added later.
+
+        This tests the bug where widget column delegates are set on wrong column index
+        when auto-detected columns aren't known yet (empty list).
+        """
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([])  # Start empty!
+            _table: QTableView = new(bind="_dogs", prependColumns=[DogActions])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        # Add items after table is created
+        instance._dogs.append(Dog("Fido", 3))
+        instance._dogs.append(Dog("Rex", 5))
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: DogActions (1) + auto-detected: name, age (2) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Text columns are at indices 1 and 2 (after prepended widget)
+        # The widget delegate should be on column 0, not interfering with data columns
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+        # Verify the widget delegate is on the CORRECT column (0)
+        from qtpie.delegates import QtPieWidgetDelegate
+
+        delegate_col0 = instance._table.itemDelegateForColumn(0)
+        delegate_col1 = instance._table.itemDelegateForColumn(1)
+        # Column 0 (DogActions) SHOULD have a widget delegate
+        assert_that(isinstance(delegate_col0, QtPieWidgetDelegate)).is_true()
+        # Column 1 (name) should NOT have a widget delegate
+        assert_that(isinstance(delegate_col1, QtPieWidgetDelegate)).is_false()
 
     def test_prepend_columns_with_string(self, base_class, decorator, qt: QtDriver) -> None:
         """prependColumns=['select'] prepends string column before auto-detected."""

@@ -2,5 +2,5 @@ name: Error 500 (Server Error)
 method: GET
 url: ${BASE_URL}/demo/error/500
 headers:
-  - key: Accept
+  - name: Accept
     value: application/json
