@@ -28,7 +28,7 @@ class RequestParamsWidget(Widget[Request]):
     ### Widgets ###
     header: QLabel = new("Query Parameters:")
     add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
-    table: QTableView = new(bind="query_params", columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
+    table: QTableView = new(bind="query_params")  # , columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
 
     ### Methods ###
     def _on_add(self) -> None:
@@ -41,7 +41,7 @@ class RequestParamsWidget(Widget[Request]):
 @widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
     ### Widgets ###
-    table: QTableView = new(bind="headers", columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
+    table: QTableView = new(bind="headers")  # , columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
 
 
 @widget(layout="form")

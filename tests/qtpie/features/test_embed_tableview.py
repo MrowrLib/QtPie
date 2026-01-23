@@ -366,3 +366,325 @@ class TestTableViewSelectedWidget:
 
         # Check it's a DogActions instance
         assert_that(instance._selected_widget.value).is_instance_of(DogActions)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewAppendColumns:
+    """QTableView with appendColumns for auto-detect + extra columns."""
+
+    def test_append_columns_with_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """appendColumns=[WidgetClass] appends widget column to auto-detected columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _table: QTableView = new(bind="_dogs", appendColumns=[DogActions])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Auto-detected columns: name, age (2) + appended: DogActions (1) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Text columns should still work (auto-detected)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 1)))).is_equal_to("3")
+
+    def test_append_columns_with_embed_config(self, base_class, decorator, qt: QtDriver) -> None:
+        """appendColumns=[embed(Widget, ...)] works with embed config."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                appendColumns=[embed(DogActionsWithRow, selectedRow="row")],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Auto-detected: name, age (2) + appended: widget (1) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+
+    def test_append_columns_with_string(self, base_class, decorator, qt: QtDriver) -> None:
+        """appendColumns=['notes'] appends string column to auto-detected."""
+
+        @dataclass
+        class DogWithNotes:
+            name: str
+            age: int
+            notes: str = ""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[DogWithNotes]] = new([DogWithNotes("Fido", 3, "Good boy")])
+            # Only auto-detect name and age, append notes explicitly
+            _table: QTableView = new(bind="_dogs", appendColumns=["notes"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Auto-detected: name, age, notes (all 3 fields) + appended: notes (1) = 4
+        # Actually, the auto-detect will find all fields, then notes is appended
+        assert_that(model.columnCount()).is_equal_to(4)
+
+    def test_append_multiple_columns(self, base_class, decorator, qt: QtDriver) -> None:
+        """appendColumns=['extra', WidgetClass] appends multiple columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", appendColumns=["extra", DogActions])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Auto-detected: name, age (2) + appended: extra, DogActions (2) = 4
+        assert_that(model.columnCount()).is_equal_to(4)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewPrependColumns:
+    """QTableView with prependColumns for extra columns + auto-detect."""
+
+    def test_prepend_columns_with_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """prependColumns=[WidgetClass] prepends widget column before auto-detected columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _table: QTableView = new(bind="_dogs", prependColumns=[DogActions])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: DogActions (1) + auto-detected: name, age (2) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Text columns are now at indices 1 and 2 (after prepended widget)
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+    def test_prepend_columns_with_string(self, base_class, decorator, qt: QtDriver) -> None:
+        """prependColumns=['select'] prepends string column before auto-detected."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", prependColumns=["select"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: select (1) + auto-detected: name, age (2) = 3
+        assert_that(model.columnCount()).is_equal_to(3)
+
+    def test_prepend_multiple_columns(self, base_class, decorator, qt: QtDriver) -> None:
+        """prependColumns=[WidgetClass, 'checkbox'] prepends multiple columns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(bind="_dogs", prependColumns=[DogActions, "checkbox"])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: DogActions, checkbox (2) + auto-detected: name, age (2) = 4
+        assert_that(model.columnCount()).is_equal_to(4)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewPrependAndAppendColumns:
+    """QTableView with both prependColumns and appendColumns."""
+
+    def test_prepend_and_append_columns(self, base_class, decorator, qt: QtDriver) -> None:
+        """Both prependColumns and appendColumns work together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=["select"],
+                appendColumns=[DogActions],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: select (1) + auto-detected: name, age (2) + appended: DogActions (1) = 4
+        assert_that(model.columnCount()).is_equal_to(4)
+
+        # Text columns are at indices 1 and 2
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+    def test_prepend_widget_and_append_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget columns in both prepend and append positions."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=[DogActions],
+                appendColumns=[DogActionsWithRow],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: DogActions (1) + auto-detected: name, age (2) + appended: DogActionsWithRow (1) = 4
+        assert_that(model.columnCount()).is_equal_to(4)
+        assert_that(model.rowCount()).is_equal_to(1)
+
+    def test_data_columns_still_work_with_prepend_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """Auto-detected data columns are accessible at correct indices."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Buddy", 7), Dog("Max", 2)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=["pre1", "pre2"],
+                appendColumns=["post1", DogActions],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Layout: pre1, pre2, name, age, post1, DogActions
+        # Indices:  0     1     2     3     4       5
+        assert_that(model.columnCount()).is_equal_to(6)
+
+        # Check auto-detected columns at correct positions
+        assert_that(model.data(model.index(0, 2))).is_equal_to("Buddy")
+        assert_that(str(model.data(model.index(0, 3)))).is_equal_to("7")
+        assert_that(model.data(model.index(1, 2))).is_equal_to("Max")
+        assert_that(str(model.data(model.index(1, 3)))).is_equal_to("2")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTableViewExplicitColumnsWithPrependAppend:
+    """QTableView with explicit columns= plus prependColumns/appendColumns."""
+
+    def test_explicit_columns_with_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """columns= explicit + appendColumns works together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name"],  # Only show name explicitly
+                appendColumns=[DogActions],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Explicit: name (1) + appended: DogActions (1) = 2
+        assert_that(model.columnCount()).is_equal_to(2)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Fido")
+
+    def test_explicit_columns_with_prepend(self, base_class, decorator, qt: QtDriver) -> None:
+        """columns= explicit + prependColumns works together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=[DogActions],
+                columns=["name"],  # Only show name explicitly
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Prepended: DogActions (1) + explicit: name (1) = 2
+        assert_that(model.columnCount()).is_equal_to(2)
+        # Name is at index 1 (after prepended widget)
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
+
+    def test_explicit_columns_with_prepend_and_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """columns= explicit + prependColumns + appendColumns all work together."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=["select"],
+                columns=["name", "age"],  # Explicit columns in middle
+                appendColumns=[DogActions],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Layout: select, name, age, DogActions
+        # Indices:  0      1     2      3
+        assert_that(model.columnCount()).is_equal_to(4)
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+    def test_explicit_columns_with_widget_in_middle_plus_append(self, base_class, decorator, qt: QtDriver) -> None:
+        """columns= with widget class + appendColumns."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Fido", 3)])
+            _table: QTableView = new(
+                bind="_dogs",
+                columns=["name", DogActions, "age"],  # Widget in explicit columns
+                appendColumns=[DogActionsWithRow],  # Another widget appended
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Explicit: name, DogActions, age (3) + appended: DogActionsWithRow (1) = 4
+        assert_that(model.columnCount()).is_equal_to(4)
+        assert_that(model.data(model.index(0, 0))).is_equal_to("Fido")
+        assert_that(str(model.data(model.index(0, 2)))).is_equal_to("3")
+
+    def test_explicit_columns_with_prepend_widget_plus_append_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """prependColumns with widget + explicit columns + appendColumns with widget."""
+
+        @decorator
+        class TestClass(base_class):
+            _dogs: Variable[list[Dog]] = new([Dog("Rex", 5)])
+            _table: QTableView = new(
+                bind="_dogs",
+                prependColumns=[DogActions],
+                columns=["name"],
+                appendColumns=[DogActionsWithRow],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        qt.process_events()
+
+        model = instance._table.model()
+        # Layout: DogActions, name, DogActionsWithRow
+        # Indices:     0        1          2
+        assert_that(model.columnCount()).is_equal_to(3)
+        assert_that(model.data(model.index(0, 1))).is_equal_to("Rex")

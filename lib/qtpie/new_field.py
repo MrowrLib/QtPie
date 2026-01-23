@@ -105,6 +105,8 @@ class NewField:
         self.model_format: str | Callable[[Any], str] | None = None  # Format for model items
         # Table columns for QTableView with bind= to list
         self.table_columns: list[str] | None = None  # Column names: ["name", "age"]
+        self.table_prepend_columns: list[str] | None = None  # Columns to prepend to auto-detected
+        self.table_append_columns: list[str] | None = None  # Columns to append to auto-detected
         self.table_headers: dict[str | int, str] | None = None  # Custom headers: {"name": "Dog Name"}
         # Custom headers for auto-detected dict binding (simpler than headers= for common case)
         self.key_header: str | None = None  # Custom header for #key or column 0 (default: "Key")
@@ -183,6 +185,9 @@ class NewField:
         self.embed_config: Any | None = None  # EmbedConfig if embed() was used
         # For QTableView: list of (column_index, widget_class, embed_config) for widget columns
         self.table_widget_columns: list[tuple[int, type, Any | None]] | None = None
+        # For prependColumns/appendColumns: widget columns extracted from those lists
+        self.table_prepend_widget_columns: list[tuple[int, type, Any | None]] | None = None
+        self.table_append_widget_columns: list[tuple[int, type, Any | None]] | None = None
         # QTabWidget support
         self.is_tab_widget: bool = False
         # tabs= can be:
@@ -894,6 +899,14 @@ class NewField:
                         if self.table_headers is None:
                             self.table_headers = {}
                         self.table_headers.update(dict(headers))
+                    # prependColumns=/appendColumns= for adding columns to auto-detected ones
+                    # These are merged with auto-detected columns in model_binding.py
+                    prepend_columns = self.kwargs.pop("prependColumns", None)
+                    if prepend_columns is not None:
+                        self._extract_prepend_columns(prepend_columns)
+                    append_columns = self.kwargs.pop("appendColumns", None)
+                    if append_columns is not None:
+                        self._extract_append_columns(append_columns)
                     # keyHeader=/valueHeader= for simple dict binding header customization
                     self.key_header = self.kwargs.pop("keyHeader", None)
                     self.value_header = self.kwargs.pop("valueHeader", None)
@@ -1627,6 +1640,62 @@ class NewField:
 
         self.table_columns = str_columns if str_columns else None
         self.table_widget_columns = widget_columns if widget_columns else None
+
+    def _extract_prepend_columns(self, columns: list[Any]) -> None:
+        """Extract prependColumns= for QTableView, detecting widget columns.
+
+        Same format as columns= but stored separately for merging with auto-detected.
+        Sets:
+        - self.table_prepend_columns: list of str field names
+        - self.table_prepend_widget_columns: list of (index, widget_class, embed_config|None)
+        """
+        from qtpie.embed import EmbedConfig
+
+        str_columns: list[str] = []
+        widget_columns: list[tuple[int, type, EmbedConfig | None]] = []
+
+        for i, col in enumerate(columns):
+            if isinstance(col, str):
+                str_columns.append(col)
+            elif isinstance(col, EmbedConfig):
+                col_name = self._get_widget_column_name(col.widget_class, col.column_name)
+                str_columns.append(col_name)
+                widget_columns.append((i, col.widget_class, col))
+            elif isinstance(col, type):
+                col_name = self._get_widget_column_name(col, None)
+                str_columns.append(col_name)
+                widget_columns.append((i, col, None))
+
+        self.table_prepend_columns = str_columns if str_columns else None
+        self.table_prepend_widget_columns = widget_columns if widget_columns else None
+
+    def _extract_append_columns(self, columns: list[Any]) -> None:
+        """Extract appendColumns= for QTableView, detecting widget columns.
+
+        Same format as columns= but stored separately for merging with auto-detected.
+        Sets:
+        - self.table_append_columns: list of str field names
+        - self.table_append_widget_columns: list of (index, widget_class, embed_config|None)
+        """
+        from qtpie.embed import EmbedConfig
+
+        str_columns: list[str] = []
+        widget_columns: list[tuple[int, type, EmbedConfig | None]] = []
+
+        for i, col in enumerate(columns):
+            if isinstance(col, str):
+                str_columns.append(col)
+            elif isinstance(col, EmbedConfig):
+                col_name = self._get_widget_column_name(col.widget_class, col.column_name)
+                str_columns.append(col_name)
+                widget_columns.append((i, col.widget_class, col))
+            elif isinstance(col, type):
+                col_name = self._get_widget_column_name(col, None)
+                str_columns.append(col_name)
+                widget_columns.append((i, col, None))
+
+        self.table_append_columns = str_columns if str_columns else None
+        self.table_append_widget_columns = widget_columns if widget_columns else None
 
     def _get_widget_column_name(self, widget_class: type, override: str | None) -> str:
         """Get column name for a widget column.

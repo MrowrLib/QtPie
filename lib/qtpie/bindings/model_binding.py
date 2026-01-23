@@ -759,6 +759,8 @@ def apply_model_binding(
             obs_list,
             parent=widget_instance,
             columns=columns,
+            prepend_columns=field_info.table_prepend_columns,
+            append_columns=field_info.table_append_columns,
             headers=headers,
             checkable=field_info.table_checkable,
             checkable_text=field_info.table_checkable_text,
@@ -1124,8 +1126,30 @@ def apply_model_binding(
             root_variable=root_variable,  # Pass root for nested path subscriptions
         )
         # Set up embedded widgets for QTableView columns
+        # Merge widget columns from main columns=, prependColumns=, and appendColumns=
+        all_widget_columns: list[tuple[int, type, Any | None]] = []
+
+        # Prepend widget columns (indices are already correct, start from 0)
+        if field_info.table_prepend_widget_columns:
+            all_widget_columns.extend(field_info.table_prepend_widget_columns)
+
+        # Main columns= widget columns (offset by prepend length)
         if field_info.table_widget_columns:
-            _setup_table_widget_columns(host, widget_instance, model, obs_list, field_info.table_widget_columns)
+            prepend_offset = len(field_info.table_prepend_columns or [])
+            for col_idx, widget_cls, embed_cfg in field_info.table_widget_columns:
+                all_widget_columns.append((col_idx + prepend_offset, widget_cls, embed_cfg))
+
+        # Append widget columns (offset = total columns - append columns length)
+        if field_info.table_append_widget_columns:
+            # model._columns contains the merged columns after creation
+            total_cols = len(model._columns)  # type: ignore[attr-defined]
+            append_len = len(field_info.table_append_columns or [])
+            append_offset = total_cols - append_len
+            for col_idx, widget_cls, embed_cfg in field_info.table_append_widget_columns:
+                all_widget_columns.append((col_idx + append_offset, widget_cls, embed_cfg))
+
+        if all_widget_columns:
+            _setup_table_widget_columns(host, widget_instance, model, obs_list, all_widget_columns)
     else:
         # QComboBox/QListView selection bindings
         setup_selection_bindings(

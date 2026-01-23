@@ -57,6 +57,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
         parent: QObject | None = None,
         *,
         columns: Sequence[str | int] | None = None,
+        prepend_columns: Sequence[str | int] | None = None,
+        append_columns: Sequence[str | int] | None = None,
         headers: dict[str | int, str] | None = None,
         format_fns: dict[str | int, Callable[[Any], str]] | None = None,
         checkable: list[str] | bool | None = None,
@@ -81,6 +83,9 @@ class ReactiveTableModel[T](QAbstractTableModel):
         self._value_header = value_header  # Custom header for column 1 (default: "Value")
         # Track dict binding detected via auto-detection (when items are 2-tuples with complex values)
         self._auto_detected_dict_binding = False
+        # Store prepend/append columns for merging with auto-detected
+        self._prepend_columns = list(prepend_columns) if prepend_columns else None
+        self._append_columns = list(append_columns) if append_columns else None
 
         # Determine columns - explicit or auto-detect from first item or dataclass
         self._columns_explicit = columns is not None
@@ -89,6 +94,8 @@ class ReactiveTableModel[T](QAbstractTableModel):
             self._columns = list(columns)
         else:
             self._columns = self._auto_detect_columns()
+        # Merge prepend/append columns (works with both explicit and auto-detected)
+        self._columns = self._merge_prepend_append_columns(self._columns)
 
         # Resolve checkable columns after columns are known
         self._checkable_columns: set[str] = self._resolve_checkable_columns()
@@ -145,6 +152,26 @@ class ReactiveTableModel[T](QAbstractTableModel):
             result = cast(list[str | int], self._get_object_columns(item))
             return result
         return []
+
+    def _merge_prepend_append_columns(self, columns: list[str | int]) -> list[str | int]:
+        """Merge prepend/append columns with auto-detected columns.
+
+        Args:
+            columns: The auto-detected (or empty) columns list
+
+        Returns:
+            Merged columns: prepend + auto-detected + append
+        """
+        if self._prepend_columns is None and self._append_columns is None:
+            return columns
+
+        result: list[str | int] = []
+        if self._prepend_columns:
+            result.extend(self._prepend_columns)
+        result.extend(columns)
+        if self._append_columns:
+            result.extend(self._append_columns)
+        return result
 
     def _get_object_columns(self, obj: Any) -> list[str]:
         """Get column names from an object's public attributes.
@@ -527,6 +554,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
         # Re-detect columns if we had none and columns weren't explicit
         if not self._columns_explicit and not self._columns:
             new_columns = self._auto_detect_columns()
+            new_columns = self._merge_prepend_append_columns(new_columns)
             if new_columns:
                 self.beginResetModel()
                 self._columns = new_columns
@@ -557,6 +585,7 @@ class ReactiveTableModel[T](QAbstractTableModel):
         # This handles the case where list starts empty and is replaced with items
         if not self._columns_explicit and not self._columns:
             self._columns = self._auto_detect_columns()
+            self._columns = self._merge_prepend_append_columns(self._columns)
         self.beginResetModel()
         self.endResetModel()
 
