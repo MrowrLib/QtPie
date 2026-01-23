@@ -37,6 +37,9 @@ class ForcWindow(Window[Workspace | None]):
     file_menu: FileMenu
     view_menu: ViewMenu = new(visible="{#record is not None}")
 
+    ### Events ###
+    on_collection_item_clicked: Event = new(on="_on_collection_item_clicked")
+
     ### Docks ###
     sidebar: Dock[SidebarWidget] = new(
         bind="#record",  # <-- I think this happens by default, maybe not in Dock?
@@ -50,6 +53,10 @@ class ForcWindow(Window[Workspace | None]):
     label: QLabel = new("Forc Main Window")
     workspace_name_label: QLabel = new(bind="Workspace is: {name}", visible="{#record is not None}")
     stretch: Stretch
+
+    ### Methods ###
+    def _on_collection_item_clicked(self) -> None:
+        print("Collection item clicked!")
 
 
 @window(

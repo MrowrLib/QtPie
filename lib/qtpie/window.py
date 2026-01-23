@@ -264,7 +264,8 @@ def _process_event_annotations_for_window(cls: type[Window[Any]]) -> None:
         # Extract signal argument types from Event[T]
         args = extract_event_args(hint)
         # Create real Qt Signal on the class
-        setattr(cls, name, Signal(*args))
+        signal = Signal(*args)
+        setattr(cls, name, signal)
 
 
 @overload

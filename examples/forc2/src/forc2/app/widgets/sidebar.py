@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QComboBox, QLabel, QListView, QPushButton, QTableView, QTreeView
+from qtpy.QtWidgets import QComboBox, QLabel, QPushButton, QTreeView
 
 from forc2.domain.workspace import Workspace
 from qtpie import Widget, new, widget
@@ -14,20 +14,8 @@ class SidebarWidget(Widget[Workspace | None]):
         children="items",
         format="{name}",
         # selectedItem="selected_sidebar_item",
+        clicked="{on_collection_item_clicked()}",
     )
-
-    # Let's try it as a ListView...
-    collections_list: QListView = new(
-        bind="collection?.items",
-        format="{name}",
-    )
-
-    # Let's try it as a TableView:
-    collections_table: QTableView = new(
-        bind="collection?.items",
-    )
-
-    collection_items_count_label: QLabel = new(bind="Items: {len(collection?.items) if collection is not None else 0}")
 
     environments_headers: QLabel = new("Environment")
     environments_chooser: QComboBox = new(

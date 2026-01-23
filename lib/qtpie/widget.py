@@ -1041,7 +1041,15 @@ def _propagate_record_to_tab_children(widget: Widget[Any], config: _QtPieConfig)
 
     from .bindings.tab_binding import _propagate_record_to_child
 
+    # Get Event field names to skip - accessing Signals before QObject.__init__
+    # corrupts the SignalInstance (PySide6 caches a broken reference)
+    event_fields: set[str] = set(getattr(config, "event_new_fields", {}).keys())
+
     for name in config.fields:
+        # Skip Event fields - they become Signals and must not be accessed
+        # before the QObject's C++ side is initialized
+        if name in event_fields:
+            continue
         field_value = getattr(widget, name, None)
         if isinstance(field_value, QTabWidget):
             # Iterate over all tabs and propagate record
