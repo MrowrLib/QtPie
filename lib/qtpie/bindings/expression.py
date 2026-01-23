@@ -332,6 +332,23 @@ def create_expression_binding(
     var_names.discard("_app_ref_")
     var_names.discard("_record_ref_")
 
+    # For Widget[T], add back record field names that were filtered out because they match builtins
+    # Example: {type.name == 'BASIC'} where 'type' is both a Python builtin and a record field
+    if hasattr(context, "_qtpie_config"):
+        ctx_config: Any = context._qtpie_config
+        if hasattr(ctx_config, "record_type") and ctx_config.record_type is not None:
+            from typing import get_type_hints
+
+            try:
+                record_annotations = get_type_hints(ctx_config.record_type)
+            except Exception:
+                record_annotations = getattr(ctx_config.record_type, "__annotations__", {})
+            # Check for names that were in ast_names, are builtins, but also record fields
+            for name in ast_names:
+                root = name.split(".")[0]
+                if root in _BUILTINS and root in record_annotations and root not in var_names:
+                    var_names.add(root)
+
     # Collect all reactive objects to subscribe to
     # Observable has on_change(callback: Callable[[T], None])
     # ObservableList/Dict/Proxy have on_change(callback: Callable[[], None])

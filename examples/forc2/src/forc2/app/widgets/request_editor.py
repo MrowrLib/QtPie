@@ -27,9 +27,10 @@ class RequestHeadersWidget(Widget[Request]):
 
 @widget(layout="form")
 class RequestAuthFormWidget(Widget[Auth]):
+    what_am_i1: QLabel = new(bind="TYPE: {#record?.type.name}", label="Auth Type 1:")  # <---- THIS IS ALWAYS BLANK!!!!!!!!!
+    what_am_i: QLabel = new(bind="TYPE: {type.name}", label="Auth Type 2:")  # <---- THIS IS ALWAYS BLANK!!!!!!!!!
+
     ### Widgets ###
-    umm: QLabel = new(bind="here HERE here - I AM {#record}", label="Auth Record:")  # <--- PRINTS NOTHING !!!!!!!!!!!!!!!!!!!!!!!!!!
-    hmm: QLabel = new(bind="THE AUTH TYPE IS: {type.name}", label="Auth Type:")  # <---- NO TYPE.NAME TOTALLY BLANK!!!!!!!!!!!!!
     # Basic Auth
     basic_username: QLineEdit = new(bind="username", label="Username:", visible="{type.name == 'BASIC'}")
     basic_password: QLineEdit = new(bind="password", label="Password:", echoMode=QLineEdit.EchoMode.Password, visible="{type.name == 'BASIC'}")
@@ -46,17 +47,16 @@ class RequestAuthFormWidget(Widget[Auth]):
         visible="{type.name == 'API_KEY'}",
     )
 
-    btn_test: QPushButton = new("Test Auth", clicked="_on_test_auth", label="")
-
-    def _on_test_auth(self):
-        print("TESTING AUTH:", self.record_value)
-
 
 @widget(title="Auth")
 class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     header: QLabel = new("Authentication:")
-    auth_type_chooser: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth.type")
+    auth_type_chooser: QComboBox = new(
+        bind=AuthType,
+        format=AUTH_TYPE_LABELS.get,
+        selectedItem="auth.type",
+    )
     auth_form: RequestAuthFormWidget = new(bind="auth")
     foo: QLabel = new(bind="AUTH IS: {auth}")
 

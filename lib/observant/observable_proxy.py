@@ -931,6 +931,13 @@ class ObservableProxy[T]:
         else:
             # For complex types (lists, dicts, objects), set directly and notify
             setattr(target, name, value)
+
+            # If there's an existing nested proxy for this field, update its target
+            # This handles cases like: proxy.auth = Auth("admin") when auth was None
+            nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+            if name in nested_proxies:
+                nested_proxies[name].replace_target(value)
+
             # Mark as dirty since we modified a field directly
             dirty_tracking: bool = object.__getattribute__(self, "_dirty_tracking")
             if dirty_tracking:

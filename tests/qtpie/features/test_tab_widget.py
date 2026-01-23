@@ -24,7 +24,7 @@ Syntax:
 
 import pytest
 from assertpy import assert_that
-from PySide6.QtWidgets import QLabel, QTabWidget
+from PySide6.QtWidgets import QLabel, QLineEdit, QTabWidget
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver
@@ -1106,3 +1106,62 @@ class TestTabWidgetFieldBindingDifferentRecordType:
 
         assert_that(auth_form._type_label.text()).is_equal_to("Type: API_KEY")
         assert_that(credentials_form._key_label.text()).is_equal_to("API Key: secret-key-123")
+
+    @pytest.mark.xfail(reason="Record field named 'type' not yet auto-resolved; use {#record?.type.name} workaround")
+    def test_record_field_named_type_resolves_correctly(self, base_class, decorator, qt: QtDriver) -> None:
+        """Test that 'type' field on record resolves correctly, not Python's builtin type()."""
+        from dataclasses import dataclass
+        from enum import Enum
+
+        class AuthType(Enum):
+            NONE = "none"
+            BASIC = "basic"
+            BEARER = "bearer"
+
+        @dataclass
+        class Auth:
+            type: AuthType = AuthType.NONE  # Field named 'type' - same as Python builtin!
+            username: str = ""
+
+        @dataclass
+        class Request:
+            url: str = ""
+            auth: Auth | None = None
+
+        @widget
+        class AuthFormWidget(Widget[Auth]):
+            # This should show "BASIC" not error from Python's builtin type()
+            _type_label: QLabel = new(bind="Auth Type: {type.name}")
+            # With visible= using the type field
+            _username: QLineEdit = new(bind="username", visible="{type.name == 'BASIC'}")
+
+        @widget(title="Auth")
+        class AuthTabWidget(Widget[Request]):
+            auth_form: AuthFormWidget = new(bind="auth")
+
+        @decorator(
+            record=Request(
+                url="http://example.com",
+                auth=Auth(type=AuthType.BASIC, username="admin"),
+            )
+        )
+        class TestClass(base_class[Request]):
+            _tabs: QTabWidget = new(tabs=[AuthTabWidget])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        auth_tab = instance._tabs.widget(0)
+        auth_form = auth_tab.auth_form
+
+        # The 'type' field should resolve to record.type, not Python's builtin type()
+        assert_that(auth_form._type_label.text()).is_equal_to("Auth Type: BASIC")
+
+        # visible= binding should also work with type.name
+        assert_that(auth_form._username.isVisible()).is_true()
+
+        # Change auth type - label should update
+        instance.record.auth.type = AuthType.BEARER
+        assert_that(auth_form._type_label.text()).is_equal_to("Auth Type: BEARER")
+
+        # username should now be hidden
+        assert_that(auth_form._username.isVisible()).is_false()

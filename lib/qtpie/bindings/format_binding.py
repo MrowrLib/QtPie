@@ -834,6 +834,22 @@ def create_format_binding(
     # Get ROOT names for building eval context
     root_names = _get_root_names(var_names)
 
+    # For Widget[T], also add record field names that were filtered out because they match builtins
+    # Example: {type.name} where 'type' is both a Python builtin and a record field
+    if hasattr(widget, "_qtpie_config"):
+        config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+        if config.record_type is not None:
+            record_annotations = _get_all_annotations(config.record_type)
+            for field in fields:
+                expr = field.expression
+                if expr.startswith("#"):
+                    continue
+                normalized = expr.replace("?.", ".")
+                root = normalized.split(".")[0]
+                # If root is in _BUILTINS but ALSO in record annotations, add to root_names
+                if root in _BUILTINS and root in record_annotations and root not in root_names:
+                    root_names.add(root)
+
     # Collect all observables to subscribe to
     # Include ObservableList, ObservableDict, ObservableSet, and ObservableProxy since they all have on_change
     all_observables: list[Observable[Any] | ObservableList[Any] | ObservableDict[Any, Any] | ObservableSet[Any] | ObservableProxy[Any]] = []
@@ -860,6 +876,34 @@ def create_format_binding(
             # record is a RecordVariable, .observable is the ObservableProxy
             record_proxy = widget.record.observable
             all_observables.append(record_proxy)
+
+    # For Widget[T], also subscribe to the record proxy for fields that might be record fields
+    # but were filtered out of var_names because they have the same name as Python builtins.
+    # Example: {type.name} where 'type' is both a Python builtin and a record field.
+    if hasattr(widget, "_qtpie_config"):
+        config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+        if config.record_type is not None:
+            record_annotations = _get_all_annotations(config.record_type)
+            # Check each field expression for root names that are builtins but also record fields
+            for field in fields:
+                expr = field.expression
+                if expr.startswith("#"):
+                    continue  # Skip special placeholders
+                normalized = expr.replace("?.", ".")
+                root = normalized.split(".")[0]
+                # If root is in _BUILTINS but ALSO in record annotations, subscribe to record proxy
+                if root in _BUILTINS and root in record_annotations:
+                    try:
+                        record_proxy = widget.record.observable
+                        if record_proxy not in all_observables:
+                            all_observables.append(record_proxy)
+                            logger.debug(
+                                "  Subscribed to record proxy for builtin-named field: %s (root=%s)",
+                                expr,
+                                root,
+                            )
+                    except Exception:
+                        pass
 
     # Build the compute function
     def compute() -> str:
@@ -902,18 +946,36 @@ def create_format_binding(
                 context["record_ref"] = None
 
         # Add all variable values to context using root names
-        # Resolution order: exact match -> record -> underscore fallback -> parent hierarchy
+        # Resolution order:
+        # 1. Widget's explicit fields (QtPie fields, Variables) - highest priority
+        # 2. Record fields (for Widget[T]) - used when no widget field matches
+        # 3. Underscore fallback (widget._name for 'name')
+        # 4. Parent widget hierarchy
+        #
+        # Key insight: we want widget fields > record fields > builtins.
+        # The tricky part is that hasattr(widget, "type") returns True for Python's builtin type().
+        # So we ONLY use hasattr() to check for QtPie fields (in config.fields) or Variables.
         for root_name in root_names:
-            # 1. Try exact match first (e.g., 'name' -> widget.name)
-            if hasattr(widget, root_name):
-                raw_attr: Any = getattr(widget, root_name)
-                if isinstance(raw_attr, Variable):
-                    context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
-                else:
-                    context[root_name] = raw_attr
+            # 1. Try explicit QtPie fields FIRST (e.g., 'name' -> widget.name where name is in config.fields)
+            if hasattr(widget, "_qtpie_config"):
+                config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
+                if root_name in config.fields or f"_{root_name}" in config.fields:
+                    raw_attr: Any = getattr(widget, root_name, None)
+                    if raw_attr is not None:
+                        if isinstance(raw_attr, Variable):
+                            context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
+                        else:
+                            context[root_name] = raw_attr
+                        continue
+            # Also check if it's a Variable directly (without config check)
+            raw_attr = getattr(widget, root_name, None)
+            if raw_attr is not None and isinstance(raw_attr, Variable):
+                context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
                 continue
 
             # 2. Try record fields if Widget[T]
+            # This is checked SECOND so that widget fields take priority,
+            # but record fields take priority over Python builtins.
             if hasattr(widget, "_qtpie_config"):
                 config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
                 if config.record_type is not None:
@@ -921,36 +983,31 @@ def create_format_binding(
                         record = widget.record
                         # record is a RecordVariable with .observable property (ObservableProxy)
                         proxy = record.observable
-                        # Check target is not None first (record might not be bound yet)
-                        target: Any = object.__getattribute__(proxy, "_target")
-                        if target is not None and hasattr(target, root_name):
-                            # Access field on proxy - returns Observable, ObservableProxy, ObservableDict, or ObservableList
-                            field_obs = getattr(proxy, root_name)
-                            # Debug: check if nested proxy was created
-                            import logging
-
-                            nested_proxies: dict[str, Any] = object.__getattribute__(proxy, "_nested_proxies")
-                            field_obs_dict: dict[str, Any] = object.__getattribute__(proxy, "_field_observables")
-                            logging.getLogger("qtpie.bindings").warning(
-                                "DEBUG format_binding compute: var=%s, proxy=%d, target=%d, nested_proxies=%s, field_obs=%s, value_type=%s",
-                                root_name,
-                                id(proxy),
-                                id(target),
-                                list(nested_proxies.keys()),
-                                list(field_obs_dict.keys()),
-                                type(field_obs).__name__,
-                            )
-                            if isinstance(field_obs, Observable):
-                                context[root_name] = field_obs.get()
-                                continue
-                            elif isinstance(field_obs, ObservableProxy):
-                                context[root_name] = field_obs.unwrap()
-                                continue
-                            elif isinstance(field_obs, ObservableDict):
-                                context[root_name] = field_obs.to_dict()
-                                continue
-                            elif isinstance(field_obs, ObservableList):
-                                context[root_name] = field_obs.to_list()
+                        # Check if this field exists on the record TYPE's __annotations__
+                        # This is more precise than hasattr() which catches inherited attrs
+                        record_type = config.record_type
+                        record_annotations = _get_all_annotations(record_type)
+                        if root_name in record_annotations:
+                            # Check if target is not None - if so, get the value
+                            target: Any = object.__getattribute__(proxy, "_target")
+                            if target is not None and hasattr(target, root_name):
+                                # Access field on proxy - returns Observable, ObservableProxy, ObservableDict, or ObservableList
+                                field_obs = getattr(proxy, root_name)
+                                if isinstance(field_obs, Observable):
+                                    context[root_name] = field_obs.get()
+                                    continue
+                                elif isinstance(field_obs, ObservableProxy):
+                                    context[root_name] = field_obs.unwrap()
+                                    continue
+                                elif isinstance(field_obs, ObservableDict):
+                                    context[root_name] = field_obs.to_dict()
+                                    continue
+                                elif isinstance(field_obs, ObservableList):
+                                    context[root_name] = field_obs.to_list()
+                                    continue
+                            else:
+                                # Target is None but field exists on record type - use None
+                                context[root_name] = None
                                 continue
                     except (TypeError, AttributeError):
                         pass
