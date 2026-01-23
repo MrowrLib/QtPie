@@ -1,54 +1,32 @@
 """HTTP client service for sending requests."""
 
+from __future__ import annotations
+
 import re
 import time
 
 import httpx
 
-from ..domain import (
-    ApiKeyAuth,
-    ApiKeyLocation,
-    BasicAuth,
-    BearerAuth,
-    BodyType,
-    Cookie,
-    Request,
-    Response,
-)
-from ..domain.workspace import Workspace
+from qtpie import State, Var, new, state
+
+from .auth import ApiKeyAuth, ApiKeyLocation, BasicAuth, BearerAuth
+from .body import BodyType
+from .environment import Environment
+from .request import Request
+from .response import Cookie, Response
 
 
-class HttpClient:
+@state
+class HttpClient(State):
     """Service for sending HTTP requests."""
 
-    def __init__(
-        self,
-        workspace: Workspace | None = None,
-        client: httpx.AsyncClient | None = None,
-    ) -> None:
-        """Initialize with workspace for variable resolution.
-
-        Args:
-            workspace: Workspace for resolving ${VAR} placeholders
-            client: Optional httpx async client (for testing)
-        """
-        self._workspace = workspace
-        self._client = client
-        self._owns_client = client is None
-        self.cookies: list[Cookie] = []
-
-    def _get_client(self) -> httpx.AsyncClient:
-        """Get or create the HTTP client."""
-        if self._client is None:
-            self._client = httpx.AsyncClient()
-        return self._client
+    cookies: Var[list[Cookie]] = new([])
+    _httpx_client: Var[httpx.AsyncClient] = new()
+    active_environment: Var[Environment | None]
 
     def _resolve(self, text: str) -> str:
         """Resolve ${VAR} placeholders using workspace's active environment."""
-        if self._workspace is None:
-            return text
-
-        env = self._workspace.active_environment()
+        env = self.active_environment()
         if env is None:
             return text
 
@@ -64,28 +42,27 @@ class HttpClient:
         return re.sub(r"\$\{(\w+)\}", replace_var, text)
 
     async def close(self) -> None:
-        """Close the client if we own it."""
-        if self._owns_client and self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        """Close the HTTP client."""
+        await self._httpx_client().aclose()
 
     def clear_cookies(self) -> None:
         """Clear all cookies from the cookie jar."""
-        self.cookies.clear()
+        self.cookies = []
 
     def _build_httpx_cookies(self) -> httpx.Cookies:
         """Convert our Cookie list to httpx.Cookies for requests."""
         jar = httpx.Cookies()
-        for cookie in self.cookies:
+        for cookie in self.cookies():
             jar.set(cookie.name, cookie.value, domain=cookie.domain, path=cookie.path)
         return jar
 
     def _update_cookies_from_response(self, response_cookies: httpx.Cookies) -> None:
         """Update our cookie list from response cookies."""
+        current_cookies = list(self.cookies())
         for cookie in response_cookies.jar:
             domain = cookie.domain or ""
             existing = next(
-                (c for c in self.cookies if c.name == cookie.name and c.domain == domain),
+                (c for c in current_cookies if c.name == cookie.name and c.domain == domain),
                 None,
             )
             new_cookie = Cookie(
@@ -99,10 +76,11 @@ class HttpClient:
                 samesite=cookie.get_nonstandard_attr("SameSite") or "",
             )
             if existing:
-                idx = self.cookies.index(existing)
-                self.cookies[idx] = new_cookie
+                idx = current_cookies.index(existing)
+                current_cookies[idx] = new_cookie
             else:
-                self.cookies.append(new_cookie)
+                current_cookies.append(new_cookie)
+        self.cookies = current_cookies
 
     async def send(self, request: Request, base_url: str = "") -> Response:
         """Send an HTTP request and return the response.
@@ -114,7 +92,7 @@ class HttpClient:
         Returns:
             Response object with status, headers, body, timing
         """
-        client = self._get_client()
+        client = self._httpx_client()
 
         # Build URL (resolve variables)
         url = self._resolve(request.url())

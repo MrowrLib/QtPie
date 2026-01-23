@@ -19,9 +19,11 @@ from forc2.domain import (
 from forc2.services import HttpClient
 
 
-def make_mock_client(handler: httpx.MockTransport) -> httpx.AsyncClient:
-    """Create an async client with mock transport."""
-    return httpx.AsyncClient(transport=handler)
+def make_http_client(handler: httpx.MockTransport) -> HttpClient:
+    """Create an HttpClient with mock transport."""
+    http = HttpClient()
+    http._httpx_client = httpx.AsyncClient(transport=handler)
+    return http
 
 
 class TestHttpClientBasic:
@@ -32,8 +34,7 @@ class TestHttpClientBasic:
             assert str(request.url) == "https://api.example.com/users"
             return httpx.Response(200, json={"users": []})
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.GET
@@ -53,8 +54,7 @@ class TestHttpClientBasic:
             assert body == {"name": "Alice"}
             return httpx.Response(201, json={"id": 1, "name": "Alice"})
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.POST
@@ -71,8 +71,7 @@ class TestHttpClientBasic:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -86,8 +85,7 @@ class TestHttpClientBasic:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, content=b"Hello World")
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -106,8 +104,7 @@ class TestHttpClientHeaders:
             assert request.headers["X-Another"] == "other"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -125,8 +122,7 @@ class TestHttpClientHeaders:
             assert request.headers["X-Enabled"] == "yes"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -144,8 +140,7 @@ class TestHttpClientQueryParams:
             assert request.url.params["limit"] == "10"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com/items"
@@ -161,8 +156,7 @@ class TestHttpClientQueryParams:
             assert request.url.params["enabled"] == "yes"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -181,8 +175,7 @@ class TestHttpClientAuth:
             assert auth_header.startswith("Basic ")
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -196,8 +189,7 @@ class TestHttpClientAuth:
             assert request.headers["Authorization"] == "Bearer my-token"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -211,8 +203,7 @@ class TestHttpClientAuth:
             assert request.headers["X-API-Key"] == "secret-key"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -226,8 +217,7 @@ class TestHttpClientAuth:
             assert request.url.params["api_key"] == "secret-key"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://example.com"
@@ -243,8 +233,7 @@ class TestHttpClientBodyTypes:
             assert request.headers["Content-Type"] == "application/x-www-form-urlencoded"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.POST
@@ -260,8 +249,7 @@ class TestHttpClientBodyTypes:
             assert request.headers["Content-Type"] == "application/xml"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.POST
@@ -277,8 +265,7 @@ class TestHttpClientBodyTypes:
             assert request.headers["Content-Type"] == "text/plain"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.POST
@@ -294,8 +281,7 @@ class TestHttpClientBodyTypes:
             assert request.headers["Content-Type"] == "application/custom"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.method = HttpMethod.POST
@@ -314,8 +300,7 @@ class TestHttpClientBaseUrl:
             assert str(request.url) == "https://api.example.com/users"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "/users"
@@ -328,8 +313,7 @@ class TestHttpClientBaseUrl:
             assert str(request.url) == "https://other.com/path"
             return httpx.Response(200)
 
-        client = make_mock_client(httpx.MockTransport(handler))
-        http = HttpClient(client=client)
+        http = make_http_client(httpx.MockTransport(handler))
 
         req = Request()
         req.url = "https://other.com/path"
@@ -346,8 +330,7 @@ class TestHttpClientAllMethods:
                 assert request.method == expected
                 return httpx.Response(200)
 
-            client = make_mock_client(httpx.MockTransport(handler))
-            http = HttpClient(client=client)
+            http = make_http_client(httpx.MockTransport(handler))
 
             req = Request()
             req.method = method

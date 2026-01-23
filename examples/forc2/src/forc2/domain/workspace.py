@@ -9,6 +9,7 @@ from qtpie import State, Var, new, state
 
 from .collection import Collection
 from .environment import Environment
+from .http_client import HttpClient
 
 
 @state
@@ -20,6 +21,7 @@ class Workspace(State):
     active_environment: Var[Environment | None] = new(None, onChange="_on_active_environment_changed")
     active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_name_changed")
     path: Var[Path | None] = new(None)
+    http_client: Var[HttpClient] = new()
 
     ### Events ###
     # on_save: Event
@@ -31,7 +33,9 @@ class Workspace(State):
 
     ### Methods ###
     def _on_active_environment_name_changed(self) -> None:
-        self._updating_active_environment = True  # Guard against recursion (for when changing active_environment_name)
+        if getattr(self, "_updating_active_environment", False):
+            return
+        self._updating_active_environment = True
         active_name = self.active_environment_name()
         if active_name is not None:
             for env in self.environments():
@@ -41,12 +45,13 @@ class Workspace(State):
         self._updating_active_environment = False
 
     def _on_active_environment_changed(self) -> None:
-        if self._updating_active_environment:
-            # Guard against recursion (for when changing active_environment_name)
+        if getattr(self, "_updating_active_environment", False):
             return
+        self._updating_active_environment = True
         active_env = self.active_environment()
         if active_env is not None:
             self.active_environment_name = active_env.name.value
+        self._updating_active_environment = False
 
     # def _do_save(self) -> None:
     #     from ..format import save_collection

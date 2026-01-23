@@ -4,6 +4,7 @@ from .auth import ApiKeyAuth, ApiKeyLocation, Auth, AuthType, BasicAuth, BearerA
 from .body import BodyType
 from .collection import Collection, TreeItem
 from .environment import Environment, EnvironmentVariable
+from .http_client import HttpClient
 from .request import HttpMethod, Request, RequestKeyValue
 from .response import Cookie, Response
 from .workspace import Workspace, load_workspace
@@ -24,6 +25,8 @@ __all__ = [
     # Environment
     "Environment",
     "EnvironmentVariable",
+    # HttpClient
+    "HttpClient",
     # Request
     "RequestKeyValue",
     "HttpMethod",

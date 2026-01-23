@@ -38,6 +38,7 @@ def _create_observable_for_type(
     inner_type: type | types.UnionType | None,
     default: Any,
     inner_kwargs: dict[str, Any] | None = None,
+    parent: Any = None,
 ) -> AnyObservable[Any]:
     """Create the appropriate observable wrapper based on type.
 
@@ -45,6 +46,8 @@ def _create_observable_for_type(
         inner_type: The type inside Variable[T], e.g., str, list[int], MyClass, etc.
         default: The default value, or NO_DEFAULT if no default was provided.
         inner_kwargs: Constructor kwargs for inner_type (for complex types).
+        parent: Optional parent State - if provided and the created value is a State,
+                sets value.state_parent = parent before the child's __setup__ runs.
     """
     # Check if no default was provided (distinct from None which is a valid default)
     no_default_provided = isinstance(default, NoDefault)
@@ -103,10 +106,14 @@ def _create_observable_for_type(
                 concrete_type = non_none_types[0]
                 if isinstance(concrete_type, type):
                     try:
-                        if inner_kwargs:
-                            default = concrete_type(**inner_kwargs)
-                        else:
-                            default = concrete_type()
+                        kwargs_to_pass = dict(inner_kwargs) if inner_kwargs else {}
+                        # Only pass _qtpie_parent to State subclasses
+                        if parent is not None:
+                            from .state import State
+
+                            if issubclass(concrete_type, State):
+                                kwargs_to_pass["_qtpie_parent"] = parent
+                        default = concrete_type(**kwargs_to_pass)
                     except TypeError as e:
                         raise ValueError(f"Cannot create Variable[{inner_type!r}] without a default value. Use new(default={concrete_type.__name__}(...)) or provide constructor args.") from e
                     return ObservableProxy(default)
@@ -122,10 +129,14 @@ def _create_observable_for_type(
         assert isinstance(inner_type, type)
         # Try to instantiate with inner_kwargs (or no args if none provided)
         try:
-            if inner_kwargs:
-                default = inner_type(**inner_kwargs)
-            else:
-                default = inner_type()
+            kwargs_to_pass = dict(inner_kwargs) if inner_kwargs else {}
+            # Only pass _qtpie_parent to State subclasses
+            if parent is not None:
+                from .state import State
+
+                if issubclass(inner_type, State):
+                    kwargs_to_pass["_qtpie_parent"] = parent
+            default = inner_type(**kwargs_to_pass)
         except TypeError as e:
             raise ValueError(f"Cannot create Variable[{inner_type.__name__}] without a default value. Use new(default=YourClass(...)) or provide constructor args.") from e
     return ObservableProxy(default)
@@ -708,12 +719,12 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
     """Walk parent hierarchy to find matching Variable.
 
     Resolution order:
-    1. widget.parent() (Qt parent)
-    2. parent().parent(), etc.
+    1. For QWidgets: widget.parent() chain
+    2. For States: state_parent chain
     3. QApplication.instance()
 
     Args:
-        widget: The widget instance to start from
+        widget: The widget/state instance to start from
         var_name: The exact Variable name to find
 
     Returns:
@@ -723,7 +734,9 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
     """
     from qtpy.QtWidgets import QApplication, QWidget
 
-    # Walk parent chain
+    from .state import State
+
+    # Walk QWidget parent chain
     current: Any = widget
     while True:
         if not isinstance(current, QWidget):
@@ -736,6 +749,22 @@ def _resolve_from_hierarchy(widget: Any, var_name: str) -> Variable[Any] | None:
         var = _try_get_variable(parent, var_name)
         if var is not None:
             # Return the SAME Variable object so all hierarchy shares one instance
+            return var
+
+        current = parent
+
+    # Walk State state_parent chain
+    current = widget
+    while True:
+        if not isinstance(current, State):
+            break
+        parent = current.state_parent
+        if parent is None:
+            break
+
+        # Try to find Variable on parent
+        var = _try_get_variable(parent, var_name)
+        if var is not None:
             return var
 
         current = parent
@@ -947,8 +976,8 @@ class _VariableDescriptor[T]:
                     widget_type=self._widget_type,
                 )
             else:
-                # Normal Variable mode
-                wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs)
+                # Normal Variable mode - pass obj as parent for State children
+                wrapper = _create_observable_for_type(self._inner_type, self._default, resolved_kwargs, parent=obj)
                 var = Variable(wrapper, widget_type=self._widget_type)
             qtpie_state.register_variable(self._name, var)
 

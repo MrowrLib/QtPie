@@ -366,6 +366,11 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
     config = cls._state_config
 
     def wrapped_init(self: State, *args: Any, **kwargs: Any) -> None:
+        # Extract _qtpie_parent if passed (for auto-parenting child States)
+        qtpie_parent = kwargs.pop("_qtpie_parent", None)
+        if qtpie_parent is not None:
+            self.state_parent = qtpie_parent
+
         # Extract Variable kwargs (match against variable_names and required_bindings)
         variable_kwargs: dict[str, Any] = {}
         all_variable_names = set(config.variable_names) | config.required_bindings
@@ -469,8 +474,8 @@ def _wire_event_new_fields_for_state(instance: State, event_new_fields: dict[str
 def _setup_auto_parenting(instance: State) -> None:
     """Set up auto-parenting for Variables that hold State children.
 
-    When a Variable[list[ChildState]] has items appended, the child's
-    state_parent is automatically set to this instance.
+    - Direct State children: state_parent is set immediately
+    - List[State] children: state_parent is set on insert
     """
     from observant import ObservableList
 
@@ -488,10 +493,15 @@ def _setup_auto_parenting(instance: State) -> None:
     if qtpie_state is None:
         return
 
-    # Now hook into any ObservableLists
     for _var_name, var in qtpie_state.variables.items():
         if not isinstance(var, Variable):
             continue
+
+        # Check if current value is a State - set state_parent immediately
+        current_value = var.value
+        if isinstance(current_value, State):
+            current_value.state_parent = instance
+
         observable: Any = var.observable
         if isinstance(observable, ObservableList):
             # Hook into on_insert to auto-parent new State children

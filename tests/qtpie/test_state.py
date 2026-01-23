@@ -795,6 +795,69 @@ class TestStateDictCallbacks:
         assert_that(events).contains("change", "set:x=10", "remove:x")
 
 
+class TestStateParentChildHierarchy:
+    """Test State parent-child hierarchy with state_parent."""
+
+    def test_child_state_gets_state_parent_set(self) -> None:
+        """Child State created via new() has state_parent set to parent."""
+
+        @state
+        class ChildState(State):
+            name: Variable[str] = new("child")
+
+        @state
+        class ParentState(State):
+            child: Variable[ChildState] = new()
+
+        parent = ParentState()
+        child = parent.child.value
+
+        assert_that(child.state_parent).is_same_as(parent)
+
+    def test_child_state_bare_variable_resolves_from_parent(self) -> None:
+        """Child State bare Variable resolves from parent's Variable."""
+
+        @state
+        class ChildState(State):
+            # Bare Variable - should resolve from parent
+            count: Variable[int]
+
+        @state
+        class ParentState(State):
+            count: Variable[int] = new(42)
+            child: Variable[ChildState] = new()
+
+        parent = ParentState()
+        child = parent.child.value
+
+        # Child's bare Variable should resolve to parent's Variable
+        assert_that(child.count.value).is_equal_to(42)
+
+        # Should be the SAME Variable, not a copy
+        parent.count.value = 100
+        assert_that(child.count.value).is_equal_to(100)
+
+    def test_child_setup_can_access_parent_variables(self) -> None:
+        """Child State __setup__ can access variables from parent hierarchy."""
+        seen_value: list[int] = []
+
+        @state
+        class ChildState(State):
+            count: Variable[int]  # Bare - from parent
+
+            def __setup__(self) -> None:
+                seen_value.append(self.count.value)
+
+        @state
+        class ParentState(State):
+            count: Variable[int] = new(99)
+            child: Variable[ChildState] = new()
+
+        ParentState()
+
+        assert_that(seen_value).is_equal_to([99])
+
+
 class TestStateEventNewOn:
     """Test Event[T] = new(on=...) syntax for State."""
 
