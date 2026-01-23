@@ -36,7 +36,7 @@ from typing import Any, cast, overload, override
 from .event import Event, is_event_hint
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
 
-__all__ = ["State", "state", "resolve_from_state_hierarchy"]
+__all__ = ["Service", "State", "service", "state", "resolve_from_state_hierarchy"]
 
 
 class StateConfig:
@@ -595,3 +595,35 @@ def state[S: State](
         return decorator(cls)
 
     return decorator
+
+
+# Aliases for semantic distinction (Services are States with a different intent)
+Service = State
+"""Alias for State. Services are States intended for application-level logic."""
+
+
+@overload
+def service[S: State](cls: type[S]) -> type[S]: ...
+
+
+@overload
+def service[S: State](
+    cls: None = None,
+    **event_wiring: str,
+) -> Callable[[type[S]], type[S]]: ...
+
+
+def service[S: State](
+    cls: type[S] | None = None,
+    **event_wiring: str,
+) -> type[S] | Callable[[type[S]], type[S]]:
+    """Alias for @state decorator. Use for application-level services.
+
+    Usage:
+        @service
+        class ApiService(Service):
+            base_url: Variable[str] = new("https://api.example.com")
+
+    Semantically equivalent to @state, but conveys intent for service-layer logic.
+    """
+    return state(cls, **event_wiring)

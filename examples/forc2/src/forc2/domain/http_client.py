@@ -7,7 +7,7 @@ import time
 
 import httpx
 
-from qtpie import State, Var, new, state
+from qtpie import Service, Var, new, service
 
 from .auth import ApiKeyAuth, ApiKeyLocation, BasicAuth, BearerAuth
 from .body import BodyType
@@ -16,8 +16,8 @@ from .request import Request
 from .response import Cookie, Response
 
 
-@state
-class HttpClient(State):
+@service
+class HttpClient(Service):
     """Service for sending HTTP requests."""
 
     cookies: Var[list[Cookie]] = new([])

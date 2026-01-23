@@ -21,7 +21,7 @@ from .ref import Ref, ref
 from .set_widget_repeater import SetWidgetRepeater
 from .setting import Setting
 from .slot import slot
-from .state import State, state
+from .state import Service, State, service, state
 from .styles import (
     ColorScheme,
     enable_dark_mode,
@@ -73,7 +73,9 @@ __all__ = [
     "Ref",
     "Section",
     "Separator",
+    "Service",
     "State",
+    "service",
     "state",
     "SetWidgetRepeater",
     "Setting",
