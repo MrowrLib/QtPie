@@ -1,6 +1,6 @@
 """Qt type checking utilities for NewField and other modules."""
 
-from typing import Any, get_origin
+from typing import Any, get_args, get_origin
 
 
 def _is_subclass_of(cls: type | None, *targets: type, exclude: tuple[type, ...] = ()) -> bool:
@@ -126,3 +126,54 @@ def is_dock_generic(type_to_check: Any) -> bool:
     from qtpie.dock import Dock
 
     return get_origin(type_to_check) is Dock
+
+
+def extract_record_type_from_bases(
+    cls: type,
+    *target_bases: type,
+    filter_typevar: bool = False,
+) -> type | None:
+    """Extract T from Widget[T] (or similar), even through intermediate generic classes.
+
+    For example, if you have:
+        class DeleteWidget[T](Widget[T]): ...
+        class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
+
+    This will correctly extract RequestKeyValue as the record type.
+
+    Args:
+        cls: The class to inspect (e.g., DeleteRequestKeyValueWidget)
+        *target_bases: The base generic classes to look for (e.g., Widget, Window, Dialog).
+                       Multiple can be provided (e.g., AppBase, App).
+        filter_typevar: If True, filter out TypeVar and NoneType results (return None instead).
+
+    Returns:
+        The concrete type T, or None if not found (or filtered out).
+    """
+    from typing import TypeVar
+
+    def _is_valid_type(t: Any) -> bool:
+        if t is None:
+            return False
+        if filter_typevar:
+            if t is type(None) or isinstance(t, TypeVar):
+                return False
+        return True
+
+    for base in getattr(cls, "__orig_bases__", ()):
+        origin = get_origin(base)
+        # Check if origin matches any target base directly
+        if origin in target_bases:
+            args = get_args(base)
+            if args and _is_valid_type(args[0]):
+                return args[0]
+            continue
+        # Check if origin is itself a generic subclass of any target_base
+        if origin is not None and isinstance(origin, type):
+            for target_base in target_bases:
+                if issubclass(origin, target_base):
+                    args = get_args(base)
+                    if args and _is_valid_type(args[0]):
+                        return args[0]
+                    break
+    return None

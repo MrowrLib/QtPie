@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from observant import Observable
 from qtpy.QtWidgets import (
@@ -25,6 +25,7 @@ from .qt_pie_state import QtPieState
 from .signals import create_signal_expression_handler
 from .utils.common import detect_required_bindings
 from .utils.layouts import add_to_layout, create_layout
+from .utils.type_checks import extract_record_type_from_bases
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget import IconType, _validate_layout_params
 
@@ -117,14 +118,10 @@ class Window[T = None](QMainWindow, QtPieComponentBase):
         # Each subclass gets its own config
         cls._qtpie_config = WindowConfig()
 
-        # Extract T from Window[T] if present
-        for base in getattr(cls, "__orig_bases__", ()):
-            origin = get_origin(base)
-            if origin is Window:
-                args = get_args(base)
-                if args:
-                    cls._qtpie_config.record_type = args[0]
-                break
+        # Extract T from Window[T] if present (works through intermediate generic classes)
+        record_type = extract_record_type_from_bases(cls, Window)
+        if record_type is not None:
+            cls._qtpie_config.record_type = record_type
 
         # Check if user declared 'record' explicitly
         has_explicit_record = "record" in cls.__dict__

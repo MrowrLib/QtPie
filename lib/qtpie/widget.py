@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast, get_args, get_origin, overload
+from typing import TYPE_CHECKING, Any, cast, get_origin, overload
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 from qtpy.QtWidgets import (
@@ -23,6 +23,7 @@ from .qtpie_config import _QtPieConfig
 from .signals import create_signal_expression_handler
 from .utils.common import detect_required_bindings
 from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
+from .utils.type_checks import extract_record_type_from_bases
 from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget_base import WidgetBase
 
@@ -237,14 +238,10 @@ class Widget[T = None](QWidget, QtPieComponentBase):
         # Create fresh config for this subclass
         cls._qtpie_config = _QtPieConfig()
 
-        # Extract T from Widget[T] if present
-        for base in getattr(cls, "__orig_bases__", ()):
-            origin = get_origin(base)
-            if origin is Widget:
-                args = get_args(base)
-                if args:
-                    cls._qtpie_config.record_type = args[0]
-                break
+        # Extract T from Widget[T] if present (works through intermediate generic classes)
+        record_type = extract_record_type_from_bases(cls, Widget)
+        if record_type is not None:
+            cls._qtpie_config.record_type = record_type
 
         # Check if user declared 'record' explicitly
         has_explicit_record = "record" in cls.__dict__

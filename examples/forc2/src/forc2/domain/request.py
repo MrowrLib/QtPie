@@ -40,7 +40,7 @@ class Request(State):
     query_params: Var[list[RequestKeyValue]] = new([])
     body: Var[str] = new("")
     body_type: Var[BodyType] = new(BodyType.NONE)
-    body_fields: Var[list[RequestKeyValue]] = new([])  # For form bodies
+    body_fields: Var[list[RequestKeyValue]] = new([])
     auth: Var[Auth | None] = new(None)
     filename: Var[str | None] = new(None)
 

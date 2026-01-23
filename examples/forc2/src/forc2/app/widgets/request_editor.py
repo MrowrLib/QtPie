@@ -1,15 +1,19 @@
-from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPushButton, QTableView, QTabWidget
+from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableView, QTabWidget
 
 from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyLocation, Auth, AuthType
+from forc2.domain.body import BODY_TYPE_LABELS, BodyType
 from forc2.domain.request import HttpMethod, Request, RequestKeyValue
 from qtpie import Event, Stretch, Widget, new, widget
 
 
-# TODO: can we make this generic for other T than RequestKeyValue?
-@widget(title="Actions")
-class DeleteRequestKeyValueWidget(Widget[RequestKeyValue]):
+@widget
+class DeleteWidget[T](Widget[T]):
     ### Widgets ###
     delete: QPushButton = new("🗑️", clicked="{on_delete(record)}", styleSheet="background: none; border: none; padding: 0;")
+
+
+@widget(title="Actions")
+class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
 
 
 @widget(layout="horizontal")
@@ -30,8 +34,6 @@ class RequestParamsWidget(Widget[Request]):
     add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
     table: QTableView = new(bind="query_params", appendColumns=[DeleteRequestKeyValueWidget])
 
-    label_query_params: QLabel = new(bind="Query Parameters: {query_params}")  # Example of binding to show current params
-
     ### Methods ###
     def _on_add(self) -> None:
         self.record.query_params.append(RequestKeyValue())
@@ -42,8 +44,20 @@ class RequestParamsWidget(Widget[Request]):
 
 @widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
+    ### Events ###
+    on_delete: Event[RequestKeyValue] = new(on="_on_delete")
+
     ### Widgets ###
+    header: QLabel = new("Headers:")
+    add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
     table: QTableView = new(bind="headers", appendColumns=[DeleteRequestKeyValueWidget])
+
+    ### Methods ###
+    def _on_add(self) -> None:
+        self.record.headers.append(RequestKeyValue())
+
+    def _on_delete(self, header: RequestKeyValue) -> None:
+        self.record.headers.remove(header)
 
 
 @widget(layout="form")
@@ -70,19 +84,28 @@ class RequestAuthFormWidget(Widget[Auth]):
 class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     header: QLabel = new("Authentication:")
-    auth_type_chooser: QComboBox = new(
-        bind=AuthType,
-        format=AUTH_TYPE_LABELS.get,
-        selectedItem="auth.type",
-    )
+    auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth.type")
     auth_form: RequestAuthFormWidget = new(bind="auth")
     foo: QLabel = new(bind="AUTH IS: {auth}")
 
 
 @widget(title="Body")
 class RequestBodyWidget(Widget[Request]):
+    ### Events ###
+    on_delete: Event = new(on="_on_delete")
+
     ### Widgets ###
-    header: QLabel = new("Body:")
+    body_type: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
+    body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}")
+    add_button: QPushButton = new("+ Add Field", clicked="_on_add_field", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", classes=["add-button"])
+    body_fields_table: QTableView = new(bind="body_fields", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget])
+
+    ### Methods ###
+    def _on_add_field(self) -> None:
+        self.record.body_fields.append(RequestKeyValue())
+
+    def _on_delete(self, field: RequestKeyValue) -> None:
+        self.record.body_fields.remove(field)
 
 
 @widget

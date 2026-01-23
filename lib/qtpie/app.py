@@ -30,6 +30,7 @@ from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
 from qtpie.utils.layouts import add_to_layout, create_layout, resolve_icon
+from qtpie.utils.type_checks import extract_record_type_from_bases
 from qtpie.widget import _validate_layout_params
 
 
@@ -270,17 +271,11 @@ class AppBase[T = None](QtPieComponentBase):
         # Check if this is a QApplication subclass
         cls._qtpie_config.is_qapplication = issubclass(cls, QApplication)
 
-        # Extract T from AppBase[T] or App[T] if present
-        from typing import TypeVar, get_args, get_origin
-
-        for base in getattr(cls, "__orig_bases__", ()):
-            origin = get_origin(base)
-            if origin is AppBase or origin is App:
-                args = get_args(base)
-                # Only set record_type if T is a concrete type, not a TypeVar or None
-                if args and args[0] is not type(None) and not isinstance(args[0], TypeVar):
-                    cls._qtpie_config.record_type = args[0]
-                break
+        # Extract T from AppBase[T] (works through intermediate generic classes)
+        # Note: App is a subclass of AppBase, so this handles both AppBase[T] and App[T]
+        record_type = extract_record_type_from_bases(cls, AppBase, filter_typevar=True)
+        if record_type is not None:
+            cls._qtpie_config.record_type = record_type
 
         # Check if user declared 'record' explicitly
         has_explicit_record = "record" in cls.__dict__
