@@ -96,11 +96,12 @@ class RequestBodyWidget(Widget[Request]):
     ### Events ###
     on_delete: Event = new(on="_on_delete")
 
-    content_type: Var[str] = new("application/xml")
+    ### Variables ###
+    content_types: Var[dict[BodyType, str]] = new({BodyType.JSON: "application/json", BodyType.XML: "application/xml"})
 
     ### Widgets ###
     body_type_chooser: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
-    body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}", content_type="content_type")
+    body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}", content_type="{content_types[body_type]}")
     add_button: QPushButton = new("+ Add Field", clicked="_on_add_field", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", classes=["add-button"])
     body_fields_table: QTableView = new(bind="body_fields", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget])
 

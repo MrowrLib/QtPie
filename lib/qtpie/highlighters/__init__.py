@@ -8,6 +8,7 @@ from qtpie.highlighters.css import CssHighlighter
 from qtpie.highlighters.html import HtmlHighlighter
 from qtpie.highlighters.javascript import JavaScriptHighlighter
 from qtpie.highlighters.json import JsonHighlighter
+from qtpie.highlighters.python import PythonHighlighter
 from qtpie.highlighters.registry import (
     get_highlighter_for_mime,
     get_registered_mime_types,
@@ -23,6 +24,7 @@ __all__ = [
     "JavaScriptHighlighter",
     "JsonHighlighter",
     "MultiLineRule",
+    "PythonHighlighter",
     "SyntaxHighlighter",
     "XmlHighlighter",
     "YamlHighlighter",
