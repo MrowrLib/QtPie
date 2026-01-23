@@ -230,11 +230,13 @@ class PersonEditor2(Widget[Person]):
     name: QLineEdit = new()
     age: QLineEdit = new()
 
+    # generally try to never use __setup__ in QtPie
     def __setup__(self) -> None:
         self.record = Person("Bob", 25)
 ```
 
 **Key points about `Widget[T]`:**
+
 - `self.record` is an `ObservableProxy[T]` - field access/assignment is reactive
 - `self.record_state` gives access to `.is_dirty`, `.value`, `.observable`
 - Fields named same as record properties auto-bind (e.g., `name: QLineEdit` binds to `record.name`)
@@ -621,39 +623,6 @@ class DirtyExample(Widget):
 
 ---
 
-## Validation
-
-Add validators to fields and check validity:
-
-```python
-@widget
-class ValidatedForm(Widget):
-    _name: Variable[str] = new("")
-    _age: Variable[int] = new(0)
-    _errors: QLabel = new(bind="{', '.join(validation_error_messages)}")
-
-    def __setup__(self) -> None:
-        # Add named validators (can be replaced/removed by name)
-        self.add_validator("_name", "required", lambda v: None if v else "Name required")
-        self.add_validator("_name", "min_len", lambda v: None if len(v) >= 3 else "Min 3 chars")
-        self.add_validator("_age", "positive", lambda v: None if v > 0 else "Must be positive")
-
-    def on_submit(self):
-        if self.is_valid:
-            print("Form is valid!")
-        else:
-            # Structured: {field: {validator: [errors]}}
-            print(self.validation_errors)
-            # Flat list of all error messages
-            print(self.validation_error_messages)
-
-    # Optional lifecycle hook
-    def on_valid_changed(self, is_valid: bool) -> None:
-        self.submit_btn.setEnabled(is_valid)
-```
-
----
-
 ## Reactive Decorator Properties
 
 Decorator kwargs can reference Variables for reactive properties:
@@ -721,40 +690,40 @@ def change_to_french(self) -> None:
 
 # Global translations (available to all widgets)
 :global:
-    Hello:
-        en: Hello
-        fr: Bonjour
-        de: Hallo
+  Hello:
+    en: Hello
+    fr: Bonjour
+    de: Hallo
 
-    # Disambiguation - same source, different meanings
-    "Open|menu":
-        en: Open
-        fr: Ouvrir
+  # Disambiguation - same source, different meanings
+  "Open|menu":
+    en: Open
+    fr: Ouvrir
 
-    "Open|status":
-        en: Open
-        fr: Ouvert
+  "Open|status":
+    en: Open
+    fr: Ouvert
 
-    # Plurals - use %n for count
-    "%n file(s)":
-        en:
-            - "%n file"
-            - "%n files"
-        fr:
-            - "%n fichier"
-            - "%n fichiers"
+  # Plurals - use %n for count
+  "%n file(s)":
+    en:
+      - "%n file"
+      - "%n files"
+    fr:
+      - "%n fichier"
+      - "%n fichiers"
 
-    # Translator notes
-    Submit:
-        :note: Button for form submission
-        en: Submit
-        fr: Soumettre
+  # Translator notes
+  Submit:
+    :note: Button for form submission
+    en: Submit
+    fr: Soumettre
 
 # Widget-specific translations (context = class name)
 MainWindow:
-    Title:
-        en: My Application
-        fr: Mon Application
+  Title:
+    en: My Application
+    fr: Mon Application
 ```
 
 ### Disambiguation
@@ -814,26 +783,31 @@ uv run qtpie tr list translations.yml
 ## Key Architecture Notes
 
 ### Class Hierarchy
+
 - `Widget` → `QWidget` with declarative features
 - `Window` → `QMainWindow` with declarative features (menus auto-added to menu bar)
 - Both support `[T]` type parameter for record types
 
 ### Config Objects
+
 - `Widget` uses `_QtPieConfig` (stored in `cls._qtpie_config`)
 - `Window` uses `WindowConfig` (dataclass, stored in `cls._qtpie_config`)
 - Instance state in `self._qtpie` (`QtPieState`)
 
 ### Descriptor Pattern
+
 - `_RecordDescriptor` handles `self.record` access for `Widget[T]`/`Window[T]`
 - `_VariableDescriptor` handles `Variable[T]` field access
 - Both use lazy initialization
 
 ### The `new()` Factory
+
 - Returns `NewField` instance at class definition time
 - Processed by `new_fields()` in `__init_subclass__`
 - Converted to proper descriptors or widget instances
 
 ### Signal Auto-Connect
+
 - `clicked="method_name"` → connects to `self.method_name`
 - `clicked=lambda: ...` → connects directly
 - Happens in wrapped `__init__` after widget creation
@@ -844,6 +818,7 @@ This project uses **bd (beads)** for issue tracking.
 Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for auto-injection.
 
 **Quick reference:**
+
 - `bd ready` - Find unblocked work
 - `bd create "Title" --type task --priority 2` - Create issue
 - `bd close <id>` - Complete work

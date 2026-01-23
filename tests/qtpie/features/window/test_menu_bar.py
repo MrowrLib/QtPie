@@ -14,7 +14,7 @@ from assertpy import assert_that
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QLabel
 
-from qtpie import Menu, Window, menu, new, window
+from qtpie import Menu, Variable, Window, menu, new, window
 from qtpie.testing import QtDriver
 
 
@@ -201,3 +201,77 @@ class TestNoMenuBar:
         # Menu bar exists but is empty
         assert_that(w.menuBar().actions()).is_length(0)
         assert_that(w.label.text()).is_equal_to("Just a label")
+
+
+class TestMenuVisibility:
+    """Menu visibility binding tests."""
+
+    def test_menu_visible_binding_simple(self, qt: QtDriver) -> None:
+        """visible= binding on Menu uses menuAction().setVisible()."""
+
+        @menu(text="&File")
+        class FileMenu(Menu):
+            action: QAction = new("Action")
+
+        @window(title="Test")
+        class TestWindow(Window):
+            _show_file_menu: Variable[bool] = new(True)
+            file_menu: FileMenu = new(visible="_show_file_menu")
+
+        w = TestWindow()
+        qt.track(w)
+
+        # Menu should be visible initially
+        assert_that(w.file_menu.menuAction().isVisible()).is_true()
+
+        # Hide the menu via Variable
+        w._show_file_menu.value = False
+        assert_that(w.file_menu.menuAction().isVisible()).is_false()
+
+        # Show it again
+        w._show_file_menu.value = True
+        assert_that(w.file_menu.menuAction().isVisible()).is_true()
+
+    def test_menu_visible_binding_expression(self, qt: QtDriver) -> None:
+        """visible= expression binding on Menu."""
+
+        @menu(text="&Edit")
+        class EditMenu(Menu):
+            action: QAction = new("Action")
+
+        @window(title="Test")
+        class TestWindow(Window):
+            _data_loaded: Variable[bool] = new(False)
+            edit_menu: EditMenu = new(visible="{_data_loaded}")
+
+        w = TestWindow()
+        qt.track(w)
+
+        # Menu should be hidden initially (data not loaded)
+        assert_that(w.edit_menu.menuAction().isVisible()).is_false()
+
+        # Load data - menu should appear
+        w._data_loaded.value = True
+        assert_that(w.edit_menu.menuAction().isVisible()).is_true()
+
+    def test_menu_visible_initially_hidden(self, qt: QtDriver) -> None:
+        """Menu can be initially hidden via visible= binding."""
+
+        @menu(text="&View")
+        class ViewMenu(Menu):
+            action: QAction = new("Action")
+
+        @window(title="Test")
+        class TestWindow(Window):
+            _show_view: Variable[bool] = new(False)
+            view_menu: ViewMenu = new(visible="_show_view")
+
+        w = TestWindow()
+        qt.track(w)
+
+        # Menu should be hidden initially
+        assert_that(w.view_menu.menuAction().isVisible()).is_false()
+
+        # Show it
+        w._show_view.value = True
+        assert_that(w.view_menu.menuAction().isVisible()).is_true()

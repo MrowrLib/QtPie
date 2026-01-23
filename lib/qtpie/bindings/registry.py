@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QProgressBar,
     QRadioButton,
@@ -263,8 +264,13 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
     # ============================================================
 
     def _set_visible(w: QWidget, v: object) -> None:
-        """Set widget visibility, also handling QFormLayout row visibility."""
+        """Set widget visibility, handling special cases like QFormLayout and QMenu."""
         visible = bool(v) if v is not None else True
+
+        # QMenu in a menu bar: use menuAction().setVisible() instead
+        if isinstance(w, QMenu):
+            w.menuAction().setVisible(visible)
+            return
 
         # Find if widget is in a QFormLayout and use setRowVisible instead
         parent = w.parentWidget()
