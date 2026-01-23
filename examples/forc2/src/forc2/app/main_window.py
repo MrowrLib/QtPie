@@ -32,7 +32,7 @@ class CentralWidget(Widget):
     dockTabsDragToUndock=True,
     size=(1600, 900),
 )
-class ForcWindowTwo(Window[Workspace | None]):
+class ForcWindow(Window[Workspace | None]):
     ### Menus ###
     file_menu: FileMenu
     view_menu: ViewMenu = new(visible="{#record is not None}")
@@ -42,11 +42,10 @@ class ForcWindowTwo(Window[Workspace | None]):
 
     ### Docks ###
     sidebar: Dock[SidebarWidget] = new(
-        bind="#record",  # <-- I think this happens by default, maybe not in Dock?
         dock="left",
         title="Explorer",
         hideTitleBar=True,
-        # visible="{#record is not None}",
+        visible="{#record is not None}",
     )(maximumWidth=400)
 
     ### Widgets ###
@@ -68,7 +67,7 @@ class ForcWindowTwo(Window[Workspace | None]):
     dockTabsDragToUndock=True,
     size=(1600, 900),
 )
-class ForcWindow(Window):
+class ForcWindow_OneDraft(Window):
     ### Events ###
     on_current_workspace_item_changed: Event
 

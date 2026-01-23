@@ -32,7 +32,7 @@ class ForcApp(App):
     workspace: Var[Workspace | None] = new(None)
 
     ### Window ###
-    main_window: ForcWindow  # = new(bind="workspace")
+    main_window: ForcWindow = new(bind="workspace")
 
     ### Methods ###
     @override
@@ -68,3 +68,4 @@ class ForcApp(App):
     def _on_load_workspace(self, folder: str) -> None:
         self.workspace = Workspace.load(Path(folder))
         self.loaded_workspace_path = folder
+        logger.info(f"Loaded workspace from: {folder}")
