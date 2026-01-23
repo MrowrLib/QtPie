@@ -479,7 +479,7 @@ class TestUnionTypeRecordBinding:
 
         assert_that(w.method_display.text()).is_equal_to("GET")
 
-        # Change method via proxy - use replace_target for nested proxy
-        method_proxy = w._qtpie.record_state.observable.method
-        method_proxy.replace_target(HttpMethod.DELETE)
+        # Change method via Observable - use .set() for enum fields (now Observable, not proxy)
+        method_obs = w._qtpie.record_state.observable.method
+        method_obs.set(HttpMethod.DELETE)  # pyright: ignore[reportCallIssue]
         assert_that(w.method_display.text()).is_equal_to("DELETE")

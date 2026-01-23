@@ -1137,3 +1137,234 @@ class TestRecordNoneBinding:
         # Two-way binding: widget -> record
         instance.child.name_input.setText("FromWidget")
         assert_that(instance.person_state.value.name()).is_equal_to("FromWidget")  # type: ignore[union-attr]
+
+
+# =============================================================================
+# Enum Field Attribute Access in Bindings (Regression Test)
+# =============================================================================
+
+
+class TestEnumFieldAttributeBinding:
+    """Test that binding to enum field attributes like {body_type.name} works reactively.
+
+    This is a regression test for a bug where:
+    - bind="{body_type}" worked (subscribed to the Observable for body_type)
+    - bind="{body_type.name}" did NOT update (only subscribed to proxy, not the field Observable)
+
+    The fix ensures that for nested paths like "body_type.name" where the root is a record
+    field, we also subscribe to the Observable for the root field (body_type), not just
+    the proxy.
+    """
+
+    def test_enum_field_name_attribute_updates_reactively(self, qt: QtDriver) -> None:
+        """bind='{field.name}' updates when enum field changes.
+
+        Reproduces the exact issue from forc2/request_editor.py where:
+        - body_type_label: QLabel = new(bind="Body Type: {body_type}") worked
+        - body_type_name_label: QLabel = new(bind="Body Type: {body_type.name}") did NOT update
+        """
+        from dataclasses import dataclass
+        from enum import Enum
+
+        from qtpie import Widget, widget
+
+        class BodyType(Enum):
+            NONE = "none"
+            JSON = "json"
+            XML = "xml"
+            TEXT = "text"
+
+        @dataclass
+        class Request:
+            body_type: BodyType = BodyType.NONE
+
+        @widget(record=Request())
+        class RequestBodyWidget(Widget[Request]):
+            # This worked before the fix
+            body_type_label: QLabel = new(bind="Body Type: {body_type}")
+            # This did NOT update before the fix
+            body_type_name_label: QLabel = new(bind="Body Type: {body_type.name}")
+
+        instance = RequestBodyWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initial state - both labels should show NONE
+        assert_that(instance.body_type_label.text()).is_equal_to("Body Type: BodyType.NONE")
+        assert_that(instance.body_type_name_label.text()).is_equal_to("Body Type: NONE")
+
+        # Change the enum value
+        instance.record.body_type = BodyType.JSON
+
+        # Both should update - this is the regression test!
+        assert_that(instance.body_type_label.text()).is_equal_to("Body Type: BodyType.JSON")
+        assert_that(instance.body_type_name_label.text()).is_equal_to("Body Type: JSON")
+
+        # Change again to verify continued reactivity
+        instance.record.body_type = BodyType.XML
+        assert_that(instance.body_type_label.text()).is_equal_to("Body Type: BodyType.XML")
+        assert_that(instance.body_type_name_label.text()).is_equal_to("Body Type: XML")
+
+    def test_enum_field_value_attribute_updates_reactively(self, qt: QtDriver) -> None:
+        """bind='{field.value}' updates when enum field changes."""
+        from dataclasses import dataclass
+        from enum import Enum
+
+        from qtpie import Widget, widget
+
+        class Status(Enum):
+            PENDING = "pending"
+            ACTIVE = "active"
+            COMPLETED = "completed"
+
+        @dataclass
+        class Task:
+            status: Status = Status.PENDING
+
+        @widget(record=Task())
+        class TaskWidget(Widget[Task]):
+            status_value_label: QLabel = new(bind="Status: {status.value}")
+
+        instance = TaskWidget()
+        qt.track(instance)
+        instance.show()
+
+        assert_that(instance.status_value_label.text()).is_equal_to("Status: pending")
+
+        instance.record.status = Status.ACTIVE
+        assert_that(instance.status_value_label.text()).is_equal_to("Status: active")
+
+        instance.record.status = Status.COMPLETED
+        assert_that(instance.status_value_label.text()).is_equal_to("Status: completed")
+
+    def test_multiple_enum_attribute_bindings(self, qt: QtDriver) -> None:
+        """Multiple labels binding to different enum attributes all update."""
+        from dataclasses import dataclass
+        from enum import Enum
+
+        from qtpie import Widget, widget
+
+        class Priority(Enum):
+            LOW = 1
+            MEDIUM = 2
+            HIGH = 3
+
+        @dataclass
+        class Item:
+            priority: Priority = Priority.LOW
+
+        @widget(record=Item())
+        class ItemWidget(Widget[Item]):
+            raw_label: QLabel = new(bind="{priority}")
+            name_label: QLabel = new(bind="{priority.name}")
+            value_label: QLabel = new(bind="{priority.value}")
+
+        instance = ItemWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initial state
+        assert_that(instance.raw_label.text()).is_equal_to("Priority.LOW")
+        assert_that(instance.name_label.text()).is_equal_to("LOW")
+        assert_that(instance.value_label.text()).is_equal_to("1")
+
+        # Change the enum
+        instance.record.priority = Priority.HIGH
+
+        # All three should update
+        assert_that(instance.raw_label.text()).is_equal_to("Priority.HIGH")
+        assert_that(instance.name_label.text()).is_equal_to("HIGH")
+        assert_that(instance.value_label.text()).is_equal_to("3")
+
+    def test_visible_binding_with_enum_name_attribute(self, qt: QtDriver) -> None:
+        """visible='{field.name in [...]}' updates when enum field changes.
+
+        This is the exact bug from forc2/request_editor.py where visible= bindings
+        using enum .name attribute didn't update reactively.
+        """
+        from dataclasses import dataclass
+        from enum import Enum
+
+        from qtpie import Widget, widget
+
+        class BodyType(Enum):
+            NONE = "none"
+            JSON = "json"
+            TEXT = "text"
+            FORM = "form"
+
+        @dataclass
+        class Request:
+            body_type: BodyType = BodyType.NONE
+
+        @widget(record=Request())
+        class RequestBodyWidget(Widget[Request]):
+            # This label is visible only for JSON/TEXT body types
+            text_editor: QLabel = new("Text Editor", visible="{body_type.name in ['JSON', 'TEXT']}")
+            # This label is visible only for FORM body type
+            form_editor: QLabel = new("Form Editor", visible="{body_type.name == 'FORM'}")
+
+        instance = RequestBodyWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initial state - NONE, both should be hidden
+        assert_that(instance.text_editor.isVisible()).is_false()
+        assert_that(instance.form_editor.isVisible()).is_false()
+
+        # Change to JSON - text_editor should become visible
+        instance.record.body_type = BodyType.JSON
+        assert_that(instance.text_editor.isVisible()).is_true()
+        assert_that(instance.form_editor.isVisible()).is_false()
+
+        # Change to FORM - form_editor should become visible, text_editor hidden
+        instance.record.body_type = BodyType.FORM
+        assert_that(instance.text_editor.isVisible()).is_false()
+        assert_that(instance.form_editor.isVisible()).is_true()
+
+        # Change to TEXT - text_editor should become visible again
+        instance.record.body_type = BodyType.TEXT
+        assert_that(instance.text_editor.isVisible()).is_true()
+        assert_that(instance.form_editor.isVisible()).is_false()
+
+        # Change back to NONE - both hidden again
+        instance.record.body_type = BodyType.NONE
+        assert_that(instance.text_editor.isVisible()).is_false()
+        assert_that(instance.form_editor.isVisible()).is_false()
+
+    def test_enabled_binding_with_enum_value_attribute(self, qt: QtDriver) -> None:
+        """enabled='{field.value == ...}' updates when enum field changes."""
+        from dataclasses import dataclass
+        from enum import Enum
+
+        from PySide6.QtWidgets import QPushButton
+
+        from qtpie import Widget, widget
+
+        class Status(Enum):
+            DRAFT = "draft"
+            READY = "ready"
+            SENT = "sent"
+
+        @dataclass
+        class Message:
+            status: Status = Status.DRAFT
+
+        @widget(record=Message())
+        class MessageWidget(Widget[Message]):
+            send_btn: QPushButton = new("Send", enabled="{status.value == 'ready'}")
+
+        instance = MessageWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initial state - DRAFT, button disabled
+        assert_that(instance.send_btn.isEnabled()).is_false()
+
+        # Change to READY - button enabled
+        instance.record.status = Status.READY
+        assert_that(instance.send_btn.isEnabled()).is_true()
+
+        # Change to SENT - button disabled again
+        instance.record.status = Status.SENT
+        assert_that(instance.send_btn.isEnabled()).is_false()

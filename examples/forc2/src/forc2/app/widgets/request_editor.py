@@ -5,6 +5,8 @@ from forc2.domain.body import BODY_TYPE_LABELS, BodyType
 from forc2.domain.request import HttpMethod, Request, RequestKeyValue
 from qtpie import Event, Stretch, Widget, new, widget
 
+# TODO: update all to use _private names for the widgets, simple names, but private to avoid conflicts with the record's attributes
+
 
 @widget
 class DeleteWidget[T](Widget[T]):
@@ -19,7 +21,7 @@ class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
 @widget(layout="horizontal")
 class RequestAddressBarWidget(Widget[Request]):
     ### Widgets ###
-    request_method: QComboBox = new(bind=HttpMethod, selectedItem="method")
+    request_method_chooser: QComboBox = new(bind=HttpMethod, selectedItem="method")
     request_url: QLineEdit = new(bind="url", placeholderText="Enter request URL...")
     send_request_button: QPushButton = new("Send", clicked="on_send_request", enabled="{not is_sending}")
 
@@ -71,7 +73,7 @@ class RequestAuthFormWidget(Widget[Auth]):
     # API Key Auth
     api_key_name: QLineEdit = new(bind="name", label="Name:", visible="{type.name == 'API_KEY'}")
     api_key_value: QLineEdit = new(bind="value", label="Value:", visible="{type.name == 'API_KEY'}")
-    api_key_location: QComboBox = new(
+    api_key_location_chooser: QComboBox = new(
         bind=ApiKeyLocation,
         format=API_KEY_LOCATION_LABELS.get,
         selectedItem="location",
@@ -86,7 +88,6 @@ class RequestAuthWidget(Widget[Request]):
     header: QLabel = new("Authentication:")
     auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth.type")
     auth_form: RequestAuthFormWidget = new(bind="auth")
-    foo: QLabel = new(bind="AUTH IS: {auth}")
 
 
 @widget(title="Body")
@@ -94,8 +95,10 @@ class RequestBodyWidget(Widget[Request]):
     ### Events ###
     on_delete: Event = new(on="_on_delete")
 
+    body_type_name: QLabel = new(bind="Body Type: {body_type.name}")
+
     ### Widgets ###
-    body_type: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
+    body_type_chooser: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
     body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}")
     add_button: QPushButton = new("+ Add Field", clicked="_on_add_field", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", classes=["add-button"])
     body_fields_table: QTableView = new(bind="body_fields", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget])

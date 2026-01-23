@@ -525,6 +525,21 @@ def create_expression_binding(
                 except (AttributeError, ValueError):
                     pass  # Path doesn't exist on record or intermediate is None
 
+                # For nested paths like "body_type.name", also get the Observable for
+                # the root field (body_type) so changes to it trigger recomputation.
+                # This is critical for enum fields where .name is an attribute access,
+                # not a nested observable.
+                if "." in normalized_path:
+                    root_name = normalized_path.split(".")[0]
+                    if hasattr(target, root_name):
+                        try:
+                            root_field_obs = getattr(record_proxy_for_subscriptions, root_name)
+                            if isinstance(root_field_obs, Observable):
+                                if root_field_obs not in observables:
+                                    observables.append(cast(Observable[Any], root_field_obs))
+                        except (AttributeError, ValueError):
+                            pass
+
     # Get module globals for class lookups (for isinstance checks)
     # This allows expressions like isinstance(item, Request) to work
     module_globals: dict[str, Any] = {}
@@ -602,9 +617,11 @@ def create_expression_binding(
                         list(field_obs.keys()),
                         type(proxy_field_value).__name__,
                     )
-                    # Unwrap ObservableProxy to get the actual value for eval context
+                    # Unwrap ObservableProxy/Observable to get the actual value for eval context
                     if isinstance(proxy_field_value, ObservableProxy):
                         eval_context[var_name] = proxy_field_value.unwrap()
+                    elif isinstance(proxy_field_value, Observable):
+                        eval_context[var_name] = proxy_field_value.get()
                     else:
                         eval_context[var_name] = proxy_field_value
                     continue

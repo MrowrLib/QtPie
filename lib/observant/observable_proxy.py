@@ -888,8 +888,9 @@ class ObservableProxy[T]:
         if callable(value):
             return value  # type: ignore[return-value]
 
-        # For primitives, return Observable
-        if _is_primitive(value):
+        # For primitives and Enum, return Observable
+        # (Enum is atomic like primitives - we want to observe the whole value changing)
+        if self._is_atomic_value(value):
             return self._get_or_create_field_observable(name)
 
         # For lists, return ObservableList

@@ -642,6 +642,24 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                             type(target).__name__ if target else "None",
                             id(target) if target else 0,
                         )
+
+                    # For nested paths like "body_type.name", also get the Observable for
+                    # the root field (body_type) so changes to it trigger recomputation.
+                    # This is critical for enum fields where .name is an attribute access,
+                    # not a nested observable.
+                    if "." in normalized:
+                        actual_root = root_name if root_name in record_annotations else root_name.lstrip("_")
+                        target = object.__getattribute__(proxy, "_target")
+                        if target is not None and hasattr(target, actual_root):
+                            # Access the field through the proxy to get/create its Observable
+                            field_obs = getattr(proxy, actual_root)
+                            if isinstance(field_obs, Observable) and field_obs not in result:
+                                result.append(cast(Observable[Any], field_obs))
+                                _logger.debug(
+                                    "_get_observables_for_name: added root field Observable for nested path %r -> %s",
+                                    name,
+                                    actual_root,
+                                )
                 except Exception:
                     pass
 

@@ -1135,9 +1135,9 @@ class TestComboBoxEnumBindingWithRecord:
         assert_that(instance._combo.currentIndex()).is_equal_to(2)
 
         # User changes selection -> should update record
-        # Note: record.body_type returns ObservableProxy for Enum fields, use .unwrap() to get value
+        # Note: record.body_type returns the actual value (RecordVariable unwraps Observable)
         instance._combo.setCurrentIndex(1)  # MEDIUM
-        assert_that(instance.record.body_type.unwrap()).is_equal_to(Priority.MEDIUM)
+        assert_that(instance.record.body_type).is_equal_to(Priority.MEDIUM)
 
         # Record change -> should update widget
         instance.record.body_type = Priority.LOW
@@ -1172,7 +1172,7 @@ class TestComboBoxEnumBindingWithRecord:
 
         # User changes selection -> should update nested record field
         instance._combo.setCurrentIndex(1)  # MEDIUM
-        assert_that(instance.record.auth.type.unwrap()).is_equal_to(Priority.MEDIUM)
+        assert_that(instance.record.auth.type.get()).is_equal_to(Priority.MEDIUM)
 
         # Nested record change -> should update widget
         instance.record.auth.type = Priority.LOW
