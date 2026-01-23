@@ -1012,7 +1012,16 @@ def create_format_binding(
                     except (TypeError, AttributeError):
                         pass
 
-            # 3. Underscore fallback (e.g., 'name' -> widget._name)
+            # 3. Check for methods/callables or explicit attributes on the widget
+            # Only add if not a Python builtin name (to avoid hasattr returning True for type())
+            if root_name not in _BUILTINS and hasattr(widget, root_name):
+                raw_attr = getattr(widget, root_name)
+                # Add both callables (methods) and non-callable attributes (like title: str)
+                if callable(raw_attr) or not isinstance(raw_attr, type):
+                    context[root_name] = raw_attr
+                    continue
+
+            # 4. Underscore fallback (e.g., 'name' -> widget._name)
             underscore_name = f"_{root_name}"
             if hasattr(widget, underscore_name):
                 raw_attr = getattr(widget, underscore_name)
@@ -1022,7 +1031,7 @@ def create_format_binding(
                     context[root_name] = raw_attr
                 continue
 
-            # 4. Search parent widget hierarchy
+            # 5. Search parent widget hierarchy
             from qtpy.QtWidgets import QApplication as QApp
 
             from qtpie.variable import _try_get_variable  # pyright: ignore[reportPrivateUsage]
@@ -1048,7 +1057,7 @@ def create_format_binding(
 
                 current = parent_widget
 
-            # 5. Fallback: check QApplication.instance()
+            # 6. Fallback: check QApplication.instance()
             if not found_in_parent and root_name not in context:
                 app_instance = QApp.instance()
                 if app_instance is not None:

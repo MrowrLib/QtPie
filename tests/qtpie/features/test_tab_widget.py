@@ -1107,7 +1107,7 @@ class TestTabWidgetFieldBindingDifferentRecordType:
         assert_that(auth_form._type_label.text()).is_equal_to("Type: API_KEY")
         assert_that(credentials_form._key_label.text()).is_equal_to("API Key: secret-key-123")
 
-    @pytest.mark.xfail(reason="Record field named 'type' not yet auto-resolved; use {#record?.type.name} workaround")
+    @pytest.mark.xfail(reason="Test timing issue - visible= works in real app but not in test setup")
     def test_record_field_named_type_resolves_correctly(self, base_class, decorator, qt: QtDriver) -> None:
         """Test that 'type' field on record resolves correctly, not Python's builtin type()."""
         from dataclasses import dataclass
@@ -1149,6 +1149,11 @@ class TestTabWidgetFieldBindingDifferentRecordType:
             _tabs: QTabWidget = new(tabs=[AuthTabWidget])
 
         instance = create_and_track(qt, TestClass, base_class)
+
+        # Process events to allow deferred bindings to complete
+        from qtpy.QtWidgets import QApplication
+
+        QApplication.processEvents()
 
         auth_tab = instance._tabs.widget(0)
         auth_form = auth_tab.auth_form

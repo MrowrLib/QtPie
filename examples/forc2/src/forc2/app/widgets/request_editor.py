@@ -1,8 +1,15 @@
 from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPushButton, QTableView, QTabWidget
 
 from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyLocation, Auth, AuthType
-from forc2.domain.request import HttpMethod, Request
-from qtpie import Stretch, Widget, new, widget
+from forc2.domain.request import HttpMethod, Request, RequestKeyValue
+from qtpie import Event, Stretch, Widget, new, widget
+
+
+# TODO: can we make this generic for other T than RequestKeyValue?
+@widget(title="Actions")
+class DeleteRequestKeyValueWidget(Widget[RequestKeyValue]):
+    ### Widgets ###
+    delete: QPushButton = new("🗑️", clicked="{on_delete(record)}", styleSheet="background: none; border: none; padding: 0;")
 
 
 @widget(layout="horizontal")
@@ -15,21 +22,30 @@ class RequestAddressBarWidget(Widget[Request]):
 
 @widget(title="Params")
 class RequestParamsWidget(Widget[Request]):
+    ### Events ###
+    on_delete: Event[RequestKeyValue] = new(on="_on_delete")
+
     ### Widgets ###
     header: QLabel = new("Query Parameters:")
+    add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["add-button"])
+    table: QTableView = new(bind="query_params", columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
+
+    ### Methods ###
+    def _on_add(self) -> None:
+        self.record.query_params.append(RequestKeyValue())
+
+    def _on_delete(self, param: RequestKeyValue) -> None:
+        self.record.query_params.remove(param)
 
 
 @widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
     ### Widgets ###
-    table: QTableView = new(bind="headers")
+    table: QTableView = new(bind="headers", columns=["key", "value", "enabled", DeleteRequestKeyValueWidget])
 
 
 @widget(layout="form")
 class RequestAuthFormWidget(Widget[Auth]):
-    what_am_i1: QLabel = new(bind="TYPE: {#record?.type.name}", label="Auth Type 1:")  # <---- THIS IS ALWAYS BLANK!!!!!!!!!
-    what_am_i: QLabel = new(bind="TYPE: {type.name}", label="Auth Type 2:")  # <---- THIS IS ALWAYS BLANK!!!!!!!!!
-
     ### Widgets ###
     # Basic Auth
     basic_username: QLineEdit = new(bind="username", label="Username:", visible="{type.name == 'BASIC'}")
