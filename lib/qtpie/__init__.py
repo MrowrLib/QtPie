@@ -28,11 +28,13 @@ from .styles import (
     enable_light_mode,
     get_theme,
     get_themes,
+    get_zoom,
     is_dark_mode,
     is_dark_theme,
     is_light_mode,
     set_color_scheme,
     set_theme,
+    set_zoom,
 )
 from .translations import Translatable, set_language, t
 from .variable import RecordVariable, Var, Variable
@@ -93,6 +95,7 @@ __all__ = [
     "is_light_mode",
     "get_theme",
     "get_themes",
+    "get_zoom",
     "is_dark_theme",
     "menu",
     "new",
@@ -104,6 +107,7 @@ __all__ = [
     "set_color_scheme",
     "set_language",
     "set_theme",
+    "set_zoom",
     "slot",
     "t",
     "widget",

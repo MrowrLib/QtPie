@@ -1,6 +1,9 @@
 // Shared styles - imported by both light and dark themes
 // Note: Color variables must be defined BEFORE this file is imported
 
+// Scale configuration (must be first - defines $scale and size variables)
+@import "_scale.scss";
+
 // ============================================
 // Generic widget styles (buttons, inputs, etc.)
 // ============================================

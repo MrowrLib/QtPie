@@ -108,6 +108,7 @@ class ScssWatcher(QObject):
 
     Watches the main SCSS file and all search paths for changes.
     Handles macOS FSEvents quirks by re-arming watches after changes.
+    Also responds to zoom/variable changes from the zoom module.
     """
 
     stylesheetApplied = Signal()
@@ -136,6 +137,11 @@ class ScssWatcher(QObject):
         self._debounce_timer.setSingleShot(True)
         self._debounce_timer.setInterval(150)
         self._debounce_timer.timeout.connect(self._recompile_if_changed)
+
+        # Register with zoom module for variable change notifications
+        from qtpie.styles.zoom import register_recompile_callback
+
+        register_recompile_callback(self._on_variables_changed)
 
         # Watch SCSS file's directory
         self._watcher.addPath(str(self._scss_path.parent))
@@ -193,6 +199,11 @@ class ScssWatcher(QObject):
 
         self._debounce_timer.start()
 
+    def _on_variables_changed(self) -> None:
+        """Called when SCSS variables change (e.g., zoom level)."""
+        # Force recompile regardless of file mtimes
+        self._force_recompile()
+
     def _get_all_scss_mtimes(self) -> dict[str, float]:
         """Get mtimes for all watched scss files."""
         mtimes: dict[str, float] = {}
@@ -227,7 +238,16 @@ class ScssWatcher(QObject):
             return
 
         self._mtimes = current_mtimes
+        self._do_compile()
 
+    def _force_recompile(self) -> None:
+        """Force recompile regardless of file changes (e.g., for variable changes)."""
+        if not self._scss_path.exists():
+            return
+        self._do_compile()
+
+    def _do_compile(self) -> None:
+        """Actually compile SCSS and apply to target."""
         try:
             compile_scss(
                 scss_path=str(self._scss_path),
@@ -251,6 +271,11 @@ class ScssWatcher(QObject):
         self._debounce_timer.stop()
         self._watcher.directoryChanged.disconnect(self._on_changed)
         self._watcher.fileChanged.disconnect(self._on_changed)
+
+        # Unregister from zoom module
+        from qtpie.styles.zoom import register_recompile_callback
+
+        register_recompile_callback(None)
 
 
 def watch_qss(

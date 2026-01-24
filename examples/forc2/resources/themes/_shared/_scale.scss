@@ -1,0 +1,40 @@
+// Scale configuration for zoom functionality
+// The $scale variable is injected from Python via set_zoom()
+// Use !default so Python injection takes precedence
+
+$scale: 1 !default;
+
+// Base measurements (at 100% zoom)
+$base-font-size: 13px;
+$base-font-size-small: 12px;
+$base-font-size-tiny: 10px;
+$base-font-size-large: 14px;
+
+// Computed font sizes (scaled)
+$font-size-base: $base-font-size * $scale;
+$font-size-small: $base-font-size-small * $scale;
+$font-size-tiny: $base-font-size-tiny * $scale;
+$font-size-large: $base-font-size-large * $scale;
+
+// Border radius (scaled px - em doesn't work well for radius)
+$radius-sm: 3px * $scale;
+$radius-md: 4px * $scale;
+$radius-lg: 6px * $scale;
+
+// Border widths (scaled px)
+$border-width: 1px * $scale;
+$border-width-thick: 2px * $scale;
+
+// Scrollbar dimensions (scaled px)
+$scrollbar-width: 10px * $scale;
+$scrollbar-min-handle: 20px * $scale;
+
+// Icon sizes (scaled px)
+$icon-sm: 16px * $scale;
+$icon-md: 24px * $scale;
+$icon-lg: 32px * $scale;
+
+// Fixed widths that need scaling (px * scale)
+$min-combo-width: 80px * $scale;
+$dropdown-width: 28px * $scale;
+$spin-button-width: 16px * $scale;

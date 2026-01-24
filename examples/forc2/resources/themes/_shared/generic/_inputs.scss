@@ -4,9 +4,9 @@
 QLineEdit {
     background-color: $bg-secondary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 6px 10px;
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.46em 0.77em;
     selection-background-color: $accent;
     selection-color: white;
 }
@@ -33,11 +33,11 @@ QLineEdit::placeholder {
 QComboBox {
     background-color: $bg-secondary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 6px 10px;
-    padding-right: 24px;
-    min-width: 80px;
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.46em 0.77em;
+    padding-right: 1.85em;
+    min-width: $min-combo-width;
 }
 
 QComboBox:hover {
@@ -50,26 +50,26 @@ QComboBox:focus {
 
 QComboBox::drop-down {
     border: none;
-    width: 28px;
+    width: $dropdown-width;
 }
 
 QComboBox::down-arrow {
     image: url(:/arrow-down.svg);
-    width: 24px;
-    height: 24px;
+    width: $icon-md;
+    height: $icon-md;
 }
 
 QComboBox QAbstractItemView {
     background-color: $bg-secondary;
     color: $text-primary;
-    border: 1px solid $border-default;
+    border: $border-width solid $border-default;
     selection-background-color: $accent;
     selection-color: white;
-    padding: 4px;
+    padding: 0.31em;
 }
 
 QComboBox QAbstractItemView::item {
-    padding: 6px 10px;
+    padding: 0.46em 0.77em;
 }
 
 QComboBox QAbstractItemView::item:hover {
@@ -80,9 +80,9 @@ QComboBox QAbstractItemView::item:hover {
 QComboBox[class~="flat"] {
     background-color: transparent;
     border: none;
-    padding: 4px 8px;
-    padding-right: 24px;
-    max-width: 70px;
+    padding: 0.31em 0.62em;
+    padding-right: 1.85em;
+    max-width: 70px * $scale;
 }
 
 QComboBox[class~="flat"]:hover,
@@ -101,13 +101,13 @@ QPlainTextEdit,
 QTextEdit {
     background-color: $bg-secondary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 8px;
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.62em;
     selection-background-color: $accent;
     selection-color: white;
     font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
-    font-size: 13px;
+    font-size: $font-size-base;
 }
 
 QPlainTextEdit:focus,
@@ -119,7 +119,7 @@ QTextEdit:focus {
 QPlainTextEdit[class~="code-editor"],
 QTextEdit[class~="code-editor"] {
     font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
-    font-size: 13px;
+    font-size: $font-size-base;
     line-height: 1.4;
 }
 
@@ -128,9 +128,9 @@ QSpinBox,
 QDoubleSpinBox {
     background-color: $bg-secondary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 4px 8px;
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.31em 0.62em;
 }
 
 QSpinBox:focus,
@@ -144,7 +144,7 @@ QDoubleSpinBox::up-button,
 QDoubleSpinBox::down-button {
     background-color: $bg-tertiary;
     border: none;
-    width: 16px;
+    width: $spin-button-width;
 }
 
 QSpinBox::up-button:hover,

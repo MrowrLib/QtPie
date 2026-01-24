@@ -1,6 +1,9 @@
 import logging
 import os
 
+# os.environ["QT_SCALE_FACTOR"] = "2"  # Requires app restart for effect
+# With Qt::AA_EnableHighDpiScaling (or QT_AUTO_SCREEN_SCALE_FACTOR=1
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 os.environ["QTPIE_DEBUG"] = "1"  # Must be set before importing qtpie
 
 # Set up file logging for debug output

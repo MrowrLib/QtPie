@@ -4,7 +4,7 @@
 QWidget {
     background-color: $bg-primary;
     color: $text-primary;
-    font-size: 13px;
+    font-size: $font-size-base;
     font-family: "Segoe UI", "SF Pro Text", system-ui, sans-serif;
 }
 
@@ -21,14 +21,14 @@ QMainWindow {
 // Scrollbars
 QScrollBar:vertical {
     background: $scrollbar-track;
-    width: 10px;
+    width: $scrollbar-width;
     border: none;
 }
 
 QScrollBar::handle:vertical {
     background: $scrollbar-thumb;
-    border-radius: 5px;
-    min-height: 20px;
+    border-radius: $scrollbar-width * 0.5;
+    min-height: $scrollbar-min-handle;
 }
 
 QScrollBar::handle:vertical:hover {
@@ -43,14 +43,14 @@ QScrollBar::sub-line:vertical {
 
 QScrollBar:horizontal {
     background: $scrollbar-track;
-    height: 10px;
+    height: $scrollbar-width;
     border: none;
 }
 
 QScrollBar::handle:horizontal {
     background: $scrollbar-thumb;
-    border-radius: 5px;
-    min-width: 20px;
+    border-radius: $scrollbar-width * 0.5;
+    min-width: $scrollbar-min-handle;
 }
 
 QScrollBar::handle:horizontal:hover {
@@ -66,23 +66,23 @@ QScrollBar::sub-line:horizontal {
 // Labels
 QLabel {
     background: transparent;
-    padding: 2px;
+    padding: 0.15em;
 }
 
 // Section header (uppercase, muted, small)
 QLabel[class~="section-header"] {
     font-weight: 600;
     color: $text-secondary;
-    font-size: 12px;
+    font-size: $font-size-small;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    padding-bottom: 8px;
+    padding-bottom: 0.62em;
 }
 
 // Tool tips
 QToolTip {
     background-color: $bg-tertiary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    padding: 4px 8px;
+    border: $border-width solid $border-default;
+    padding: 0.31em 0.62em;
 }

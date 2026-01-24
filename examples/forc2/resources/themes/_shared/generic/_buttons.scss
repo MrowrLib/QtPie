@@ -3,10 +3,10 @@
 QPushButton {
     background-color: $bg-tertiary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 6px 12px;
-    min-height: 20px;
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.46em 0.92em;
+    min-height: 1.54em;
 }
 
 QPushButton:hover {
@@ -49,12 +49,12 @@ QPushButton[class~="btn-primary"]:disabled {
 QPushButton[class~="btn-icon"] {
     background: transparent;
     border: none;
-    padding: 4px;
+    padding: 0.31em;
 }
 
 QPushButton[class~="btn-icon"]:hover {
     background-color: $bg-hover;
-    border-radius: 4px;
+    border-radius: $radius-md;
 }
 
 // Delete button (icon button with danger hover)
@@ -65,7 +65,7 @@ QPushButton[class~="btn-delete"]:hover {
 // Add button style (ghost with border)
 QPushButton[class~="btn-add"] {
     background: transparent;
-    border: 1px solid $border-default;
+    border: $border-width solid $border-default;
     color: $text-secondary;
 }
 
@@ -79,11 +79,11 @@ QPushButton[class~="btn-add"]:hover {
 QToolButton {
     background-color: $bg-tertiary;
     color: $text-primary;
-    border: 1px solid $border-default;
-    border-radius: 4px;
-    padding: 6px 12px;
-    min-height: 20px;
-    spacing: 6px;  // Try spacing between icon and text
+    border: $border-width solid $border-default;
+    border-radius: $radius-md;
+    padding: 0.46em 0.92em;
+    min-height: 1.54em;
+    spacing: 0.46em;
 }
 
 QToolButton:hover {

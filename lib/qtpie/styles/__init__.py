@@ -40,6 +40,17 @@ from qtpie.styles.watcher import (
     watch_scss,
     watch_styles,
 )
+from qtpie.styles.zoom import (
+    clear_scss_variables,
+    get_base_font_size,
+    get_scss_variables,
+    get_zoom,
+    register_recompile_callback,
+    set_base_font_size,
+    set_scss_variable,
+    set_scss_variables,
+    set_zoom,
+)
 
 __all__ = [
     # Class helpers
@@ -82,4 +93,14 @@ __all__ = [
     "watch_qss",
     "watch_scss",
     "watch_styles",
+    # Zoom
+    "clear_scss_variables",
+    "get_base_font_size",
+    "get_scss_variables",
+    "get_zoom",
+    "register_recompile_callback",
+    "set_base_font_size",
+    "set_scss_variable",
+    "set_scss_variables",
+    "set_zoom",
 ]
