@@ -1,5 +1,52 @@
 // Shared styles - imported by both light and dark themes
 // Note: Color variables must be defined BEFORE this file is imported
+//
+// =============================================================================
+// ZOOM/SCALE SYSTEM - READ THIS BEFORE WRITING SCSS
+// =============================================================================
+//
+// This theme supports dynamic zoom via set_zoom() in Python. To ensure your
+// styles scale correctly:
+//
+// SPACING (padding, margin):
+//   Use `em` units - they scale with font size automatically.
+//   Reference: 1em = 13px at 100% zoom
+//
+//   | px   | em    |        | px   | em    |
+//   |------|-------|        |------|-------|
+//   | 2px  | 0.15em|        | 12px | 0.92em|
+//   | 4px  | 0.31em|        | 16px | 1.23em|
+//   | 6px  | 0.46em|        | 20px | 1.54em|
+//   | 8px  | 0.62em|        | 24px | 1.85em|
+//   | 10px | 0.77em|        | 32px | 2.46em|
+//
+//   Example: padding: 0.46em 0.92em;  // ~6px 12px at 100%
+//
+// STRUCTURAL DIMENSIONS (border-radius, border-width, fixed widths):
+//   Use `$scale` multiplication or predefined variables.
+//
+//   Available variables:
+//     $border-width, $border-width-thick    - scaled border widths
+//     $radius-sm, $radius-md, $radius-lg    - scaled border radii
+//     $icon-sm, $icon-md, $icon-lg          - scaled icon sizes
+//     $scrollbar-width, $scrollbar-min-handle
+//
+//   Or multiply directly: width: 100px * $scale;
+//
+// FONT SIZES:
+//   Use the predefined variables:
+//     $font-size-base   (13px * $scale)
+//     $font-size-small  (12px * $scale)
+//     $font-size-tiny   (10px * $scale)
+//     $font-size-large  (14px * $scale)
+//
+// PYTHON API:
+//   set_zoom(1.5)           - Set zoom to 150%
+//   get_zoom()              - Get current zoom level
+//   set_base_font_size(12)  - Change base font size (default 10pt)
+//                             Call before set_zoom() if changing
+//
+// =============================================================================
 
 // Scale configuration (must be first - defines $scale and size variables)
 @import "_scale.scss";
