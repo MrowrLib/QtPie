@@ -146,3 +146,19 @@ def get_main_window(instance: Any, base_class: type) -> Window:
     if base_class is AppBase:
         return instance.window  # type: ignore[return-value]
     return instance  # type: ignore[return-value]
+
+
+def get_layout(instance: Any, base_class: type) -> Any:
+    """Get the layout for an instance, handling Window/App/Dialog differences.
+
+    - Widget/WidgetBase/Dialog: instance.layout()
+    - Window: instance.centralWidget().layout()
+    - App: instance.window.centralWidget().layout()
+    """
+    if base_class is Window:
+        return instance.centralWidget().layout()
+    elif base_class is AppBase:
+        return instance.window.centralWidget().layout()
+    else:
+        # Widget, WidgetBase, Dialog - all have layout() directly
+        return instance.layout()

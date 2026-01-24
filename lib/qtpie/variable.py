@@ -875,6 +875,9 @@ class _VariableDescriptor[T]:
         dock_info: dict[str, Any] | None = None,
         # Nested layout support
         target_layout: str | None = None,
+        # Container targeting (splitter/groupbox)
+        target_splitter: str | None = None,
+        target_group: str | None = None,
         # Constructor kwargs for inner type T (for Variable[T] without widget)
         inner_kwargs: dict[str, Any] | None = None,
         # Setting[T] support - if set, creates Setting instead of Variable
@@ -903,6 +906,9 @@ class _VariableDescriptor[T]:
         self.exclude_from_layout = exclude_from_layout
         # Target layout for nested layouts
         self.target_layout = target_layout
+        # Target splitter/groupbox for container targeting
+        self.target_splitter = target_splitter
+        self.target_group = target_group
         # Validator method names to auto-register
         self.validators = validators or []
         # Widget objectName and CSS classes
@@ -1956,6 +1962,8 @@ def create_variable_descriptor(
     css_classes: list[str] | None = None,
     dock_info: dict[str, Any] | None = None,
     target_layout: str | None = None,
+    target_splitter: str | None = None,
+    target_group: str | None = None,
     inner_kwargs: dict[str, Any] | None = None,
     persist_key: str | None = None,
     on_change: str | Callable[..., Any] | None = None,
@@ -1982,6 +1990,8 @@ def create_variable_descriptor(
         css_classes,
         dock_info,
         target_layout,
+        target_splitter,
+        target_group,
         inner_kwargs,
         persist_key,
         on_change,

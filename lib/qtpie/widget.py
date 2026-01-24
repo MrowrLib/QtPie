@@ -556,10 +556,6 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
         # Call original __init__ (which instantiates fields via new_fields)
         original_init(self, *args, **kwargs)
 
-        # Create list widget fields (list[QWidget] = new(bind="..."))
-        # This must happen before layout so they're included in the correct order
-        _create_list_widget_fields(self, config)
-
         # Apply widget properties (windowTitle="X" → setWindowTitle("X"))
         _apply_widget_props(self, config)
 
@@ -582,7 +578,12 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 splitters: dict[str, QSplitter] = {}
 
-                # First pass: Create nested layouts and splitters (so they exist before items reference them)
+                # Track group boxes by field name for later reference
+                from qtpy.QtWidgets import QGroupBox, QVBoxLayout
+
+                groupboxes: dict[str, QGroupBox] = {}
+
+                # First pass: Create nested layouts, splitters, and groupboxes (so they exist before items reference them)
                 # Don't ADD them yet - that happens in second pass to preserve field order
                 for name in getattr(cls, "__annotations__", {}):
                     if name in config.fields:
@@ -598,6 +599,18 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             splitter_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             setattr(self, name, splitter_instance)
                             splitters[name] = splitter_instance
+
+                        elif field.is_groupbox:
+                            # Create the groupbox instance with an internal layout for child widgets
+                            groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            # QGroupBox needs a layout for its children
+                            groupbox_instance.setLayout(QVBoxLayout())
+                            setattr(self, name, groupbox_instance)
+                            groupboxes[name] = groupbox_instance
+
+                # Create list widget fields (list[QWidget] = new(bind="..."))
+                # Must happen after groupboxes are created so target_group can be resolved
+                _create_list_widget_fields(self, config)
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 # Use __annotations__ to preserve order across all field types
@@ -634,6 +647,22 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
                             continue
 
+                        # Handle QGroupBox - add to layout or parent groupbox in order
+                        if field.is_groupbox:
+                            groupbox_instance = groupboxes.get(name)
+                            if groupbox_instance is not None:
+                                # Check if groupbox should go into another groupbox
+                                target_group = _get_target_groupbox(groupboxes, field.target_group)
+                                if target_group is not None:
+                                    group_layout = target_group.layout()
+                                    if group_layout is not None:
+                                        group_layout.addWidget(groupbox_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, groupbox_instance, config.layout, None, field.grid, None)
+                            continue
+
                         # Check if widget should go to a splitter instead of layout
                         target_splitter = _get_target_splitter(splitters, field.target_splitter)
                         if target_splitter is not None:
@@ -641,6 +670,17 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             widget_instance = getattr(self, name, None)
                             if widget_instance is not None and isinstance(widget_instance, QWidget):
                                 target_splitter.addWidget(widget_instance)
+                            continue
+
+                        # Check if widget should go to a groupbox instead of layout
+                        target_group = _get_target_groupbox(groupboxes, field.target_group)
+                        if target_group is not None:
+                            # Add to groupbox's internal layout, not main layout
+                            widget_instance = getattr(self, name, None)
+                            if widget_instance is not None and isinstance(widget_instance, QWidget):
+                                group_layout = target_group.layout()
+                                if group_layout is not None:
+                                    group_layout.addWidget(widget_instance)
                             continue
 
                         # Determine target layout
@@ -708,6 +748,20 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
                                 target_layout_name = descriptor.target_layout
+
+                                # Check if Variable's widget should go to a splitter
+                                var_target_splitter = _get_target_splitter(splitters, descriptor.target_splitter)
+                                if var_target_splitter is not None:
+                                    var_target_splitter.addWidget(var.widget)
+                                    continue
+
+                                # Check if Variable's widget should go to a groupbox
+                                var_target_group = _get_target_groupbox(groupboxes, descriptor.target_group)
+                                if var_target_group is not None:
+                                    group_layout = var_target_group.layout()
+                                    if group_layout is not None:
+                                        group_layout.addWidget(var.widget)
+                                    continue
 
                             # Determine target layout
                             target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)
@@ -845,6 +899,24 @@ def _get_target_splitter(
     if target_name is None:
         return None
     return splitters.get(target_name)
+
+
+def _get_target_groupbox(
+    groupboxes: dict[str, Any],
+    target_name: str | None,
+) -> Any | None:
+    """Get the target group box for adding widgets.
+
+    Args:
+        groupboxes: Dictionary of group boxes by field name.
+        target_name: Name of the target group box (or None for no group box).
+
+    Returns:
+        The target QGroupBox, or None if no group box target.
+    """
+    if target_name is None:
+        return None
+    return groupboxes.get(target_name)
 
 
 def _add_stretch_to_layout(layout: QLayout, factor: int = 1) -> None:
@@ -2033,9 +2105,35 @@ def _add_repeater_to_layout(widget: Widget[Any], repeater: QWidget, field_name: 
     Called when creating list/dict/set widget repeaters after the layout is already built.
     Adds the repeater at the correct position based on field order in class annotations.
     """
+    # If layout=False was specified, don't add to any layout
+    if field.exclude_from_layout:
+        return
+
     # App doesn't have a layout - it's a QApplication, not a QWidget
     if not hasattr(widget, "layout") or not callable(getattr(widget, "layout", None)):
         return
+
+    # Check if repeater should go to a splitter
+    if field.target_splitter is not None:
+        splitter = getattr(widget, field.target_splitter, None)
+        if splitter is not None:
+            from qtpy.QtWidgets import QSplitter
+
+            if isinstance(splitter, QSplitter):
+                splitter.addWidget(repeater)
+                return
+
+    # Check if repeater should go to a groupbox
+    if field.target_group is not None:
+        groupbox = getattr(widget, field.target_group, None)
+        if groupbox is not None:
+            from qtpy.QtWidgets import QGroupBox
+
+            if isinstance(groupbox, QGroupBox):
+                group_layout = groupbox.layout()
+                if group_layout is not None:
+                    group_layout.addWidget(repeater)
+                    return
 
     layout = widget.layout()
     if layout is None:

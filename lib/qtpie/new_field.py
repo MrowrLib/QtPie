@@ -14,6 +14,7 @@ from .utils.type_checks import (
     is_model_widget,
     is_qaction,
     is_qcombobox,
+    is_qgroupbox,
     is_qlayout,
     is_qlistview,
     is_qobject,
@@ -214,6 +215,9 @@ class NewField:
         # QSplitter support
         self.is_splitter: bool = False  # True if field type is QSplitter
         self.target_splitter: str | None = None  # Splitter to add this widget to (field name reference)
+        # QGroupBox support
+        self.is_groupbox: bool = False  # True if field type is QGroupBox
+        self.target_group: str | None = None  # Group box to add this widget to (field name reference)
         # Dock[T] support
         self.is_dock: bool = False
         self.dock_content_type: type | None = None  # The widget type inside Dock[T]
@@ -527,6 +531,23 @@ class NewField:
             widget_kwargs_copy.pop("width", None)
             widget_kwargs_copy.pop("height", None)
 
+            # Extract splitter= and group= for container targeting
+            splitter_kwarg = widget_kwargs_copy.pop("splitter", None)
+            target_splitter: str | None = None
+            if splitter_kwarg is not None:
+                if isinstance(splitter_kwarg, NewField):
+                    target_splitter = splitter_kwarg.name
+                elif isinstance(splitter_kwarg, str):
+                    target_splitter = splitter_kwarg
+
+            group_kwarg = widget_kwargs_copy.pop("group", None)
+            target_group: str | None = None
+            if group_kwarg is not None:
+                if isinstance(group_kwarg, NewField):
+                    target_group = group_kwarg.name
+                elif isinstance(group_kwarg, str):
+                    target_group = group_kwarg
+
             # Extract validate= for auto-registering validators (only in kwargs, not widget_kwargs)
             validators = self.kwargs.pop("validate", None)
 
@@ -591,6 +612,8 @@ class NewField:
                 css_classes,
                 dock_info,
                 target_layout,
+                target_splitter,
+                target_group,
                 inner_kwargs if inner_kwargs else None,
                 persist_key,
                 on_change,
@@ -678,6 +701,16 @@ class NewField:
             # Remaining kwargs are passed directly to QSplitter constructor
             return
 
+        # Handle QGroupBox - widget container with title and border
+        if self._is_qgroupbox_type():
+            self.is_groupbox = True
+            # Extract target layout reference (groupbox can be in a layout)
+            self._extract_target_layout()
+            # Extract target group reference (groupbox can be nested in another groupbox)
+            self._extract_target_group()
+            # Remaining kwargs are passed directly to QGroupBox constructor
+            return
+
         # Handle list[Dock[W]] - creates a DockWidgetRepeater bound to a list source
         if origin is list:
             type_args = get_args(self.field_type)
@@ -741,6 +774,10 @@ class NewField:
                 classes = self.kwargs.pop("classes", None)
                 if classes is not None:
                     self.css_classes = classes
+
+                # Extract splitter= and group= for container targeting
+                self._extract_target_splitter()
+                self._extract_target_group()
 
                 # Extract widget props (e.g., styleSheet="..." → setStyleSheet)
                 # Use list_widget_type for setter detection
@@ -1049,6 +1086,11 @@ class NewField:
             # - splitter=_splitter (NewField) → add to that splitter
             # - splitter="_splitter" (str) → add to that splitter by name
             self._extract_target_splitter()
+
+            # Handle group= parameter:
+            # - group=_group (NewField) → add to that group box
+            # - group="_group" (str) → add to that group box by name
+            self._extract_target_group()
 
             # Extract label= for form layouts
             self.label = self.kwargs.pop("label", None)
@@ -1514,6 +1556,10 @@ class NewField:
         """Check if the field type is QSplitter."""
         return is_qsplitter(self.field_type)
 
+    def _is_qgroupbox_type(self) -> bool:
+        """Check if the field type is QGroupBox."""
+        return is_qgroupbox(self.field_type)
+
     def _extract_target_layout(self) -> None:
         """Extract layout= parameter for targeting nested layouts.
 
@@ -1553,6 +1599,21 @@ class NewField:
                 self.target_splitter = splitter_kwarg.name
             elif isinstance(splitter_kwarg, str):
                 self.target_splitter = splitter_kwarg
+
+    def _extract_target_group(self) -> None:
+        """Extract group= parameter for adding widgets to a QGroupBox.
+
+        Handles:
+        - group=_group (NewField) → add to that group box
+        - group="_group" (str) → add to that group box by name
+        """
+        group_kwarg = self.kwargs.pop("group", None)
+        if group_kwarg is not None:
+            # NewField reference or string - store for target group resolution
+            if isinstance(group_kwarg, NewField):
+                self.target_group = group_kwarg.name
+            elif isinstance(group_kwarg, str):
+                self.target_group = group_kwarg
 
     def _extract_dock_kwargs(self, source: dict[str, Any], *, full: bool = False) -> None:
         """Extract dock-specific kwargs from source dict into self.dock_* fields.

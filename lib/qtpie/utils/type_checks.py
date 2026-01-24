@@ -105,6 +105,13 @@ def is_qsplitter(cls: type | None) -> bool:
     return _is_subclass_of(cls, QSplitter)
 
 
+def is_qgroupbox(cls: type | None) -> bool:
+    """Check if cls is a QGroupBox subclass."""
+    from qtpy.QtWidgets import QGroupBox
+
+    return _is_subclass_of(cls, QGroupBox)
+
+
 def is_model_widget(cls: type | None) -> bool:
     """Check if cls is a model widget (QComboBox, QListView, QTableView, QTreeView)."""
     from qtpy.QtWidgets import QComboBox, QListView, QTableView, QTreeView

@@ -773,7 +773,12 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                 # Track nested layouts
                 nested_layouts: dict[str, QLayout] = {}
 
-                # First pass: Create nested layouts
+                # Track group boxes by field name
+                from qtpy.QtWidgets import QGroupBox, QVBoxLayout
+
+                groupboxes: dict[str, QGroupBox] = {}
+
+                # First pass: Create nested layouts and groupboxes
                 for name in getattr(cls, "__annotations__", {}):
                     # Skip DialogButton fields
                     if any(bc.name == name for bc in config.button_configs):
@@ -784,6 +789,12 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             setattr(self, name, layout_instance)
                             nested_layouts[name] = layout_instance
+                        elif field.is_groupbox:
+                            # Create the groupbox instance with an internal layout for child widgets
+                            groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            groupbox_instance.setLayout(QVBoxLayout())
+                            setattr(self, name, groupbox_instance)
+                            groupboxes[name] = groupbox_instance
 
                 # Second pass: Add widgets to layout (excluding DialogButton fields)
                 from qtpie.layout import Stretch
@@ -794,6 +805,7 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                     _add_stretch_to_layout,
                     _add_widget_to_nested_layout,
                     _create_spacer_item,
+                    _get_target_groupbox,
                     _get_target_layout,
                     _validate_layout_params,
                 )
@@ -822,6 +834,33 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                 target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                 if target is not None:
                                     _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
+                            continue
+
+                        # Handle QGroupBox - add to layout or parent groupbox in order
+                        if field.is_groupbox:
+                            groupbox_instance = groupboxes.get(name)
+                            if groupbox_instance is not None:
+                                # Check if groupbox should go into another groupbox
+                                target_group = _get_target_groupbox(groupboxes, field.target_group)
+                                if target_group is not None:
+                                    group_layout = target_group.layout()
+                                    if group_layout is not None:
+                                        group_layout.addWidget(groupbox_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, groupbox_instance, config.layout, None, field.grid, None)
+                            continue
+
+                        # Check if widget should go to a groupbox instead of layout
+                        target_group = _get_target_groupbox(groupboxes, field.target_group)
+                        if target_group is not None:
+                            # Add to groupbox's internal layout, not main layout
+                            widget_instance = getattr(self, name, None)
+                            if widget_instance is not None and isinstance(widget_instance, QWidget):
+                                group_layout = target_group.layout()
+                                if group_layout is not None:
+                                    group_layout.addWidget(widget_instance)
                             continue
 
                         # Determine target layout
@@ -888,6 +927,14 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
                                 target_layout_name = descriptor.target_layout
+
+                                # Check if Variable's widget should go to a groupbox
+                                var_target_group = _get_target_groupbox(groupboxes, descriptor.target_group)
+                                if var_target_group is not None:
+                                    group_layout = var_target_group.layout()
+                                    if group_layout is not None:
+                                        group_layout.addWidget(var.widget)
+                                    continue
 
                             target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)
                             if target is None:

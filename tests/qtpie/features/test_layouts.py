@@ -16,8 +16,6 @@ Tests vertical, horizontal, form, and grid layouts.
 Menu is excluded as it doesn't support layouts.
 """
 
-from typing import Any
-
 import pytest
 from assertpy import assert_that
 from PySide6.QtWidgets import (
@@ -32,26 +30,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from qtpie import AppBase, Stretch, Variable, Window, new
+from qtpie import Stretch, Variable, new
 from qtpie.testing import QtDriver
 
-from .conftest import WIDGET_CLASS_TYPES, create_and_track
-
-
-def get_layout(instance: Any, base_class: type) -> Any:
-    """Get the layout for an instance, handling Window/App differences.
-
-    - Widget: instance.layout()
-    - Window: instance.centralWidget().layout()
-    - App: instance.window.centralWidget().layout()
-    """
-    if base_class is Window:
-        return instance.centralWidget().layout()
-    elif base_class is AppBase:
-        return instance.window.centralWidget().layout()
-    else:
-        return instance.layout()
-
+from .conftest import WIDGET_CLASS_TYPES, create_and_track, get_layout
 
 # =============================================================================
 # Vertical Layout (Default)
