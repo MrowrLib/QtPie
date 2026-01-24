@@ -115,8 +115,9 @@ class TestFieldNameClasses:
         assert_that(instance.label.objectName()).is_equal_to("greeting")
         assert_that(get_classes(instance.label)).is_equal_to(["text", "large"])
 
-    def test_field_default_object_name_is_field_name(self, base_class, decorator, qt: QtDriver) -> None:
-        """Without name=, objectName defaults to field name."""
+    def test_field_default_object_name_is_widget_class_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without name=, objectName defaults to widget class name, field stores field name."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
@@ -124,8 +125,12 @@ class TestFieldNameClasses:
             my_label: QLabel = new("Text")
 
         instance = create_and_track(qt, TestClass, base_class)
-        assert_that(instance.my_button.objectName()).is_equal_to("my_button")
-        assert_that(instance.my_label.objectName()).is_equal_to("my_label")
+        # objectName defaults to widget class name
+        assert_that(instance.my_button.objectName()).is_equal_to("QPushButton")
+        assert_that(instance.my_label.objectName()).is_equal_to("QLabel")
+        # field property stores the field name
+        assert_that(get_field_property(instance.my_button)).is_equal_to("my_button")
+        assert_that(get_field_property(instance.my_label)).is_equal_to("my_label")
 
 
 # =============================================================================
@@ -169,14 +174,18 @@ class TestVariableWidgetNameClasses:
         assert_that(get_classes(instance._name.widget)).is_equal_to(["input"])
 
     def test_variable_widget_default_object_name(self, base_class, decorator, qt: QtDriver) -> None:
-        """Variable[T, W] without name= defaults to field name."""
+        """Variable[T, W] without name= defaults to widget class name for objectName."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
             my_field: Variable[str, QLineEdit] = new("initial")
 
         instance = create_and_track(qt, TestClass, base_class)
-        assert_that(instance.my_field.widget.objectName()).is_equal_to("my_field")
+        # objectName defaults to widget class name
+        assert_that(instance.my_field.widget.objectName()).is_equal_to("QLineEdit")
+        # field property stores the field name
+        assert_that(get_field_property(instance.my_field.widget)).is_equal_to("my_field")
 
 
 # =============================================================================
@@ -323,10 +332,11 @@ class TestSingleClassOnField:
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestLeadingUnderscoreStripping:
-    """Leading underscore is stripped from field names for objectName."""
+    """Leading underscore is stripped from field names for field property."""
 
     def test_underscore_stripped_from_field_name(self, base_class, decorator, qt: QtDriver) -> None:
-        """_button gets objectName 'button' (not '_button')."""
+        """_button gets field property 'button' (not '_button'), objectName is class name."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
@@ -334,11 +344,16 @@ class TestLeadingUnderscoreStripping:
             _label: QLabel = new("Text")
 
         instance = create_and_track(qt, TestClass, base_class)
-        assert_that(instance._button.objectName()).is_equal_to("button")
-        assert_that(instance._label.objectName()).is_equal_to("label")
+        # objectName defaults to widget class name
+        assert_that(instance._button.objectName()).is_equal_to("QPushButton")
+        assert_that(instance._label.objectName()).is_equal_to("QLabel")
+        # field property has the stripped field name
+        assert_that(get_field_property(instance._button)).is_equal_to("button")
+        assert_that(get_field_property(instance._label)).is_equal_to("label")
 
     def test_no_underscore_unchanged(self, base_class, decorator, qt: QtDriver) -> None:
-        """Fields without underscore keep their name as-is."""
+        """Fields without underscore keep their name as-is in field property."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
@@ -346,18 +361,26 @@ class TestLeadingUnderscoreStripping:
             myLabel: QLabel = new("Text")
 
         instance = create_and_track(qt, TestClass, base_class)
-        assert_that(instance.button.objectName()).is_equal_to("button")
-        assert_that(instance.myLabel.objectName()).is_equal_to("myLabel")
+        # objectName defaults to widget class name
+        assert_that(instance.button.objectName()).is_equal_to("QPushButton")
+        assert_that(instance.myLabel.objectName()).is_equal_to("QLabel")
+        # field property has the field name unchanged
+        assert_that(get_field_property(instance.button)).is_equal_to("button")
+        assert_that(get_field_property(instance.myLabel)).is_equal_to("myLabel")
 
     def test_variable_widget_underscore_stripped(self, base_class, decorator, qt: QtDriver) -> None:
-        """Variable[T, W] with underscore prefix gets stripped objectName."""
+        """Variable[T, W] with underscore prefix gets stripped field property."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
             _name: Variable[str, QLineEdit] = new("initial")
 
         instance = create_and_track(qt, TestClass, base_class)
-        assert_that(instance._name.widget.objectName()).is_equal_to("name")
+        # objectName defaults to widget class name
+        assert_that(instance._name.widget.objectName()).is_equal_to("QLineEdit")
+        # field property has the stripped field name
+        assert_that(get_field_property(instance._name.widget)).is_equal_to("name")
 
 
 # =============================================================================
@@ -416,8 +439,9 @@ class TestDecoratorNameInheritance:
         instance = create_and_track(qt, TestClass, base_class)
         assert_that(instance._input.widget.objectName()).is_equal_to("custom-input")
 
-    def test_no_decorator_name_uses_field_name(self, base_class, decorator, qt: QtDriver) -> None:
-        """Without @decorator(name=...), field name (stripped) is used."""
+    def test_no_decorator_name_uses_widget_class_name(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without @decorator(name=...), widget class name is used for objectName."""
+        from qtpie.styles import get_field_property
 
         @decorator
         class TestClass(base_class):
@@ -425,10 +449,12 @@ class TestDecoratorNameInheritance:
             label: QLabel = new("Text")
 
         instance = create_and_track(qt, TestClass, base_class)
-        # Underscore stripped
-        assert_that(instance._button.objectName()).is_equal_to("button")
-        # No underscore
-        assert_that(instance.label.objectName()).is_equal_to("label")
+        # objectName defaults to widget class name
+        assert_that(instance._button.objectName()).is_equal_to("QPushButton")
+        assert_that(instance.label.objectName()).is_equal_to("QLabel")
+        # field property stores the field name (stripped)
+        assert_that(get_field_property(instance._button)).is_equal_to("button")
+        assert_that(get_field_property(instance.label)).is_equal_to("label")
 
 
 # =============================================================================

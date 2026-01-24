@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast, overload
 
 from observant import Observable
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QDockWidget,
     QLayout,
@@ -84,6 +85,8 @@ class WindowConfig:
     signal_connections: dict[str, str] = field(default_factory=lambda: {})
     # Event[T] = new(on=...) fields
     event_new_fields: dict[str, NewField] = field(default_factory=lambda: {})
+    # Widget attributes to set
+    attributes: dict[Qt.WidgetAttribute, bool] = field(default_factory=lambda: {})
 
 
 class Window[T = None](QMainWindow, QtPieComponentBase):
@@ -290,6 +293,8 @@ def window[W: Window[Any]](
     icon: IconType = None,
     size: tuple[int, int] | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     corners: dict[str, str] | None = None,
     dockStateKey: str | None = None,
     docksLocked: str | None = None,
@@ -326,6 +331,8 @@ def window[W: Window[Any]](
     icon: IconType = None,
     size: tuple[int, int] | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     stylesheet: str | None = None,
     corners: dict[str, str] | None = None,
     dockStateKey: str | None = None,
@@ -435,6 +442,19 @@ def window[W: Window[Any]](
         config.icon = icon
         config.size = size
         config.signal_connections = signal_connections
+
+        # Build attributes dict from attributes param and styledBackground shorthand
+        attrs: dict[Qt.WidgetAttribute, bool] = {}
+        if attributes is not None:
+            if isinstance(attributes, dict):
+                attrs.update(attributes)
+            else:
+                # Tuple of attributes - all set to True
+                for attr in attributes:
+                    attrs[attr] = True
+        if styledBackground:
+            attrs[Qt.WidgetAttribute.WA_StyledBackground] = True
+        config.attributes = attrs
 
         # Auto-wrap async methods (e.g., async def on_close)
         from qtpie.async_wrap import wrap_async_methods
@@ -656,6 +676,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
             config.css_classes,
             default_name=type(self).__name__,
         )
+
+        # Apply widget attributes (e.g., WA_StyledBackground)
+        for attr, value in config.attributes.items():
+            self.setAttribute(attr, value)
 
         # Connect signals for fields
         from qtpie.signals import connect_field_event_handlers, connect_field_signals

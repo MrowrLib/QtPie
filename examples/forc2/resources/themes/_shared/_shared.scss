@@ -1,19 +1,22 @@
 // Shared styles - imported by both light and dark themes
 // Note: Color variables must be defined BEFORE this file is imported
 
-// Base/global styles
-@import "_base.scss";
+// ============================================
+// Generic widget styles (buttons, inputs, etc.)
+// ============================================
+@import "generic/_base.scss";
+@import "generic/_buttons.scss";
+@import "generic/_inputs.scss";
+@import "generic/_tabs.scss";
+@import "generic/_tables.scss";
+@import "generic/_splitter.scss";
+@import "generic/_dialogs.scss";
+@import "generic/_badges.scss";
 
-// Generic widget styles
-@import "_buttons.scss";
-@import "_inputs.scss";
-@import "_tabs.scss";
-@import "_tables.scss";
-@import "_splitter.scss";
-@import "_dialogs.scss";
-@import "_badges.scss";
-
-// Forc-specific component styles
-@import "_sidebar.scss";
-@import "_request.scss";
-@import "_response.scss";
+// ============================================
+// App-specific component styles (by feature)
+// ============================================
+@import "app/_sidebar.scss";
+@import "app/_request.scss";
+@import "app/_request_editor.scss";
+@import "app/_response.scss";

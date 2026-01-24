@@ -65,6 +65,7 @@ def create_styled_widget(
     object_name: str | None,
     css_classes: list[str],
     widget_props: dict[str, Any],
+    field_name: str | None = None,
 ) -> QWidget:
     """Create a widget with styling applied.
 
@@ -74,18 +75,27 @@ def create_styled_widget(
         widget_type: The widget class to instantiate.
         widget_args: Positional arguments for constructor.
         widget_kwargs: Keyword arguments for constructor.
-        object_name: objectName to set (if any).
+        object_name: objectName to set (explicit name= or None for class name default).
         css_classes: CSS classes to apply.
         widget_props: Widget properties to apply via setXxx().
+        field_name: Field/attribute name to set as 'field' property.
 
     Returns:
         The created and styled widget.
     """
     widget = widget_type(*widget_args, **widget_kwargs)
 
-    # Apply objectName if specified
+    # Apply objectName: use explicit name if provided, otherwise default to class name
     if object_name is not None:
         widget.setObjectName(object_name)
+    else:
+        widget.setObjectName(widget_type.__name__)
+
+    # Apply field property if specified
+    if field_name is not None:
+        from qtpie.styles import set_field_property
+
+        set_field_property(widget, field_name, refresh=False)
 
     # Apply CSS classes if specified
     if css_classes:

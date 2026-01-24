@@ -69,6 +69,16 @@ QLabel {
     padding: 2px;
 }
 
+// Section header (uppercase, muted, small)
+QLabel[class~="section-header"] {
+    font-weight: 600;
+    color: $text-secondary;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 8px;
+}
+
 // Tool tips
 QToolTip {
     background-color: $bg-tertiary;

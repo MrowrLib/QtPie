@@ -186,7 +186,7 @@ def new_fields[T](cls: type[T]) -> type[T]:
                     # Variables weren't set up during child's __init__)
                     _apply_pending_bindings(instance)
 
-                    # Apply objectName with priority: new(name=) > @widget(name=) > field name (stripped)
+                    # Apply objectName with priority: new(name=) > @widget(name=) > widget class name
                     from qtpy.QtWidgets import QWidget
 
                     if isinstance(instance, QWidget):
@@ -202,9 +202,14 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             # @widget(name=...) on parent class is next priority
                             instance.setObjectName(config.object_name)
                         else:
-                            # Default to field name with leading underscore stripped
-                            object_name = fname[1:] if fname.startswith("_") else fname
-                            instance.setObjectName(object_name)
+                            # Default to widget class name (e.g., "QPushButton", "QLabel")
+                            instance.setObjectName(type(instance).__name__)
+
+                        # Always set field property to attribute name (stripped)
+                        from .styles import set_field_property
+
+                        field_name = fname[1:] if fname.startswith("_") else fname
+                        set_field_property(instance, field_name, refresh=False)
 
                         # Apply CSS classes if specified
                         if field.css_classes:

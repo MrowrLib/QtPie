@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, cast, overload, override
 
 from observant import Observable
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -223,6 +224,8 @@ class DialogConfig:
     has_explicit_button_box: bool = False
     # Event[T] = new(on=...) fields
     event_new_fields: dict[str, NewField] = field(default_factory=lambda: {})
+    # Widget attributes to set
+    attributes: dict[Qt.WidgetAttribute, bool] = field(default_factory=lambda: {})
 
 
 class Dialog[T = None](QDialog, QtPieComponentBase):
@@ -536,6 +539,8 @@ def dialog[D: Dialog[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     **kwargs: Any,
 ) -> Callable[[type[D]], type[D]]: ...
 
@@ -552,6 +557,8 @@ def dialog[D: Dialog[Any]](
     name: str | None = None,
     classes: list[str] | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     stylesheet: str | None = None,
     **kwargs: Any,
 ) -> type[D] | Callable[[type[D]], type[D]]:
@@ -610,6 +617,19 @@ def dialog[D: Dialog[Any]](
         config.object_name = name
         config.css_classes = classes or []
         config.signal_connections = signal_connections
+
+        # Build attributes dict from attributes param and styledBackground shorthand
+        attrs: dict[Qt.WidgetAttribute, bool] = {}
+        if attributes is not None:
+            if isinstance(attributes, dict):
+                attrs.update(attributes)
+            else:
+                # Tuple of attributes - all set to True
+                for attr in attributes:
+                    attrs[attr] = True
+        if styledBackground:
+            attrs[Qt.WidgetAttribute.WA_StyledBackground] = True
+        config.attributes = attrs
 
         # Wrap __init__
         _wrap_init_for_dialog(target)
@@ -695,6 +715,10 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
             config.css_classes,
             default_name=type(self).__name__,
         )
+
+        # Apply widget attributes (e.g., WA_StyledBackground)
+        for attr, value in config.attributes.items():
+            self.setAttribute(attr, value)
 
         # Apply initial size
         if config.size is not None:

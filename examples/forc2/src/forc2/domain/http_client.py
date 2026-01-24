@@ -20,10 +20,14 @@ from .response import Cookie, Response
 class HttpClient(Service):
     """Service for sending HTTP requests."""
 
-    cookies: Var[list[Cookie]] = new([])
-    _httpx_client: Var[httpx.AsyncClient] = new()
+    ### Parent Variables ###
     active_environment: Var[Environment | None]
 
+    ### Variables ###
+    cookies: Var[list[Cookie]] = new([])
+    _httpx_client: Var[httpx.AsyncClient] = new()
+
+    ### Methods ###
     def _resolve(self, text: str) -> str:
         """Resolve ${VAR} placeholders using workspace's active environment."""
         env = self.active_environment()

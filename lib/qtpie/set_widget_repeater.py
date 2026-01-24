@@ -49,6 +49,7 @@ class SetWidgetRepeater[T](QWidget):
         css_classes: list[str] | None = None,
         signal_connections: dict[str, str | Callable[..., Any]] | None = None,
         parent_widget: Widget[Any] | None = None,
+        field_name: str | None = None,
     ) -> None:
         """Initialize the set widget repeater.
 
@@ -63,10 +64,11 @@ class SetWidgetRepeater[T](QWidget):
             sort: Sorting option - False/None (insertion order), True (sorted()),
                   or callable (key function for sorted()).
             layout_type: "vertical" or "horizontal".
-            object_name: objectName to set on each created widget.
+            object_name: objectName to set on each created widget (None = use class name).
             css_classes: CSS classes to apply to each created widget.
             signal_connections: Signal connections from child widget to parent handlers.
             parent_widget: The parent Widget instance for resolving handler methods.
+            field_name: Field/attribute name to set as 'field' property on each widget.
         """
         super().__init__()
 
@@ -84,6 +86,7 @@ class SetWidgetRepeater[T](QWidget):
         self._css_classes = css_classes or []
         self._signal_connections = signal_connections or {}
         self._parent_widget = parent_widget
+        self._field_name = field_name
 
         # Track: item -> (widget, item_wrapper)
         # item_wrapper is Observable[T] for primitives, ObservableProxy[T] for objects
@@ -160,6 +163,7 @@ class SetWidgetRepeater[T](QWidget):
             self._object_name,
             self._css_classes,
             self._widget_props,
+            self._field_name,
         )
 
     def _bind_widget_to_item(

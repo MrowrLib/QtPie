@@ -19,6 +19,7 @@ _qrc = qt_resource_data  # Prevent unused import from being removed
     themes="resources/themes",
     theme="dark",
     watch_themes=True,
+    themes_output="build/themes",
 )
 def main():
     return Application()

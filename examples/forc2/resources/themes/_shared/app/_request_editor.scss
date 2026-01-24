@@ -1,0 +1,67 @@
+// Request Editor styles
+// Layout and spacing specific to the request editor section
+
+// Main container
+QWidget[class~="request-editor"] {
+  background-color: $bg-primary;
+  padding: 8px;
+}
+
+// Address bar (method + URL + send)
+// QWidget[class~="address-bar"] {
+#RequestAddressBarWidget {
+  background: transparent;
+}
+
+QWidget[class~="address-bar"] QComboBox[class~="method-chooser"] {
+  // padding: 5px;
+  min-height: 28px;
+}
+
+QWidget[class~="address-bar"] QComboBox[class~="method-chooser"]:hover {
+  border: 1px solid $border-default;
+}
+
+// URL input inside address bar (borderless, transparent)
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"] {
+  background-color: transparent;
+  border: none;
+  font-size: 14px;
+  padding: 8px;
+}
+
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:hover {
+  border: 1px solid $border-default;
+}
+
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:focus {
+  border: 1px solid $border-default;
+  background-color: transparent;
+}
+
+// Send button sizing
+QWidget[class~="address-bar"] QPushButton[class~="btn-send"] {
+  padding: 8px 20px;
+  font-size: 13px;
+}
+
+// Tab content panels
+QWidget[class~="tab-content"] {
+  padding: 12px;
+}
+
+// Auth form layout
+QWidget[class~="auth-form"] {
+  margin-top: 8px;
+}
+
+QWidget[class~="auth-form"] QLineEdit,
+QWidget[class~="auth-form"] QComboBox {
+  min-width: 200px;
+}
+
+// Delete cell in tables (minimal width)
+QWidget[class~="delete-cell"] {
+  background: transparent;
+  max-width: 40px;
+}

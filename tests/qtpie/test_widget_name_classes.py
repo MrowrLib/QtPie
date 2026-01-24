@@ -6,7 +6,7 @@ import pytest
 from qtpy.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
 
 from qtpie import Widget, new, widget
-from qtpie.styles import get_classes
+from qtpie.styles import get_classes, get_field_property
 
 
 @pytest.fixture(scope="module")
@@ -351,8 +351,8 @@ class TestDefaultObjectName:
         w = MyDefaultWidget()
         assert w.objectName() == "MyDefaultWidget"
 
-    def test_qwidget_field_defaults_to_field_name(self, app):
-        """Test that QWidget fields without name= default objectName to field name (stripped)."""
+    def test_qwidget_field_defaults_to_widget_class_name(self, app):
+        """Test that QWidget fields without name= default objectName to widget class name."""
 
         @widget
         class MyWidget(Widget):
@@ -360,12 +360,12 @@ class TestDefaultObjectName:
             _label: QLabel = new("Hello")
 
         w = MyWidget()
-        # Leading underscore is stripped from field name
-        assert w._button.objectName() == "button"
-        assert w._label.objectName() == "label"
+        # objectName defaults to the Qt widget class name
+        assert w._button.objectName() == "QPushButton"
+        assert w._label.objectName() == "QLabel"
 
-    def test_variable_widget_defaults_to_field_name(self, app):
-        """Test that Variable[T, W] widgets without name= default objectName to field name (stripped)."""
+    def test_variable_widget_defaults_to_widget_class_name(self, app):
+        """Test that Variable[T, W] widgets without name= default objectName to widget class name."""
         from qtpie import Variable
 
         @widget
@@ -373,11 +373,11 @@ class TestDefaultObjectName:
             _name: Variable[str, QLineEdit] = new("initial")
 
         w = MyWidget()
-        # Leading underscore is stripped from field name
-        assert w._name.widget.objectName() == "name"
+        # objectName defaults to the Qt widget class name
+        assert w._name.widget.objectName() == "QLineEdit"
 
-    def test_list_widget_defaults_to_field_name(self, app):
-        """Test that list[QWidget] items without name= default objectName to field name (stripped)."""
+    def test_list_widget_defaults_to_widget_class_name(self, app):
+        """Test that list[QWidget] items without name= default objectName to widget class name."""
         from qtpie import Variable
 
         @widget
@@ -387,11 +387,11 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for label in w._labels:
-            # Leading underscore is stripped from field name
-            assert label.objectName() == "labels"
+            # objectName defaults to the Qt widget class name
+            assert label.objectName() == "QLabel"
 
-    def test_variable_list_widget_defaults_to_field_name(self, app):
-        """Test that Variable[list[T], W] items default objectName to field name (stripped)."""
+    def test_variable_list_widget_defaults_to_widget_class_name(self, app):
+        """Test that Variable[list[T], W] items default objectName to widget class name."""
         from qtpie import Variable
 
         @widget
@@ -400,11 +400,11 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for widget_item in w._items.widget:
-            # Leading underscore is stripped from field name
-            assert widget_item.objectName() == "items"
+            # objectName defaults to the Qt widget class name
+            assert widget_item.objectName() == "QLabel"
 
-    def test_variable_dict_widget_defaults_to_field_name(self, app):
-        """Test that Variable[dict[K, V], W] items default objectName to field name (stripped)."""
+    def test_variable_dict_widget_defaults_to_widget_class_name(self, app):
+        """Test that Variable[dict[K, V], W] items default objectName to widget class name."""
         from qtpie import Variable
 
         @widget
@@ -413,11 +413,11 @@ class TestDefaultObjectName:
 
         w = MyWidget()
         for widget_item in w._entries.widget:
-            # Leading underscore is stripped from field name
-            assert widget_item.objectName() == "entries"
+            # objectName defaults to the Qt widget class name
+            assert widget_item.objectName() == "QLabel"
 
     def test_explicit_name_overrides_default(self, app):
-        """Test that explicit name= overrides default field name."""
+        """Test that explicit name= overrides default class name."""
 
         @widget(name="custom-widget")
         class MyWidget(Widget):
@@ -427,15 +427,15 @@ class TestDefaultObjectName:
         assert w.objectName() == "custom-widget"
         assert w._button.objectName() == "custom-button"
 
-    def test_qss_selector_works_with_defaults(self, app):
-        """Test that QSS selectors work with default objectNames (stripped)."""
+    def test_qss_selector_works_with_class_names(self, app):
+        """Test that QSS #ClassName selectors work with default objectNames."""
 
         @widget(
             stylesheet="""
 #TestQssWidget {
     background-color: red;
 }
-#my_label {
+#QLabel {
     color: blue;
 }
 """
@@ -445,5 +445,107 @@ class TestDefaultObjectName:
 
         w = TestQssWidget()
         assert w.objectName() == "TestQssWidget"
-        # Leading underscore is stripped from field name
-        assert w._my_label.objectName() == "my_label"
+        # objectName defaults to the Qt widget class name
+        assert w._my_label.objectName() == "QLabel"
+
+
+class TestFieldProperty:
+    """Test that field property stores the attribute/field name."""
+
+    def test_qwidget_field_sets_field_property(self, app):
+        """Test that QWidget fields set 'field' property to field name (stripped)."""
+
+        @widget
+        class MyWidget(Widget):
+            _button: QPushButton = new("Click")
+            _label: QLabel = new("Hello")
+
+        w = MyWidget()
+        # field property stores the attribute name with leading underscore stripped
+        assert get_field_property(w._button) == "button"
+        assert get_field_property(w._label) == "label"
+
+    def test_variable_widget_sets_field_property(self, app):
+        """Test that Variable[T, W] widgets set 'field' property to field name (stripped)."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _name: Variable[str, QLineEdit] = new("initial")
+
+        w = MyWidget()
+        assert get_field_property(w._name.widget) == "name"
+
+    def test_list_widget_sets_field_property(self, app):
+        """Test that list[QWidget] items set 'field' property to field name (stripped)."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str]] = new(["a", "b"])
+            _labels: list[QLabel] = new(bind="_items")
+
+        w = MyWidget()
+        for label in w._labels:
+            assert get_field_property(label) == "labels"
+
+    def test_variable_list_widget_sets_field_property(self, app):
+        """Test that Variable[list[T], W] items set 'field' property."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str], QLabel] = new(["a", "b"])
+
+        w = MyWidget()
+        for widget_item in w._items.widget:
+            assert get_field_property(widget_item) == "items"
+
+    def test_variable_dict_widget_sets_field_property(self, app):
+        """Test that Variable[dict[K, V], W] items set 'field' property."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _entries: Variable[dict[str, int], QLabel] = new({"a": 1, "b": 2})
+
+        w = MyWidget()
+        for widget_item in w._entries.widget:
+            assert get_field_property(widget_item) == "entries"
+
+    def test_dynamic_list_items_get_field_property(self, app):
+        """Test that dynamically added list items also get field property."""
+        from qtpie import Variable
+
+        @widget
+        class MyWidget(Widget):
+            _items: Variable[list[str]] = new([])
+            _labels: list[QLabel] = new(bind="_items")
+
+        w = MyWidget()
+        w._items.append("new1")
+        w._items.append("new2")
+
+        for label in w._labels:
+            assert get_field_property(label) == "labels"
+
+    def test_qss_field_selector_works(self, app):
+        """Test that QSS [field='...'] selectors work."""
+
+        @widget(
+            stylesheet="""
+#TestFieldWidget {
+    background-color: red;
+}
+QLabel[field="my_label"] {
+    color: blue;
+}
+"""
+        )
+        class TestFieldWidget(Widget):
+            _my_label: QLabel = new("Label")
+
+        w = TestFieldWidget()
+        assert w.objectName() == "TestFieldWidget"
+        assert w._my_label.objectName() == "QLabel"
+        assert get_field_property(w._my_label) == "my_label"

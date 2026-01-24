@@ -998,16 +998,19 @@ class _VariableDescriptor[T]:
             if self._widget_type is not None:
                 from .bindings import bind
 
-                # Compute objectName with priority: new()(name=) > @widget(name=) > field name (stripped)
+                # Compute objectName with priority: new()(name=) > @widget(name=) > widget class name
                 parent_config = getattr(type(obj), "_qtpie_config", None)
                 parent_decorator_name = parent_config.object_name if parent_config else None
                 if self._object_name is not None:
-                    computed_object_name = self._object_name
+                    computed_object_name: str | None = self._object_name
                 elif parent_decorator_name is not None:
                     computed_object_name = parent_decorator_name
                 else:
-                    # Strip leading underscore from field name
-                    computed_object_name = self._name[1:] if self._name.startswith("_") else self._name
+                    # None means use widget class name as default
+                    computed_object_name = None
+
+                # Field name is always the attribute name with leading underscore stripped
+                field_name = self._name[1:] if self._name.startswith("_") else self._name
 
                 # Check if inner_type is list[X] or dict[K, V] - create repeater
                 inner_origin = get_origin(self._inner_type)
@@ -1036,6 +1039,7 @@ class _VariableDescriptor[T]:
                         sort=sort_key,
                         object_name=computed_object_name,
                         css_classes=self._css_classes,
+                        field_name=field_name,
                     )
                 elif inner_origin is dict:
                     from typing import get_args as typing_get_args
@@ -1064,6 +1068,7 @@ class _VariableDescriptor[T]:
                         sort=sort_key,
                         object_name=computed_object_name,
                         css_classes=self._css_classes,
+                        field_name=field_name,
                     )
                 elif inner_origin is set:
                     from typing import get_args as typing_get_args
@@ -1090,6 +1095,7 @@ class _VariableDescriptor[T]:
                         sort=sort_key,
                         object_name=computed_object_name,
                         css_classes=self._css_classes,
+                        field_name=field_name,
                     )
                 else:
                     # Regular widget creation
@@ -1145,7 +1151,16 @@ class _VariableDescriptor[T]:
                         raise TypeError(f"Failed to create {self._widget_type.__name__} for Variable '{self._name}': {e}\n  args={self._widget_args}, kwargs={widget_kwargs_copy}") from e
 
                     # Apply objectName (computed earlier with priority logic)
-                    widget_instance.setObjectName(computed_object_name)
+                    # Use widget class name if no explicit name was provided
+                    if computed_object_name is not None:
+                        widget_instance.setObjectName(computed_object_name)
+                    else:
+                        widget_instance.setObjectName(type(widget_instance).__name__)
+
+                    # Set field property to attribute name (stripped)
+                    from .styles import set_field_property
+
+                    set_field_property(widget_instance, field_name, refresh=False)
 
                     # Apply initial size (width=/height=) via resize()
                     # Float values (0.0-1.0) are interpreted as percentage of window size.

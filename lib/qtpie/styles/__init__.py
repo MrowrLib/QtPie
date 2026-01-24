@@ -4,11 +4,13 @@ from qtpie.styles.classes import (
     add_class,
     add_classes,
     get_classes,
+    get_field_property,
     has_any_class,
     has_class,
     remove_class,
     replace_class,
     set_classes,
+    set_field_property,
     toggle_class,
 )
 from qtpie.styles.color_scheme import (
@@ -44,11 +46,13 @@ __all__ = [
     "add_class",
     "add_classes",
     "get_classes",
+    "get_field_property",
     "has_any_class",
     "has_class",
     "remove_class",
     "replace_class",
     "set_classes",
+    "set_field_property",
     "toggle_class",
     # Color scheme
     "ColorScheme",

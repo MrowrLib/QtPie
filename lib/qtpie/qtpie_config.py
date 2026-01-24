@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from qtpy.QtCore import Qt
+
 from .layout import LayoutType
 from .new_field import NewField
 from .utils.layouts import IconType
@@ -29,6 +31,7 @@ class _QtPieConfig:
         "size",
         "signal_connections",
         "event_new_fields",
+        "attributes",
     )
 
     def __init__(self) -> None:
@@ -48,3 +51,4 @@ class _QtPieConfig:
         self.size: tuple[int, int] | None = None  # Initial size (width, height)
         self.signal_connections: dict[str, str] = {}  # Signal connections from decorator
         self.event_new_fields: dict[str, NewField] = {}  # Event[T] fields with new(on=...)
+        self.attributes: dict[Qt.WidgetAttribute, bool] = {}  # Widget attributes to set

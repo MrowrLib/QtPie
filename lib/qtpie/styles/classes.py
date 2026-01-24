@@ -96,3 +96,30 @@ def toggle_class(widget: QObject, class_name: str) -> None:
     else:
         classes.append(class_name)
     set_classes(widget, classes)
+
+
+def get_field_property(widget: QObject) -> str | None:
+    """Get the 'field' dynamic property on a widget.
+
+    This property stores the Python attribute name used to define the widget
+    in its parent class, enabling QSS selectors like: QLabel[field="my_label"]
+    """
+    field = widget.property("field")
+    if isinstance(field, str):
+        return field
+    return None
+
+
+def set_field_property(widget: QObject, field_name: str, *, refresh: bool = True) -> None:
+    """Set the 'field' dynamic property on a widget.
+
+    Args:
+        widget: The widget to configure.
+        field_name: The attribute name (typically with leading underscore stripped).
+        refresh: Whether to refresh styles (unpolish/polish).
+    """
+    widget.setProperty("field", field_name)
+    if refresh and isinstance(widget, QWidget):
+        style = widget.style()
+        style.unpolish(widget)
+        style.polish(widget)

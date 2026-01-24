@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast, get_origin, overload
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QLayout,
     QSpacerItem,
@@ -368,6 +369,8 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     width: int | None = None,
     height: int | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
 
@@ -386,6 +389,8 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     width: int | None = None,
     height: int | None = None,
     record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
     stylesheet: str | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
@@ -468,6 +473,19 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         target._qtpie_config.icon = icon
         target._qtpie_config.size = size
         target._qtpie_config.signal_connections = signal_connections
+
+        # Build attributes dict from attributes param and styledBackground shorthand
+        attrs: dict[Qt.WidgetAttribute, bool] = {}
+        if attributes is not None:
+            if isinstance(attributes, dict):
+                attrs.update(attributes)
+            else:
+                # Tuple of attributes - all set to True
+                for attr in attributes:
+                    attrs[attr] = True
+        if styledBackground:
+            attrs[Qt.WidgetAttribute.WA_StyledBackground] = True
+        target._qtpie_config.attributes = attrs
 
         # Auto-wrap async methods (e.g., async def closeEvent)
         from qtpie.async_wrap import wrap_async_methods
@@ -998,6 +1016,10 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
 
     apply_widget_props(widget, config.widget_props, skip_filter=skip_reactive, strict=True)
 
+    # Apply widget attributes (e.g., WA_StyledBackground)
+    for attr, value in config.attributes.items():
+        widget.setAttribute(attr, value)
+
 
 def _register_validators(widget: Widget[Any], config: _QtPieConfig) -> None:  # pyright: ignore[reportUnknownArgumentType]
     """Register validators defined via validate= parameter on Variables.
@@ -1225,13 +1247,17 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if existing is not None and hasattr(existing, "widget_count"):
             continue
 
-        # Compute objectName with priority: new(name=) > @widget(name=) > field name (stripped)
+        # Compute objectName with priority: new(name=) > @widget(name=) > widget class name
         if field.object_name is not None:
-            computed_object_name = field.object_name
+            computed_object_name: str | None = field.object_name
         elif config.object_name is not None:
             computed_object_name = config.object_name
         else:
-            computed_object_name = name[1:] if name.startswith("_") else name
+            # None means use widget class name as default
+            computed_object_name = None
+
+        # Field name is always the attribute name with leading underscore stripped
+        field_name = name[1:] if name.startswith("_") else name
 
         # list_widget_type is always set when is_list_widget is True
         assert field.list_widget_type is not None
@@ -1329,6 +1355,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
+                    field_name=field_name,
                 )
                 setattr(widget, name, repeater)
                 _add_repeater_to_layout(widget, repeater, name, field)
@@ -1353,6 +1380,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
+                    field_name=field_name,
                 )
                 setattr(widget, name, dict_repeater)
                 _add_repeater_to_layout(widget, dict_repeater, name, field)
@@ -1398,6 +1426,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 css_classes=field.css_classes,
                 signal_connections=field.signal_connections,
                 parent_widget=widget,
+                field_name=field_name,
             )
             setattr(widget, name, dict_repeater)
             _add_repeater_to_layout(widget, dict_repeater, name, field)
@@ -1432,6 +1461,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
+                    field_name=field_name,
                 )
                 setattr(widget, name, dict_repeater)
                 _add_repeater_to_layout(widget, dict_repeater, name, field)
@@ -1586,6 +1616,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
             css_classes=field.css_classes,
             signal_connections=field.signal_connections,
             parent_widget=widget,
+            field_name=field_name,
         )
 
         # Store the repeater on the widget
@@ -1597,13 +1628,17 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
         if not field.is_set_widget:
             continue
 
-        # Compute objectName with priority: new(name=) > @widget(name=) > field name (stripped)
+        # Compute objectName with priority: new(name=) > @widget(name=) > widget class name
         if field.object_name is not None:
-            computed_object_name = field.object_name
+            computed_object_name: str | None = field.object_name
         elif config.object_name is not None:
             computed_object_name = config.object_name
         else:
-            computed_object_name = name[1:] if name.startswith("_") else name
+            # None means use widget class name as default
+            computed_object_name = None
+
+        # Field name is always the attribute name with leading underscore stripped
+        field_name = name[1:] if name.startswith("_") else name
 
         # set_widget_type is always set when is_set_widget is True
         assert field.set_widget_type is not None
@@ -1647,6 +1682,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
+                    field_name=field_name,
                 )
                 setattr(widget, name, set_repeater)
                 _add_repeater_to_layout(widget, set_repeater, name, field)
@@ -1679,6 +1715,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                 css_classes=field.css_classes,
                 signal_connections=field.signal_connections,
                 parent_widget=widget,
+                field_name=field_name,
             )
             setattr(widget, name, set_repeater)
             _add_repeater_to_layout(widget, set_repeater, name, field)
@@ -1717,6 +1754,7 @@ def _create_list_widget_fields(widget: Widget[Any], config: _QtPieConfig) -> Non
                     css_classes=field.css_classes,
                     signal_connections=field.signal_connections,
                     parent_widget=widget,
+                    field_name=field_name,
                 )
                 setattr(widget, name, set_repeater)
                 _add_repeater_to_layout(widget, set_repeater, name, field)

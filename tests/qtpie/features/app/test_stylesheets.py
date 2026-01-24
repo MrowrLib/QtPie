@@ -123,7 +123,8 @@ class TestObjectName:
         assert_that(a.title.objectName()).is_equal_to("page-title")
 
     def test_default_widget_object_name(self, qt: QtDriver) -> None:
-        """Without name=, widget objectName is field name."""
+        """Without name=, widget objectName is widget class name, field property is field name."""
+        from qtpie.styles import get_field_property
 
         @app
         class MyApp(AppBase):
@@ -132,7 +133,10 @@ class TestObjectName:
         a = MyApp()
         qt.track(a.window)
 
-        assert_that(a.my_label.objectName()).is_equal_to("my_label")
+        # objectName defaults to widget class name
+        assert_that(a.my_label.objectName()).is_equal_to("QLabel")
+        # field property stores the field name
+        assert_that(get_field_property(a.my_label)).is_equal_to("my_label")
 
 
 class TestCombinedStyling:

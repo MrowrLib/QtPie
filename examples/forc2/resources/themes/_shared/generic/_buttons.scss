@@ -24,54 +24,52 @@ QPushButton:disabled {
     border-color: $border-subtle;
 }
 
-// Primary/accent button (e.g., Send button)
-QPushButton#send-button,
-QPushButton[class~="primary"] {
+// Primary/accent button
+QPushButton[class~="btn-primary"] {
     background-color: $accent;
     color: white;
     border: none;
     font-weight: 600;
 }
 
-QPushButton#send-button:hover,
-QPushButton[class~="primary"]:hover {
+QPushButton[class~="btn-primary"]:hover {
     background-color: $accent-hover;
 }
 
-QPushButton#send-button:pressed,
-QPushButton[class~="primary"]:pressed {
+QPushButton[class~="btn-primary"]:pressed {
     background-color: $accent-active;
 }
 
-QPushButton#send-button:disabled,
-QPushButton[class~="primary"]:disabled {
+QPushButton[class~="btn-primary"]:disabled {
     background-color: $accent-muted;
     color: $text-muted;
 }
 
-// Flat/ghost button (for toolbar-style buttons)
-QPushButton[flat="true"],
-QPushButton#delete-button {
+// Icon-only button (minimal, no chrome)
+QPushButton[class~="btn-icon"] {
     background: transparent;
     border: none;
     padding: 4px;
 }
 
-QPushButton[flat="true"]:hover,
-QPushButton#delete-button:hover {
+QPushButton[class~="btn-icon"]:hover {
     background-color: $bg-hover;
+    border-radius: 4px;
+}
+
+// Delete button (icon button with danger hover)
+QPushButton[class~="btn-delete"]:hover {
+    background-color: $error-muted;
 }
 
 // Add button style (ghost with border)
-QPushButton#add-button,
-QPushButton[class~="add-button"] {
+QPushButton[class~="btn-add"] {
     background: transparent;
     border: 1px solid $border-default;
     color: $text-secondary;
 }
 
-QPushButton#add-button:hover,
-QPushButton[class~="add-button"]:hover {
+QPushButton[class~="btn-add"]:hover {
     border-color: $accent;
     color: $accent;
     background-color: rgba(124, 58, 237, 0.1);

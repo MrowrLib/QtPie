@@ -29,12 +29,6 @@ QLineEdit::placeholder {
     color: $text-placeholder;
 }
 
-// URL input (bigger, more prominent)
-#RequestAddressBarWidget QLineEdit {
-    font-size: 14px;
-    padding: 8px 12px;
-}
-
 // Combo box (dropdown)
 QComboBox {
     background-color: $bg-secondary;
@@ -82,6 +76,26 @@ QComboBox QAbstractItemView::item:hover {
     background-color: $bg-hover;
 }
 
+// Flat combo box (minimal, borderless)
+QComboBox[class~="flat"] {
+    background-color: transparent;
+    border: none;
+    padding: 4px 8px;
+    padding-right: 24px;
+    max-width: 70px;
+}
+
+QComboBox[class~="flat"]:hover,
+QComboBox[class~="flat"]:focus,
+QComboBox[class~="flat"]:on {
+    background-color: transparent;
+}
+
+QComboBox[class~="flat"]::drop-down {
+    border: none;
+    background: transparent;
+}
+
 // Plain text edit (multiline)
 QPlainTextEdit,
 QTextEdit {
@@ -99,6 +113,14 @@ QTextEdit {
 QPlainTextEdit:focus,
 QTextEdit:focus {
     border-color: $border-focus;
+}
+
+// Code editor (monospace, for JSON/XML/code)
+QPlainTextEdit[class~="code-editor"],
+QTextEdit[class~="code-editor"] {
+    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.4;
 }
 
 // Spin box
