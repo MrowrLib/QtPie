@@ -29,7 +29,7 @@ import pytest
 from assertpy import assert_that
 from PySide6.QtWidgets import QComboBox, QListView, QTableView, QTreeView
 
-from qtpie import Variable, new
+from qtpie import State, Variable, Widget, new, state, widget
 from qtpie.testing import QtDriver
 
 from .conftest import WIDGET_CLASS_TYPES, create_and_track
@@ -775,6 +775,93 @@ class TestFilterWithTreeView:
         instance._min_age.value = 5
         assert_that(model.rowCount()).is_equal_to(2)
 
+    def test_treeview_filter_with_selectedItem(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTreeView with filter= and selectedItem= works when selecting items.
+
+        Regression test: selecting an item when filter= is active used to crash
+        because proxy indices were passed to the source model instead of being
+        handled by the view's model (which may be a proxy).
+        """
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Buddy", 3),
+                    Dog("Rex", 5),
+                    Dog("Fido", 2),
+                ]
+            )
+            _selected: Variable[Dog | None] = new(None)
+            _tree: QTreeView = new(
+                bind="_dogs",
+                filter="{_search} in {name}",
+                selectedItem="_selected",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Apply filter to activate proxy model
+        instance._search.value = "Rex"
+        qt.process_events()
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Select the filtered item using selection model (simulates user click)
+        selection_model = instance._tree.selectionModel()
+        index = model.index(0, 0)
+        selection_model.setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Verify selectedItem was updated (this would crash before the fix)
+        assert_that(instance._selected.value).is_not_none()
+        assert_that(instance._selected.value.name).is_equal_to("Rex")
+
+    def test_treeview_filter_clear_and_select(self, base_class, decorator, qt: QtDriver) -> None:
+        """QTreeView selection works after clearing filter.
+
+        Regression test: ensure selection still works after filter is applied then cleared.
+        """
+        from PySide6.QtCore import QItemSelectionModel
+
+        @decorator
+        class TestClass(base_class):
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Buddy", 3),
+                    Dog("Rex", 5),
+                    Dog("Fido", 2),
+                ]
+            )
+            _selected: Variable[Dog | None] = new(None)
+            _tree: QTreeView = new(
+                bind="_dogs",
+                filter="{_search} in {name}",
+                selectedItem="_selected",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._tree.model()
+
+        # Apply filter then clear it
+        instance._search.value = "Rex"
+        qt.process_events()
+        instance._search.value = ""
+        qt.process_events()
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Select an item after filter cleared
+        selection_model = instance._tree.selectionModel()
+        index = model.index(1, 0)  # Second item
+        selection_model.setCurrentIndex(index, QItemSelectionModel.SelectionFlag.ClearAndSelect)
+        qt.process_events()
+
+        # Verify selectedItem was updated
+        assert_that(instance._selected.value).is_not_none()
+
 
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestFilterCallable:
@@ -1201,3 +1288,466 @@ class TestFilterDepends:
         # Clear search
         instance._search.value = ""
         assert_that(model.rowCount()).is_equal_to(3)
+
+
+# State classes with Var[T] attributes for testing Variable unwrapping
+@state
+class StateDog(State):
+    """Test State class with Variable attributes - mimics real-world usage like Collection/Request."""
+
+    name: Variable[str] = new("")
+    age: Variable[int] = new(0)
+    breed: Variable[str] = new("unknown")
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterWithStateObjects:
+    """Filter on State objects with Var[T] attributes that need unwrapping.
+
+    This tests the real-world scenario where tree items are State subclasses
+    with Variable attributes (like Collection/Request in Forc), not plain dataclasses.
+    """
+
+    def test_filter_state_object_simple_contains(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter with simple 'in' expression on State object with Var[str] attribute."""
+
+        @decorator
+        class TestClass(base_class):
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[StateDog]] = new([])
+            _list: QListView = new(bind="_dogs", filter="{_search} in {name}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create State objects with Variable attributes
+        fido = StateDog()
+        fido.name.value = "Fido"
+        fido.age.value = 3
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+        rex.age.value = 5
+
+        buddy = StateDog()
+        buddy.name.value = "Buddy"
+        buddy.age.value = 2
+
+        # Add to list
+        instance._dogs.value = [fido, rex, buddy]
+
+        model = instance._list.model()
+
+        # No filter - all items shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Filter for "id" - matches "Fido"
+        instance._search.value = "id"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Filter for "ex" - matches "Rex"
+        instance._search.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Filter for "" - back to all items
+        instance._search.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_state_object_comparison(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter with comparison on State object with Var[int] attribute."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _dogs: Variable[list[StateDog]] = new([])
+            _list: QListView = new(bind="_dogs", filter="{age} >= {_min_age}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create State objects
+        puppy = StateDog()
+        puppy.name.value = "Puppy"
+        puppy.age.value = 1
+
+        adult = StateDog()
+        adult.name.value = "Adult"
+        adult.age.value = 5
+
+        senior = StateDog()
+        senior.name.value = "Senior"
+        senior.age.value = 10
+
+        instance._dogs.value = [puppy, adult, senior]
+
+        model = instance._list.model()
+
+        # Min age 0 - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Min age 3 - excludes puppy
+        instance._min_age.value = 3
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Min age 8 - only senior
+        instance._min_age.value = 8
+        assert_that(model.rowCount()).is_equal_to(1)
+
+    def test_filter_state_object_case_insensitive(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using string methods on State object Var[str] attribute."""
+
+        @decorator
+        class TestClass(base_class):
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[StateDog]] = new([])
+            _list: QListView = new(
+                bind="_dogs",
+                filter="{_search.lower()} in {name.lower()}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create State objects with mixed case names
+        fido = StateDog()
+        fido.name.value = "FIDO"
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+
+        buddy = StateDog()
+        buddy.name.value = "buddy"
+
+        instance._dogs.value = [fido, rex, buddy]
+
+        model = instance._list.model()
+
+        # No filter - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Case-insensitive search for "FIDO"
+        instance._search.value = "fido"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Case-insensitive search for "buddy"
+        instance._search.value = "BUDDY"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+    def test_filter_state_object_and_expression(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter with 'and' expression on State object attributes."""
+
+        @decorator
+        class TestClass(base_class):
+            _min_age: Variable[int] = new(0)
+            _search: Variable[str] = new("")
+            _dogs: Variable[list[StateDog]] = new([])
+            _list: QListView = new(
+                bind="_dogs",
+                filter="{age} >= {_min_age} and {_search} in {name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        fido = StateDog()
+        fido.name.value = "Fido"
+        fido.age.value = 3
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+        rex.age.value = 5
+
+        buddy = StateDog()
+        buddy.name.value = "Buddy"
+        buddy.age.value = 2
+
+        instance._dogs.value = [fido, rex, buddy]
+
+        model = instance._list.model()
+
+        # No filters - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Min age 3 - Fido and Rex
+        instance._min_age.value = 3
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Also search for "ex" - only Rex
+        instance._search.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+    def test_filter_state_object_with_treeview(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter on QTreeView with State objects - matches Forc Collection/Request pattern."""
+
+        @decorator
+        class TestClass(base_class):
+            _filter_text: Variable[str] = new("")
+            _items: Variable[list[StateDog]] = new([])
+            _tree: QTreeView = new(
+                bind="_items",
+                headerHidden=True,
+                filter="{_filter_text} in {name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create items like Collection/Request would have
+        item1 = StateDog()
+        item1.name.value = "Collection A"
+
+        item2 = StateDog()
+        item2.name.value = "Request B"
+
+        item3 = StateDog()
+        item3.name.value = "Collection C"
+
+        instance._items.value = [item1, item2, item3]
+
+        model = instance._tree.model()
+
+        # No filter - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Filter for "Collection"
+        instance._filter_text.value = "Collection"
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Filter for "Request"
+        instance._filter_text.value = "Request"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Clear filter
+        instance._filter_text.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_with_embedded_widget(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter combined with widget= should render embedded widgets correctly.
+
+        This tests the scenario where a QTreeView has both filter= and widget= -
+        the embedded widgets should render properly even when a proxy model is used.
+        """
+        from qtpy.QtWidgets import QLabel
+
+        # Define an embedded row widget
+        @widget
+        class RowWidget(Widget[StateDog]):
+            label: QLabel = new(bind="{name}")
+
+        @decorator
+        class TestClass(base_class):
+            _filter_text: Variable[str] = new("")
+            _items: Variable[list[StateDog]] = new([])
+            _tree: QTreeView = new(
+                bind="_items",
+                headerHidden=True,
+                filter="{_filter_text} in {name}",
+                widget=RowWidget,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create items
+        fido = StateDog()
+        fido.name.value = "Fido"
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+
+        buddy = StateDog()
+        buddy.name.value = "Buddy"
+
+        instance._items.value = [fido, rex, buddy]
+
+        # Process events to let initial widgets render
+        from qtpy.QtWidgets import QApplication
+
+        QApplication.processEvents()
+
+        model = instance._tree.model()
+
+        # All items should be shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Check that embedded widgets are created and have correct data
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            editor = instance._tree.indexWidget(index)
+            assert_that(editor).is_not_none()
+            assert_that(editor).is_instance_of(RowWidget)
+            if editor is not None:
+                assert_that(editor.label.text()).is_not_empty()
+
+        # Filter to show only Rex
+        instance._filter_text.value = "ex"
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Rex should have a working embedded widget
+        index = model.index(0, 0)
+        editor = instance._tree.indexWidget(index)
+        assert_that(editor).is_not_none()
+        if editor is not None:
+            assert_that(editor.label.text()).is_equal_to("Rex")
+
+        # Clear filter - all items should reappear WITH their embedded widgets
+        instance._filter_text.value = ""
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # CRITICAL: After un-filtering, ALL items must have embedded widgets with correct data
+        # This is the bug scenario - widgets disappear after filter is cleared
+        expected_names = {"Fido", "Rex", "Buddy"}
+        found_names: set[str] = set()
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            editor = instance._tree.indexWidget(index)
+            assert_that(editor).described_as(f"Row {row} must have embedded widget after un-filtering").is_not_none()
+            if editor is not None:
+                assert_that(editor).is_instance_of(RowWidget)
+                label_text = editor.label.text()
+                assert_that(label_text).described_as(f"Row {row} widget must have non-empty label text").is_not_empty()
+                found_names.add(label_text)
+
+        # Verify we found all expected names
+        assert_that(found_names).is_equal_to(expected_names)
+
+    def test_filter_with_embedded_widget_filter_all_then_restore(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter that hides ALL items, then restore - widgets must reappear.
+
+        This tests the scenario where filtering removes all visible rows,
+        then clearing the filter should restore all widgets.
+        """
+        from qtpy.QtWidgets import QLabel
+
+        @widget
+        class NodeWidget(Widget[StateDog]):
+            label: QLabel = new(bind="{name}")
+
+        @decorator
+        class TestClass(base_class):
+            _filter_text: Variable[str] = new("")
+            _items: Variable[list[StateDog]] = new([])
+            _tree: QTreeView = new(
+                bind="_items",
+                headerHidden=True,
+                filter="{_filter_text} in {name}",
+                widget=NodeWidget,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create items
+        fido = StateDog()
+        fido.name.value = "Fido"
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+
+        instance._items.value = [fido, rex]
+
+        from qtpy.QtWidgets import QApplication
+
+        QApplication.processEvents()
+
+        model = instance._tree.model()
+
+        # Initial: 2 items with widgets
+        assert_that(model.rowCount()).is_equal_to(2)
+        for row in range(2):
+            editor = instance._tree.indexWidget(model.index(row, 0))
+            assert_that(editor).is_not_none()
+
+        # Filter that matches NOTHING - all rows disappear
+        instance._filter_text.value = "ZZZZZ_NO_MATCH"
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Clear filter - all items should reappear WITH widgets
+        instance._filter_text.value = ""
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # CRITICAL: Both items must have embedded widgets after un-filtering
+        for row in range(model.rowCount()):
+            index = model.index(row, 0)
+            editor = instance._tree.indexWidget(index)
+            assert_that(editor).described_as(f"Row {row} must have widget after filter cleared").is_not_none()
+            if editor is not None:
+                assert_that(editor.label.text()).is_in("Fido", "Rex")
+
+    def test_filter_with_widget_multiple_filter_cycles(self, base_class, decorator, qt: QtDriver) -> None:
+        """Test multiple filter/unfilter cycles - widgets must persist.
+
+        This tests that embedded widgets survive multiple filter changes.
+        """
+        from qtpy.QtWidgets import QLabel
+
+        @widget
+        class RowWidget(Widget[StateDog]):
+            label: QLabel = new(bind="{name}")
+
+        @decorator
+        class TestClass(base_class):
+            _filter_text: Variable[str] = new("")
+            _items: Variable[list[StateDog]] = new([])
+            _tree: QTreeView = new(
+                bind="_items",
+                headerHidden=True,
+                filter="{_filter_text} in {name}",
+                widget=RowWidget,
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create items
+        fido = StateDog()
+        fido.name.value = "Fido"
+        rex = StateDog()
+        rex.name.value = "Rex"
+        buddy = StateDog()
+        buddy.name.value = "Buddy"
+
+        instance._items.value = [fido, rex, buddy]
+
+        from qtpy.QtWidgets import QApplication
+
+        QApplication.processEvents()
+
+        model = instance._tree.model()
+
+        # Initial state - all visible with widgets
+        assert_that(model.rowCount()).is_equal_to(3)
+        for row in range(3):
+            assert_that(instance._tree.indexWidget(model.index(row, 0))).is_not_none()
+
+        # Cycle 1: Filter then unfilter
+        instance._filter_text.value = "ex"
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        instance._filter_text.value = ""
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(3)
+        for row in range(3):
+            editor = instance._tree.indexWidget(model.index(row, 0))
+            assert_that(editor).described_as(f"Cycle 1: row {row}").is_not_none()
+
+        # Cycle 2: Filter differently then unfilter
+        instance._filter_text.value = "Bud"
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        instance._filter_text.value = ""
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(3)
+        for row in range(3):
+            editor = instance._tree.indexWidget(model.index(row, 0))
+            assert_that(editor).described_as(f"Cycle 2: row {row}").is_not_none()
+
+        # Cycle 3: Filter to nothing then restore
+        instance._filter_text.value = "ZZZZZ"
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        instance._filter_text.value = ""
+        QApplication.processEvents()
+        assert_that(model.rowCount()).is_equal_to(3)
+        for row in range(3):
+            editor = instance._tree.indexWidget(model.index(row, 0))
+            assert_that(editor).described_as(f"Cycle 3: row {row}").is_not_none()

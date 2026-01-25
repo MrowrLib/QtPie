@@ -348,23 +348,39 @@ def _setup_embedded_widget(
 
     QTimer.singleShot(0, open_editors_for_all)
 
-    # For tree views, use the model's rowsInserted signal to handle ALL row insertions
+    # For tree views, use the view model's rowsInserted signal to handle ALL row insertions
     # (including nested children). The ObservableList callbacks only fire for root-level changes.
+    # NOTE: We connect to view.model() which may be a proxy - this ensures we get proxy indexes.
     if is_tree:
-        # Connect to model's rowsInserted signal to open persistent editors for new rows at ANY level
+        # Connect to view model's rowsInserted signal to open persistent editors for new rows at ANY level
         def on_rows_inserted(parent: QModelIndex, first: int, last: int) -> None:
+            view_model = view.model()  # type: ignore[attr-defined]
+            if view_model is None:
+                return
             for row in range(first, last + 1):
-                index = model.index(row, 0, parent)
+                index = view_model.index(row, 0, parent)  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
                 view.openPersistentEditor(index)  # type: ignore[attr-defined]
 
-        model.rowsInserted.connect(on_rows_inserted)
+        # Connect to view.model().rowsInserted - view.model() is the proxy if filter=/sort= is used
+        view_model = view.model()  # type: ignore[attr-defined]
+        if view_model is not None:
+            view_model.rowsInserted.connect(on_rows_inserted)  # pyright: ignore[reportUnknownMemberType]
 
         # Also handle model reset (e.g., when workspace changes completely)
         def on_model_reset() -> None:
             # Defer to allow model to fully populate
             QTimer.singleShot(0, open_editors_for_all)
 
-        model.modelReset.connect(on_model_reset)
+        # Handle filter/layout changes - when filter changes, rows may appear/disappear
+        # without rowsInserted/rowsRemoved being emitted
+        def on_layout_changed(*_: Any) -> None:
+            QTimer.singleShot(0, open_editors_for_all)
+
+        if view_model is not None:
+            view_model.layoutChanged.connect(on_layout_changed)  # pyright: ignore[reportUnknownMemberType]
+
+        if view_model is not None:
+            view_model.modelReset.connect(on_model_reset)  # pyright: ignore[reportUnknownMemberType]
     else:
         # For flat lists, use ObservableList callbacks (simpler, no nesting)
         def on_insert(index: int, _item: Any) -> None:
@@ -469,9 +485,13 @@ def _open_all_persistent_editors(view: QWidget, model: Any, parent_index: Any = 
     For QTreeView, this traverses the entire tree structure.
     For QListView/QTableView, this opens editors for all rows.
 
+    IMPORTANT: Uses view.model() to get the actual model set on the view,
+    which may be a proxy model (when filter= or sort= is used). This ensures
+    openPersistentEditor receives correct indexes.
+
     Args:
         view: The view widget
-        model: The model
+        model: The source model (unused, kept for API compatibility)
         parent_index: The parent index for tree models (None for root)
         is_tree: Whether this is a tree model (enables recursion)
     """
@@ -480,13 +500,18 @@ def _open_all_persistent_editors(view: QWidget, model: Any, parent_index: Any = 
     if parent_index is None:
         parent_index = QModelIndex()
 
-    row_count = model.rowCount(parent_index)
-    for row in range(row_count):
-        index = model.index(row, 0, parent_index)
+    # Use view.model() to get the actual model (could be proxy if filter=/sort= is used)
+    view_model = view.model()  # type: ignore[attr-defined]
+    if view_model is None:
+        return
+
+    row_count = view_model.rowCount(parent_index)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+    for row in range(cast(int, row_count)):
+        index = view_model.index(row, 0, parent_index)  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
         view.openPersistentEditor(index)  # type: ignore[attr-defined]
 
         # For tree models, recurse into children
-        if is_tree and model.rowCount(index) > 0:
+        if is_tree and view_model.rowCount(index) > 0:  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
             _open_all_persistent_editors(view, model, index, is_tree=True)
 
     # Schedule layout recalculation to pick up widget size hints (only at root level)

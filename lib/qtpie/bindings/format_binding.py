@@ -1101,6 +1101,18 @@ def create_format_binding(
     # Subscribe to ALL observables - when any changes, recompute
     # Use *args because Observable passes value, but ObservableList/Dict pass nothing
     def on_any_change(*_: Any) -> None:
+        # Check if widget's C++ object is still valid (may have been deleted by Qt)
+        # This happens when widgets are destroyed (e.g., filtered out in a QTreeView)
+        # but ObservableProxy callbacks still reference them
+        try:
+            from shiboken6 import isValid
+
+            if not isValid(widget):
+                return  # Widget was deleted, skip update
+        except ImportError:
+            pass  # Not using PySide6, skip check
+        except RuntimeError:
+            return  # Widget was deleted during check
         setter(compute())
 
     # Track subscribed observables to avoid duplicates

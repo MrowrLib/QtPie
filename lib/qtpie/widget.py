@@ -200,6 +200,12 @@ class _RecordDescriptor[T]:
         # (e.g., Widget[Auth] child with bind="auth" on Widget[Request] parent)
         _update_field_bound_children(obj)
 
+        # Resolve any deferred bindings that were waiting for this record to be set
+        # (e.g., child Widget[Collection] with bind="collection" on Widget[Workspace] parent)
+        from .new_fields import _resolve_deferred_bindings  # pyright: ignore[reportPrivateUsage]
+
+        _resolve_deferred_bindings(obj)
+
 
 class Widget[T = None](QWidget, QtPieComponentBase):
     """QWidget container with automatic layout and QtPie features.

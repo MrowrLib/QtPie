@@ -2318,3 +2318,176 @@ class TestTreeViewWidgetRecordNullable:
         # Tree should populate
         assert_that(model.rowCount()).is_equal_to(1)
         assert_that(model.data(model.index(0, 0))).is_equal_to("Node A")
+
+
+class TestTreeViewNestedWidgetRecordPropagation:
+    """Test QTreeView with nested widgets and record propagation.
+
+    This mirrors the forc2 app structure:
+    - SidebarWidget[Workspace | None] contains CollectionsTreeWidget
+    - CollectionsTreeWidget[Collection | None] has QTreeView with bind="#record?.items"
+    - The child widget's record comes from parent via bind="collection"
+
+    This is the realistic scenario that reproduces the bug where
+    bind="#record?.items" fails with 'str' object has no attribute 'items'.
+    """
+
+    def test_nested_widget_with_state_record_and_record_path_bind(self, qt: QtDriver) -> None:
+        """Child widget with bind='#record?.items' where record is propagated from parent State."""
+        from qtpie import State, Var, Widget, new, state, widget
+
+        # Domain model - mirrors forc2's Collection/TreeItem structure
+        @dataclass
+        class TreeItemState:
+            name: str
+            items: list["TreeItemState"] = field(default_factory=list)  # noqa: UP037
+
+        @state
+        class CollectionState(State):
+            name: Var[str] = new("")
+            items: Var[list[TreeItemState]] = new([])
+
+        @state
+        class WorkspaceState(State):
+            name: Var[str] = new("")
+            collection: Var[CollectionState | None] = new(None)
+
+        # Child widget - mirrors CollectionsTreeWidget
+        @widget
+        class CollectionTreeWidget(Widget[CollectionState | None]):
+            _tree: QTreeView = new(
+                bind="#record?.items",
+                children="items",
+                format="{name}",
+            )
+
+        # Parent widget - mirrors SidebarWidget
+        @widget
+        class SidebarWidget(Widget[WorkspaceState | None]):
+            _collection_tree: CollectionTreeWidget = new(bind="collection")
+
+        # Create and show
+        instance = SidebarWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially everything is None
+        tree_model = instance._collection_tree._tree.model()
+        assert tree_model is not None
+        assert_that(tree_model.rowCount()).is_equal_to(0)
+
+        # Create workspace with collection
+        item1 = TreeItemState("Request 1")
+        item2 = TreeItemState("Folder", items=[TreeItemState("Nested Request")])
+        collection = CollectionState()
+        collection.name.value = "My Collection"
+        collection.items.value = [item1, item2]
+
+        workspace = WorkspaceState()
+        workspace.name.value = "My Workspace"
+        workspace.collection.value = collection
+
+        # Set the parent's record - should propagate to child
+        instance.record = workspace  # type: ignore[assignment]
+        qt.process_events()
+
+        # Tree should now have items
+        tree_model = instance._collection_tree._tree.model()
+        assert tree_model is not None
+        assert_that(tree_model.rowCount()).is_equal_to(2)
+        assert_that(tree_model.data(tree_model.index(0, 0))).is_equal_to("Request 1")
+        assert_that(tree_model.data(tree_model.index(1, 0))).is_equal_to("Folder")
+
+        # Nested child should work
+        folder_idx = tree_model.index(1, 0)
+        assert_that(tree_model.rowCount(folder_idx)).is_equal_to(1)
+        assert_that(tree_model.data(tree_model.index(0, 0, folder_idx))).is_equal_to("Nested Request")
+
+    def test_child_widget_record_direct_items_bind(self, qt: QtDriver) -> None:
+        """Widget[Collection | None] with bind='#record?.items' - simplest direct case."""
+        from qtpie import State, Var, Widget, new, state, widget
+
+        @dataclass
+        class TreeItemState:
+            name: str
+            items: list["TreeItemState"] = field(default_factory=list)  # noqa: UP037
+
+        @state
+        class CollectionState(State):
+            name: Var[str] = new("")
+            items: Var[list[TreeItemState]] = new([])
+
+        @widget
+        class CollectionTreeWidget(Widget[CollectionState | None]):
+            _tree: QTreeView = new(
+                bind="#record?.items",
+                children="items",
+                format="{name}",
+            )
+
+        instance = CollectionTreeWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Initially record is None
+        tree_model = instance._tree.model()
+        assert tree_model is not None
+        assert_that(tree_model.rowCount()).is_equal_to(0)
+
+        # Set record directly
+        item1 = TreeItemState("Item 1")
+        item2 = TreeItemState("Item 2")
+        collection = CollectionState()
+        collection.items.value = [item1, item2]
+
+        instance.record = collection  # type: ignore[assignment]
+        qt.process_events()
+
+        tree_model = instance._tree.model()
+        assert tree_model is not None
+        assert_that(tree_model.rowCount()).is_equal_to(2)
+        assert_that(tree_model.data(tree_model.index(0, 0))).is_equal_to("Item 1")
+        assert_that(tree_model.data(tree_model.index(1, 0))).is_equal_to("Item 2")
+
+    def test_bind_items_without_record_prefix(self, qt: QtDriver) -> None:
+        """Widget[Collection | None] with bind='items' (implicit record field)."""
+        from qtpie import State, Var, Widget, new, state, widget
+
+        @dataclass
+        class TreeItemState:
+            name: str
+            items: list["TreeItemState"] = field(default_factory=list)  # noqa: UP037
+
+        @state
+        class CollectionState(State):
+            name: Var[str] = new("")
+            items: Var[list[TreeItemState]] = new([])
+
+        @widget
+        class CollectionTreeWidget(Widget[CollectionState | None]):
+            # Using implicit record field binding (no #record prefix)
+            _tree: QTreeView = new(
+                bind="items",
+                children="items",
+                format="{name}",
+            )
+
+        instance = CollectionTreeWidget()
+        qt.track(instance)
+        instance.show()
+        qt.process_events()
+
+        # Set record
+        item1 = TreeItemState("Item A")
+        collection = CollectionState()
+        collection.items.value = [item1]
+
+        instance.record = collection  # type: ignore[assignment]
+        qt.process_events()
+
+        tree_model = instance._tree.model()
+        assert tree_model is not None
+        assert_that(tree_model.rowCount()).is_equal_to(1)
+        assert_that(tree_model.data(tree_model.index(0, 0))).is_equal_to("Item A")

@@ -51,6 +51,8 @@ class MainWindow(Window[Workspace | None]):
 
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
+        print("Selected sidebar item changed")
+        print("Selected sidebar item changed:", self.selected_sidebar_item())
         item = self.selected_sidebar_item()
         if isinstance(item, Request):
             # If it's already added, then simply switch to that tab:

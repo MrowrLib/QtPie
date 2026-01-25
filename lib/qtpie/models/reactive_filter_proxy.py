@@ -81,6 +81,7 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
 
         self.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.setDynamicSortFilter(True)
+        self.setRecursiveFilteringEnabled(True)  # Filter children in tree views
 
         if filter_expr:
             self._setup_filter(filter_expr)
@@ -331,9 +332,17 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         self._invalidate_rows_filter()
 
     def _invalidate_rows_filter(self) -> None:
-        """Invalidate the filter using the non-deprecated API."""
+        """Invalidate the filter and emit layoutChanged.
+
+        Note: The Qt 6 filter change API doesn't emit layoutChanged, so we emit
+        it manually. This is needed so persistent editors get reopened for ALL
+        rows (including nested children in tree views).
+        """
+        # Use beginFilterChange/endFilterChange - the non-deprecated Qt 6 API
         self.beginFilterChange()
         self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
+        # Manually emit layoutChanged so model_binding reopens persistent editors
+        self.layoutChanged.emit()
 
     def set_filter_expression(self, expr: str | None) -> None:
         """Set a new filter expression."""
@@ -391,10 +400,25 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
                 else:
                     context[var_name] = attr
 
-        # Add item attributes
+        # Add item attributes (unwrap Variable types like we do for widget Variables)
         for attr_name in self._item_var_names:
             if hasattr(item, attr_name):
-                context[attr_name] = getattr(item, attr_name)
+                attr = getattr(item, attr_name)
+                # Unwrap Variable types (e.g., State objects with Var[str] attributes)
+                if isinstance(attr, Variable):
+                    obs: Any = attr.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+                    if isinstance(obs, Observable):
+                        context[attr_name] = obs.get()
+                    elif isinstance(obs, ObservableList):
+                        context[attr_name] = obs.to_list()
+                    elif isinstance(obs, ObservableDict):
+                        context[attr_name] = obs.to_dict()
+                    elif isinstance(obs, ObservableSet):
+                        context[attr_name] = obs.to_set()
+                    else:  # ObservableProxy
+                        context[attr_name] = obs.unwrap()  # pyright: ignore[reportUnknownMemberType]
+                else:
+                    context[attr_name] = attr
 
         # Build the expression by replacing placeholders
         expr = self._filter_expr

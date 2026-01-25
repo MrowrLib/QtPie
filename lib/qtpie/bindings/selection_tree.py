@@ -159,13 +159,13 @@ def _setup_tree_selection_bindings_impl(
         if is_observable(var):
             var.set(value)  # pyright: ignore[reportUnknownMemberType]
         else:
-            # Try to get the proxy from the model
+            # Try to get the proxy from the model (use view model for proxy indices)
             proxy: ObservableProxy[Any] | None = None
             if index is not None and index.isValid():
-                m = container["model"]
-                if m is not None:
+                view_model = widget.model()  # type: ignore[attr-defined]
+                if view_model is not None:
                     try:
-                        proxy = m.data(index, TREE_PROXY_ROLE)
+                        proxy = view_model.data(index, TREE_PROXY_ROLE)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
                         if not isinstance(proxy, ObservableProxy):
                             proxy = None
                     except (RuntimeError, AttributeError):
@@ -189,10 +189,13 @@ def _setup_tree_selection_bindings_impl(
 
     # Helper to get item at model index
     def get_item_at_index(index: QModelIndex) -> Any:
-        m = container["model"]
-        if m is None or not index.isValid():
+        if not index.isValid():
             return None
-        return m.data(index, Qt.ItemDataRole.UserRole)
+        # Use the view's model (may be a proxy) to get data - it handles mapping internally
+        view_model = widget.model()  # type: ignore[attr-defined]
+        if view_model is None:
+            return None
+        return view_model.data(index, Qt.ItemDataRole.UserRole)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
 
     # Helper to get current item
     def get_current_item() -> Any:
@@ -242,18 +245,19 @@ def _setup_tree_selection_bindings_impl(
             itemsv.value = items  # pyright: ignore[reportUnknownMemberType]
 
     # Helper to find model index for an item (searches entire tree)
+    # Uses view model (may be proxy) so returned indices work with selection model
     def find_index_for_item(item: Any, parent: QModelIndex | None = None) -> QModelIndex:
-        m = container["model"]
-        if m is None:
+        view_model = widget.model()  # type: ignore[attr-defined]
+        if view_model is None:
             return QModelIndex()
         if parent is None:
             parent = QModelIndex()
-        for row in range(m.rowCount(parent)):
-            idx = m.index(row, 0, parent)
-            if get_item_at_index(idx) == item:
-                return idx
+        for row in range(view_model.rowCount(parent)):  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+            idx = view_model.index(row, 0, parent)  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            if get_item_at_index(idx) == item:  # pyright: ignore[reportUnknownArgumentType]
+                return idx  # pyright: ignore[reportUnknownVariableType]
             # Search children recursively
-            child_result = find_index_for_item(item, idx)
+            child_result = find_index_for_item(item, idx)  # pyright: ignore[reportUnknownArgumentType]
             if child_result.isValid():
                 return child_result
         return QModelIndex()

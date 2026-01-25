@@ -3,42 +3,23 @@ from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTableView, QTabWidget
 from forc2.domain.response import Response
 from qtpie import Computed, Stretch, Widget, new, widget
 
-# TODO --> copy the response_viewer stuff from forc1
-
 
 @widget(layout="horizontal")
 class ResponseStatsWidget(Widget[Response]):
+    ### Widgets ###
     _status: QLabel = new(bind="Status: {status_code} {status_text}", classes=["status-badge", "status-{status_code // 100}xx"])
     _time: QLabel = new(bind="Time: {time_ms:.2f} ms")
     _size: QLabel = new(bind="Size: {size_bytes} bytes")
 
 
-# @dataclass
-# class Response:
-#     """HTTP response - runtime only, not persisted."""
-
-#     status_code: int
-#     status_text: str
-#     headers: dict[str, str]
-#     body: bytes
-#     time_ms: float
-#     size_bytes: int
-#     cookies: list[Cookie] = field(default_factory=lambda: [])
-
-
 @widget(title="Body")
 class ResponseBodyWidget(Widget[Response]):
     ### Variables ###
-    # Remove everything after the ;, if any, in the content-type
-    content_type: Computed[str] = new("{headers['content-type'].split(';')[0] if 'content-type' in headers else ''}")
+    _content_type: Computed[str] = new("{headers['content-type'].split(';')[0] if 'content-type' in headers else ''}")
 
     ### Widgets ###
-    content_type_label: QLabel = new(bind="THE Content-Type: {content_type}")
-    body_text: QPlainTextEdit = new(
-        bind="{body.decode('utf-8', errors='ignore')}",
-        readOnly=True,
-        content_type="{content_type}",
-    )
+    _content_type_label: QLabel = new(bind="Content-Type: {_content_type}")
+    _body_text: QPlainTextEdit = new(bind="{body_text}", readOnly=True, content_type="{_content_type}")
 
 
 @widget(title="Headers")

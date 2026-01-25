@@ -666,13 +666,28 @@ def create_expression_binding(
         except Exception:
             return None
 
+    # Helper to check if the context widget is still valid (not deleted by Qt)
+    def _is_context_valid() -> bool:
+        try:
+            from shiboken6 import isValid
+
+            return isValid(context)
+        except ImportError:
+            return True  # Not using PySide6, assume valid
+        except RuntimeError:
+            return False  # Widget was deleted during check
+
     # Subscribe to ALL reactive objects - when any changes, recompute
     # Observable.on_change takes Callable[[T], None]
     def on_observable_change(_: Any) -> None:
+        if not _is_context_valid():
+            return  # Widget was deleted, skip update
         setter(compute())
 
     # ObservableList/Dict/Proxy.on_change takes Callable[[], None]
     def on_collection_change() -> None:
+        if not _is_context_valid():
+            return  # Widget was deleted, skip update
         setter(compute())
 
     # Track subscribed observables to avoid duplicates
