@@ -1,11 +1,14 @@
 """Computed[T] - read-only derived variables."""
 
+import logging
 import re
 from typing import Any, NoReturn, cast, overload, override
 
 from observant import Observable
 
 from .variable import Variable
+
+_logger = logging.getLogger("qtpie.computed")
 
 
 class Computed[T](Variable[T, None]):
@@ -17,6 +20,15 @@ class Computed[T](Variable[T, None]):
     The value is automatically recomputed when any referenced Variable changes.
     Attempting to set the value raises AttributeError.
     """
+
+    # Store the on_change callback for re-subscription when record is replaced
+    _on_change_callback: Any = None
+    # Track which proxies we've subscribed to
+    _subscribed_proxies: list[Any]
+
+    def __init__(self, wrapper: Observable[T]) -> None:
+        super().__init__(wrapper, widget_type=None)
+        self._subscribed_proxies = []
 
     @Variable.value.setter
     def value(self, val: T) -> NoReturn:  # pyright: ignore[reportReturnType] - raises
@@ -46,6 +58,34 @@ class Computed[T](Variable[T, None]):
     @override
     def __imod__(self, other: Any) -> NoReturn:  # pyright: ignore[reportReturnType] - raises
         raise AttributeError("Cannot modify Computed value")
+
+    def resubscribe_to_record(self, context: Any) -> None:
+        """Re-subscribe to the current record proxy after record replacement.
+
+        Called by _propagate_record_to_child when a widget's record is replaced.
+        """
+        if self._on_change_callback is None:
+            return
+
+        # Get the current record proxy
+        if not hasattr(context, "_qtpie_config"):
+            return
+        config = context._qtpie_config
+        if not hasattr(config, "record_type") or config.record_type is None:
+            return
+        if not hasattr(context, "record") or not hasattr(context.record, "observable"):
+            return
+
+        new_record_proxy = context.record.observable
+
+        # Only subscribe if this is a new proxy we haven't seen
+        if new_record_proxy not in self._subscribed_proxies:
+            if hasattr(new_record_proxy, "on_change"):
+                new_record_proxy.on_change(lambda: self._on_change_callback())
+            self._subscribed_proxies.append(new_record_proxy)
+
+        # Trigger immediate recompute with new record data
+        self._on_change_callback()
 
 
 # Regex to find variable references in expressions like "{_count * 2}" or "{_first} {_last}"
@@ -91,18 +131,13 @@ class _ComputedDescriptor:
     """Descriptor that creates per-instance Computed objects.
 
     Handles expression evaluation and reactive subscriptions.
+    Stores Computed in the widget's _qtpie.variables dict (same as _VariableDescriptor).
     """
 
     def __init__(self, name: str, expression: str, inner_type: type | None = None) -> None:
         self._name = name
         self._expression = expression
         self._inner_type = inner_type
-        # Cache for per-instance Computed objects
-        self._instance_cache: dict[int, Computed[Any]] = {}
-        # Cache for on_change callbacks per instance (for re-subscription)
-        self._on_change_cache: dict[int, Any] = {}
-        # Cache for subscribed record proxies per instance
-        self._subscribed_proxies: dict[int, list[Any]] = {}
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Computed[Any]: ...
@@ -115,15 +150,20 @@ class _ComputedDescriptor:
             # Class-level access - return a placeholder
             return cast(Computed[Any], self)
 
-        # Check if we already created this Computed for this instance
-        obj_id = id(obj)
-        if obj_id in self._instance_cache:
-            return self._instance_cache[obj_id]
+        # Get or create per-instance Computed in _qtpie.variables (same pattern as _VariableDescriptor)
+        from .widget import QtPieState
 
-        # Create the Computed for this instance
-        computed = self._create_computed(obj)
-        self._instance_cache[obj_id] = computed
-        return computed
+        if not hasattr(obj, "_qtpie"):
+            # Lazily create state if accessed before __init__
+            obj._qtpie = QtPieState(obj)  # type: ignore[arg-type, attr-defined]
+        qtpie_state = cast(Any, obj._qtpie)  # type: ignore[attr-defined]
+
+        if self._name not in qtpie_state.variables:
+            # Create the Computed for this instance
+            computed = self._create_computed(obj)
+            qtpie_state.register_variable(self._name, computed)
+
+        return qtpie_state.variables[self._name]  # type: ignore[no-any-return]
 
     def __set__(self, obj: object, value: Any) -> None:
         raise AttributeError("Cannot set Computed value - it's derived from an expression")
@@ -247,14 +287,16 @@ class _ComputedDescriptor:
                 # Case 1: No braces - whole string is the expression
                 try:
                     return eval(expr, {"__builtins__": __builtins__}, full_context)  # noqa: S307
-                except Exception:
+                except Exception as e:
+                    _logger.debug("Computed expression '%s' failed: %s", expr, e)
                     return None
             elif expr.startswith("{") and expr.endswith("}") and expr.count("{") == 1:
                 # Case 2: Single expression wrapped in braces: "{_count * 2}"
                 expr = expr[1:-1]
                 try:
                     return eval(expr, {"__builtins__": __builtins__}, full_context)  # noqa: S307
-                except Exception:
+                except Exception as e:
+                    _logger.debug("Computed expression '%s' failed: %s", expr, e)
                     return None
             else:
                 # Case 3: Format string with multiple parts: "Count: {_count}"
@@ -265,7 +307,8 @@ class _ComputedDescriptor:
                     try:
                         value = eval(expr_content, {"__builtins__": __builtins__}, full_context)  # noqa: S307
                         result = result.replace(full_match, str(value))
-                    except Exception:
+                    except Exception as e:
+                        _logger.debug("Computed expression '%s' failed: %s", expr_content, e)
                         result = result.replace(full_match, "")
                 return result
 
@@ -288,44 +331,11 @@ class _ComputedDescriptor:
             if hasattr(proxy, "on_change"):
                 proxy.on_change(lambda: on_change())
 
-        # Store the callback and context for potential re-subscription
-        obj_id = id(context)
-        self._on_change_cache[obj_id] = on_change
-        self._subscribed_proxies[obj_id] = list(observable_proxies)
+        # Store the callback on the Computed for potential re-subscription
+        computed._on_change_callback = on_change  # pyright: ignore[reportPrivateUsage] - internal
+        computed._subscribed_proxies = list(observable_proxies)  # pyright: ignore[reportPrivateUsage] - internal
 
         return computed
-
-    def resubscribe_to_record(self, context: Any) -> None:
-        """Re-subscribe to the current record proxy after record replacement.
-
-        Called by _propagate_record_to_child when a widget's record is replaced.
-        """
-        obj_id = id(context)
-        on_change = self._on_change_cache.get(obj_id)
-        if on_change is None:
-            return
-
-        # Get the current record proxy
-        if not hasattr(context, "_qtpie_config"):
-            return
-        config = context._qtpie_config
-        if not hasattr(config, "record_type") or config.record_type is None:
-            return
-        if not hasattr(context, "record") or not hasattr(context.record, "observable"):
-            return
-
-        new_record_proxy = context.record.observable
-        subscribed = self._subscribed_proxies.get(obj_id, [])
-
-        # Only subscribe if this is a new proxy we haven't seen
-        if new_record_proxy not in subscribed:
-            if hasattr(new_record_proxy, "on_change"):
-                new_record_proxy.on_change(lambda: on_change())
-            subscribed.append(new_record_proxy)
-            self._subscribed_proxies[obj_id] = subscribed
-
-        # Trigger immediate recompute with new record data
-        on_change()
 
 
 def create_computed_descriptor(
@@ -346,13 +356,14 @@ def resubscribe_computed_to_record(widget: Any) -> None:
     Args:
         widget: The widget whose Computed values should be re-subscribed.
     """
-    # Find all _ComputedDescriptor attributes on the widget's class
-    widget_type = type(widget)  # pyright: ignore[reportUnknownVariableType] - widget is Any
-    for attr_name in dir(widget_type):  # pyright: ignore[reportUnknownArgumentType]
-        try:
-            descriptor = type(widget).__dict__.get(attr_name)
-            if isinstance(descriptor, _ComputedDescriptor):
-                descriptor.resubscribe_to_record(widget)
-        except Exception:
-            # Skip any errors - descriptor access can sometimes fail
-            pass
+    # Get all Computed from the widget's _qtpie.variables
+    if not hasattr(widget, "_qtpie"):
+        return
+
+    qtpie_state = widget._qtpie
+    if not hasattr(qtpie_state, "variables"):
+        return
+
+    for var in qtpie_state.variables.values():
+        if isinstance(var, Computed):
+            var.resubscribe_to_record(widget)
