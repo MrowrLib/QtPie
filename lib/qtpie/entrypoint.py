@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, cast, overload
 
 import qasync  # type: ignore[import-untyped]
-from qtpy.QtCore import QFile, QIODeviceBase, QSettings, QTextStream, QTimer
+from qtpy.QtCore import QDir, QDirIterator, QFile, QIODeviceBase, QSettings, QTextStream, QTimer
+from qtpy.QtGui import QFont, QFontDatabase
 from qtpy.QtWidgets import QApplication, QWidget
 
 from qtpie.styles.color_scheme import ColorScheme, set_color_scheme
@@ -69,6 +70,9 @@ class EntryConfig:
     # QSettings organization/application names
     org: str | None = None  # QCoreApplication.setOrganizationName()
     app: str | None = None  # QCoreApplication.setApplicationName()
+    # Font loading
+    font_folders: tuple[str, ...] = field(default_factory=tuple)  # Folders to load fonts from
+    default_font: str | None = None  # Default font family for the app
 
 
 # Attribute name for storing entry config
@@ -220,6 +224,110 @@ def _load_themes(app: QApplication, config: EntryConfig) -> Any:
     )
 
 
+# Font file extensions to look for
+_FONT_EXTENSIONS = {".ttf", ".otf", ".woff", ".woff2"}
+
+
+def _load_fonts(config: EntryConfig) -> list[str]:
+    """Load fonts from configured folders.
+
+    Supports both filesystem paths and QRC paths (starting with ":/" or ":").
+
+    Returns list of font family names that were loaded.
+    """
+    import os
+
+    if not config.font_folders:
+        return []
+
+    loaded_families: list[str] = []
+
+    for folder in config.font_folders:
+        if folder.startswith(":/") or folder.startswith(":"):
+            # QRC path - use Qt's resource system
+            loaded_families.extend(_load_fonts_from_qrc(folder))
+        else:
+            # Filesystem path - use pathlib
+            loaded_families.extend(_load_fonts_from_filesystem(folder))
+
+    if os.environ.get("QTPIE_DEBUG") and loaded_families:
+        # Print unique family names, sorted
+        unique_families = sorted(set(loaded_families))
+        print(f"Loaded {len(unique_families)} font families:")
+        for family in unique_families:
+            print(f"  - {family}")
+
+    return loaded_families
+
+
+def _load_fonts_from_qrc(qrc_path: str) -> list[str]:
+    """Load fonts recursively from a QRC resource path."""
+    loaded: list[str] = []
+
+    # Use QDir to list files in the QRC path
+    qdir = QDir(qrc_path)
+    if not qdir.exists():
+        return loaded
+
+    # Get all files recursively using QDirIterator with name filters
+    name_filters = [f"*{ext}" for ext in _FONT_EXTENSIONS]
+    it = QDirIterator(
+        qrc_path,
+        name_filters,
+        QDir.Filter.Files,
+        QDirIterator.IteratorFlag.Subdirectories,
+    )
+
+    while it.hasNext():
+        file_path = it.next()
+        font_id = QFontDatabase.addApplicationFont(file_path)
+        if font_id != -1:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            loaded.extend(families)
+
+    # Also try non-recursive in case QRC aliases create flat structure
+    if not loaded:
+        for entry in qdir.entryList(name_filters, QDir.Filter.Files):
+            file_path = f"{qrc_path}/{entry}"
+            font_id = QFontDatabase.addApplicationFont(file_path)
+            if font_id != -1:
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                loaded.extend(families)
+
+    return loaded
+
+
+def _load_fonts_from_filesystem(folder_path: str) -> list[str]:
+    """Load fonts recursively from a filesystem folder."""
+    loaded: list[str] = []
+    folder = Path(folder_path)
+
+    if not folder.exists():
+        return loaded
+
+    # Recursively find all font files
+    for ext in _FONT_EXTENSIONS:
+        for font_file in folder.rglob(f"*{ext}"):
+            font_id = QFontDatabase.addApplicationFont(str(font_file))
+            if font_id != -1:
+                families = QFontDatabase.applicationFontFamilies(font_id)
+                loaded.extend(families)
+
+    return loaded
+
+
+def _set_default_font(app: QApplication, config: EntryConfig) -> None:
+    """Set the default application font if configured."""
+    if config.default_font is None:
+        return
+
+    font = QFont(config.default_font)
+    # Preserve the current point size (may have been set by zoom)
+    current_font = app.font()
+    font.setPointSizeF(current_font.pointSizeF())
+    app.setFont(font)
+
+
 def _run_entrypoint(target: Any, config: EntryConfig) -> None:
     """Execute the entry point."""
     App = _get_app_class()
@@ -251,7 +359,7 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
         return App(**app_kwargs)
 
     def setup_app(application: QApplication) -> None:
-        """Apply org/app names, translations, themes, and stylesheet to app."""
+        """Apply org/app names, fonts, translations, themes, and stylesheet to app."""
         nonlocal _translation_watcher, _watcher, _theme_watcher
 
         # Set organization/application names for QSettings (before any Settings are created)
@@ -259,6 +367,10 @@ def _run_entrypoint(target: Any, config: EntryConfig) -> None:
             application.setOrganizationName(config.org)
         if config.app is not None:
             application.setApplicationName(config.app)
+
+        # Load fonts early (before stylesheets that might reference them)
+        _load_fonts(config)
+        _set_default_font(application, config)
 
         _translation_watcher = _load_translations(application, config)
 
@@ -390,6 +502,8 @@ def entrypoint[T](
     themes_output: str | None = ...,
     org: str | None = ...,
     app: str | None = ...,
+    font_folders: list[str] | None = ...,
+    default_font: str | None = ...,
 ) -> type[T]: ...
 
 
@@ -415,6 +529,8 @@ def entrypoint[T](
     themes_output: str | None = ...,
     org: str | None = ...,
     app: str | None = ...,
+    font_folders: list[str] | None = ...,
+    default_font: str | None = ...,
 ) -> Callable[..., T]: ...
 
 
@@ -440,6 +556,8 @@ def entrypoint[T](
     themes_output: str | None = ...,
     org: str | None = ...,
     app: str | None = ...,
+    font_folders: list[str] | None = ...,
+    default_font: str | None = ...,
 ) -> Callable[[Callable[..., T] | type[T]], Callable[..., T] | type[T]]: ...
 
 
@@ -464,6 +582,8 @@ def entrypoint(
     themes_output: str | None = None,
     org: str | None = None,
     app: str | None = None,
+    font_folders: list[str] | None = None,
+    default_font: str | None = None,
 ) -> Any:
     """
     Decorator that marks a function or class as the application entry point.
@@ -504,6 +624,13 @@ def entrypoint(
             Not applicable to QRC paths.
         themes_output: Output directory for compiled theme SCSS -> QSS files.
             If not provided, uses a temp directory.
+        font_folders: List of folders to load fonts from. Supports:
+            - Filesystem paths (e.g., "./fonts", "resources/fonts")
+            - QRC paths (e.g., ":/fonts")
+            Recursively finds and registers .ttf, .otf, .woff, .woff2 files.
+        default_font: Font family name to use as the application default.
+            This sets the base font for all widgets that don't have a
+            font-family specified in the stylesheet.
 
     Examples:
         # Simplest - function returning a widget
@@ -568,6 +695,8 @@ def entrypoint(
         themes_output=themes_output,
         org=org,
         app=app,
+        font_folders=tuple(font_folders) if font_folders else (),
+        default_font=default_font,
     )
 
     def decorator(target: Callable[..., Any] | type) -> Callable[..., Any] | type:

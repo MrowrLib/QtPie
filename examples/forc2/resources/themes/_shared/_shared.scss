@@ -48,7 +48,10 @@
 //
 // =============================================================================
 
-// Scale configuration (must be first - defines $scale and size variables)
+// Font family variables (must be before scale)
+@import "_fonts.scss";
+
+// Scale configuration (defines $scale and size variables)
 @import "_scale.scss";
 
 // ============================================
@@ -62,6 +65,11 @@
 @import "generic/_splitter.scss";
 @import "generic/_dialogs.scss";
 @import "generic/_badges.scss";
+
+// ============================================
+// Typography classes (uses font + color vars)
+// ============================================
+@import "_typography.scss";
 
 // ============================================
 // App-specific component styles (by feature)

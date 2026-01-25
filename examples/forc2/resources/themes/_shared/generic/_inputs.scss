@@ -2,154 +2,154 @@
 
 // Line edit (single line input)
 QLineEdit {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-md;
-    padding: 0.46em 0.77em;
-    selection-background-color: $accent;
-    selection-color: white;
+  background-color: $bg-secondary;
+  color: $text-primary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-md;
+  padding: 0.46em 0.77em;
+  selection-background-color: $accent;
+  selection-color: white;
 }
 
 QLineEdit:hover {
-    border-color: $border-strong;
+  border-color: $border-strong;
 }
 
 QLineEdit:focus {
-    border-color: $border-focus;
-    background-color: $bg-primary;
+  border-color: $border-focus;
+  background-color: $bg-primary;
 }
 
 QLineEdit:disabled {
-    background-color: $bg-tertiary;
-    color: $text-muted;
+  background-color: $bg-tertiary;
+  color: $text-muted;
 }
 
 QLineEdit::placeholder {
-    color: $text-placeholder;
+  color: $text-placeholder;
 }
 
 // Combo box (dropdown)
 QComboBox {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-md;
-    padding: 0.46em 0.77em;
-    padding-right: 1.85em;
-    min-width: $min-combo-width;
+  background-color: $bg-primary;
+  color: $text-primary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-md;
+  padding: 0.46em 0.77em;
+  padding-right: 1.85em;
+  min-width: $min-combo-width;
 }
 
 QComboBox:hover {
-    border-color: $border-strong;
+  border-color: $border-strong;
 }
 
 QComboBox:focus {
-    border-color: $border-focus;
+  border-color: $border-focus;
 }
 
 QComboBox::drop-down {
-    border: none;
-    width: $dropdown-width;
+  border: none;
+  width: $dropdown-width;
 }
 
 QComboBox::down-arrow {
-    image: url(:/arrow-down.svg);
-    width: $icon-md;
-    height: $icon-md;
+  image: url(:/arrow-down.svg);
+  width: $icon-md;
+  height: $icon-md;
 }
 
 QComboBox QAbstractItemView {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    border: $border-width solid $border-default;
-    selection-background-color: $accent;
-    selection-color: white;
-    padding: 0.31em;
+  background-color: $bg-secondary;
+  color: $text-primary;
+  border: $border-width solid $border-default;
+  selection-background-color: $accent;
+  selection-color: white;
+  padding: 0.31em;
 }
 
 QComboBox QAbstractItemView::item {
-    padding: 0.46em 0.77em;
+  padding: 0.46em 0.77em;
 }
 
 QComboBox QAbstractItemView::item:hover {
-    background-color: $bg-hover;
+  background-color: $bg-hover;
 }
 
 // Flat combo box (minimal, borderless)
 QComboBox[class~="flat"] {
-    background-color: transparent;
-    border: none;
-    padding: 0.31em 0.62em;
-    padding-right: 1.85em;
-    max-width: 70px * $scale;
+  background-color: transparent;
+  border: none;
+  padding: 0.31em 0.62em;
+  padding-right: 1.85em;
+  max-width: 70px * $scale;
 }
 
 QComboBox[class~="flat"]:hover,
 QComboBox[class~="flat"]:focus,
 QComboBox[class~="flat"]:on {
-    background-color: transparent;
+  background-color: transparent;
 }
 
 QComboBox[class~="flat"]::drop-down {
-    border: none;
-    background: transparent;
+  border: none;
+  background: transparent;
 }
 
 // Plain text edit (multiline)
 QPlainTextEdit,
 QTextEdit {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-md;
-    padding: 0.62em;
-    selection-background-color: $accent;
-    selection-color: white;
-    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
-    font-size: $font-size-base;
+  background-color: $bg-secondary;
+  color: $text-primary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-md;
+  padding: 0.62em;
+  selection-background-color: $accent;
+  selection-color: white;
+  font-family: $font-family-editor;
+  font-size: $font-size-base;
 }
 
 QPlainTextEdit:focus,
 QTextEdit:focus {
-    border-color: $border-focus;
+  border-color: $border-focus;
 }
 
 // Code editor (monospace, for JSON/XML/code)
 QPlainTextEdit[class~="code-editor"],
 QTextEdit[class~="code-editor"] {
-    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
-    font-size: $font-size-base;
-    line-height: 1.4;
+  font-family: $font-family-editor;
+  font-size: $font-size-base;
+  line-height: 1.4;
 }
 
 // Spin box
 QSpinBox,
 QDoubleSpinBox {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-md;
-    padding: 0.31em 0.62em;
+  background-color: $bg-secondary;
+  color: $text-primary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-md;
+  padding: 0.31em 0.62em;
 }
 
 QSpinBox:focus,
 QDoubleSpinBox:focus {
-    border-color: $border-focus;
+  border-color: $border-focus;
 }
 
 QSpinBox::up-button,
 QSpinBox::down-button,
 QDoubleSpinBox::up-button,
 QDoubleSpinBox::down-button {
-    background-color: $bg-tertiary;
-    border: none;
-    width: $spin-button-width;
+  background-color: $bg-tertiary;
+  border: none;
+  width: $spin-button-width;
 }
 
 QSpinBox::up-button:hover,
 QSpinBox::down-button:hover,
 QDoubleSpinBox::up-button:hover,
 QDoubleSpinBox::down-button:hover {
-    background-color: $bg-hover;
+  background-color: $bg-hover;
 }

@@ -270,6 +270,17 @@ def create_signal_expression_handler(
         # Build context with context_obj's variables
         context: dict[str, Any] = {}
 
+        # Include module-level globals from where context_obj's class was defined
+        import sys
+
+        module_name = context_obj.__class__.__module__
+        if module_name in sys.modules:
+            module = sys.modules[module_name]
+            # Add module globals (classes, functions, imports) to context
+            for name in var_names:
+                if hasattr(module, name):
+                    context[name] = getattr(module, name)
+
         # Add context_obj reference for self placeholders
         if uses_self:
             context["context_ref"] = context_obj

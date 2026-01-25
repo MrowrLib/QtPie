@@ -5,7 +5,7 @@ QWidget {
     background-color: $bg-primary;
     color: $text-primary;
     font-size: $font-size-base;
-    font-family: "Segoe UI", "SF Pro Text", system-ui, sans-serif;
+    font-family: $font-family-ui;
 }
 
 // Remove the box around focus

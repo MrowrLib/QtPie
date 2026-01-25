@@ -55,7 +55,7 @@ dev = [
 ]
 
 [tool.pyright]
-exclude = ["v1/", "**/.venv/", "examples/test-apis/"]
+exclude = ["v1/", "**/.venv/", "examples/test-apis/", "**/qrc_resources.py"]
 extraPaths = ["examples/forc/test-apis"]
 pythonPlatform = "All"
 pythonVersion = "3.13"
@@ -88,6 +88,7 @@ strictParameterNoneValue = true
 strictSetInference = true
 
 [tool.ruff]
+exclude = ["**/qrc_resources.py"]
 line-length = 200
 target-version = "py314"
 

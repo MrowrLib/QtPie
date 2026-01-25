@@ -10,5 +10,70 @@
     <file alias="trash-light.svg">images/icons/trash-light.svg</file>
     <file alias="settings-light.svg">images/icons/settings-light.svg</file>
     <file alias="settings-dark.svg">images/icons/settings-dark.svg</file>
+
+    <!-- Avrile Sans (OTF) -->
+    <file alias="fonts/AvrileSans-Thin.otf">fonts/avrile-sans/AvrileSans-Thin.otf</file>
+    <file alias="fonts/AvrileSans-ThinItalic.otf">fonts/avrile-sans/AvrileSans-ThinItalic.otf</file>
+    <file alias="fonts/AvrileSans-ExtraLight.otf">fonts/avrile-sans/AvrileSans-ExtraLight.otf</file>
+    <file alias="fonts/AvrileSans-ExtraLightItalic.otf">fonts/avrile-sans/AvrileSans-ExtraLightItalic.otf</file>
+    <file alias="fonts/AvrileSans-Light.otf">fonts/avrile-sans/AvrileSans-Light.otf</file>
+    <file alias="fonts/AvrileSans-LightItalic.otf">fonts/avrile-sans/AvrileSans-LightItalic.otf</file>
+    <file alias="fonts/AvrileSans-Regular.otf">fonts/avrile-sans/AvrileSans-Regular.otf</file>
+    <file alias="fonts/AvrileSans-Italic.otf">fonts/avrile-sans/AvrileSans-Italic.otf</file>
+    <file alias="fonts/AvrileSans-Medium.otf">fonts/avrile-sans/AvrileSans-Medium.otf</file>
+    <file alias="fonts/AvrileSans-MediumItalic.otf">fonts/avrile-sans/AvrileSans-MediumItalic.otf</file>
+    <file alias="fonts/AvrileSans-SemiBold.otf">fonts/avrile-sans/AvrileSans-SemiBold.otf</file>
+    <file alias="fonts/AvrileSans-SemiBoldItalic.otf">fonts/avrile-sans/AvrileSans-SemiBoldItalic.otf</file>
+    <file alias="fonts/AvrileSans-Bold.otf">fonts/avrile-sans/AvrileSans-Bold.otf</file>
+    <file alias="fonts/AvrileSans-BoldItalic.otf">fonts/avrile-sans/AvrileSans-BoldItalic.otf</file>
+    <file alias="fonts/AvrileSans-ExtraBold.otf">fonts/avrile-sans/AvrileSans-ExtraBold.otf</file>
+    <file alias="fonts/AvrileSans-ExtraBoldItalic.otf">fonts/avrile-sans/AvrileSans-ExtraBoldItalic.otf</file>
+    <file alias="fonts/AvrileSans-Black.otf">fonts/avrile-sans/AvrileSans-Black.otf</file>
+    <file alias="fonts/AvrileSans-BlackItalic.otf">fonts/avrile-sans/AvrileSans-BlackItalic.otf</file>
+
+    <!-- Avrile Serif (OTF) -->
+    <file alias="fonts/AvrileSerif-Thin.otf">fonts/avrile-serif/AvrileSerif-Thin.otf</file>
+    <file alias="fonts/AvrileSerif-ThinItalic.otf">fonts/avrile-serif/AvrileSerif-ThinItalic.otf</file>
+    <file alias="fonts/AvrileSerif-ExtraLight.otf">fonts/avrile-serif/AvrileSerif-ExtraLight.otf</file>
+    <file alias="fonts/AvrileSerif-ExtraLightItalic.otf">fonts/avrile-serif/AvrileSerif-ExtraLightItalic.otf</file>
+    <file alias="fonts/AvrileSerif-Light.otf">fonts/avrile-serif/AvrileSerif-Light.otf</file>
+    <file alias="fonts/AvrileSerif-LightItalic.otf">fonts/avrile-serif/AvrileSerif-LightItalic.otf</file>
+    <file alias="fonts/AvrileSerif-Regular.otf">fonts/avrile-serif/AvrileSerif-Regular.otf</file>
+    <file alias="fonts/AvrileSerif-Italic.otf">fonts/avrile-serif/AvrileSerif-Italic.otf</file>
+    <file alias="fonts/AvrileSerif-Medium.otf">fonts/avrile-serif/AvrileSerif-Medium.otf</file>
+    <file alias="fonts/AvrileSerif-MediumItalic.otf">fonts/avrile-serif/AvrileSerif-MediumItalic.otf</file>
+    <file alias="fonts/AvrileSerif-SemiBold.otf">fonts/avrile-serif/AvrileSerif-SemiBold.otf</file>
+    <file alias="fonts/AvrileSerif-SemiBoldItalic.otf">fonts/avrile-serif/AvrileSerif-SemiBoldItalic.otf</file>
+    <file alias="fonts/AvrileSerif-Bold.otf">fonts/avrile-serif/AvrileSerif-Bold.otf</file>
+    <file alias="fonts/AvrileSerif-BoldItalic.otf">fonts/avrile-serif/AvrileSerif-BoldItalic.otf</file>
+    <file alias="fonts/AvrileSerif-ExtraBold.otf">fonts/avrile-serif/AvrileSerif-ExtraBold.otf</file>
+    <file alias="fonts/AvrileSerif-ExtraBoldItalic.otf">fonts/avrile-serif/AvrileSerif-ExtraBoldItalic.otf</file>
+    <file alias="fonts/AvrileSerif-Black.otf">fonts/avrile-serif/AvrileSerif-Black.otf</file>
+    <file alias="fonts/AvrileSerif-BlackItalic.otf">fonts/avrile-serif/AvrileSerif-BlackItalic.otf</file>
+
+    <!-- Droid Serif -->
+    <file alias="fonts/DroidSerif.ttf">fonts/droid-serif/DroidSerif.ttf</file>
+    <file alias="fonts/DroidSerif-Italic.ttf">fonts/droid-serif/DroidSerif-Italic.ttf</file>
+    <file alias="fonts/DroidSerif-Bold.ttf">fonts/droid-serif/DroidSerif-Bold.ttf</file>
+    <file alias="fonts/DroidSerif-BoldItalic.ttf">fonts/droid-serif/DroidSerif-BoldItalic.ttf</file>
+
+    <!-- High Sans Serif 7 -->
+    <file alias="fonts/high_sans_serif_7.ttf">fonts/high-sans-serif-7/high_sans_serif_7.ttf</file>
+
+    <!-- Open Sans Condensed -->
+    <file alias="fonts/OpenSans-CondLight.ttf">fonts/open-sans-condensed/OpenSans-CondLight.ttf</file>
+    <file alias="fonts/OpenSans-CondLightItalic.ttf">fonts/open-sans-condensed/OpenSans-CondLightItalic.ttf</file>
+    <file alias="fonts/OpenSans-CondBold.ttf">fonts/open-sans-condensed/OpenSans-CondBold.ttf</file>
+
+    <!-- Fira Code iScript (monospace) -->
+    <file alias="fonts/FiraCodeiScript-Regular.ttf">fonts/FireCodeiScript/FiraCodeiScript-Regular.ttf</file>
+    <file alias="fonts/FiraCodeiScript-Italic.ttf">fonts/FireCodeiScript/FiraCodeiScript-Italic.ttf</file>
+    <file alias="fonts/FiraCodeiScript-Bold.ttf">fonts/FireCodeiScript/FiraCodeiScript-Bold.ttf</file>
+
+    <!-- Yoster Island -->
+    <file alias="fonts/yoster.ttf">fonts/yoster-island/yoster.ttf</file>
+
+    <!-- RM Typerighter -->
+    <file alias="fonts/rm_typerighter.ttf">fonts/rm-typerighter/rm_typerighter.ttf</file>
   </qresource>
 </RCC>

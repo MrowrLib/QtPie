@@ -1,0 +1,120 @@
+// Font Family Variables
+// =====================
+// Base families - themes should override these
+// All specific families default to these, but can be individually customized
+
+// Core font stacks (override these in your theme)
+$font-stack-sans: "Segoe UI", "SF Pro Text", system-ui, sans-serif !default;
+$font-stack-serif: "Georgia", "Times New Roman", serif !default;
+$font-stack-mono: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas", monospace !default;
+$font-stack-display: $font-stack-sans !default;
+
+// =============================================================================
+// UI Elements - General interface components
+// =============================================================================
+
+// Base UI font (buttons, labels, menus, most widgets)
+$font-family-ui: $font-stack-sans !default;
+
+// Input fields (QLineEdit, QComboBox, QSpinBox)
+$font-family-input: $font-family-ui !default;
+
+// Buttons (QPushButton, QToolButton)
+$font-family-button: $font-family-ui !default;
+
+// Menu items (QMenu, QMenuBar)
+$font-family-menu: $font-family-ui !default;
+
+// Tab labels (QTabBar)
+$font-family-tab: $font-family-ui !default;
+
+// Tree/list items (QTreeView, QListView, QTableView)
+$font-family-tree: $font-family-ui !default;
+$font-family-list: $font-family-ui !default;
+$font-family-table: $font-family-ui !default;
+$font-family-table-header: $font-family-ui !default;
+
+// Tooltips
+$font-family-tooltip: $font-family-ui !default;
+
+// Status bar
+$font-family-statusbar: $font-family-ui !default;
+
+// Dialog titles
+$font-family-dialog-title: $font-family-ui !default;
+
+// Badges/tags
+$font-family-badge: $font-family-ui !default;
+
+// =============================================================================
+// Typography - Text content and headings
+// =============================================================================
+
+// Headings (h1-h6 style)
+$font-family-heading: $font-stack-sans !default;
+$font-family-h1: $font-family-heading !default;
+$font-family-h2: $font-family-heading !default;
+$font-family-h3: $font-family-heading !default;
+$font-family-h4: $font-family-heading !default;
+$font-family-h5: $font-family-heading !default;
+$font-family-h6: $font-family-heading !default;
+
+// Display/hero text (large decorative titles)
+$font-family-display: $font-stack-display !default;
+$font-family-display-1: $font-family-display !default;
+$font-family-display-2: $font-family-display !default;
+
+// Body text (paragraphs, long-form content)
+$font-family-body: $font-stack-sans !default;
+$font-family-paragraph: $font-family-body !default;
+
+// Lead/intro paragraphs
+$font-family-lead: $font-family-body !default;
+
+// Small text (captions, footnotes, metadata)
+$font-family-small: $font-family-ui !default;
+$font-family-caption: $font-family-small !default;
+$font-family-footnote: $font-family-small !default;
+$font-family-meta: $font-family-small !default;
+$font-family-timestamp: $font-family-small !default;
+
+// =============================================================================
+// Code & Monospace
+// =============================================================================
+
+// Code blocks (multi-line)
+$font-family-code: $font-stack-mono !default;
+$font-family-code-block: $font-family-code !default;
+
+// Inline code (single words/phrases)
+$font-family-code-inline: $font-family-code !default;
+
+// Terminal/console output
+$font-family-terminal: $font-family-code !default;
+
+// Pre-formatted text
+$font-family-pre: $font-family-code !default;
+
+// Code editor (QPlainTextEdit, QTextEdit for code)
+$font-family-editor: $font-family-code !default;
+
+// JSON/XML/data viewers
+$font-family-data: $font-family-code !default;
+
+// =============================================================================
+// Special/Accent
+// =============================================================================
+
+// Brand/logo text
+$font-family-brand: $font-family-display !default;
+
+// Accent/decorative elements
+$font-family-accent: $font-family-ui !default;
+
+// Quotes/blockquotes
+$font-family-quote: $font-stack-serif !default;
+$font-family-blockquote: $font-family-quote !default;
+
+// Labels (form labels, field labels)
+$font-family-label: $font-family-ui !default;
+$font-family-form-label: $font-family-label !default;

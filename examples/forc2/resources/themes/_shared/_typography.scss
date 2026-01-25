@@ -1,0 +1,250 @@
+// Typography Classes
+// ===================
+// Apply via classes=["h1"], classes=["code-block"], etc.
+// Uses font family variables from _fonts.scss
+
+// =============================================================================
+// Headings
+// =============================================================================
+
+*[class~="h1"],
+*[class~="heading-1"] {
+  font-family: $font-family-h1;
+  font-size: $font-size-base * 2;
+  font-weight: 700;
+}
+
+*[class~="h2"],
+*[class~="heading-2"] {
+  font-family: $font-family-h2;
+  font-size: $font-size-base * 1.75;
+  font-weight: 700;
+}
+
+*[class~="h3"],
+*[class~="heading-3"] {
+  font-family: $font-family-h3;
+  font-size: $font-size-base * 1.5;
+  font-weight: 600;
+}
+
+*[class~="h4"],
+*[class~="heading-4"] {
+  font-family: $font-family-h4;
+  font-size: $font-size-base * 1.25;
+  font-weight: 600;
+}
+
+*[class~="h5"],
+*[class~="heading-5"] {
+  font-family: $font-family-h5;
+  font-size: $font-size-base * 1.1;
+  font-weight: 600;
+}
+
+*[class~="h6"],
+*[class~="heading-6"] {
+  font-family: $font-family-h6;
+  font-size: $font-size-base;
+  font-weight: 600;
+}
+
+// =============================================================================
+// Display / Hero Text
+// =============================================================================
+
+*[class~="display-1"] {
+  font-family: $font-family-display-1;
+  font-size: $font-size-base * 3;
+  font-weight: 300;
+}
+
+*[class~="display-2"] {
+  font-family: $font-family-display-2;
+  font-size: $font-size-base * 2.5;
+  font-weight: 300;
+}
+
+// =============================================================================
+// Body Text
+// =============================================================================
+
+*[class~="body"],
+*[class~="paragraph"],
+*[class~="p"] {
+  font-family: $font-family-paragraph;
+  font-size: $font-size-base;
+}
+
+*[class~="lead"] {
+  font-family: $font-family-lead;
+  font-size: $font-size-large;
+  font-weight: 300;
+}
+
+// =============================================================================
+// Small Text / Metadata
+// =============================================================================
+
+*[class~="small"],
+*[class~="text-small"] {
+  font-family: $font-family-small;
+  font-size: $font-size-small;
+}
+
+*[class~="tiny"],
+*[class~="text-tiny"] {
+  font-family: $font-family-small;
+  font-size: $font-size-tiny;
+}
+
+*[class~="caption"] {
+  font-family: $font-family-caption;
+  font-size: $font-size-small;
+  color: $text-secondary;
+}
+
+*[class~="footnote"] {
+  font-family: $font-family-footnote;
+  font-size: $font-size-tiny;
+  color: $text-muted;
+}
+
+*[class~="meta"],
+*[class~="metadata"] {
+  font-family: $font-family-meta;
+  font-size: $font-size-small;
+  color: $text-secondary;
+}
+
+*[class~="timestamp"] {
+  font-family: $font-family-timestamp;
+  font-size: $font-size-small;
+  color: $text-muted;
+}
+
+// =============================================================================
+// Code & Monospace
+// =============================================================================
+
+*[class~="code"],
+*[class~="code-inline"] {
+  font-family: $font-family-code-inline;
+  font-size: $font-size-small;
+  background-color: $bg-tertiary;
+  padding: 0.15em 0.4em;
+  border-radius: $radius-sm;
+}
+
+*[class~="code-block"],
+*[class~="pre"] {
+  font-family: $font-family-code-block;
+  font-size: $font-size-base;
+  background-color: $bg-secondary;
+  padding: 0.75em 1em;
+  border-radius: $radius-md;
+}
+
+*[class~="terminal"],
+*[class~="console"] {
+  font-family: $font-family-terminal;
+  font-size: $font-size-base;
+  background-color: $bg-primary;
+  color: $text-primary;
+  padding: 0.75em 1em;
+  border-radius: $radius-md;
+}
+
+// =============================================================================
+// Quotes
+// =============================================================================
+
+*[class~="quote"],
+*[class~="blockquote"] {
+  font-family: $font-family-blockquote;
+  font-size: $font-size-base;
+  font-style: italic;
+  border-left: 3px solid $border-default;
+  padding-left: 1em;
+  color: $text-secondary;
+}
+
+// =============================================================================
+// Labels
+// =============================================================================
+
+*[class~="label"],
+*[class~="form-label"] {
+  font-family: $font-family-form-label;
+  font-size: $font-size-small;
+  font-weight: 500;
+  color: $text-secondary;
+}
+
+// =============================================================================
+// Brand / Accent
+// =============================================================================
+
+*[class~="brand"] {
+  font-family: $font-family-brand;
+  font-weight: 700;
+}
+
+*[class~="accent"] {
+  font-family: $font-family-accent;
+}
+
+// =============================================================================
+// Font Weight Utilities
+// =============================================================================
+
+*[class~="font-thin"] { font-weight: 100; }
+*[class~="font-extralight"] { font-weight: 200; }
+*[class~="font-light"] { font-weight: 300; }
+*[class~="font-normal"] { font-weight: 400; }
+*[class~="font-medium"] { font-weight: 500; }
+*[class~="font-semibold"] { font-weight: 600; }
+*[class~="font-bold"] { font-weight: 700; }
+*[class~="font-extrabold"] { font-weight: 800; }
+*[class~="font-black"] { font-weight: 900; }
+
+// =============================================================================
+// Font Style Utilities
+// =============================================================================
+
+*[class~="italic"] { font-style: italic; }
+*[class~="not-italic"] { font-style: normal; }
+
+// =============================================================================
+// Text Transform Utilities
+// =============================================================================
+
+*[class~="uppercase"] { text-transform: uppercase; }
+*[class~="lowercase"] { text-transform: lowercase; }
+*[class~="capitalize"] { text-transform: capitalize; }
+
+// =============================================================================
+// Monospace Utility
+// =============================================================================
+
+*[class~="mono"],
+*[class~="monospace"] {
+  font-family: $font-family-code;
+}
+
+// =============================================================================
+// Serif Utility
+// =============================================================================
+
+*[class~="serif"] {
+  font-family: $font-stack-serif;
+}
+
+// =============================================================================
+// Sans Utility
+// =============================================================================
+
+*[class~="sans"],
+*[class~="sans-serif"] {
+  font-family: $font-stack-sans;
+}

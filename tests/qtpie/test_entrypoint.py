@@ -15,8 +15,11 @@ from qtpie.entrypoint import (
     _apply_stylesheet,  # pyright: ignore[reportPrivateUsage]
     _compile_scss_to_string,  # pyright: ignore[reportPrivateUsage]
     _is_main_module,  # pyright: ignore[reportPrivateUsage]
+    _load_fonts,  # pyright: ignore[reportPrivateUsage]
+    _load_fonts_from_filesystem,  # pyright: ignore[reportPrivateUsage]
     _load_qrc_stylesheet,  # pyright: ignore[reportPrivateUsage]
     _run_entrypoint,  # pyright: ignore[reportPrivateUsage]
+    _set_default_font,  # pyright: ignore[reportPrivateUsage]
     _should_auto_run,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -529,3 +532,112 @@ class TestOrgAndAppConfig:
         config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
         assert_that(config.org).is_equal_to("MyCompany")
         assert_that(config.app).is_equal_to("MyProduct")
+
+
+class TestFontFoldersConfig:
+    """Tests for font_folders= parameter."""
+
+    def test_font_folders_stored_in_config(self) -> None:
+        """font_folders= is stored in EntryConfig as tuple."""
+
+        @entrypoint(font_folders=[":/fonts", "./local_fonts"])
+        @widget
+        class TestWidget(Widget):
+            label: QLabel = new("Hello")
+
+        config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
+        assert_that(config.font_folders).is_equal_to((":/fonts", "./local_fonts"))
+
+    def test_font_folders_defaults_to_empty_tuple(self) -> None:
+        """font_folders= defaults to empty tuple."""
+        config = EntryConfig()
+        assert_that(config.font_folders).is_equal_to(())
+
+    def test_load_fonts_returns_empty_when_no_folders(self) -> None:
+        """_load_fonts returns empty list when no font_folders configured."""
+        config = EntryConfig()
+        result = _load_fonts(config)
+        assert_that(result).is_empty()
+
+    def test_load_fonts_from_nonexistent_folder(self) -> None:
+        """_load_fonts_from_filesystem returns empty for nonexistent folder."""
+        result = _load_fonts_from_filesystem("/nonexistent/folder/path")
+        assert_that(result).is_empty()
+
+    def test_load_fonts_from_empty_folder(self, tmp_path: Path) -> None:
+        """_load_fonts_from_filesystem returns empty for folder with no fonts."""
+        empty_dir = tmp_path / "empty_fonts"
+        empty_dir.mkdir()
+        result = _load_fonts_from_filesystem(str(empty_dir))
+        assert_that(result).is_empty()
+
+    def test_entrypoint_with_font_folders_config(self) -> None:
+        """@entrypoint stores font_folders config correctly."""
+
+        @entrypoint(
+            font_folders=["resources/fonts", ":/embedded/fonts"],
+        )
+        def my_main() -> QLabel:
+            return QLabel("Hi")
+
+        config = getattr(my_main, ENTRY_CONFIG_ATTR)
+        assert_that(config.font_folders).is_equal_to(("resources/fonts", ":/embedded/fonts"))
+
+
+class TestDefaultFontConfig:
+    """Tests for default_font= parameter."""
+
+    def test_default_font_stored_in_config(self) -> None:
+        """default_font= is stored in EntryConfig."""
+
+        @entrypoint(default_font="Arial")
+        @widget
+        class TestWidget(Widget):
+            label: QLabel = new("Hello")
+
+        config = getattr(TestWidget, ENTRY_CONFIG_ATTR)
+        assert_that(config.default_font).is_equal_to("Arial")
+
+    def test_default_font_defaults_to_none(self) -> None:
+        """default_font= defaults to None."""
+        config = EntryConfig()
+        assert_that(config.default_font).is_none()
+
+    def test_set_default_font_does_nothing_when_none(self, qapp: App) -> None:
+        """_set_default_font does nothing when default_font is None."""
+        original_family = qapp.font().family()
+        config = EntryConfig()
+        _set_default_font(qapp, config)
+        assert_that(qapp.font().family()).is_equal_to(original_family)
+
+    def test_set_default_font_changes_app_font(self, qapp: App) -> None:
+        """_set_default_font sets the app font family."""
+        config = EntryConfig(default_font="Courier New")
+        _set_default_font(qapp, config)
+        assert_that(qapp.font().family()).is_equal_to("Courier New")
+
+    def test_set_default_font_preserves_point_size(self, qapp: App) -> None:
+        """_set_default_font preserves the current point size."""
+        # Set a specific font size first
+        font = qapp.font()
+        font.setPointSizeF(14.5)
+        qapp.setFont(font)
+
+        config = EntryConfig(default_font="Courier New")
+        _set_default_font(qapp, config)
+
+        assert_that(qapp.font().pointSizeF()).is_equal_to(14.5)
+
+    def test_entrypoint_with_font_folders_and_default_font(self) -> None:
+        """@entrypoint stores both font_folders and default_font."""
+
+        @entrypoint(
+            font_folders=[":/fonts"],
+            default_font="My Custom Font",
+        )
+        def my_main() -> QLabel:
+            return QLabel("Hi")
+
+        config = getattr(my_main, ENTRY_CONFIG_ATTR)
+        assert_that(config.font_folders).is_equal_to((":/fonts",))
+        assert_that(config.default_font).is_equal_to("My Custom Font")

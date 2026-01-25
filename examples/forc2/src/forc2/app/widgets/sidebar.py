@@ -40,13 +40,13 @@ class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
     _new_collection_button: QPushButton = new(
         "+ New Collection",
         clicked="_on_new_collection",
-        classes=["add-button"],
+        classes=["btn-add"],
     )
     _new_request_button: QPushButton = new(
         "+ New Request",
         # clicked="_on_new_request",
         # enabled="{current_workspace_item is not None}",
-        classes=["add-button"],
+        classes=["btn-add"],
     )
 
     # ### Methods ###
