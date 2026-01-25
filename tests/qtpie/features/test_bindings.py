@@ -5,6 +5,7 @@
 # pyright: reportUntypedClassDecorator=false
 # pyright: reportUnknownArgumentType=false
 # pyright: reportUnknownLambdaType=false
+# pyright: reportUnknownVariableType=false
 """Tests for bind= parameter across Widget, Window, Menu, and App.
 
 Tests simple bindings, format expressions, auto-binding, and two-way binding.
@@ -1562,3 +1563,342 @@ class TestPropertyBindingSupport:
 
         # @property should be resolved correctly at widget creation
         assert_that(instance._area.text()).is_equal_to("Area: 50")
+
+
+# =============================================================================
+# Auto-bind for Child Widget[T] Fields
+# =============================================================================
+
+
+class TestChildWidgetAutoBind:
+    """Test that child Widget[T] fields auto-bind to parent record fields.
+
+    When a parent widget has a record type with a field that matches the child
+    widget's field name (stripped of underscore), the child should automatically
+    bind to that field.
+
+    For example:
+    - Parent record has `auth: AuthConfig`
+    - Child widget is `_auth: AuthWidget = new()`
+    - Child should auto-bind to `parent.record.auth`
+    """
+
+    def test_child_widget_auto_binds_to_parent_record_field(self, qt: QtDriver) -> None:
+        """_auth: AuthWidget = new() auto-binds to parent.record.auth."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class AuthConfig:
+            username: str = "admin"
+            password: str = "secret"
+
+        @dataclass
+        class Request:
+            auth: AuthConfig | None = None
+
+        @widget
+        class AuthWidget(Widget[AuthConfig | None]):
+            _username: QLabel = new(bind="username")
+
+        @widget(record=Request(auth=AuthConfig()))
+        class RequestWidget(Widget[Request]):
+            # No explicit bind= - should auto-bind to record.auth
+            _auth: AuthWidget = new()
+
+        instance = RequestWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Child widget should have received the auth config from parent
+        assert_that(instance._auth._username.text()).is_equal_to("admin")
+
+        # Changing parent record should propagate to child
+        instance.record.auth = AuthConfig(username="newuser", password="newpass")
+        assert_that(instance._auth._username.text()).is_equal_to("newuser")
+
+    def test_child_widget_auto_bind_with_explicit_disabled(self, qt: QtDriver) -> None:
+        """bind=False explicitly disables auto-bind for child widget."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Settings:
+            value: int = 42
+
+        @dataclass
+        class Parent:
+            settings: Settings | None = None
+
+        @widget
+        class SettingsWidget(Widget[Settings | None]):
+            _value: QLabel = new(bind="value")
+
+        @widget(record=Parent(settings=Settings()))
+        class ParentWidget(Widget[Parent]):
+            # Explicit bind=False disables auto-bind
+            _settings: SettingsWidget = new(bind=False)
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Child should NOT have received parent's settings (empty label)
+        assert_that(instance._settings._value.text()).is_equal_to("")
+
+    def test_child_widget_different_record_type_no_auto_bind(self, qt: QtDriver) -> None:
+        """Child widget with different record type should NOT auto-bind to non-existent field."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class ChildData:
+            name: str = "default"
+
+        @dataclass
+        class ParentData:
+            # Note: no 'child' field here
+            title: str = "Parent"
+
+        @widget
+        class ChildWidget(Widget[ChildData | None]):
+            _name: QLabel = new(bind="name")
+
+        @widget(record=ParentData())
+        class ParentWidget(Widget[ParentData]):
+            # _child field doesn't match any field on ParentData
+            # Should NOT auto-bind, child record stays None
+            _child: ChildWidget = new()
+
+        instance = ParentWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Child should have None record (no auto-bind because no matching field)
+        assert_that(instance._child._name.text()).is_equal_to("")
+
+
+# =============================================================================
+# Union Type Auto-bind (e.g., Collection | None)
+# =============================================================================
+
+
+class TestUnionTypeAutoBind:
+    """Test auto-bind works correctly with Union types like T | None.
+
+    This is a regression test for a bug where auto-bind didn't work for
+    fields with Union types because the annotation lookup failed.
+    """
+
+    def test_auto_bind_union_type_field(self, qt: QtDriver) -> None:
+        """Auto-bind works for fields with Union types like Collection | None."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Collection:
+            name: str = "My Collection"
+            item_count: int = 10
+
+        @dataclass
+        class Workspace:
+            collection: Collection | None = None
+
+        @widget
+        class CollectionWidget(Widget[Collection | None]):
+            _name: QLabel = new(bind="name")
+            _count: QLabel = new(bind="{item_count} items")
+
+        @widget(record=Workspace(collection=Collection()))
+        class WorkspaceWidget(Widget[Workspace]):
+            # _collection should auto-bind to record.collection (Union type)
+            _collection: CollectionWidget = new()
+
+        instance = WorkspaceWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Auto-bind should work with Union type
+        assert_that(instance._collection._name.text()).is_equal_to("My Collection")
+        assert_that(instance._collection._count.text()).is_equal_to("10 items")
+
+    def test_auto_bind_union_type_with_initial_value_reacts(self, qt: QtDriver) -> None:
+        """Auto-bind with Union type reacts to changes when initial value is not None."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Config:
+            setting: str = "initial"
+
+        @dataclass
+        class App:
+            config: Config | None = None
+
+        @widget
+        class ConfigWidget(Widget[Config | None]):
+            _setting: QLabel = new(bind="setting")
+
+        # Start with a Config value so binding is established
+        @widget(record=App(config=Config(setting="initial")))
+        class AppWidget(Widget[App]):
+            _config: ConfigWidget = new()
+
+        instance = AppWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Initial value
+        assert_that(instance._config._setting.text()).is_equal_to("initial")
+
+        # Change the config to a new instance
+        instance.record.config = Config(setting="updated")
+        assert_that(instance._config._setting.text()).is_equal_to("updated")
+
+        # Change to another config
+        instance.record.config = Config(setting="another")
+        assert_that(instance._config._setting.text()).is_equal_to("another")
+
+
+# =============================================================================
+# Model Widget Auto-bind with kwargs (QTreeView, QTableView, etc.)
+# =============================================================================
+
+
+class TestModelWidgetAutoBindKwargs:
+    """Test that model widget kwargs (appendColumns, columns, etc.) work with auto-bind.
+
+    This is a regression test for a bug where model widget kwargs like 'appendColumns'
+    were passed to the Qt widget constructor instead of being handled by QtPie,
+    causing errors like: QTableView() got an unexpected keyword argument 'appendColumns'
+    """
+
+    def test_treeview_auto_bind_with_model_kwargs(self, qt: QtDriver) -> None:
+        """QTreeView auto-bind works with model-specific kwargs like filter."""
+        from dataclasses import dataclass, field
+
+        from PySide6.QtWidgets import QTreeView
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class TreeItem:
+            name: str = ""
+
+        @dataclass
+        class Collection:
+            items: list[TreeItem] = field(default_factory=list)
+
+        @dataclass
+        class Workspace:
+            collection: Collection | None = None
+
+        @widget
+        class CollectionWidget(Widget[Collection | None]):
+            # Auto-bind _items to record.items with filter kwarg
+            _items: QTreeView = new(
+                filter="{name.startswith('A')}",
+            )
+
+        @widget(
+            record=Workspace(
+                collection=Collection(
+                    items=[
+                        TreeItem(name="Alpha"),
+                        TreeItem(name="Beta"),
+                    ]
+                )
+            )
+        )
+        class WorkspaceWidget(Widget[Workspace]):
+            _collection: CollectionWidget = new()
+
+        # Should not raise "unexpected keyword argument" errors
+        instance = WorkspaceWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Widget should be created successfully
+        assert_that(instance._collection._items).is_instance_of(QTreeView)
+
+    def test_tableview_auto_bind_with_columns(self, qt: QtDriver) -> None:
+        """QTableView auto-bind works with columns kwarg."""
+        from dataclasses import dataclass, field
+
+        from PySide6.QtWidgets import QTableView
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Header:
+            key: str = ""
+            value: str = ""
+
+        @dataclass
+        class Request:
+            headers: list[Header] = field(default_factory=list)
+
+        @widget(
+            record=Request(
+                headers=[
+                    Header(key="Content-Type", value="application/json"),
+                    Header(key="Authorization", value="Bearer token"),
+                ]
+            )
+        )
+        class RequestWidget(Widget[Request]):
+            # Auto-bind with columns kwarg (no explicit bind=)
+            _headers: QTableView = new(
+                columns=["key", "value"],
+            )
+
+        # Should not raise "unexpected keyword argument 'columns'"
+        instance = RequestWidget()
+        qt.track(instance)
+        instance.show()
+
+        assert_that(instance._headers).is_instance_of(QTableView)
+
+    def test_explicit_bind_with_model_kwargs(self, qt: QtDriver) -> None:
+        """Explicit bind= with model kwargs still works."""
+        from dataclasses import dataclass, field
+
+        from PySide6.QtWidgets import QTableView
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Item:
+            name: str = ""
+            quantity: int = 0
+
+        @dataclass
+        class Order:
+            items: list[Item] = field(default_factory=list)
+
+        @widget(
+            record=Order(
+                items=[
+                    Item(name="Widget", quantity=5),
+                    Item(name="Gadget", quantity=3),
+                ]
+            )
+        )
+        class OrderWidget(Widget[Order]):
+            # Explicit bind= with model kwargs
+            _items: QTableView = new(
+                bind="items",
+                columns=["name", "quantity"],
+                format="Name: {name}, Qty: {quantity}",
+            )
+
+        instance = OrderWidget()
+        qt.track(instance)
+        instance.show()
+
+        assert_that(instance._items).is_instance_of(QTableView)

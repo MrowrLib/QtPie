@@ -1,8 +1,59 @@
-from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QTreeView
+from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QTreeView
 
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.workspace import Workspace
-from qtpie import Var, Widget, new, widget
+from qtpie import Dialog, DialogButton, Var, Widget, dialog, new, widget
+
+
+@dialog(layout="form", size=(400, 100), title="{kind}")
+class TextValueDialog(Dialog):
+    ### Variables ###
+    kind: Var[str]
+
+    ### Widgets ###
+    value: Var[str, QLineEdit] = new()(label="{kind}", placeholderText="Enter {kind} name...")
+
+    ### Dialog Buttons ###
+    _ok: DialogButton = new(enabled="{value != ''}")
+    _cancel: DialogButton
+
+
+@dialog(layout="form", size=(450, 150), title="Add Collection")
+class AddCollectionDialog(Dialog):
+    ### Widgets ###
+    name: Var[str, QLineEdit] = new()(
+        label="Collection Name",
+        placeholderText="Enter collection name...",
+        # validator=filename_safe_validator,
+    )
+    parent_collection: Var[Collection | None, QLabel] = new(None)(bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}")
+    make_root_collection: Var[bool, QCheckBox] = new(False)(label="Set as Root Collection")
+
+    ### Dialog Buttons ###
+    _ok: DialogButton = new(enabled="{name != ''}")
+    _cancel: DialogButton
+
+
+@widget(layout="horizontal")
+class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
+    ### Widgets ###
+    _new_collection_button: QPushButton = new(
+        "+ New Collection",
+        clicked="_on_new_collection",
+        classes=["add-button"],
+    )
+    _new_request_button: QPushButton = new(
+        "+ New Request",
+        # clicked="_on_new_request",
+        # enabled="{current_workspace_item is not None}",
+        classes=["add-button"],
+    )
+
+    # ### Methods ###
+    def _on_new_collection(self) -> None:
+        dialog = AddCollectionDialog()
+        if dialog.show_dialog():
+            ...
 
 
 @widget(layout="horizontal", margins=0)
@@ -64,7 +115,8 @@ class CollectionsTreeWidget(Widget[Collection | None]):
 @widget
 class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
-    _workspace_name_label: QLabel = new(bind="Workspace: {name}")
+    _workspace_name: QLabel = new(bind="Workspace: {name}")
+    _action_buttons: WorkspaceActionButtonsWidget
     _collection: CollectionsTreeWidget
     _environment_label: QLabel = new("Environment")
     _environments: QComboBox = new(format="{name}", selectedItem="active_environment")
