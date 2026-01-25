@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Literal, cast, get_args, get_origin, get_type_hints
 
+from .computed import Computed, create_computed_descriptor
 from .event import is_event_hint
 from .layout import GridPosition, Stretch
 from .setting import Setting
@@ -374,19 +375,27 @@ class NewField:
             # NewField stays on class - will be processed by _process_event_annotations_for_*
             return  # Don't process further - the Event annotation will be handled separately
 
-        # If it's a Variable or Setting, replace self with a Variable descriptor
+        # If it's a Variable, Computed, or Setting, replace self with a Variable descriptor
         origin = get_origin(self.field_type)
         is_variable = origin is Variable or self.field_type is Variable
+        is_computed = origin is Computed or self.field_type is Computed
         is_setting = origin is Setting or self.field_type is Setting
-        if is_variable or is_setting:
+        if is_variable or is_computed or is_setting:
             default = self._get_variable_default()
-            # Extract inner type from Variable[T]/Setting[T] and optional widget type from Variable[T, W]/Setting[T, W]
+            # Extract inner type from Variable[T]/Setting[T]/Computed[T] and optional widget type
             inner_type: type | None = None
             widget_type: type | None = None
-            if origin is Variable or origin is Setting:
+            compute_expression: str | None = None
+            if origin is Variable or origin is Setting or origin is Computed:
                 args = get_args(self.field_type)
                 inner_type = args[0] if args else None
-                widget_type = args[1] if len(args) > 1 else None
+                # Computed[T] has no widget type - it's always just a value
+                widget_type = args[1] if len(args) > 1 and not is_computed else None
+
+            # For Computed[T], the first positional arg is the expression
+            if is_computed and self.args:
+                compute_expression = str(self.args[0])
+                default = None  # Computed values don't have defaults
 
             # For Setting[T], compute the persist_key
             persist_key: str | None = None
@@ -600,6 +609,12 @@ class NewField:
                         inner_kwargs[k] = v.name  # Will be resolved at instantiation time
                     else:
                         inner_kwargs[k] = v
+
+            # For Computed[T], use the specialized descriptor
+            if is_computed and compute_expression:
+                descriptor = create_computed_descriptor(name, compute_expression, inner_type)
+                setattr(owner, name, descriptor)
+                return
 
             descriptor = create_variable_descriptor(
                 default,

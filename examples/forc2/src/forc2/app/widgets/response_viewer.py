@@ -1,7 +1,7 @@
 from qtpy.QtWidgets import QLabel, QPlainTextEdit, QTableView, QTabWidget
 
 from forc2.domain.response import Response
-from qtpie import Stretch, Widget, new, widget
+from qtpie import Computed, Stretch, Widget, new, widget
 
 # TODO --> copy the response_viewer stuff from forc1
 
@@ -29,8 +29,11 @@ class ResponseStatsWidget(Widget[Response]):
 @widget(title="Body")
 class ResponseBodyWidget(Widget[Response]):
     ### Variables ###
-    # TODO! I want this :)
-    # content_type_prefix: Computed[str] = new(bind="headers['content-type'].split(';')[0] if 'content-type' in headers else ''")
+    # TODO! I want this :) it doesn't exist yet. But  want it!!!
+    content_type_prefix: Computed[str] = new(bind="headers['content-type'].split(';')[0] if 'content-type' in headers else ''")
+
+    # # or it could be Variable[str] with like a computed= kwarg, I dunno?
+    # content_type_label: Var[str] = new(compute="{headers['content-type'].split(';')[0] if 'content-type' in headers else 'unknown'}")
 
     ### Widgets ###
     # content_type_label: QLabel = new(bind="Content-Type: {headers['content-type']}")

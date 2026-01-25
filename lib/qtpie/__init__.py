@@ -3,6 +3,7 @@
 from . import debug as _debug  # noqa: F401 # pyright: ignore[reportUnusedImport] - import for side effect
 from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
+from .computed import Computed
 from .create import create_instance
 from .dialog import ButtonInfo, Dialog, DialogButton, DialogButtons, DialogConfig, DialogResult, buttons, dialog
 from .dict_widget_repeater import DictWidgetRepeater
@@ -52,6 +53,7 @@ __all__ = [
     "ButtonInfo",
     "ColorScheme",
     "ColumnResizeMode",
+    "Computed",
     "Dialog",
     "Event",
     "DialogButton",
