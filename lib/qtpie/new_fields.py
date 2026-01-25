@@ -161,12 +161,28 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                     # If this is a Widget[T] child with bind="xxx", convert to record="xxx"
                     # This handles both explicit bind="xxx" and auto-record-bind (bind="record")
-                    if field.bind is not None and field.bind is not False:
+                    # Also handle auto-bind: if bind=None but parent has auto_bind, derive bind path from field name
+                    # BUT only if that path exists on the parent's record type (e.g., _auth → auth field on Request)
+                    bind_path_for_record = field.bind
+                    if bind_path_for_record is None and config is not None and getattr(config, "auto_bind", False):
+                        # Auto-bind: derive bind path from field name (strip leading underscore)
+                        # Only apply if the derived path exists on the parent's record type
+                        derived_path = fname.lstrip("_")
+                        parent_record_type = getattr(config, "record_type", None)
+                        if parent_record_type is not None:
+                            # Check if derived path is a field on the parent's record type
+                            # Use _get_all_annotations to handle Union types (e.g., Workspace | None)
+                            from qtpie.bindings.format_binding import _get_all_annotations  # pyright: ignore[reportPrivateUsage]
+
+                            parent_annotations = _get_all_annotations(parent_record_type)
+                            if derived_path in parent_annotations:
+                                bind_path_for_record = derived_path
+                    if bind_path_for_record is not None and bind_path_for_record is not False:
                         child_config = getattr(field.field_type, "_qtpie_config", None)
                         if child_config is not None:
                             child_record_type = getattr(child_config, "record_type", None)
                             if child_record_type is not None and "record" not in bindings_dict:
-                                bindings_dict["record"] = field.bind
+                                bindings_dict["record"] = bind_path_for_record
 
                     # Pass parent reference to QtPie classes so they can find parent Variables
                     # during binding setup (only if field type has _qtpie_config - Widget, Window, Menu, Dialog, App)
@@ -948,8 +964,8 @@ def _apply_expression_binding(parent: Any, child: Any, child_var_name: str, expr
         context: dict[str, Any] = {}
 
         for var_name in potential_vars:
-            # Try with underscore prefix first, then without
-            for attr_name in [f"_{var_name}", var_name]:
+            # Try exact name first, then with underscore prefix
+            for attr_name in [var_name, f"_{var_name}"]:
                 if hasattr(parent, attr_name):
                     attr = getattr(parent, attr_name)
                     if isinstance(attr, Variable):

@@ -1368,3 +1368,197 @@ class TestEnumFieldAttributeBinding:
         # Change to SENT - button disabled again
         instance.record.status = Status.SENT
         assert_that(instance.send_btn.isEnabled()).is_false()
+
+
+# =============================================================================
+# Binding Resolution Order - Record fields before underscore fallback
+# =============================================================================
+
+
+class TestBindingResolutionOrder:
+    """Test that binding resolution checks record fields BEFORE underscore fallback.
+
+    This is a regression test for a bug where:
+    - _body_text: QPlainTextEdit = new(bind="{body_text}") would find ITSELF
+    - Because the code tried _body_text (underscore prefix) before checking the record
+
+    The correct order is:
+    1. Exact name on widget fields
+    2. Record fields (annotations and @property)
+    3. THEN underscore fallback
+    """
+
+    def test_bind_resolves_to_record_not_self(self, qt: QtDriver) -> None:
+        """bind='{body_text}' on _body_text field resolves to record.body_text, not the field itself.
+
+        This is the exact bug from forc2 where:
+        - _body_text: QPlainTextEdit = new(bind="{body_text}")
+        - Should bind to Response.body_text, NOT find _body_text widget
+        """
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QPlainTextEdit
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Response:
+            body_text: str = "Response body content"
+
+        @widget(record=Response())
+        class ResponseBodyWidget(Widget[Response]):
+            # Field is named _body_text, bind references body_text (no underscore)
+            # Should resolve to record.body_text, NOT to self._body_text
+            _body_text: QPlainTextEdit = new(bind="{body_text}", readOnly=True)
+
+        instance = ResponseBodyWidget()
+        qt.track(instance)
+        instance.show()
+
+        # The QPlainTextEdit should show the RECORD's body_text value
+        assert_that(instance._body_text.toPlainText()).is_equal_to("Response body content")
+
+        # Changing the record should update the widget
+        instance.record.body_text = "Updated content"
+        assert_that(instance._body_text.toPlainText()).is_equal_to("Updated content")
+
+    def test_bind_underscore_variable_to_record_field(self, qt: QtDriver) -> None:
+        """bind='name' (no underscore) on _name field resolves to record.name."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Person:
+            name: str = "Alice"
+
+        @widget(record=Person())
+        class PersonWidget(Widget[Person]):
+            # Field is _name, bind='name' should resolve to record.name
+            _name: QLabel = new(bind="name")
+
+        instance = PersonWidget()
+        qt.track(instance)
+        instance.show()
+
+        assert_that(instance._name.text()).is_equal_to("Alice")
+
+        instance.record.name = "Bob"
+        assert_that(instance._name.text()).is_equal_to("Bob")
+
+    def test_explicit_underscore_resolves_to_widget_field(self, qt: QtDriver) -> None:
+        """bind='_count' (with underscore) resolves to widget._count Variable."""
+        from qtpie import Widget, widget
+
+        @widget
+        class CounterWidget(Widget):
+            _count: Variable[int] = new(42)
+            _label: QLabel = new(bind="_count")
+
+        instance = CounterWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Explicit underscore should resolve to the widget's _count Variable
+        assert_that(instance._label.text()).is_equal_to("42")
+
+        instance._count.value = 100
+        assert_that(instance._label.text()).is_equal_to("100")
+
+
+# =============================================================================
+# @property Support in Record Bindings
+# =============================================================================
+
+
+class TestPropertyBindingSupport:
+    """Test that @property methods on record types are accessible via bindings.
+
+    Before the fix, only annotated fields (in __annotations__) were checked.
+    @property methods were not found, causing underscore fallback to incorrectly match.
+    """
+
+    def test_bind_to_property_on_record(self, qt: QtDriver) -> None:
+        """bind='{full_name}' resolves to record's @property full_name."""
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Person:
+            first_name: str = "John"
+            last_name: str = "Doe"
+
+            @property
+            def full_name(self) -> str:
+                return f"{self.first_name} {self.last_name}"
+
+        @widget(record=Person())
+        class PersonWidget(Widget[Person]):
+            _full_name: QLabel = new(bind="{full_name}")
+
+        instance = PersonWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Should resolve to the @property, not try to find _full_name on widget
+        assert_that(instance._full_name.text()).is_equal_to("John Doe")
+
+    def test_bind_to_property_with_underscore_field_name(self, qt: QtDriver) -> None:
+        """bind='{body_text}' on _body_text field resolves to record's @property body_text."""
+        from dataclasses import dataclass
+
+        from PySide6.QtWidgets import QPlainTextEdit
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Response:
+            raw_body: str = "raw content"
+
+            @property
+            def body_text(self) -> str:
+                return f"Formatted: {self.raw_body}"
+
+        @widget(record=Response())
+        class ResponseWidget(Widget[Response]):
+            # _body_text field with bind="{body_text}"
+            # body_text is a @property, not an annotation
+            _body_text: QPlainTextEdit = new(bind="{body_text}", readOnly=True)
+
+        instance = ResponseWidget()
+        qt.track(instance)
+        instance.show()
+
+        # Should resolve to record's @property body_text
+        assert_that(instance._body_text.toPlainText()).is_equal_to("Formatted: raw content")
+
+    def test_property_initial_value_resolved(self, qt: QtDriver) -> None:
+        """@property is correctly resolved at widget creation time.
+
+        Note: @property values don't automatically update when dependent fields change.
+        For reactive computed values, use Computed[T] instead.
+        """
+        from dataclasses import dataclass
+
+        from qtpie import Widget, widget
+
+        @dataclass
+        class Rectangle:
+            width: int = 10
+            height: int = 5
+
+            @property
+            def area(self) -> int:
+                return self.width * self.height
+
+        @widget(record=Rectangle())
+        class RectangleWidget(Widget[Rectangle]):
+            _area: QLabel = new(bind="Area: {area}")
+
+        instance = RectangleWidget()
+        qt.track(instance)
+        instance.show()
+
+        # @property should be resolved correctly at widget creation
+        assert_that(instance._area.text()).is_equal_to("Area: 50")

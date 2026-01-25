@@ -606,11 +606,11 @@ def apply_auto_bindings(
             # Check if it's a plain list/dict attribute (static data for model widgets)
             if _is_model_widget(widget_instance):
                 # Try to get the raw attribute (might be plain list/dict)
+                # IMPORTANT: Only try exact name and stripped name, NOT underscore variant
+                # Adding underscore would find the field being defined (e.g., _headers finds _headers QTableView)
                 lookup_name = bind_path.lstrip("_")
                 raw_attr = getattr(host, bind_path, None)
-                if raw_attr is None:
-                    raw_attr = getattr(host, f"_{lookup_name}", None)
-                if raw_attr is None:
+                if raw_attr is None and lookup_name != bind_path:
                     raw_attr = getattr(host, lookup_name, None)
 
                 # Handle static list[T] attribute

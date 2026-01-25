@@ -926,7 +926,8 @@ class NewField:
 
             # Extract format=/filter=/selection bindings for model widgets ONLY (QComboBox, QListView, QTableView)
             # These kwargs should NOT be popped for non-model widgets as they might be constructor params
-            if self.bind is not None and self._is_model_widget_type():
+            # Note: Always extract for model widgets, even when bind=None (auto-bind may apply later)
+            if self._is_model_widget_type():
                 # format= specifies how list items should be displayed: "{name} ({age}}"
                 self.model_format = self.kwargs.pop("format", None)
                 # filter= specifies expression to filter items: "{_search} in {name}"

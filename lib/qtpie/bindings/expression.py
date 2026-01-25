@@ -626,8 +626,8 @@ def create_expression_binding(
                         eval_context[var_name] = proxy_field_value
                     continue
 
-            # Try with underscore prefix first, then without on the context
-            for attr_name in [f"_{var_name}", var_name]:
+            # Try exact name first, then with underscore prefix on the context
+            for attr_name in [var_name, f"_{var_name}"]:
                 if hasattr(context, attr_name):
                     raw_attr: Any = getattr(context, attr_name)
                     if isinstance(raw_attr, Variable):

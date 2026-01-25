@@ -1083,7 +1083,8 @@ def _create_menu_expression_binding(
             context["parent_ref"] = parent
 
         for var_name in var_names:
-            for attr_name in [f"_{var_name}", var_name]:
+            # Try exact name first, then with underscore prefix
+            for attr_name in [var_name, f"_{var_name}"]:
                 if hasattr(menu, attr_name):
                     raw_attr: Any = getattr(menu, attr_name)
                     if isinstance(raw_attr, Variable):

@@ -200,7 +200,7 @@ class _ComputedDescriptor:
             if var_name.startswith("_"):
                 names_to_try = [var_name]
             else:
-                names_to_try = [f"_{var_name}", var_name]
+                names_to_try = [var_name, f"_{var_name}"]
 
             for attr_name in names_to_try:
                 # Use object's __dict__ to avoid triggering the descriptor we're creating
@@ -242,7 +242,7 @@ class _ComputedDescriptor:
                 if var_name.startswith("_"):
                     names_to_try = [var_name]
                 else:
-                    names_to_try = [f"_{var_name}", var_name]
+                    names_to_try = [var_name, f"_{var_name}"]
 
                 for attr_name in names_to_try:
                     # Skip our own name to avoid self-reference

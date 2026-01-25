@@ -19,19 +19,20 @@ class ResponseBodyWidget(Widget[Response]):
 
     ### Widgets ###
     _content_type_label: QLabel = new(bind="Content-Type: {_content_type}")
-    _body_text: QPlainTextEdit = new(bind="{body_text}", readOnly=True, content_type="{_content_type}")
+    _body_text: QPlainTextEdit = new(readOnly=True, content_type="{_content_type}")
 
 
 @widget(title="Headers")
 class ResponseHeadersWidget(Widget[Response]):
     ### Widgets ###
-    _headers: QTableView = new(bind="headers")
+    _headers: QTableView
 
 
+# TODO: only make this tab appear if there are cookies in the response
 @widget(title="Cookies")
 class ResponseCookiesWidget(Widget[Response]):
     ### Widgets ###
-    _cookies: QTableView = new(bind="cookies")
+    _cookies: QTableView
 
 
 @widget

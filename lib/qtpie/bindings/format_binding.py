@@ -51,6 +51,14 @@ def _get_all_annotations(record_type: type[Any]) -> dict[str, Any]:
     return getattr(resolved_type, "__annotations__", {})
 
 
+def _is_record_attr(record_type: type[Any], name: str, record_annotations: dict[str, Any]) -> bool:
+    """Check if name is a record field (annotation) or @property on the record type."""
+    if name in record_annotations:
+        return True
+    type_attr = getattr(record_type, name, None)
+    return isinstance(type_attr, property)
+
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -617,10 +625,11 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
             # Get root name to check against record fields
             normalized = name.replace("?.", ".")
             root_name = normalized.split(".")[0]
-            # Check if root_name could be a field on the record type
+            # Check if root_name could be a field or @property on the record type
             # Use _get_all_annotations to handle Union types (e.g., Collection | Request)
             record_annotations = _get_all_annotations(record_type)
-            if root_name in record_annotations or root_name.lstrip("_") in record_annotations:
+            stripped_root = root_name.lstrip("_")
+            if _is_record_attr(record_type, root_name, record_annotations) or _is_record_attr(record_type, stripped_root, record_annotations):
                 # This name is a record field - subscribe to the record proxy
                 try:
                     record = widget.record
@@ -634,7 +643,7 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                     # This is critical for enum fields where .name is an attribute access,
                     # not a nested observable.
                     if "." in normalized:
-                        actual_root = root_name if root_name in record_annotations else root_name.lstrip("_")
+                        actual_root = root_name if _is_record_attr(record_type, root_name, record_annotations) else stripped_root
                         target = object.__getattribute__(proxy, "_target")
                         if target is not None and hasattr(target, actual_root):
                             # Access the field through the proxy to get/create its Observable
@@ -927,19 +936,20 @@ def create_format_binding(
 
         # Add all variable values to context using root names
         # Resolution order:
-        # 1. Widget's explicit fields (QtPie fields, Variables) - highest priority
-        # 2. Record fields (for Widget[T]) - used when no widget field matches
-        # 3. Underscore fallback (widget._name for 'name')
+        # 1. Widget's explicit fields by EXACT name (QtPie fields, Variables) - highest priority
+        # 2. Record fields (for Widget[T]) - used when no exact widget field matches
+        # 3. Underscore fallback (widget._name for 'name') - AFTER record
         # 4. Parent widget hierarchy
         #
-        # Key insight: we want widget fields > record fields > builtins.
+        # Key insight: we want widget fields (exact) > record fields > underscore fallback > builtins.
         # The tricky part is that hasattr(widget, "type") returns True for Python's builtin type().
         # So we ONLY use hasattr() to check for QtPie fields (in config.fields) or Variables.
         for root_name in root_names:
-            # 1. Try explicit QtPie fields FIRST (e.g., 'name' -> widget.name where name is in config.fields)
+            # 1. Try explicit QtPie fields by EXACT name FIRST (e.g., 'name' -> widget.name)
+            # Do NOT check underscore variant here - that comes AFTER record check
             if hasattr(widget, "_qtpie_config"):
                 config = widget._qtpie_config  # pyright: ignore[reportPrivateUsage]
-                if root_name in config.fields or f"_{root_name}" in config.fields:
+                if root_name in config.fields:
                     raw_attr: Any = getattr(widget, root_name, None)
                     if raw_attr is not None:
                         if isinstance(raw_attr, Variable):
@@ -947,13 +957,13 @@ def create_format_binding(
                         else:
                             context[root_name] = raw_attr
                         continue
-            # Also check if it's a Variable directly (without config check)
+            # Also check if it's a Variable directly by exact name (without config check)
             raw_attr = getattr(widget, root_name, None)
             if raw_attr is not None and isinstance(raw_attr, Variable):
                 context[root_name] = raw_attr.value  # pyright: ignore[reportUnknownMemberType]
                 continue
 
-            # 2. Try record fields if Widget[T]
+            # 2. Try record fields if Widget[T] - BEFORE underscore fallback
             # This is checked SECOND so that widget fields take priority,
             # but record fields take priority over Python builtins.
             if hasattr(widget, "_qtpie_config"):
@@ -963,11 +973,11 @@ def create_format_binding(
                         record = widget.record
                         # record is a RecordVariable with .observable property (ObservableProxy)
                         proxy = record.observable
-                        # Check if this field exists on the record TYPE's __annotations__
-                        # This is more precise than hasattr() which catches inherited attrs
+                        # Check if this field exists on the record TYPE (annotation or @property)
                         record_type = config.record_type
                         record_annotations = _get_all_annotations(record_type)
-                        if root_name in record_annotations:
+                        is_record_field = root_name in record_annotations or isinstance(getattr(record_type, root_name, None), property)
+                        if is_record_field:
                             # Check if target is not None - if so, get the value
                             target: Any = object.__getattribute__(proxy, "_target")
                             if target is not None and hasattr(target, root_name):

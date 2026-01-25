@@ -23,7 +23,7 @@ class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
 class RequestAddressBarWidget(Widget[Request]):
     ### Widgets ###
     _request_method_chooser: QComboBox = new(bind=HttpMethod, selectedItem="method", classes=["flat", "method-chooser"])
-    _request_url: QLineEdit = new(bind="url", placeholderText="Enter request URL...", classes=["url-input"])
+    _url: QLineEdit = new(placeholderText="Enter request URL...", classes=["url-input"])
     _send_request_button: QPushButton = new("Send", clicked="on_send_request", enabled="{not is_sending}", classes=["btn-primary", "btn-send"])
 
 
@@ -35,7 +35,7 @@ class RequestParamsWidget(Widget[Request]):
     ### Widgets ###
     _header: QLabel = new("Query Parameters:", classes=["section-header"])
     _add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["btn-add"])
-    _table: QTableView = new(bind="query_params", appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"])
+    _query_params: QTableView = new(appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"])
 
     ### Methods ###
     def _on_add(self) -> None:
@@ -53,7 +53,7 @@ class RequestHeadersWidget(Widget[Request]):
     ### Widgets ###
     _header: QLabel = new("Headers:", classes=["section-header"])
     _add_button: QPushButton = new("+ Add", clicked="_on_add", classes=["btn-add"])
-    _table: QTableView = new(bind="headers", appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"])
+    _headers: QTableView = new(appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"])
     _stretch: Stretch
 
     ### Methods ###
@@ -68,14 +68,14 @@ class RequestHeadersWidget(Widget[Request]):
 class RequestAuthFormWidget(Widget[Auth]):
     ### Widgets ###
     # Basic Auth
-    _basic_username: QLineEdit = new(bind="username", label="Username:", visible="{type.name == 'BASIC'}")
-    _basic_password: QLineEdit = new(bind="password", label="Password:", echoMode=QLineEdit.EchoMode.Password, visible="{type.name == 'BASIC'}")
+    _username: QLineEdit = new(label="Username:", visible="{type.name == 'BASIC'}")
+    _password: QLineEdit = new(label="Password:", echoMode=QLineEdit.EchoMode.Password, visible="{type.name == 'BASIC'}")
     # Bearer Auth
-    _bearer_token: QLineEdit = new(bind="token", label="Token:", visible="{type.name == 'BEARER'}")
+    _token: QLineEdit = new(label="Token:", visible="{type.name == 'BEARER'}")
     # API Key Auth
-    _api_key_name: QLineEdit = new(bind="name", label="Name:", visible="{type.name == 'API_KEY'}")
-    _api_key_value: QLineEdit = new(bind="value", label="Value:", visible="{type.name == 'API_KEY'}")
-    _api_key_location_chooser: QComboBox = new(
+    _name: QLineEdit = new(label="Name:", visible="{type.name == 'API_KEY'}")
+    _value: QLineEdit = new(label="Value:", visible="{type.name == 'API_KEY'}")
+    _location: QComboBox = new(
         bind=ApiKeyLocation,
         format=API_KEY_LOCATION_LABELS.get,
         selectedItem="location",
@@ -89,7 +89,7 @@ class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     _header: QLabel = new("Authentication:", classes=["section-header"])
     _auth_type: QComboBox = new(bind=AuthType, format=AUTH_TYPE_LABELS.get, selectedItem="auth.type", classes=["auth-type-chooser"])
-    _auth_form: RequestAuthFormWidget = new(bind="auth")
+    _auth: RequestAuthFormWidget
     _stretch: Stretch
 
 
@@ -103,11 +103,9 @@ class RequestBodyWidget(Widget[Request]):
 
     ### Widgets ###
     _body_type_chooser: QComboBox = new(bind=BodyType, format=BODY_TYPE_LABELS.get, selectedItem="body_type")
-    _body_text: QPlainTextEdit = new(bind="body", visible="{body_type.name in ['JSON', 'XML', 'TEXT']}", content_type="{content_types[body_type]}", classes=["code-editor"])
+    _body: QPlainTextEdit = new(visible="{body_type.name in ['JSON', 'XML', 'TEXT']}", content_type="{content_types[body_type]}", classes=["code-editor"])
     _add_button: QPushButton = new("+ Add Field", clicked="_on_add_field", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", classes=["btn-add"])
-    _body_fields_table: QTableView = new(
-        bind="body_fields", visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"]
-    )
+    _body_fields: QTableView = new(visible="{body_type.name in ['FORM_URLENCODED', 'FORM_DATA']}", appendColumns=[DeleteRequestKeyValueWidget], classes=["key-value-table"])
     _stretch: Stretch
 
     ### Methods ###

@@ -39,11 +39,10 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
 
 
 @widget
-class CollectionsTreeWidget(Widget[Collection]):
+class CollectionsTreeWidget(Widget[Collection | None]):
     ### Widgets ###
     _filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
-    _collection_tree: QTreeView = new(
-        bind="items",
+    _items: QTreeView = new(
         children="items",
         widget=CollectionsTreeWidgetRow,
         expand=True,
@@ -65,7 +64,7 @@ class CollectionsTreeWidget(Widget[Collection]):
 @widget
 class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
-    _workspace_name_label: QLabel = new(bind="name")
-    _collection_tree_widget: CollectionsTreeWidget = new(bind="collection")
+    _workspace_name_label: QLabel = new(bind="Workspace: {name}")
+    _collection: CollectionsTreeWidget
     _environment_label: QLabel = new("Environment")
-    _environment_chooser: QComboBox = new(bind="environments", format="{name}", selectedItem="active_environment")
+    _environments: QComboBox = new(format="{name}", selectedItem="active_environment")
