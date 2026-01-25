@@ -14,6 +14,7 @@ from qtpy.QtWidgets import (
     QDialogButtonBox,
     QLayout,
     QPushButton,
+    QSplitter,
     QWidget,
 )
 
@@ -689,11 +690,6 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
         # Initialize buttons dict
         self._buttons = {}
 
-        # Create list widget fields
-        from .widget import _create_list_widget_fields
-
-        _create_list_widget_fields(self, config)  # type: ignore[arg-type]
-
         # Apply widget properties
         from .bindings import is_format_string
         from .translations.translatable import Translatable
@@ -773,13 +769,14 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                 # Track nested layouts
                 nested_layouts: dict[str, QLayout] = {}
 
-                # Track group boxes and frames by field name
+                # Track group boxes, frames, and splitters by field name
                 from qtpy.QtWidgets import QFrame, QGroupBox
 
                 groupboxes: dict[str, QGroupBox] = {}
                 frames: dict[str, QFrame] = {}
+                splitters: dict[str, QSplitter] = {}
 
-                # First pass: Create nested layouts, groupboxes, and frames
+                # First pass: Create nested layouts, splitters, groupboxes, and frames
                 for name in getattr(cls, "__annotations__", {}):
                     # Skip DialogButton fields
                     if any(bc.name == name for bc in config.button_configs):
@@ -790,6 +787,11 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             layout_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             setattr(self, name, layout_instance)
                             nested_layouts[name] = layout_instance
+                        elif field.is_splitter:
+                            # Create the splitter instance (but don't add to layout yet - preserve order)
+                            splitter_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            setattr(self, name, splitter_instance)
+                            splitters[name] = splitter_instance
                         elif field.is_groupbox:
                             # Create the groupbox instance with an internal layout for child widgets
                             from .widget import _create_groupbox_layout
@@ -809,6 +811,12 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             setattr(self, name, frame_instance)
                             frames[name] = frame_instance
 
+                # Create list widget fields (list[QWidget] = new(bind="..."))
+                # Must happen after splitters, groupboxes, frames are created so targets can be resolved
+                from .widget import _create_list_widget_fields
+
+                _create_list_widget_fields(self, config)  # type: ignore[arg-type]
+
                 # Second pass: Add widgets to layout (excluding DialogButton fields)
                 from qtpie.layout import Stretch
 
@@ -821,6 +829,7 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                     _create_spacer_item,
                     _get_target_container,
                     _get_target_layout,
+                    _get_target_splitter,
                     _validate_layout_params,
                 )
 
@@ -848,6 +857,20 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                 target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                 if target is not None:
                                     _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
+                            continue
+
+                        # Handle QSplitter - add to layout or parent splitter in order
+                        if field.is_splitter:
+                            splitter_instance = splitters.get(name)
+                            if splitter_instance is not None:
+                                # Check if splitter should go into another splitter (nested splitters)
+                                target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                                if target_splitter is not None:
+                                    target_splitter.addWidget(splitter_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
                             continue
 
                         # Handle QGroupBox - add to layout or parent groupbox/frame in order
@@ -880,6 +903,19 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                     target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                     if target is not None:
                                         _add_to_layout(target, frame_instance, config.layout, None, field.grid, None)
+                            continue
+
+                        # Skip list widget fields - they're handled by _create_list_widget_fields
+                        if field.is_list_widget:
+                            continue
+
+                        # Check if widget should go to a splitter instead of layout
+                        target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                        if target_splitter is not None:
+                            # Add to splitter, not layout
+                            widget_instance = getattr(self, name, None)
+                            if widget_instance is not None and isinstance(widget_instance, QWidget):
+                                target_splitter.addWidget(widget_instance)
                             continue
 
                         # Check if widget should go to a groupbox or frame instead of layout
@@ -959,6 +995,12 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                     var_label = raw_label
                                 grid = descriptor.grid  # type: ignore[assignment]
                                 target_layout_name = descriptor.target_layout
+
+                                # Check if Variable's widget should go to a splitter
+                                var_target_splitter = _get_target_splitter(splitters, descriptor.target_splitter)
+                                if var_target_splitter is not None:
+                                    var_target_splitter.addWidget(var.widget)
+                                    continue
 
                                 # Check if Variable's widget should go to a groupbox or frame
                                 var_target_group = _get_target_container(groupboxes, frames, descriptor.target_group)

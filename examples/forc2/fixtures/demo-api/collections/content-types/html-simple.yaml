@@ -1,0 +1,6 @@
+name: HTML Simple
+method: GET
+url: ${BASE_URL}/content/html/simple
+headers:
+  - name: Accept
+    value: text/html

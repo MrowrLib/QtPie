@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
-
-logger = logging.getLogger("qtpie.bindings")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -602,13 +599,6 @@ def apply_auto_bindings(
 
         # Resolve the binding source
         source = resolve_binding_source(host, bind_path)  # type: ignore[arg-type]
-        logger.debug(
-            "Model binding resolution: bind_path=%r, source=%s (type=%s), widget=%s",
-            bind_path,
-            source,
-            type(source).__name__ if source else None,
-            type(widget_instance).__name__,
-        )
         if source is None:
             # Source not found yet - may need to wait for record propagation.
             # Skip for now; apply_auto_bindings will be called again when record is set.
@@ -777,7 +767,6 @@ def apply_auto_bindings(
                             # Note: record_observable is actually an ObservableProxy which takes Callable[[], None]
                             # but we cast it to Observable[Any] above for type compatibility
                             record_observable.on_change(make_record_listener(widget_instance, host, bind_path, field_info, applied_record))  # type: ignore[arg-type]
-                            logger.debug("Registered record change listener for deferred model binding: bind_path=%s", bind_path)
                         else:
                             # Non-model widget (QLabel, QLineEdit, etc.) - set up deferred binding
                             # Listen to record Observable changes and apply binding when record becomes available
@@ -796,7 +785,6 @@ def apply_auto_bindings(
                                 return on_record_change
 
                             record_observable.on_change(make_simple_record_listener(widget_instance, host, bind_path, applied_simple))  # type: ignore[arg-type]
-                            logger.debug("Registered record change listener for deferred simple binding: bind_path=%s", bind_path)
                     else:
                         # Fallback: schedule deferred retries for parenting case.
                         # Use multiple attempts with increasing delays because the parent
@@ -876,7 +864,6 @@ def apply_auto_bindings(
                         return on_record_change
 
                     record_observable.on_change(make_simple_record_listener_nonmodel(widget_instance, host, bind_path, applied_simple))  # type: ignore[arg-type]
-                    logger.debug("Registered record change listener for deferred simple binding (non-model): bind_path=%s", bind_path)
 
             continue
 

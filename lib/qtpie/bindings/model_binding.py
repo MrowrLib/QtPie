@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, get_proxies_for, on_proxy_registered
 from qtpy.QtWidgets import QWidget
 
 from qtpie.models.reactive_table_model import DICT_KEY_COLUMN
-
-logger = logging.getLogger("qtpie.bindings")
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -183,14 +180,12 @@ def _setup_tree_proxy_watching(
                     return  # C++ object deleted
             except ImportError:
                 pass  # Not using PySide6, skip check
-            logger.debug("Proxy changed for %s, notifying tree model", type(item).__name__)
             try:
                 m.notify_item_changed(item)
             except RuntimeError:
                 pass  # C++ object deleted during call
 
         proxy.on_change(on_proxy_change)
-        logger.debug("Subscribed tree model to proxy changes for %s", type(item).__name__)
 
     def subscribe_to_item(item: Any) -> None:
         """Subscribe to all existing proxies for an item."""
@@ -223,7 +218,6 @@ def _setup_tree_proxy_watching(
         target_id = id(target)
         all_item_ids = get_all_items()
         if target_id in all_item_ids:
-            logger.debug("New proxy registered for tree item %s, subscribing", type(target).__name__)
             subscribe_to_proxy(target, proxy)
 
     on_proxy_registered(on_new_proxy)
@@ -274,14 +268,12 @@ def _setup_list_proxy_watching(
                     return  # C++ object deleted
             except ImportError:
                 pass  # Not using PySide6, skip check
-            logger.debug("Proxy changed for %s, notifying list model", type(item).__name__)
             try:
                 m.notify_item_changed(item)
             except RuntimeError:
                 pass  # C++ object deleted during call
 
         proxy.on_change(on_proxy_change)
-        logger.debug("Subscribed list model to proxy changes for %s", type(item).__name__)
 
     def subscribe_to_item(item: Any) -> None:
         """Subscribe to all existing proxies for an item."""
@@ -307,7 +299,6 @@ def _setup_list_proxy_watching(
         target_id = id(target)
         all_item_ids = get_all_items()
         if target_id in all_item_ids:
-            logger.debug("New proxy registered for list item %s, subscribing", type(target).__name__)
             subscribe_to_proxy(target, proxy)
 
     on_proxy_registered(on_new_proxy)
@@ -530,14 +521,6 @@ def apply_model_binding(
     from qtpie.bindings.selection_tree import setup_tree_selection_bindings
     from qtpie.variable import Variable as VarType
 
-    logger.debug(
-        "apply_model_binding: source=%s (type=%s), bind_path=%r, widget=%s",
-        source,
-        type(source).__name__,
-        bind_path,
-        type(widget_instance).__name__,
-    )
-
     obs_list: ObservableList[Any] | None = None
     root_variable: VarType[Any] | None = None
 
@@ -594,12 +577,6 @@ def apply_model_binding(
             # Source might be Observable[list] or ObservableProxy with nested list
             # Create a synced ObservableList that updates when source changes
             val = wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap()  # pyright: ignore[reportUnknownVariableType]
-            logger.debug(
-                "apply_model_binding: unwrapped val=%s (type=%s), wrapper=%s",
-                val,  # pyright: ignore[reportUnknownArgumentType]
-                type(val).__name__ if val is not None else None,  # pyright: ignore[reportUnknownArgumentType]
-                type(wrapper).__name__,  # pyright: ignore[reportUnknownArgumentType]
-            )
             if isinstance(val, ObservableList):
                 # Already an ObservableList - use it directly!
                 obs_list = val  # pyright: ignore[reportUnknownVariableType]
@@ -640,14 +617,6 @@ def apply_model_binding(
 
     if obs_list is None:
         return False
-
-    logger.debug(
-        "Model binding: widget=%s, bind_path=%s, list_size=%d, is_source_obs_list=%s",
-        type(widget_instance).__name__,
-        bind_path,
-        len(obs_list),
-        isinstance(source, ObservableList),
-    )
 
     # Decide which model type to use
     # QTableView (or explicit columns=) uses ReactiveTableModel
@@ -915,15 +884,12 @@ def apply_model_binding(
                 nested_list.on_remove(on_nested_remove)
                 nested_list.on_replace(on_nested_replace)
                 nested_list.on_clear(on_nested_clear)
-                logger.debug("Subscribed target to nested ObservableList changes for path=%s", path)
 
             def on_root_change(*_: Any) -> None:
                 nonlocal syncing
                 if syncing:
-                    logger.debug("on_root_change: skipped (syncing=True) for path=%s", path)
                     return
 
-                logger.debug("on_root_change: triggered for path=%s", path)
                 root_val: Any = root_var.value
                 if root_val is None:
                     if last_nested_list_id[0] != 0:
@@ -965,13 +931,6 @@ def apply_model_binding(
                 if isinstance(nested_val, (list, ObservableList)):
                     nested_id = id(cast(list[Any], nested_val))
                     if nested_id != last_nested_list_id[0]:
-                        logger.debug(
-                            "on_root_change: list identity changed for path=%s (old_id=%d, new_id=%d), syncing %d items",
-                            path,
-                            last_nested_list_id[0],
-                            nested_id,
-                            len(cast(list[Any], nested_val)),
-                        )
                         last_nested_list_id[0] = nested_id
                         syncing = True
                         try:
@@ -991,24 +950,11 @@ def apply_model_binding(
 
                             # Defer expandAll to after model updates
                             QTimer.singleShot(0, tree_widget.expandAll)  # type: ignore[attr-defined]
-                    else:
-                        logger.debug(
-                            "on_root_change: same list identity for path=%s (id=%d), skipping sync",
-                            path,
-                            nested_id,
-                        )
                 elif isinstance(nested_val, (dict, ObservableDict)):
                     # Handle dict -> list[(key, value)] conversion for QTableView
                     nested_dict = cast(dict[Any, Any], nested_val)
                     nested_id = id(nested_dict)
                     if nested_id != last_nested_list_id[0]:
-                        logger.debug(
-                            "on_root_change: dict identity changed for path=%s (old_id=%d, new_id=%d), syncing %d items",
-                            path,
-                            last_nested_list_id[0],
-                            nested_id,
-                            len(nested_dict),
-                        )
                         last_nested_list_id[0] = nested_id
                         syncing = True
                         try:
@@ -1039,7 +985,6 @@ def apply_model_binding(
 
             # Subscribe to root variable
             root_var.observable.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
-            logger.debug("Registered root sync callback for path=%s", path)
 
             # Also subscribe to any intermediate Variables along the path
             # e.g., for "active_environment.variables", subscribe to active_environment
@@ -1059,7 +1004,6 @@ def apply_model_binding(
                         if obs_id not in subscribed_ids:
                             obs.on_change(on_root_change)  # pyright: ignore[reportUnknownMemberType]
                             subscribed_ids.add(obs_id)
-                            logger.debug("Subscribed to intermediate Variable at part=%s for path=%s", part, path)
                         current_value = nested_attr.value
                     else:
                         current_value = nested_attr

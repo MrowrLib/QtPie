@@ -647,13 +647,18 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
                             continue
 
-                        # Handle QSplitter - add to layout in order
+                        # Handle QSplitter - add to layout or parent splitter in order
                         if field.is_splitter:
                             splitter_instance = splitters.get(name)
                             if splitter_instance is not None:
-                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
-                                if target is not None:
-                                    _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
+                                # Check if splitter should go into another splitter (nested splitters)
+                                target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                                if target_splitter is not None:
+                                    target_splitter.addWidget(splitter_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
                             continue
 
                         # Handle QGroupBox - add to layout or parent groupbox/frame in order

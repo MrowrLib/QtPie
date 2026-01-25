@@ -5,7 +5,13 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth_router, demo_router, posts_router, users_router
+from routers import (
+    auth_router,
+    content_types_router,
+    demo_router,
+    posts_router,
+    users_router,
+)
 
 RequestResponseEndpoint = Callable[[Request], Awaitable[Response]]
 
@@ -40,6 +46,7 @@ app.include_router(auth_router)
 app.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(posts_router, prefix="/posts", tags=["Posts"])
 app.include_router(demo_router, prefix="/demo", tags=["Demo"])
+app.include_router(content_types_router, prefix="/content", tags=["Content Types"])
 
 
 @app.get("/")
@@ -54,6 +61,15 @@ async def root():
             "users": ["/users", "/users/{id}", "/users/{id}/avatar"],
             "posts": ["/posts", "/posts/{id}/comments"],
             "demo": ["/demo/echo", "/demo/slow", "/demo/large", "/demo/error/{code}"],
+            "content": [
+                "/content/html/simple",
+                "/content/html/styled",
+                "/content/xml/simple",
+                "/content/json/detailed",
+                "/content/text/plain",
+                "/content/files",
+                "/content/files/{filename}",
+            ],
         },
     }
 

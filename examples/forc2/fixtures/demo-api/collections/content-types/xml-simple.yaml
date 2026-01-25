@@ -1,0 +1,6 @@
+name: XML Simple
+method: GET
+url: ${BASE_URL}/content/xml/simple
+headers:
+  - name: Accept
+    value: application/xml

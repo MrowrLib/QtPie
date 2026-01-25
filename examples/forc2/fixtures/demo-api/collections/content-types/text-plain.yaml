@@ -1,0 +1,6 @@
+name: Plain Text
+method: GET
+url: ${BASE_URL}/content/text/plain
+headers:
+  - name: Accept
+    value: text/plain

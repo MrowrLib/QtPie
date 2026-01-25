@@ -1,0 +1,6 @@
+name: List Available Files
+method: GET
+url: ${BASE_URL}/content/files
+headers:
+  - name: Accept
+    value: application/json

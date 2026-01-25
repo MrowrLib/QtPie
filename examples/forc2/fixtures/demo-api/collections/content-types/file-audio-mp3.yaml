@@ -1,0 +1,3 @@
+name: Download Audio (MP3)
+method: GET
+url: ${BASE_URL}/content/files/sound.mp3

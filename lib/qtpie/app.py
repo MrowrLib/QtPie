@@ -1186,13 +1186,18 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                                 _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
                         continue
 
-                    # Handle QSplitter - add to layout in order
+                    # Handle QSplitter - add to layout or parent splitter in order
                     if field.is_splitter:
                         splitter_instance = splitters.get(name)
                         if splitter_instance is not None:
-                            target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
-                            if target is not None:
-                                _add_to_layout_for_app(target, splitter_instance, config.layout, None, field.grid)
+                            # Check if splitter should go into another splitter (nested splitters)
+                            target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                            if target_splitter is not None:
+                                target_splitter.addWidget(splitter_instance)
+                            else:
+                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                if target is not None:
+                                    _add_to_layout_for_app(target, splitter_instance, config.layout, None, field.grid)
                         continue
 
                     # Handle QGroupBox - add to layout or parent groupbox/frame in order
@@ -1300,6 +1305,12 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                             var_label = descriptor.label
                             grid = descriptor.grid  # type: ignore[assignment]
                             target_layout_name = descriptor.target_layout
+
+                            # Check if Variable's widget should go to a splitter
+                            var_target_splitter = _get_target_splitter(splitters, descriptor.target_splitter)
+                            if var_target_splitter is not None:
+                                var_target_splitter.addWidget(var.widget)
+                                continue
 
                             # Check if Variable's widget should go to a groupbox or frame
                             var_target_group = _get_target_container(groupboxes, frames, descriptor.target_group)

@@ -579,11 +579,6 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
         setup_dock_tab_options(self, config)
 
-        # Create list widget fields (list[QWidget] = new(bind="..."))
-        from .widget import _create_list_widget_fields
-
-        _create_list_widget_fields(self, config)  # type: ignore[arg-type]
-
         # Pre-create bare Variables for selection bindings BEFORE creating dock fields
         # This allows groupSelectedDock="_var" to work with bare Variable[Dock[Any] | None] annotations
         from .bindings.apply import pre_create_selection_variables
@@ -790,6 +785,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                             setattr(self, name, frame_instance)
                             frames[name] = frame_instance
 
+                # Create list widget fields (list[QWidget] = new(bind="..."))
+                # Must happen after splitters, groupboxes, frames are created so targets can be resolved
+                from .widget import _create_list_widget_fields
+
+                _create_list_widget_fields(self, config)  # type: ignore[arg-type]
+
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 from qtpie.layout import Stretch
 
@@ -822,13 +823,18 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                     _add_layout_to_nested_layout(target, layout_instance, field.grid, name)
                             continue
 
-                        # Handle QSplitter - add to layout in order
+                        # Handle QSplitter - add to layout or parent splitter in order
                         if field.is_splitter:
                             splitter_instance = splitters.get(name)
                             if splitter_instance is not None:
-                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
-                                if target is not None:
-                                    _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
+                                # Check if splitter should go into another splitter (nested splitters)
+                                target_splitter = _get_target_splitter(splitters, field.target_splitter)
+                                if target_splitter is not None:
+                                    target_splitter.addWidget(splitter_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
                             continue
 
                         # Handle QGroupBox - add to layout or parent groupbox/frame in order
@@ -861,6 +867,10 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                     target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                     if target is not None:
                                         _add_to_layout(target, frame_instance, config.layout, None, field.grid, None)
+                            continue
+
+                        # Skip list widget fields - they're handled by _create_list_widget_fields
+                        if field.is_list_widget:
                             continue
 
                         # Check if widget should go to a splitter instead of layout
@@ -953,6 +963,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                 grid = descriptor.grid  # type: ignore[assignment]
                                 target_layout_name = descriptor.target_layout
 
+                                # Check if Variable's widget should go to a splitter
+                                var_target_splitter = _get_target_splitter(splitters, descriptor.target_splitter)
+                                if var_target_splitter is not None:
+                                    var_target_splitter.addWidget(var.widget)
+                                    continue
+
                                 # Check if Variable's widget should go to a groupbox or frame
                                 var_target_group = _get_target_container(groupboxes, frames, descriptor.target_group)
                                 if var_target_group is not None:
@@ -986,6 +1002,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                 _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
 
             self.setCentralWidget(central)
+        else:
+            # For windows without layouts, still create list widget fields
+            from .widget import _create_list_widget_fields
+
+            _create_list_widget_fields(self, config)  # type: ignore[arg-type]
 
         # Set up status bar widget if defined (status_bar or _status_bar field)
         # Note: Use `is None` check because Variable can be falsy (empty value)

@@ -602,11 +602,7 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
             result.append(source)
 
     # Try to resolve as binding source (full path) on current widget
-    import logging
-
-    _logger = logging.getLogger("qtpie.format_binding")
     source = resolve_binding_source(widget, name)
-    _logger.debug("_get_observables_for_name: resolve_binding_source(%r) -> %s (type=%s)", name, source, type(source).__name__ if source else None)
     if source is not None:
         add_source(source)
 
@@ -632,16 +628,6 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                     # Add proxy if not already in result (avoid duplicates)
                     if proxy not in result:
                         result.append(proxy)
-                        import logging
-
-                        target = object.__getattribute__(proxy, "_target")
-                        logging.getLogger("qtpie.bindings").warning(
-                            "DEBUG _get_observables_for_name: subscribed to proxy=%d for name=%s, target=%s (id=%d)",
-                            id(proxy),
-                            name,
-                            type(target).__name__ if target else "None",
-                            id(target) if target else 0,
-                        )
 
                     # For nested paths like "body_type.name", also get the Observable for
                     # the root field (body_type) so changes to it trigger recomputation.
@@ -655,11 +641,6 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
                             field_obs = getattr(proxy, actual_root)
                             if isinstance(field_obs, Observable) and field_obs not in result:
                                 result.append(cast(Observable[Any], field_obs))
-                                _logger.debug(
-                                    "_get_observables_for_name: added root field Observable for nested path %r -> %s",
-                                    name,
-                                    actual_root,
-                                )
                 except Exception:
                     pass
 
@@ -669,11 +650,9 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
 
     # For nested paths like "workspace.name", also try to subscribe to the ROOT Variable
     # This is critical because the root Variable's Observable is what changes when the value is replaced
-    _logger.debug("_get_observables_for_name: checking nested path, normalized=%r, has_dot=%s", normalized, "." in normalized)
     if "." in normalized:
         # Try root name directly on widget (handles descriptors like bare Variables)
         root_attr: Any = getattr(widget, root_name, None)
-        _logger.debug("_get_observables_for_name: root_attr from widget=%s (type=%s)", root_attr, type(root_attr).__name__ if root_attr else None)
         if root_attr is not None and isinstance(root_attr, Variable):
             add_source(cast(BindingSource, root_attr))
 
@@ -688,18 +667,14 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
         """
         parts = normalized.split(".")
         current_value: Any = root_var.value
-        _logger.debug("  traverse_and_subscribe_nested: parts=%s, root_value=%s", parts, type(current_value).__name__ if current_value else None)
         for part in parts[1:]:  # Skip root, traverse rest
             if current_value is None:
-                _logger.debug("    stopped at part=%s: current_value is None", part)
                 break
             nested_attr: Any = getattr(current_value, part, None)
-            _logger.debug("    part=%s, nested_attr=%s (type=%s)", part, nested_attr, type(nested_attr).__name__)
             if nested_attr is not None and isinstance(nested_attr, Variable):
                 nested_var = cast("Variable[Any, Any]", nested_attr)
                 nested_obs_id = id(nested_var.observable)
                 if not any(id(obs) == nested_obs_id for obs in result):
-                    _logger.debug("    -> subscribing to nested Variable!")
                     add_source(nested_var)
                 current_value = nested_var.value
             else:
@@ -827,11 +802,6 @@ def create_format_binding(
         setter: Callable to set the formatted value (e.g., label.setText).
         variable: Optional Variable/Observable to use for #self/#var resolution.
     """
-    import logging
-
-    logger = logging.getLogger("qtpie.format_binding")
-    logger.debug("create_format_binding: template=%r, widget=%s", template, type(widget).__name__)
-
     from qtpie.variable import Variable
 
     fields = _parse_format_fields(template)
@@ -840,7 +810,6 @@ def create_format_binding(
 
     # Extract all variable names/paths we need to observe
     var_names = _get_variable_names(fields)
-    logger.debug("  var_names=%s, fields=%s", var_names, [(f.expression, f.is_expression) for f in fields])
 
     # Check for special placeholder usage (can appear anywhere in expression)
     uses_self = any("#self" in f.expression for f in fields)
@@ -874,7 +843,6 @@ def create_format_binding(
 
     for name in var_names:
         obs_list = _get_observables_for_name(widget, name)
-        logger.debug("  _get_observables_for_name(%r) -> %d observables: %s", name, len(obs_list), [type(o).__name__ for o in obs_list])
         all_observables.extend(obs_list)
 
     # If we have a variable, subscribe to it too
@@ -915,11 +883,6 @@ def create_format_binding(
                         record_proxy = widget.record.observable
                         if record_proxy not in all_observables:
                             all_observables.append(record_proxy)
-                            logger.debug(
-                                "  Subscribed to record proxy for builtin-named field: %s (root=%s)",
-                                expr,
-                                root,
-                            )
                     except Exception:
                         pass
 
@@ -927,7 +890,6 @@ def create_format_binding(
     def compute() -> str:
         # Build context with current values using root names
         context: dict[str, Any] = {}
-        logger.debug("compute() called for template=%r", template)
 
         # Add #widget as 'widget_ref' in context if used
         if uses_widget:
@@ -1085,8 +1047,6 @@ def create_format_binding(
                             context[root_name] = found_var.value  # pyright: ignore[reportUnknownMemberType]
                             break
 
-        logger.debug("  context keys=%s, values=%s", list(context.keys()), {k: type(v).__name__ for k, v in context.items()})
-
         # Process each field and build the result
         result_parts: list[str] = []
 
@@ -1110,7 +1070,6 @@ def create_format_binding(
                         value = _eval_with_optional_chaining(eval_expr, context)
                     else:
                         value = eval(eval_expr, {"__builtins__": __builtins__}, context)  # noqa: S307
-                    logger.debug("  eval(%r) -> %s (type=%s)", eval_expr, value, type(value).__name__)
                     # Unwrap Observable/ObservableProxy/ObservableDict/ObservableList results
                     if isinstance(value, Observable):
                         value = value.get()  # pyright: ignore[reportUnknownVariableType]
@@ -1123,8 +1082,7 @@ def create_format_binding(
                     # If value is callable (method without parens), call it
                     if callable(value) and not isinstance(value, type):  # pyright: ignore[reportUnknownArgumentType]
                         value = value()
-                except Exception as e:
-                    logger.debug("  eval(%r) EXCEPTION: %s", eval_expr, e)
+                except Exception:
                     value = None  # Return None on errors (allows `or 'default'` in expressions)
 
                 # Apply format spec if present

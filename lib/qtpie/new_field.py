@@ -700,6 +700,8 @@ class NewField:
             self.is_splitter = True
             # Extract target layout reference (splitter can be in a layout)
             self._extract_target_layout()
+            # Extract target splitter reference (splitter can be nested in another splitter)
+            self._extract_target_splitter()
             # Extract bind= for property binding (e.g., bind="orientation")
             self.bind = self.kwargs.pop("bind", None)
             # Remaining kwargs are passed directly to QSplitter constructor

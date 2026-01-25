@@ -1,0 +1,6 @@
+name: HTML Styled
+method: GET
+url: ${BASE_URL}/content/html/styled
+headers:
+  - name: Accept
+    value: text/html

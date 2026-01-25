@@ -11,6 +11,7 @@ from .dock_widget_repeater import DockWidgetRepeater
 from .embed import EmbedConfig, embed
 from .entrypoint import entrypoint
 from .event import Event
+from .frame import Frame, frame
 from .layout import Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .messagebox import MessageBoxResult, confirm, messagebox
@@ -58,6 +59,7 @@ __all__ = [
     "DialogResult",
     "Dock",
     "EmbedConfig",
+    "Frame",
     "MessageBoxResult",
     "Stretch",
     "app",
@@ -91,6 +93,7 @@ __all__ = [
     "enable_dark_mode",
     "enable_light_mode",
     "entrypoint",
+    "frame",
     "is_dark_mode",
     "is_light_mode",
     "get_theme",
