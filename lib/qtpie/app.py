@@ -1092,7 +1092,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             _add_widget_to_groupbox,
             _add_widget_to_nested_layout,
             _create_spacer_item,
-            _get_target_groupbox,
+            _get_target_container,
             _get_target_layout,
             _get_target_splitter,
         )
@@ -1112,14 +1112,15 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             nested_layouts: dict[str, QLayout] = {}
 
             # Track splitters by field name for later reference
-            from qtpy.QtWidgets import QGroupBox, QSplitter
+            from qtpy.QtWidgets import QFrame, QGroupBox, QSplitter
 
             splitters: dict[str, QSplitter] = {}
 
-            # Track group boxes by field name for later reference
+            # Track group boxes and frames by field name for later reference
             groupboxes: dict[str, QGroupBox] = {}
+            frames: dict[str, QFrame] = {}
 
-            # First pass: Create nested layouts, splitters, and groupboxes (so they exist before items reference them)
+            # First pass: Create nested layouts, splitters, groupboxes, and frames (so they exist before items reference them)
             # Don't ADD them yet - that happens in second pass to preserve field order
             for name in getattr(cls, "__annotations__", {}):
                 if name in config.fields:
@@ -1145,6 +1146,16 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                         groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
                         setattr(app, name, groupbox_instance)
                         groupboxes[name] = groupbox_instance
+
+                    elif field.is_frame:
+                        # Create the frame instance with an internal layout for child widgets
+                        from qtpie.widget import _create_groupbox_layout
+
+                        frame_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                        # QFrame needs a layout for its children (based on inner_layout=)
+                        frame_instance.setLayout(_create_groupbox_layout(field.inner_layout))
+                        setattr(app, name, frame_instance)
+                        frames[name] = frame_instance
 
             # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
             from qtpie.layout import Stretch
@@ -1184,12 +1195,12 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                                 _add_to_layout_for_app(target, splitter_instance, config.layout, None, field.grid)
                         continue
 
-                    # Handle QGroupBox - add to layout or parent groupbox in order
+                    # Handle QGroupBox - add to layout or parent groupbox/frame in order
                     if field.is_groupbox:
                         groupbox_instance = groupboxes.get(name)
                         if groupbox_instance is not None:
-                            # Check if groupbox should go into another groupbox
-                            target_group = _get_target_groupbox(groupboxes, field.target_group)
+                            # Check if groupbox should go into another groupbox or frame
+                            target_group = _get_target_container(groupboxes, frames, field.target_group)
                             if target_group is not None:
                                 group_layout = target_group.layout()
                                 if group_layout is not None:
@@ -1198,6 +1209,22 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                                 target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                 if target is not None:
                                     _add_to_layout_for_app(target, groupbox_instance, config.layout, None, field.grid)
+                        continue
+
+                    # Handle QFrame - add to layout or parent groupbox/frame in order
+                    if field.is_frame:
+                        frame_instance = frames.get(name)
+                        if frame_instance is not None:
+                            # Check if frame should go into a groupbox or another frame
+                            target_group = _get_target_container(groupboxes, frames, field.target_group)
+                            if target_group is not None:
+                                group_layout = target_group.layout()
+                                if group_layout is not None:
+                                    group_layout.addWidget(frame_instance)
+                            else:
+                                target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                if target is not None:
+                                    _add_to_layout_for_app(target, frame_instance, config.layout, None, field.grid)
                         continue
 
                     # Check if widget should go to a splitter instead of layout
@@ -1209,10 +1236,10 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                             target_splitter.addWidget(widget_instance)
                         continue
 
-                    # Check if widget should go to a groupbox instead of layout
-                    target_group = _get_target_groupbox(groupboxes, field.target_group)
+                    # Check if widget should go to a groupbox or frame instead of layout
+                    target_group = _get_target_container(groupboxes, frames, field.target_group)
                     if target_group is not None:
-                        # Add to groupbox's internal layout, not main layout
+                        # Add to container's internal layout, not main layout
                         widget_instance = getattr(app, name, None)
                         if widget_instance is not None and isinstance(widget_instance, QWidget):
                             group_layout = target_group.layout()
@@ -1274,8 +1301,8 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                             grid = descriptor.grid  # type: ignore[assignment]
                             target_layout_name = descriptor.target_layout
 
-                            # Check if Variable's widget should go to a groupbox
-                            var_target_group = _get_target_groupbox(groupboxes, descriptor.target_group)
+                            # Check if Variable's widget should go to a groupbox or frame
+                            var_target_group = _get_target_container(groupboxes, frames, descriptor.target_group)
                             if var_target_group is not None:
                                 group_layout = var_target_group.layout()
                                 if group_layout is not None:

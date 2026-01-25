@@ -579,9 +579,10 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                 splitters: dict[str, QSplitter] = {}
 
                 # Track group boxes by field name for later reference
-                from qtpy.QtWidgets import QGroupBox
+                from qtpy.QtWidgets import QFrame, QGroupBox
 
                 groupboxes: dict[str, QGroupBox] = {}
+                frames: dict[str, QFrame] = {}
 
                 # First pass: Create nested layouts, splitters, and groupboxes (so they exist before items reference them)
                 # Don't ADD them yet - that happens in second pass to preserve field order
@@ -607,6 +608,14 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
                             setattr(self, name, groupbox_instance)
                             groupboxes[name] = groupbox_instance
+
+                        elif field.is_frame:
+                            # Create the frame instance with an internal layout for child widgets
+                            frame_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            # QFrame needs a layout for its children (based on inner_layout=)
+                            frame_instance.setLayout(_create_groupbox_layout(field.inner_layout))
+                            setattr(self, name, frame_instance)
+                            frames[name] = frame_instance
 
                 # Create list widget fields (list[QWidget] = new(bind="..."))
                 # Must happen after groupboxes are created so target_group can be resolved
@@ -647,12 +656,12 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     _add_to_layout(target, splitter_instance, config.layout, None, field.grid, None)
                             continue
 
-                        # Handle QGroupBox - add to layout or parent groupbox in order
+                        # Handle QGroupBox - add to layout or parent groupbox/frame in order
                         if field.is_groupbox:
                             groupbox_instance = groupboxes.get(name)
                             if groupbox_instance is not None:
-                                # Check if groupbox should go into another groupbox
-                                target_group = _get_target_groupbox(groupboxes, field.target_group)
+                                # Check if groupbox should go into another groupbox or frame
+                                target_group = _get_target_container(groupboxes, frames, field.target_group)
                                 if target_group is not None:
                                     group_layout = target_group.layout()
                                     if group_layout is not None:
@@ -661,6 +670,22 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
                                     if target is not None:
                                         _add_to_layout(target, groupbox_instance, config.layout, None, field.grid, None)
+                            continue
+
+                        # Handle QFrame - add to layout or parent groupbox/frame in order
+                        if field.is_frame:
+                            frame_instance = frames.get(name)
+                            if frame_instance is not None:
+                                # Check if frame should go into a groupbox or another frame
+                                target_group = _get_target_container(groupboxes, frames, field.target_group)
+                                if target_group is not None:
+                                    group_layout = target_group.layout()
+                                    if group_layout is not None:
+                                        group_layout.addWidget(frame_instance)
+                                else:
+                                    target = _get_target_layout(qt_layout, nested_layouts, field.target_layout)
+                                    if target is not None:
+                                        _add_to_layout(target, frame_instance, config.layout, None, field.grid, None)
                             continue
 
                         # Check if widget should go to a splitter instead of layout
@@ -672,10 +697,10 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                 target_splitter.addWidget(widget_instance)
                             continue
 
-                        # Check if widget should go to a groupbox instead of layout
-                        target_group = _get_target_groupbox(groupboxes, field.target_group)
+                        # Check if widget should go to a groupbox or frame instead of layout
+                        target_group = _get_target_container(groupboxes, frames, field.target_group)
                         if target_group is not None:
-                            # Add to groupbox's internal layout, not main layout
+                            # Add to container's internal layout, not main layout
                             widget_instance = getattr(self, name, None)
                             if widget_instance is not None and isinstance(widget_instance, QWidget):
                                 group_layout = target_group.layout()
@@ -759,8 +784,8 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                     var_target_splitter.addWidget(var.widget)
                                     continue
 
-                                # Check if Variable's widget should go to a groupbox
-                                var_target_group = _get_target_groupbox(groupboxes, descriptor.target_group)
+                                # Check if Variable's widget should go to a groupbox or frame
+                                var_target_group = _get_target_container(groupboxes, frames, descriptor.target_group)
                                 if var_target_group is not None:
                                     group_layout = var_target_group.layout()
                                     if group_layout is not None:
@@ -905,22 +930,28 @@ def _get_target_splitter(
     return splitters.get(target_name)
 
 
-def _get_target_groupbox(
+def _get_target_container(
     groupboxes: dict[str, Any],
+    frames: dict[str, Any],
     target_name: str | None,
 ) -> Any | None:
-    """Get the target group box for adding widgets.
+    """Get the target container (QGroupBox or QFrame) for adding widgets.
 
     Args:
         groupboxes: Dictionary of group boxes by field name.
-        target_name: Name of the target group box (or None for no group box).
+        frames: Dictionary of frames by field name.
+        target_name: Name of the target container (or None for no container).
 
     Returns:
-        The target QGroupBox, or None if no group box target.
+        The target QGroupBox or QFrame, or None if no container target.
     """
     if target_name is None:
         return None
-    return groupboxes.get(target_name)
+    # Check groupboxes first, then frames
+    result = groupboxes.get(target_name)
+    if result is not None:
+        return result
+    return frames.get(target_name)
 
 
 def _create_groupbox_layout(inner_layout: str | None) -> QLayout:
@@ -2186,14 +2217,14 @@ def _add_repeater_to_layout(widget: Widget[Any], repeater: QWidget, field_name: 
                 splitter.addWidget(repeater)
                 return
 
-    # Check if repeater should go to a groupbox
+    # Check if repeater should go to a groupbox or frame
     if field.target_group is not None:
-        groupbox = getattr(widget, field.target_group, None)
-        if groupbox is not None:
-            from qtpy.QtWidgets import QGroupBox
+        container = getattr(widget, field.target_group, None)
+        if container is not None:
+            from qtpy.QtWidgets import QFrame, QGroupBox
 
-            if isinstance(groupbox, QGroupBox):
-                group_layout = groupbox.layout()
+            if isinstance(container, (QGroupBox, QFrame)):
+                group_layout = container.layout()
                 if group_layout is not None:
                     group_layout.addWidget(repeater)
                     return

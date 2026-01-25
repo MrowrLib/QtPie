@@ -112,6 +112,30 @@ def is_qgroupbox(cls: type | None) -> bool:
     return _is_subclass_of(cls, QGroupBox)
 
 
+def is_qframe(cls: type | None) -> bool:
+    """Check if cls is a QFrame subclass (but not QGroupBox or other derived types)."""
+    from qtpy.QtWidgets import (
+        QAbstractScrollArea,
+        QFrame,
+        QGroupBox,
+        QLabel,
+        QStackedWidget,
+    )
+
+    # QFrame is base class for many widgets - only match actual QFrame usage
+    # Exclude QGroupBox (handled separately), QLabel, QStackedWidget
+    # Also exclude QAbstractScrollArea subclasses (QListView, QTableView, QTreeView, etc.)
+    if cls is None:
+        return False
+    if not _is_subclass_of(cls, QFrame):
+        return False
+    # Exclude types that inherit from QFrame but aren't used as container frames
+    if _is_subclass_of(cls, QGroupBox, QLabel, QStackedWidget, QAbstractScrollArea):
+        return False
+    # Only match QFrame itself or custom subclasses that aren't the above
+    return cls is QFrame or (issubclass(cls, QFrame) and not _is_subclass_of(cls, QGroupBox, QLabel, QStackedWidget, QAbstractScrollArea))
+
+
 def is_model_widget(cls: type | None) -> bool:
     """Check if cls is a model widget (QComboBox, QListView, QTableView, QTreeView)."""
     from qtpy.QtWidgets import QComboBox, QListView, QTableView, QTreeView

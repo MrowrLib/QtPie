@@ -14,6 +14,7 @@ from .utils.type_checks import (
     is_model_widget,
     is_qaction,
     is_qcombobox,
+    is_qframe,
     is_qgroupbox,
     is_qlayout,
     is_qlistview,
@@ -217,8 +218,10 @@ class NewField:
         self.target_splitter: str | None = None  # Splitter to add this widget to (field name reference)
         # QGroupBox support
         self.is_groupbox: bool = False  # True if field type is QGroupBox
-        self.target_group: str | None = None  # Group box to add this widget to (field name reference)
-        self.inner_layout: str | None = None  # Layout type for QGroupBox children ("vertical", "horizontal", "form", "grid")
+        self.target_group: str | None = None  # Group box or frame to add this widget to (field name reference)
+        self.inner_layout: str | None = None  # Layout type for QGroupBox/QFrame children ("vertical", "horizontal", "form", "grid")
+        # QFrame support
+        self.is_frame: bool = False  # True if field type is QFrame
         # Dock[T] support
         self.is_dock: bool = False
         self.dock_content_type: type | None = None  # The widget type inside Dock[T]
@@ -712,6 +715,18 @@ class NewField:
             # Extract inner_layout for groupbox's internal layout type
             self._extract_inner_layout()
             # Remaining kwargs are passed directly to QGroupBox constructor
+            return
+
+        # Handle QFrame - widget container without title (borderless or styled)
+        if self._is_qframe_type():
+            self.is_frame = True
+            # Extract target layout reference (frame can be in a layout)
+            self._extract_target_layout()
+            # Extract target group reference (frame can be nested in another groupbox/frame)
+            self._extract_target_group()
+            # Extract inner_layout for frame's internal layout type
+            self._extract_inner_layout()
+            # Remaining kwargs are passed directly to QFrame constructor
             return
 
         # Handle list[Dock[W]] - creates a DockWidgetRepeater bound to a list source
@@ -1562,6 +1577,10 @@ class NewField:
     def _is_qgroupbox_type(self) -> bool:
         """Check if the field type is QGroupBox."""
         return is_qgroupbox(self.field_type)
+
+    def _is_qframe_type(self) -> bool:
+        """Check if the field type is QFrame."""
+        return is_qframe(self.field_type)
 
     def _extract_target_layout(self) -> None:
         """Extract layout= parameter for targeting nested layouts.

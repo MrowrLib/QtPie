@@ -1550,14 +1550,8 @@ class TestComboBoxRecordVariableDictBinding:
         # Should have 2 items (one per dict entry)
         assert_that(instance._combo.count()).is_equal_to(2)
 
-    @pytest.mark.xfail(reason="Child widget dict binding with late record assignment not fully supported for QComboBox")
     def test_record_dict_via_child_widget_binding(self, base_class, decorator, qt: QtDriver) -> None:
-        """Child Widget[Response] with QComboBox bind='headers' works.
-
-        Note: This test is xfail because ReactiveListModel doesn't have the same
-        root sync callback as ReactiveTableModel for dict bindings. QTableView
-        passes this test but QComboBox doesn't auto-sync when parent sets record later.
-        """
+        """Child Widget[Response] with QComboBox bind='headers' works."""
         from qtpie import Widget, widget
 
         @widget
