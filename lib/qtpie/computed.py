@@ -57,23 +57,32 @@ def _extract_var_names(expression: str) -> list[str]:
     """Extract potential variable names from an expression.
 
     Args:
-        expression: Expression like "{_count * 2}" or "{_first} {_last}"
+        expression: Expression like "_count * 2" or "{_first} {_last}"
 
     Returns:
         List of potential variable names found in the expression.
     """
     var_names: list[str] = []
 
-    # Find all {expression} blocks
-    for match in _VAR_PATTERN.finditer(expression):
-        expr_content = match.group(1)
-        # Find all identifiers in the expression
-        for ident_match in _IDENTIFIER_PATTERN.finditer(expr_content):
+    if "{" not in expression:
+        # No braces - scan the whole expression for identifiers
+        for ident_match in _IDENTIFIER_PATTERN.finditer(expression):
             ident = ident_match.group()
             # Skip Python builtins and keywords
             if ident not in {"len", "str", "int", "float", "bool", "list", "dict", "set", "True", "False", "None", "if", "else", "and", "or", "not", "in"}:
                 if ident not in var_names:
                     var_names.append(ident)
+    else:
+        # Find all {expression} blocks
+        for match in _VAR_PATTERN.finditer(expression):
+            expr_content = match.group(1)
+            # Find all identifiers in the expression
+            for ident_match in _IDENTIFIER_PATTERN.finditer(expr_content):
+                ident = ident_match.group()
+                # Skip Python builtins and keywords
+                if ident not in {"len", "str", "int", "float", "bool", "list", "dict", "set", "True", "False", "None", "if", "else", "and", "or", "not", "in"}:
+                    if ident not in var_names:
+                        var_names.append(ident)
 
     return var_names
 
@@ -90,6 +99,10 @@ class _ComputedDescriptor:
         self._inner_type = inner_type
         # Cache for per-instance Computed objects
         self._instance_cache: dict[int, Computed[Any]] = {}
+        # Cache for on_change callbacks per instance (for re-subscription)
+        self._on_change_cache: dict[int, Any] = {}
+        # Cache for subscribed record proxies per instance
+        self._subscribed_proxies: dict[int, list[Any]] = {}
 
     @overload
     def __get__(self, obj: None, objtype: type) -> Computed[Any]: ...
@@ -124,6 +137,16 @@ class _ComputedDescriptor:
         Returns:
             A Computed that updates when dependencies change.
         """
+        import sys
+
+        # Get module globals so eval can access classes, enums, etc. from the user's module
+        module_globals: dict[str, Any] = {}
+        context_class = type(context)  # pyright: ignore[reportUnknownVariableType] - context is Any
+        if hasattr(context_class, "__module__"):  # pyright: ignore[reportUnknownArgumentType]
+            module = sys.modules.get(context_class.__module__)
+            if module is not None:
+                module_globals = dict(vars(module))
+
         # Find all Variables this expression depends on
         var_names = _extract_var_names(self._expression)
         # Capture our own name to avoid self-reference in compute()
@@ -211,23 +234,36 @@ class _ComputedDescriptor:
                                     eval_context[field_name] = getattr(record.value, field_name)
 
             # Evaluate the expression
-            # Handle both "{expr}" format and plain expressions
+            # Three cases:
+            # 1. No braces at all: "_count * 2" → treat whole string as expression
+            # 2. Single brace wrapping all: "{_count * 2}" → unwrap and eval
+            # 3. Format string: "Count: {_count}" → replace each {expr} block
             expr = self._expression
-            if expr.startswith("{") and expr.endswith("}") and expr.count("{") == 1:
-                # Simple single expression: "{_count * 2}"
+
+            # Merge module globals with eval context (eval_context takes priority)
+            full_context = {**module_globals, **eval_context}
+
+            if "{" not in expr:
+                # Case 1: No braces - whole string is the expression
+                try:
+                    return eval(expr, {"__builtins__": __builtins__}, full_context)  # noqa: S307
+                except Exception:
+                    return None
+            elif expr.startswith("{") and expr.endswith("}") and expr.count("{") == 1:
+                # Case 2: Single expression wrapped in braces: "{_count * 2}"
                 expr = expr[1:-1]
                 try:
-                    return eval(expr, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
+                    return eval(expr, {"__builtins__": __builtins__}, full_context)  # noqa: S307
                 except Exception:
                     return None
             else:
-                # Format string: "{_first} {_last}"
+                # Case 3: Format string with multiple parts: "Count: {_count}"
                 result = self._expression
                 for match in _VAR_PATTERN.finditer(self._expression):
                     expr_content = match.group(1)
                     full_match = match.group(0)
                     try:
-                        value = eval(expr_content, {"__builtins__": __builtins__}, eval_context)  # noqa: S307
+                        value = eval(expr_content, {"__builtins__": __builtins__}, full_context)  # noqa: S307
                         result = result.replace(full_match, str(value))
                     except Exception:
                         result = result.replace(full_match, "")
@@ -252,7 +288,44 @@ class _ComputedDescriptor:
             if hasattr(proxy, "on_change"):
                 proxy.on_change(lambda: on_change())
 
+        # Store the callback and context for potential re-subscription
+        obj_id = id(context)
+        self._on_change_cache[obj_id] = on_change
+        self._subscribed_proxies[obj_id] = list(observable_proxies)
+
         return computed
+
+    def resubscribe_to_record(self, context: Any) -> None:
+        """Re-subscribe to the current record proxy after record replacement.
+
+        Called by _propagate_record_to_child when a widget's record is replaced.
+        """
+        obj_id = id(context)
+        on_change = self._on_change_cache.get(obj_id)
+        if on_change is None:
+            return
+
+        # Get the current record proxy
+        if not hasattr(context, "_qtpie_config"):
+            return
+        config = context._qtpie_config
+        if not hasattr(config, "record_type") or config.record_type is None:
+            return
+        if not hasattr(context, "record") or not hasattr(context.record, "observable"):
+            return
+
+        new_record_proxy = context.record.observable
+        subscribed = self._subscribed_proxies.get(obj_id, [])
+
+        # Only subscribe if this is a new proxy we haven't seen
+        if new_record_proxy not in subscribed:
+            if hasattr(new_record_proxy, "on_change"):
+                new_record_proxy.on_change(lambda: on_change())
+            subscribed.append(new_record_proxy)
+            self._subscribed_proxies[obj_id] = subscribed
+
+        # Trigger immediate recompute with new record data
+        on_change()
 
 
 def create_computed_descriptor(
@@ -262,3 +335,24 @@ def create_computed_descriptor(
 ) -> _ComputedDescriptor:
     """Create a computed descriptor. Used by NewField."""
     return _ComputedDescriptor(name, expression, inner_type)
+
+
+def resubscribe_computed_to_record(widget: Any) -> None:
+    """Re-subscribe all Computed values on a widget to the current record.
+
+    Called after a widget's record is replaced (e.g., by _propagate_record_to_child).
+    This ensures Computed values that depend on record fields get the new proxy's changes.
+
+    Args:
+        widget: The widget whose Computed values should be re-subscribed.
+    """
+    # Find all _ComputedDescriptor attributes on the widget's class
+    widget_type = type(widget)  # pyright: ignore[reportUnknownVariableType] - widget is Any
+    for attr_name in dir(widget_type):  # pyright: ignore[reportUnknownArgumentType]
+        try:
+            descriptor = type(widget).__dict__.get(attr_name)
+            if isinstance(descriptor, _ComputedDescriptor):
+                descriptor.resubscribe_to_record(widget)
+        except Exception:
+            # Skip any errors - descriptor access can sometimes fail
+            pass

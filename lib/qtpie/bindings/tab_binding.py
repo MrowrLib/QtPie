@@ -153,6 +153,11 @@ def _propagate_record_to_child(host: QWidget, child: QWidget) -> None:
         # Re-apply bindings on child now that record is set
         apply_auto_bindings(child, child_config)  # type: ignore[arg-type]
 
+        # Re-subscribe Computed values to the new record proxy
+        from qtpie.computed import resubscribe_computed_to_record
+
+        resubscribe_computed_to_record(child)
+
         # Resolve deferred bindings on child (e.g., Widget[Auth] with bind="auth")
         # These may have been deferred because the parent's record was not set during init
         from qtpie.new_fields import _resolve_deferred_bindings  # type: ignore[reportPrivateUsage]

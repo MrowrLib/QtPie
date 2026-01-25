@@ -29,24 +29,15 @@ class ResponseStatsWidget(Widget[Response]):
 @widget(title="Body")
 class ResponseBodyWidget(Widget[Response]):
     ### Variables ###
-    # TODO! I want this :) it doesn't exist yet. But  want it!!!
-    content_type_prefix: Computed[str] = new(bind="headers['content-type'].split(';')[0] if 'content-type' in headers else ''")
-
-    # # or it could be Variable[str] with like a computed= kwarg, I dunno?
-    # content_type_label: Var[str] = new(compute="{headers['content-type'].split(';')[0] if 'content-type' in headers else 'unknown'}")
+    # Remove everything after the ;, if any, in the content-type
+    content_type: Computed[str] = new("{headers['content-type'].split(';')[0] if 'content-type' in headers else ''}")
 
     ### Widgets ###
-    # content_type_label: QLabel = new(bind="Content-Type: {headers['content-type']}")
-
-    # TODO: I'd love a COMPUTED property! for binding. so we could bind content_type="{computed_content_type}"
-    content_type_label: QLabel = new(bind="Content-Type: {headers['content-type'].split(';')[0] if 'content-type' in headers else 'unknown'}")
-
-    # body_text: QPlainTextEdit = new(bind="{body.decode('utf-8', errors='ignore')}", readOnly=True, content_type="{headers['content-type']}")
-    # Remove everything after the ;, if any, in the content-type
+    content_type_label: QLabel = new(bind="THE Content-Type: {content_type}")
     body_text: QPlainTextEdit = new(
         bind="{body.decode('utf-8', errors='ignore')}",
         readOnly=True,
-        content_type="{headers['content-type'].split(';')[0] if 'content-type' in headers else ''}",
+        content_type="{content_type}",
     )
 
 
