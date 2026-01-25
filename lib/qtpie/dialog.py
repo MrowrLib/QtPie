@@ -774,7 +774,7 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                 nested_layouts: dict[str, QLayout] = {}
 
                 # Track group boxes by field name
-                from qtpy.QtWidgets import QGroupBox, QVBoxLayout
+                from qtpy.QtWidgets import QGroupBox
 
                 groupboxes: dict[str, QGroupBox] = {}
 
@@ -791,8 +791,11 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             nested_layouts[name] = layout_instance
                         elif field.is_groupbox:
                             # Create the groupbox instance with an internal layout for child widgets
+                            from .widget import _create_groupbox_layout
+
                             groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
-                            groupbox_instance.setLayout(QVBoxLayout())
+                            # QGroupBox needs a layout for its children (based on inner_layout=)
+                            groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
                             setattr(self, name, groupbox_instance)
                             groupboxes[name] = groupbox_instance
 
@@ -803,6 +806,7 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                     _add_layout_to_nested_layout,
                     _add_spacer_to_layout,
                     _add_stretch_to_layout,
+                    _add_widget_to_groupbox,
                     _add_widget_to_nested_layout,
                     _create_spacer_item,
                     _get_target_groupbox,
@@ -860,7 +864,9 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                             if widget_instance is not None and isinstance(widget_instance, QWidget):
                                 group_layout = target_group.layout()
                                 if group_layout is not None:
-                                    group_layout.addWidget(widget_instance)
+                                    # Resolve Translatable labels
+                                    group_label = field.label.resolve() if isinstance(field.label, Translatable) else field.label
+                                    _add_widget_to_groupbox(group_layout, widget_instance, group_label, field.grid)
                             continue
 
                         # Determine target layout
@@ -933,7 +939,7 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                 if var_target_group is not None:
                                     group_layout = var_target_group.layout()
                                     if group_layout is not None:
-                                        group_layout.addWidget(var.widget)
+                                        _add_widget_to_groupbox(group_layout, var.widget, var_label, grid)
                                     continue
 
                             target = _get_target_layout(qt_layout, nested_layouts, target_layout_name)

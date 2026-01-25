@@ -743,7 +743,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 nested_layouts: dict[str, QLayout] = {}
 
                 # Track splitters by field name for later reference
-                from qtpy.QtWidgets import QGroupBox, QSplitter, QVBoxLayout
+                from qtpy.QtWidgets import QGroupBox, QSplitter
 
                 splitters: dict[str, QSplitter] = {}
 
@@ -771,16 +771,18 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
                         elif field.is_groupbox:
                             # Create the groupbox instance with an internal layout for child widgets
+                            from .widget import _create_groupbox_layout
+
                             groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
-                            # QGroupBox needs a layout for its children
-                            groupbox_instance.setLayout(QVBoxLayout())
+                            # QGroupBox needs a layout for its children (based on inner_layout=)
+                            groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
                             setattr(self, name, groupbox_instance)
                             groupboxes[name] = groupbox_instance
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 from qtpie.layout import Stretch
 
-                from .widget import _get_target_groupbox, _get_target_splitter
+                from .widget import _add_widget_to_groupbox, _get_target_groupbox, _get_target_splitter
 
                 for name in getattr(cls, "__annotations__", {}):
                     if name in dock_field_names or name in variable_dock_field_names:
@@ -851,7 +853,9 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                             if widget_instance is not None and isinstance(widget_instance, QWidget):
                                 group_layout = target_group.layout()
                                 if group_layout is not None:
-                                    group_layout.addWidget(widget_instance)
+                                    # Resolve Translatable labels
+                                    group_label = field.label.resolve() if isinstance(field.label, Translatable) else field.label
+                                    _add_widget_to_groupbox(group_layout, widget_instance, group_label, field.grid)
                             continue
 
                         # Determine target layout
@@ -927,7 +931,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                                 if var_target_group is not None:
                                     group_layout = var_target_group.layout()
                                     if group_layout is not None:
-                                        group_layout.addWidget(var.widget)
+                                        _add_widget_to_groupbox(group_layout, var.widget, var_label, grid)
                                     continue
 
                             # Determine target layout

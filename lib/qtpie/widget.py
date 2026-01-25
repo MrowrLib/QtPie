@@ -579,7 +579,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                 splitters: dict[str, QSplitter] = {}
 
                 # Track group boxes by field name for later reference
-                from qtpy.QtWidgets import QGroupBox, QVBoxLayout
+                from qtpy.QtWidgets import QGroupBox
 
                 groupboxes: dict[str, QGroupBox] = {}
 
@@ -603,8 +603,8 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                         elif field.is_groupbox:
                             # Create the groupbox instance with an internal layout for child widgets
                             groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
-                            # QGroupBox needs a layout for its children
-                            groupbox_instance.setLayout(QVBoxLayout())
+                            # QGroupBox needs a layout for its children (based on inner_layout=)
+                            groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
                             setattr(self, name, groupbox_instance)
                             groupboxes[name] = groupbox_instance
 
@@ -680,7 +680,11 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             if widget_instance is not None and isinstance(widget_instance, QWidget):
                                 group_layout = target_group.layout()
                                 if group_layout is not None:
-                                    group_layout.addWidget(widget_instance)
+                                    # Resolve Translatable labels
+                                    from qtpie.translations.translatable import Translatable
+
+                                    group_label = field.label.resolve() if isinstance(field.label, Translatable) else field.label
+                                    _add_widget_to_groupbox(group_layout, widget_instance, group_label, field.grid)
                             continue
 
                         # Determine target layout
@@ -760,7 +764,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                                 if var_target_group is not None:
                                     group_layout = var_target_group.layout()
                                     if group_layout is not None:
-                                        group_layout.addWidget(var.widget)
+                                        _add_widget_to_groupbox(group_layout, var.widget, var_label, grid)
                                     continue
 
                             # Determine target layout
@@ -917,6 +921,65 @@ def _get_target_groupbox(
     if target_name is None:
         return None
     return groupboxes.get(target_name)
+
+
+def _create_groupbox_layout(inner_layout: str | None) -> QLayout:
+    """Create the appropriate layout for a QGroupBox based on inner_layout parameter.
+
+    Args:
+        inner_layout: Layout type string ("vertical", "horizontal", "form", "grid")
+                      or None for default (vertical).
+
+    Returns:
+        The QLayout instance to use for the groupbox.
+    """
+    from qtpy.QtWidgets import QFormLayout, QGridLayout, QHBoxLayout, QVBoxLayout
+
+    if inner_layout == "horizontal":
+        return QHBoxLayout()
+    elif inner_layout == "form":
+        return QFormLayout()
+    elif inner_layout == "grid":
+        return QGridLayout()
+    else:
+        # Default to vertical
+        return QVBoxLayout()
+
+
+def _add_widget_to_groupbox(
+    group_layout: QLayout,
+    widget: QWidget,
+    label: str | None = None,
+    grid: tuple[int, ...] | None = None,
+) -> None:
+    """Add a widget to a groupbox's layout, handling form/grid layouts properly.
+
+    Args:
+        group_layout: The groupbox's layout (may be QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout).
+        widget: The widget to add.
+        label: Label for form layouts.
+        grid: Grid position (row, col) or (row, col, rowspan, colspan) for grid layouts.
+    """
+    from qtpy.QtWidgets import QFormLayout, QGridLayout
+
+    if isinstance(group_layout, QFormLayout):
+        # Form layout needs addRow(label, widget)
+        group_layout.addRow(label or "", widget)
+    elif isinstance(group_layout, QGridLayout):
+        # Grid layout needs position
+        if grid is not None:
+            if len(grid) == 2:
+                group_layout.addWidget(widget, grid[0], grid[1])
+            elif len(grid) >= 4:
+                group_layout.addWidget(widget, grid[0], grid[1], grid[2], grid[3])
+            else:
+                group_layout.addWidget(widget)
+        else:
+            # No grid position - just add to next row
+            group_layout.addWidget(widget)
+    else:
+        # VBox/HBox - just addWidget
+        group_layout.addWidget(widget)
 
 
 def _add_stretch_to_layout(layout: QLayout, factor: int = 1) -> None:

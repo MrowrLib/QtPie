@@ -8,7 +8,7 @@
 
 import pytest
 from assertpy import assert_that
-from qtpy.QtWidgets import QGroupBox, QLabel, QLineEdit, QVBoxLayout
+from qtpy.QtWidgets import QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QVBoxLayout
 
 from qtpie import Variable, WidgetRepeater, new
 from qtpie.testing import QtDriver
@@ -261,3 +261,116 @@ class TestGroupBox:
 
         # Repeater contains 2 labels
         assert_that(instance._labels.widget_count()).is_equal_to(2)
+
+    def test_groupbox_inner_layout_vertical(self, base_class, decorator, qt: QtDriver) -> None:
+        """QGroupBox with explicit inner_layout='vertical'."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Vertical Group", inner_layout="vertical")
+            label1: QLabel = new("Label 1", group="_group")
+            label2: QLabel = new("Label 2", group="_group")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QVBoxLayout)
+        assert_that(group_layout.count()).is_equal_to(2)
+
+    def test_groupbox_inner_layout_horizontal(self, base_class, decorator, qt: QtDriver) -> None:
+        """QGroupBox with inner_layout='horizontal'."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Horizontal Group", inner_layout="horizontal")
+            label1: QLabel = new("Label 1", group="_group")
+            label2: QLabel = new("Label 2", group="_group")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QHBoxLayout)
+        assert_that(group_layout.count()).is_equal_to(2)
+
+    def test_groupbox_inner_layout_form(self, base_class, decorator, qt: QtDriver) -> None:
+        """QGroupBox with inner_layout='form' and label= on children."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Form Group", inner_layout="form")
+            name: QLineEdit = new(group="_group", label="Name:")
+            email: QLineEdit = new(group="_group", label="Email:")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QFormLayout)
+        assert_that(group_layout.rowCount()).is_equal_to(2)
+
+        # Check labels were created
+        name_label = group_layout.itemAt(0, QFormLayout.ItemRole.LabelRole).widget()
+        assert_that(name_label.text()).is_equal_to("Name:")
+
+        email_label = group_layout.itemAt(1, QFormLayout.ItemRole.LabelRole).widget()
+        assert_that(email_label.text()).is_equal_to("Email:")
+
+    def test_groupbox_inner_layout_grid(self, base_class, decorator, qt: QtDriver) -> None:
+        """QGroupBox with inner_layout='grid' and grid= on children."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Grid Group", inner_layout="grid")
+            btn_00: QLabel = new("(0,0)", group="_group", grid=(0, 0))
+            btn_01: QLabel = new("(0,1)", group="_group", grid=(0, 1))
+            btn_10: QLabel = new("(1,0)", group="_group", grid=(1, 0))
+            btn_11: QLabel = new("(1,1)", group="_group", grid=(1, 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QGridLayout)
+        assert_that(group_layout.count()).is_equal_to(4)
+
+        # Check grid positions
+        assert_that(group_layout.itemAtPosition(0, 0).widget().text()).is_equal_to("(0,0)")
+        assert_that(group_layout.itemAtPosition(0, 1).widget().text()).is_equal_to("(0,1)")
+        assert_that(group_layout.itemAtPosition(1, 0).widget().text()).is_equal_to("(1,0)")
+        assert_that(group_layout.itemAtPosition(1, 1).widget().text()).is_equal_to("(1,1)")
+
+    def test_groupbox_inner_layout_form_with_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in form-layout groupbox with label=."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Form Group", inner_layout="form")
+            _age: Variable[int, QSpinBox] = new(25)(group="_group", label="Age:")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QFormLayout)
+        assert_that(group_layout.rowCount()).is_equal_to(1)
+
+        # Check label
+        age_label = group_layout.itemAt(0, QFormLayout.ItemRole.LabelRole).widget()
+        assert_that(age_label.text()).is_equal_to("Age:")
+
+    def test_groupbox_inner_layout_grid_with_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Variable[T, W] in grid-layout groupbox with grid=."""
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _group: QGroupBox = new("Grid Group", inner_layout="grid")
+            _value: Variable[int, QSpinBox] = new(10)(group="_group", grid=(0, 0))
+            _label: Variable[str, QLabel] = new("Hello")(group="_group", grid=(0, 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        group_layout = instance._group.layout()
+        assert_that(group_layout).is_instance_of(QGridLayout)
+
+        item_00 = group_layout.itemAtPosition(0, 0)
+        assert_that(item_00.widget()).is_instance_of(QSpinBox)
+
+        item_01 = group_layout.itemAtPosition(0, 1)
+        assert_that(item_01.widget()).is_instance_of(QLabel)

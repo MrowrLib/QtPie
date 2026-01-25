@@ -218,6 +218,7 @@ class NewField:
         # QGroupBox support
         self.is_groupbox: bool = False  # True if field type is QGroupBox
         self.target_group: str | None = None  # Group box to add this widget to (field name reference)
+        self.inner_layout: str | None = None  # Layout type for QGroupBox children ("vertical", "horizontal", "form", "grid")
         # Dock[T] support
         self.is_dock: bool = False
         self.dock_content_type: type | None = None  # The widget type inside Dock[T]
@@ -708,6 +709,8 @@ class NewField:
             self._extract_target_layout()
             # Extract target group reference (groupbox can be nested in another groupbox)
             self._extract_target_group()
+            # Extract inner_layout for groupbox's internal layout type
+            self._extract_inner_layout()
             # Remaining kwargs are passed directly to QGroupBox constructor
             return
 
@@ -1614,6 +1617,19 @@ class NewField:
                 self.target_group = group_kwarg.name
             elif isinstance(group_kwarg, str):
                 self.target_group = group_kwarg
+
+    def _extract_inner_layout(self) -> None:
+        """Extract inner_layout= parameter for QGroupBox internal layout type.
+
+        Handles:
+        - inner_layout="vertical" → QVBoxLayout (default if not specified)
+        - inner_layout="horizontal" → QHBoxLayout
+        - inner_layout="form" → QFormLayout
+        - inner_layout="grid" → QGridLayout
+        """
+        inner_layout_kwarg = self.kwargs.pop("inner_layout", None)
+        if inner_layout_kwarg is not None and isinstance(inner_layout_kwarg, str):
+            self.inner_layout = inner_layout_kwarg
 
     def _extract_dock_kwargs(self, source: dict[str, Any], *, full: bool = False) -> None:
         """Extract dock-specific kwargs from source dict into self.dock_* fields.
