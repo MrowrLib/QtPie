@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from qtpie import Event, State, Var, new, state
+from qtpie import State, Var, new, state
 
 from .auth import Auth
 from .body import BodyType
@@ -30,7 +30,7 @@ class RequestKeyValue:
     enabled: bool = True
 
 
-@state(on_save="_do_save")
+@state
 class Request(State):
     ### Variables ###
     name: Var[str] = new("")
@@ -43,9 +43,6 @@ class Request(State):
     body_fields: Var[list[RequestKeyValue]] = new([])
     auth: Var[Auth | None] = new(None)
     filename: Var[str | None] = new(None)
-
-    # Events
-    on_save: Event
 
     ### Methods ###
     def _get_full_path(self) -> Path | None:
@@ -68,10 +65,14 @@ class Request(State):
 
         return None
 
-    def _do_save(self) -> None:
-        """Save this request to disk."""
+    def save(self, path: Path | None = None) -> None:
+        """Save this request to disk.
+
+        If path is not provided, walks the state_parent chain to determine it.
+        """
         from ..format import save_request
 
-        path = self._get_full_path()
+        if path is None:
+            path = self._get_full_path()
         if path:
             save_request(self, path)

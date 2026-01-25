@@ -3,7 +3,6 @@
 
 from pathlib import Path
 
-import pytest
 from assertpy import assert_that
 from forc2.domain import Collection, HttpMethod, Request, Workspace
 from forc2.format import load_collection, save_collection
@@ -19,8 +18,8 @@ class TestWorkspace:
         assert_that(ws.path.value).is_none()
         assert_that(ws.collection.value).is_none()
 
-    def test_set_path_loads_collection(self, tmp_path: Path) -> None:
-        """Setting path reactively loads the collection."""
+    def test_load_workspace(self, tmp_path: Path) -> None:
+        """Workspace.load() loads collection from disk."""
         # Create a workspace with collections/ subfolder
         workspace_dir = tmp_path / "my-workspace"
         workspace_dir.mkdir()
@@ -29,55 +28,18 @@ class TestWorkspace:
         (coll_dir / "_collection.yaml").write_text("name: My API\n")
         (coll_dir / "test.yaml").write_text("name: Test Request\nmethod: GET\nurl: /test\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert_that(ws.collection.value).is_not_none()
         assert ws.collection.value is not None
         assert_that(ws.collection.value.name.value).is_equal_to("My API")
         assert_that(list(ws.collection.value.items.value)).is_length(1)
 
-    def test_set_path_none_unloads(self, tmp_path: Path) -> None:
-        """Setting path to None clears the collection."""
-        # Create a workspace with collections/ subfolder
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir()
-        coll_dir = workspace_dir / "collections"
-        coll_dir.mkdir()
-        (coll_dir / "_collection.yaml").write_text("name: API\n")
-
-        ws = Workspace()
-        ws.path.value = workspace_dir
-        assert_that(ws.collection.value).is_not_none()
-
-        # Unload
-        ws.path.value = None
-        assert_that(ws.collection.value).is_none()
-
-    def test_change_path_switches_collection(self, tmp_path: Path) -> None:
-        """Changing path loads a different collection."""
-        # Create two workspaces
-        ws1_dir = tmp_path / "workspace1"
-        ws1_dir.mkdir()
-        coll1 = ws1_dir / "collections"
-        coll1.mkdir()
-        (coll1 / "_collection.yaml").write_text("name: API 1\n")
-
-        ws2_dir = tmp_path / "workspace2"
-        ws2_dir.mkdir()
-        coll2 = ws2_dir / "collections"
-        coll2.mkdir()
-        (coll2 / "_collection.yaml").write_text("name: API 2\n")
-
-        ws = Workspace()
-
-        ws.path.value = ws1_dir
-        assert ws.collection.value is not None
-        assert_that(ws.collection.value.name.value).is_equal_to("API 1")
-
-        ws.path.value = ws2_dir
-        assert ws.collection.value is not None
-        assert_that(ws.collection.value.name.value).is_equal_to("API 2")
+    def test_load_nonexistent_returns_none(self, tmp_path: Path) -> None:
+        """Workspace.load() returns None for nonexistent folder."""
+        ws = Workspace.load(tmp_path / "does-not-exist")
+        assert_that(ws).is_none()
 
     def test_collection_state_parent_is_workspace(self, tmp_path: Path) -> None:
         """Loaded collection has workspace as state_parent."""
@@ -87,15 +49,14 @@ class TestWorkspace:
         coll_dir.mkdir()
         (coll_dir / "_collection.yaml").write_text("name: API\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert ws.collection.value is not None
         assert_that(ws.collection.value.state_parent).is_same_as(ws)
 
-    @pytest.mark.skip(reason="on_save is commented out in Workspace")
     def test_save_writes_to_disk(self, tmp_path: Path) -> None:
-        """on_save.emit() saves the collection to disk."""
+        """workspace.save() saves the collection to disk."""
         # Create initial workspace
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
@@ -103,19 +64,55 @@ class TestWorkspace:
         coll_dir.mkdir()
         (coll_dir / "_collection.yaml").write_text("name: Original\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
+        assert ws is not None
 
         # Modify
         assert ws.collection.value is not None
         ws.collection.value.name.value = "Modified"
 
         # Save
-        ws.on_save.emit()  # pyright: ignore[reportUnknownMemberType,reportAttributeAccessIssue]
+        ws.save()
 
         # Reload and check
         reloaded = load_collection(coll_dir)
         assert_that(reloaded.name.value).is_equal_to("Modified")
+
+    def test_add_collection(self, tmp_path: Path) -> None:
+        """Workspace.add_collection() creates a new top-level collection."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: Root\n")
+
+        ws = Workspace.load(workspace_dir)
+        assert ws is not None
+
+        new_coll = ws.add_collection("My New Collection")
+
+        assert_that(new_coll.name.value).is_equal_to("My New Collection")
+        assert_that(new_coll.state_parent).is_same_as(ws.collection.value)
+        assert ws.collection.value is not None
+        assert new_coll in ws.collection.value.items.value
+
+    def test_add_request(self, tmp_path: Path) -> None:
+        """Workspace.add_request() creates a new top-level request."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: Root\n")
+
+        ws = Workspace.load(workspace_dir)
+        assert ws is not None
+
+        new_req = ws.add_request("Get Users")
+
+        assert_that(new_req.name.value).is_equal_to("Get Users")
+        assert_that(new_req.state_parent).is_same_as(ws.collection.value)
+        assert ws.collection.value is not None
+        assert new_req in ws.collection.value.items.value
 
 
 class TestRequestGetFullPath:
@@ -131,9 +128,9 @@ class TestRequestGetFullPath:
         (coll_dir / "_collection.yaml").write_text("name: API\n")
         (coll_dir / "test-req.yaml").write_text("name: Test\nmethod: GET\nurl: /test\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert ws.collection.value is not None
         request = ws.collection.value.items.value[0]
         assert isinstance(request, Request)
@@ -167,9 +164,9 @@ class TestRequestGetFullPath:
         (sub_dir / "_collection.yaml").write_text("name: Users\n")
         (sub_dir / "get-user.yaml").write_text("name: Get User\nmethod: GET\nurl: /users/1\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert ws.collection.value is not None
         sub_coll = ws.collection.value.items.value[0]
         assert isinstance(sub_coll, Collection)
@@ -182,11 +179,11 @@ class TestRequestGetFullPath:
         assert_that(path.parts[-3:]).is_equal_to(("collections", "users", "get-user.yaml"))
 
 
-class TestRequestOnSave:
-    """Tests for Request.on_save event."""
+class TestRequestSave:
+    """Tests for Request.save() method."""
 
-    def test_on_save_writes_to_disk(self, tmp_path: Path) -> None:
-        """Emitting on_save saves the request to its path."""
+    def test_save_writes_to_disk(self, tmp_path: Path) -> None:
+        """request.save() saves the request to its path."""
         # Create workspace structure
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir()
@@ -195,9 +192,9 @@ class TestRequestOnSave:
         (coll_dir / "_collection.yaml").write_text("name: API\n")
         (coll_dir / "test.yaml").write_text("name: Test\nmethod: GET\nurl: /original\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert ws.collection.value is not None
         request = ws.collection.value.items.value[0]
         assert isinstance(request, Request)
@@ -206,13 +203,40 @@ class TestRequestOnSave:
         request.url.value = "/modified"
 
         # Save
-        request.on_save.emit()
+        request.save()
 
         # Reload and check
         reloaded = load_collection(coll_dir)
         reloaded_req = reloaded.items.value[0]
         assert isinstance(reloaded_req, Request)
         assert_that(reloaded_req.url.value).is_equal_to("/modified")
+
+
+class TestCollectionSave:
+    """Tests for Collection.save() method."""
+
+    def test_save_writes_to_disk(self, tmp_path: Path) -> None:
+        """collection.save() saves the collection to its path."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: Original\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+
+        # Modify
+        ws.collection.value.name.value = "Modified"
+
+        # Save just the collection
+        ws.collection.value.save()
+
+        # Reload and check
+        reloaded = load_collection(coll_dir)
+        assert_that(reloaded.name.value).is_equal_to("Modified")
 
 
 class TestWorkspaceEnvironments:
@@ -242,9 +266,9 @@ variables:
     value: https://api.example.com
 """)
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert_that(list(ws.environments.value)).is_length(2)
         # Sorted alphabetically
         assert_that(ws.environments.value[0].name.value).is_equal_to("Development")
@@ -262,9 +286,9 @@ variables:
         env_dir.mkdir()
         (env_dir / "dev.yaml").write_text("name: Dev\n")
 
-        ws = Workspace()
-        ws.path.value = workspace_dir
+        ws = Workspace.load(workspace_dir)
 
+        assert ws is not None
         assert_that(ws.environments.value[0].state_parent).is_same_as(ws)
 
     def test_load_demo_api_environments(self) -> None:
@@ -273,9 +297,9 @@ variables:
         if not fixtures.exists():
             return
 
-        ws = Workspace()
-        ws.path.value = fixtures
+        ws = Workspace.load(fixtures)
 
+        assert ws is not None
         # Should have loaded environments
         assert_that(list(ws.environments.value)).is_length(2)
 

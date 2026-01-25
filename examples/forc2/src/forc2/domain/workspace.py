@@ -10,6 +10,7 @@ from qtpie import State, Var, new, state
 from .collection import Collection
 from .environment import Environment
 from .http_client import HttpClient
+from .request import Request
 
 
 @state
@@ -22,9 +23,6 @@ class Workspace(State):
     active_environment_name: Var[str | None] = new(None, onChange="_on_active_environment_name_changed")
     path: Var[Path | None] = new(None)
     http_client: Var[HttpClient] = new()
-
-    ### Events ###
-    # on_save: Event
 
     ### Static Methods ###
     @staticmethod
@@ -53,13 +51,53 @@ class Workspace(State):
             self.active_environment_name = active_env.name.value
         self._updating_active_environment = False
 
-    # def _do_save(self) -> None:
-    #     from ..format import save_collection
+    def _ensure_root_collection(self) -> Collection:
+        """Ensure root collection exists, creating it if needed."""
+        if self.collection() is None:
+            root = Collection()
+            root.name.value = "collections"
+            root.filename.value = "collections"
+            root.state_parent = self
+            self.collection = root
 
-    #     if self.collection.value is not None and self.path.value is not None:
-    #         # Save to 'collections/' subfolder within workspace path
-    #         collections_path = self.path.value / "collections"
-    #         save_collection(self.collection.value, collections_path)
+        root = self.collection()
+        assert root is not None
+        return root
+
+    def add_collection(self, name: str = "") -> Collection:
+        """Create and add a new top-level Collection to this workspace."""
+        root = self._ensure_root_collection()
+        return root.add_collection(name)
+
+    def add_request(self, name: str = "") -> Request:
+        """Create and add a new top-level Request to this workspace."""
+        root = self._ensure_root_collection()
+        return root.add_request(name)
+
+    def save(self) -> None:
+        """Save the entire workspace to disk (collections + environments)."""
+        from ..format import save_collection, save_environment
+
+        if self.path() is None:
+            return
+
+        workspace_path = self.path()
+        assert workspace_path is not None
+
+        # Save collections
+        collection = self.collection()
+        if collection is not None:
+            collections_path = workspace_path / "collections"
+            save_collection(collection, collections_path)
+
+        # Save environments
+        if self.environments():
+            environments_path = workspace_path / "environments"
+            environments_path.mkdir(parents=True, exist_ok=True)
+            for env in self.environments():
+                filename = env.filename.value or env.name.value
+                env_path = environments_path / f"{filename}.yaml"
+                save_environment(env, env_path)
 
 
 def load_workspace(folder: Path) -> Workspace | None:
