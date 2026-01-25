@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QLabel
 
-from qtpie import AppBase, Dialog, Menu, State, Widget, WidgetBase, Window, app, dialog, menu, state, widget, window
+from qtpie import AppBase, Dialog, Frame, GroupBox, Menu, State, Widget, WidgetBase, Window, app, dialog, frame, groupbox, menu, state, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -27,13 +27,15 @@ class AppBaseWithSignals[T = None](QObject, AppBase[T]):
     pass
 
 
-# Class types that support QWidget children and layouts (Widget, Window, Dialog, App)
+# Class types that support QWidget children and layouts (Widget, Window, Dialog, App, Frame)
 WIDGET_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
     pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
 # All class types including Menu (for features that work on all)
@@ -44,6 +46,8 @@ ALL_CLASS_TYPES = [
     pytest.param(Menu, menu, id="Menu"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
 # Widget only - for features that only work on basic Widget (not Window/App/Dialog)
@@ -53,13 +57,15 @@ WIDGET_ONLY = [
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
 ]
 
-# Widget, Window, and Dialog - for features that work on QWidget-based classes
+# Widget, Window, Dialog, and Frame - for features that work on QWidget-based classes
 # Used for name=/classes= tests since App is not a QWidget
 QWIDGET_CLASS_TYPES = [
     pytest.param(Widget, widget, id="Widget"),
     pytest.param(Window, window, id="Window"),
     pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
 # Window and App only - for features that require QMainWindow (docks, menus, etc.)
@@ -76,6 +82,8 @@ RECORD_CLASS_TYPES = [
     pytest.param(Window, window, id="Window"),
     pytest.param(Dialog, dialog, id="Dialog"),
     pytest.param(AppBase, app, id="App"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
 # All class types including State - for features that work on all Variable hosts
@@ -87,6 +95,8 @@ ALL_CLASS_TYPES_WITH_STATE = [
     pytest.param(Menu, menu, id="Menu"),
     pytest.param(AppBase, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
     pytest.param(State, state, id="State"),
 ]
 
@@ -100,6 +110,8 @@ SIGNAL_CLASS_TYPES = [
     pytest.param(Menu, menu, id="Menu"),
     pytest.param(AppBaseWithSignals, app, id="App"),
     pytest.param(WidgetBaseLabel, widget, id="WidgetBase"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
 
