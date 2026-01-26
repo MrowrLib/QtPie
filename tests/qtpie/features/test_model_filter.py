@@ -1751,3 +1751,143 @@ class TestFilterWithStateObjects:
         for row in range(3):
             editor = instance._tree.indexWidget(model.index(row, 0))
             assert_that(editor).described_as(f"Cycle 3: row {row}").is_not_none()
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFilterWithNestedChildWidgetVariable:
+    """Filter referencing a Variable on a child widget.
+
+    This tests the pattern where:
+    - Parent widget has a child widget (_actions)
+    - Child widget has a Variable (filter_text)
+    - Parent's filter expression references {_actions.filter_text}
+    """
+
+    def test_filter_child_widget_variable_simple(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using Variable from child widget - simple case."""
+
+        # Child widget with filter Variable
+        @widget(layout="horizontal")
+        class ActionsWidget(Widget):
+            filter_text: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _actions: ActionsWidget = new()
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("Fido", 3),
+                    Dog("Rex", 5),
+                    Dog("Buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="{_actions.filter_text} in {name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # No filter - all items shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Filter for "id" via child widget's Variable - should match "Fido"
+        instance._actions.filter_text.value = "id"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Filter for "ex" - matches "Rex"
+        instance._actions.filter_text.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Clear filter - back to all items
+        instance._actions.filter_text.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_child_widget_variable_with_method_call(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter using Variable from child widget with method call like .lower()."""
+
+        @widget(layout="horizontal")
+        class ActionsWidget(Widget):
+            filter_text: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _actions: ActionsWidget = new()
+            _dogs: Variable[list[Dog]] = new(
+                [
+                    Dog("FIDO", 3),
+                    Dog("Rex", 5),
+                    Dog("buddy", 2),
+                ]
+            )
+            _list: QListView = new(
+                bind="_dogs",
+                filter="{_actions.filter_text.lower()} in {name.lower()}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        model = instance._list.model()
+
+        # No filter - all items shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Case-insensitive filter for "fido" - should match "FIDO"
+        instance._actions.filter_text.value = "FIDO"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Filter for "buddy" - matches "buddy"
+        instance._actions.filter_text.value = "BUDDY"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Clear filter
+        instance._actions.filter_text.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_filter_child_widget_variable_with_treeview(self, base_class, decorator, qt: QtDriver) -> None:
+        """Filter on QTreeView using Variable from child widget - matches Forc pattern."""
+
+        @widget(layout="horizontal")
+        class CollectionsTreeActionsWidget(Widget):
+            filter_text: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _actions: CollectionsTreeActionsWidget = new()
+            _items: Variable[list[StateDog]] = new([])
+            _tree: QTreeView = new(
+                bind="_items",
+                headerHidden=True,
+                filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create State objects
+        fido = StateDog()
+        fido.name.value = "Fido"
+
+        rex = StateDog()
+        rex.name.value = "Rex"
+
+        buddy = StateDog()
+        buddy.name.value = "Buddy"
+
+        instance._items.value = [fido, rex, buddy]
+
+        model = instance._tree.model()
+
+        # No filter - all shown
+        assert_that(model.rowCount()).is_equal_to(3)
+
+        # Filter via child widget
+        instance._actions.filter_text.value = "fido"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Change filter
+        instance._actions.filter_text.value = "ex"
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Clear filter
+        instance._actions.filter_text.value = ""
+        assert_that(model.rowCount()).is_equal_to(3)

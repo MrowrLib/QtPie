@@ -689,6 +689,27 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
             else:
                 current_value = nested_attr
 
+    def traverse_and_subscribe_from_object(root_obj: Any) -> None:
+        """Traverse nested path starting from a plain object (not a Variable).
+
+        e.g., for "_actions.filter_text" where _actions is a child widget,
+        traverse to find filter_text Variable on the widget.
+        """
+        parts = normalized.split(".")
+        current_value: Any = root_obj
+        for part in parts[1:]:  # Skip root, traverse rest
+            if current_value is None:
+                break
+            nested_attr: Any = getattr(current_value, part, None)
+            if nested_attr is not None and isinstance(nested_attr, Variable):
+                nested_var = cast("Variable[Any, Any]", nested_attr)
+                nested_obs_id = id(nested_var.observable)
+                if not any(id(obs) == nested_obs_id for obs in result):
+                    add_source(nested_var)
+                current_value = nested_var.value
+            else:
+                current_value = nested_attr
+
     # Track if we found the root Variable on current widget (for nested paths)
     found_root_on_widget = False
     if "." in normalized:
@@ -704,6 +725,12 @@ def _get_observables_for_name(widget: Widget[Any] | Window[Any], name: str) -> l
 
                     # Traverse nested path to find and subscribe to nested Variables
                     traverse_and_subscribe_nested(root_var)
+                    found_root_on_widget = True
+                    break
+                elif root_attr is not None:
+                    # Root is a plain object (e.g., child widget) - traverse into it
+                    # to find and subscribe to nested Variables
+                    traverse_and_subscribe_from_object(root_attr)
                     found_root_on_widget = True
                     break
             except Exception:

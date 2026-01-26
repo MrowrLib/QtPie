@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, override
 
@@ -10,7 +11,6 @@ from qtpy.QtCore import QModelIndex, QPersistentModelIndex, QSortFilterProxyMode
 
 from qtpie.bindings.format_binding import (
     _BUILTINS,  # pyright: ignore[reportPrivateUsage]
-    _extract_ast_names,  # pyright: ignore[reportPrivateUsage]
     _get_observables_for_name,  # pyright: ignore[reportPrivateUsage]
     _parse_format_fields,  # pyright: ignore[reportPrivateUsage]
 )
@@ -21,6 +21,92 @@ if TYPE_CHECKING:
 
 # Names that come from the item, not the widget
 _ITEM_CONTEXT_NAMES = frozenset({"item", "self"})
+
+
+def _extract_attribute_chains(expr: str) -> set[str]:
+    """Extract full attribute chains from a Python expression using AST.
+
+    For subscription purposes, we need full paths like "_actions.filter_text",
+    not just root names like "_actions".
+
+    Example: "_actions.filter_text.lower()" → {"_actions.filter_text"}
+    Example: "x.y.z + a.b" → {"x.y.z", "a.b"}
+    Example: "len(name)" → {"name"}
+    """
+    normalized = expr.replace("?.", ".")
+    try:
+        tree = ast.parse(normalized, mode="eval")
+    except SyntaxError:
+        return set()
+
+    chains: set[str] = set()
+
+    def get_chain(node: ast.expr) -> str | None:
+        """Recursively build attribute chain from node."""
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            parent = get_chain(node.value)
+            if parent:
+                return f"{parent}.{node.attr}"
+        return None
+
+    for node in ast.walk(tree):
+        # For attribute access, get the full chain
+        if isinstance(node, ast.Attribute):
+            chain = get_chain(node)
+            if chain:
+                chains.add(chain)
+        # For bare names (not part of attribute chain), add them too
+        elif isinstance(node, ast.Name):
+            # Check if this Name is the value of an Attribute (skip those)
+            # We only want standalone names
+            # ast.walk gives us all nodes, so we need to check parent context
+            # Simpler: just add all names, duplicates with chains are fine
+            chains.add(node.id)
+
+    return chains
+
+
+class _VariableUnwrapper:
+    """Wrapper that auto-unwraps Variables when accessed via attribute.
+
+    When a child widget is put in the eval context, accessing its Variable
+    attributes returns the Variable object, not its value. This wrapper
+    intercepts attribute access and returns the value for Variables.
+    """
+
+    __slots__ = ("_wrapped",)
+
+    def __init__(self, obj: Any) -> None:
+        object.__setattr__(self, "_wrapped", obj)
+
+    def __getattr__(self, name: str) -> Any:
+        from qtpie.variable import Variable
+
+        wrapped = object.__getattribute__(self, "_wrapped")
+        attr = getattr(wrapped, name)
+
+        # If it's a Variable, return its value
+        if isinstance(attr, Variable):
+            obs: Any = attr.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
+            if isinstance(obs, Observable):
+                return obs.get()  # pyright: ignore[reportUnknownVariableType]
+            elif isinstance(obs, ObservableList):
+                return obs.to_list()  # pyright: ignore[reportUnknownVariableType]
+            elif isinstance(obs, ObservableDict):
+                return obs.to_dict()  # pyright: ignore[reportUnknownVariableType]
+            elif isinstance(obs, ObservableSet):
+                return obs.to_set()  # pyright: ignore[reportUnknownVariableType]
+            else:  # ObservableProxy
+                return obs.unwrap()  # pyright: ignore[reportUnknownMemberType]
+
+        # If it's another object that might have Variables, wrap it too
+        # (for nested paths like _actions.toolbar.filter_text)
+        if hasattr(attr, "__dict__") and not callable(attr):
+            return _VariableUnwrapper(attr)
+
+        return attr
 
 
 class ReactiveFilterProxyModel(QSortFilterProxyModel):
@@ -146,31 +232,37 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         all_names: set[str] = set()
         for field in fields:
             if field.is_expression:
-                # Complex expression - use AST
-                expr_names = _extract_ast_names(field.expression)
+                # Complex expression - extract full attribute chains for subscription
+                expr_chains = _extract_attribute_chains(field.expression)
                 # Filter out builtins
-                all_names.update(expr_names - _BUILTINS)
+                all_names.update(expr_chains - _BUILTINS)
             else:
-                # Simple name
+                # Simple name or dotted path
                 expr = field.expression
                 if not expr.startswith("#"):
-                    root = expr.replace("?.", ".").split(".")[0]
-                    all_names.add(root)
+                    # Keep full path for proper nested subscription
+                    all_names.add(expr.replace("?.", "."))
 
         # Classify names: widget Variables vs item attributes
+        # For dotted paths like "_actions.filter_text", check if ROOT exists on widget
         for name in all_names:
-            # Check if this is a widget Variable
-            attr = getattr(self._widget, name, None)
+            # Get root name for widget attribute lookup
+            root_name = name.replace("?.", ".").split(".")[0]
+
+            # Check if this is a widget Variable (check root for dotted paths)
+            attr = getattr(self._widget, root_name, None)
             if attr is None:
                 # Try underscore prefix
-                attr = getattr(self._widget, f"_{name}", None)
+                attr = getattr(self._widget, f"_{root_name}", None)
                 if attr is not None:
-                    # Store the actual attribute name for lookup
-                    self._widget_var_names.add(f"_{name}")
+                    # Store the FULL path (with underscore root) for subscription
+                    full_path = f"_{root_name}" + name[len(root_name) :]
+                    self._widget_var_names.add(full_path)
                 else:
                     # Assume it's an item attribute
                     self._item_var_names.add(name)
             elif isinstance(attr, Variable):
+                # Store FULL path for proper nested subscription
                 self._widget_var_names.add(name)
             else:
                 # It's a widget attribute but not a Variable - could be either
@@ -376,29 +468,46 @@ class ReactiveFilterProxyModel(QSortFilterProxyModel):
         context["self"] = item
 
         # Add widget Variable values
+        # For dotted paths like "_actions.filter_text", we add the ROOT object to context
+        # so Python eval can naturally traverse the path
         if self._widget:
+            # Get unique root names from full paths
+            roots_added: set[str] = set()
             for var_name in self._widget_var_names:
-                attr = getattr(self._widget, var_name, None)
-                if attr is None and not var_name.startswith("_"):
-                    attr = getattr(self._widget, f"_{var_name}", None)
+                # Get root name (e.g., "_actions" from "_actions.filter_text")
+                root_name = var_name.split(".")[0]
+                if root_name in roots_added:
+                    continue
 
-                # Use original var_name as context key (matches expression)
+                attr = getattr(self._widget, root_name, None)
+                if attr is None and not root_name.startswith("_"):
+                    attr = getattr(self._widget, f"_{root_name}", None)
+                    if attr is not None:
+                        root_name = f"_{root_name}"
+
+                if attr is None:
+                    continue
+
+                roots_added.add(root_name)
+
+                # Add root object to context - Python eval will traverse the rest
                 if isinstance(attr, Variable):
                     # Get the observable value
-                    # Variable[T].observable has Unknown type param
                     obs: Any = attr.observable  # pyright: ignore[reportUnknownMemberType,reportUnknownVariableType]
                     if isinstance(obs, Observable):
-                        context[var_name] = obs.get()
+                        context[root_name] = obs.get()
                     elif isinstance(obs, ObservableList):
-                        context[var_name] = obs.to_list()
+                        context[root_name] = obs.to_list()
                     elif isinstance(obs, ObservableDict):
-                        context[var_name] = obs.to_dict()
+                        context[root_name] = obs.to_dict()
                     elif isinstance(obs, ObservableSet):
-                        context[var_name] = obs.to_set()
+                        context[root_name] = obs.to_set()
                     else:  # ObservableProxy
-                        context[var_name] = obs.unwrap()  # pyright: ignore[reportUnknownMemberType]
+                        context[root_name] = obs.unwrap()  # pyright: ignore[reportUnknownMemberType]
                 else:
-                    context[var_name] = attr
+                    # Not a Variable - wrap it to auto-unwrap nested Variables
+                    # (e.g., child widget with Variable attributes)
+                    context[root_name] = _VariableUnwrapper(attr)
 
         # Add item attributes (unwrap Variable types like we do for widget Variables)
         for attr_name in self._item_var_names:
