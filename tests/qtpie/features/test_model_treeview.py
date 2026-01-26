@@ -2491,3 +2491,122 @@ class TestTreeViewNestedWidgetRecordPropagation:
         assert tree_model is not None
         assert_that(tree_model.rowCount()).is_equal_to(1)
         assert_that(tree_model.data(tree_model.index(0, 0))).is_equal_to("Item A")
+
+
+# =============================================================================
+# deselectOnEscape Tests
+# =============================================================================
+
+
+class TestTreeViewDeselectOnEscape:
+    """Test deselectOnEscape= for QTreeView (default: True)."""
+
+    def test_escape_clears_selection_by_default(self, qt: QtDriver) -> None:
+        """Pressing Escape clears tree selection and selectedItem Variable by default."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _tree: QTreeView = new(bind="_items", selectedItem="_selected")
+            _items: Variable[list[TreeNode]] = new([TreeNode("A"), TreeNode("B")])
+            _selected: Variable[TreeNode | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._tree.model()
+        index = model.index(0, 0)
+        instance._tree.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection - both Qt and Variable
+        assert instance._tree.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+        assert instance._selected.value.name == "A"
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._tree, event)
+        qt.process_events()
+
+        # Selection should be cleared - both Qt and Variable
+        assert not instance._tree.selectionModel().hasSelection()
+        assert instance._selected.value is None
+
+    def test_escape_clears_selected_items_list(self, qt: QtDriver) -> None:
+        """Pressing Escape clears selectedItems list Variable."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtWidgets import QAbstractItemView
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _tree: QTreeView = new(bind="_items", selectedItems="_selected_list")
+            _items: Variable[list[TreeNode]] = new([TreeNode("A"), TreeNode("B"), TreeNode("C")])
+            _selected_list: Variable[list[TreeNode]] = new([])
+
+        instance = qt.track(TestWidget())
+        instance._tree.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        instance.show()
+        qt.process_events()
+
+        # Select multiple items
+        model = instance._tree.model()
+        sm = instance._tree.selectionModel()
+        sm.select(model.index(0, 0), sm.SelectionFlag.Select)
+        sm.select(model.index(1, 0), sm.SelectionFlag.Select)
+        qt.process_events()
+
+        # Verify multiple selection
+        assert len(instance._selected_list.value) == 2
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._tree, event)
+        qt.process_events()
+
+        # selectedItems should be empty
+        assert instance._selected_list.value == []
+
+    def test_deselect_on_escape_false_keeps_selection(self, qt: QtDriver) -> None:
+        """Pressing Escape does NOT clear selection when deselectOnEscape=False."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _tree: QTreeView = new(bind="_items", selectedItem="_selected", deselectOnEscape=False)
+            _items: Variable[list[TreeNode]] = new([TreeNode("A"), TreeNode("B")])
+            _selected: Variable[TreeNode | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._tree.model()
+        index = model.index(0, 0)
+        instance._tree.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection
+        assert instance._tree.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._tree, event)
+        qt.process_events()
+
+        # Selection should still be there
+        assert instance._tree.selectionModel().hasSelection()
+        assert instance._selected.value is not None

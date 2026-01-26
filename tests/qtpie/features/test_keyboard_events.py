@@ -287,6 +287,99 @@ class TestDeleteKeyEvent:
 
 
 # =============================================================================
+# onEscapeKey Event
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestEscapeKeyEvent:
+    """Escape key shortcut event handlers."""
+
+    def test_on_escape_key_calls_method(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEscapeKey='method_name' calls method when Escape key is pressed."""
+        escape_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEscapeKey="on_escape")
+
+            def on_escape(self) -> None:
+                escape_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Escape)
+
+        assert_that(escape_count[0]).is_equal_to(1)
+
+    def test_on_escape_key_with_lambda(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEscapeKey=lambda works without event parameter."""
+        escape_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEscapeKey=lambda: escape_count.__setitem__(0, escape_count[0] + 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Escape)
+
+        assert_that(escape_count[0]).is_equal_to(1)
+
+    def test_on_escape_key_does_not_fire_on_other_keys(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEscapeKey does not fire when other keys are pressed."""
+        escape_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEscapeKey="on_escape")
+
+            def on_escape(self) -> None:
+                escape_count[0] += 1
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_A)
+        send_key_press(instance.line_edit, Qt.Key.Key_Return)
+        send_key_press(instance.line_edit, Qt.Key.Key_Delete)
+
+        assert_that(escape_count[0]).is_equal_to(0)
+
+    def test_on_escape_key_with_event_parameter(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEscapeKey handler can accept the event parameter."""
+        events = []
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEscapeKey="on_escape")
+
+            def on_escape(self, event) -> None:
+                events.append(event.key())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        send_key_press(instance.line_edit, Qt.Key.Key_Escape)
+
+        assert_that(events).is_length(1)
+        assert_that(events[0]).is_equal_to(Qt.Key.Key_Escape)
+
+    def test_on_escape_key_return_true_consumes(self, base_class, decorator, qt: QtDriver) -> None:
+        """onEscapeKey handler returning True consumes the event."""
+        escape_count = [0]
+
+        @decorator
+        class TestClass(base_class):
+            line_edit: QLineEdit = new(onEscapeKey="on_escape")
+
+            def on_escape(self) -> bool:
+                escape_count[0] += 1
+                return True
+
+        instance = create_and_track(qt, TestClass, base_class)
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance.line_edit, event)
+
+        assert_that(escape_count[0]).is_equal_to(1)
+        assert_that(event.isAccepted()).is_true()
+
+
+# =============================================================================
 # Combined Key Shortcuts
 # =============================================================================
 

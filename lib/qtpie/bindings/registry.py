@@ -276,7 +276,10 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         # Avoid calling setVisible(True) on widgets that could trigger a Dialog to flash.
         # On Windows, setVisible(True) on a child can cause an unshown parent Dialog to appear.
         # Widgets are visible by default, so they'll show when their parent window is shown.
-        if visible:
+        # HOWEVER: If the widget was previously hidden (isHidden()=True), we MUST call
+        # setVisible(True) to show it - only skip for widgets in default visible state.
+        if visible and not w.isHidden():
+            # Widget is already visible (default state) - check if we should skip setVisible(True)
             # Check if any ancestor is an unshown top-level window (like QDialog)
             ancestor = w.parentWidget()
             while ancestor is not None:

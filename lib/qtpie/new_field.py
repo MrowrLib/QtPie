@@ -149,6 +149,9 @@ class NewField:
         self.tree_children: str | None = None  # Attribute name for child items: "children"
         self.tree_expand: bool = False  # If True, expandAll() on init and when root changes
         self.tree_header_hidden: bool = True  # If True, hide the header row (default: True)
+        # deselectOnEscape= for QTreeView/QListView/QTableView (default: True)
+        # Clears selection when Escape key is pressed while view has focus
+        self.deselect_on_escape: bool = True
         # QTreeView checkable: checkbox support for tree nodes
         # - None/False: no checkboxes (default)
         # - str without braces: two-way binding to bool field name
@@ -1066,6 +1069,11 @@ class NewField:
                     # Note: selected_item is already extracted above for all model widgets
                     self.selected_items = self.kwargs.pop("selectedItems", None)
 
+                # deselectOnEscape= for QTreeView/QListView/QTableView (default: True)
+                # Clears selection when Escape key is pressed while view has focus
+                if self._is_qtreeview_type() or self._is_qlistview_type() or self._is_qtableview_type():
+                    self.deselect_on_escape = self.kwargs.pop("deselectOnEscape", True)
+
             # Extract QTabWidget-specific kwargs
             if self._is_qtabwidget_type():
                 self.is_tab_widget = True
@@ -1346,6 +1354,7 @@ class NewField:
             "onKeyRelease",
             "onEnterKey",
             "onDeleteKey",
+            "onEscapeKey",
             # Widget events
             "onShow",
             "onHide",

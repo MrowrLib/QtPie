@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, overload
 from observant import Observable
 
 if TYPE_CHECKING:
+    from qtpie.dialog import Dialog, DialogResult
     from qtpie.qt_pie_state import QtPieState
 
 
@@ -346,3 +347,33 @@ class QtPieComponentBase:
         from qtpie.create import create_instance
 
         return create_instance(self, cls, *args, **kwargs)  # type: ignore[arg-type]
+
+    # -------------------------------------------------------------------------
+    # Dialog Helpers
+    # -------------------------------------------------------------------------
+
+    def open_dialog[D: Dialog[Any]](
+        self,
+        dialog_class: type[D],
+        record: Any | None = None,
+        **kwargs: Any,
+    ) -> DialogResult[Any]:
+        """Open a dialog with this component as the QtPie parent.
+
+        This enables bare Variables on the dialog to resolve from this
+        component's Variable hierarchy.
+
+        Args:
+            dialog_class: The Dialog class to instantiate and show.
+            record: Optional record for Dialog[T].
+            **kwargs: Additional kwargs passed to dialog constructor.
+
+        Returns:
+            DialogResult with .accepted, .record, .dialog, etc.
+
+        Example:
+            result = self.open_dialog(AddCollectionDialog)
+            if result:
+                save(result.record)
+        """
+        return dialog_class.show_dialog(record=record, parent=self, **kwargs)  # type: ignore[arg-type]

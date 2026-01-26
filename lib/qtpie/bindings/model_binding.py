@@ -1046,6 +1046,7 @@ def apply_model_binding(
         )
 
     # Set up selection bindings based on widget type
+    deselect_on_escape = getattr(field_info, "deselect_on_escape", True)
     if use_tree_model:
         # QTreeView selection bindings
         setup_tree_selection_bindings(
@@ -1057,6 +1058,7 @@ def apply_model_binding(
             field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
             root_variable=root_variable,  # Pass root for nested path subscriptions
+            deselect_on_escape=deselect_on_escape,
         )
 
         # Handle expand=True: expandAll immediately and on data changes
@@ -1093,6 +1095,7 @@ def apply_model_binding(
             field_info.selected_widget,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
             root_variable=root_variable,  # Pass root for nested path subscriptions
+            deselect_on_escape=deselect_on_escape,
         )
         # Set up embedded widgets for QTableView columns
         # Merge widget columns from main columns=, prependColumns=, and appendColumns=
@@ -1160,6 +1163,8 @@ def apply_model_binding(
             model.modelReset.connect(setup_deferred_widget_columns)
     else:
         # QComboBox/QListView selection bindings
+        # Only enable deselect_on_escape for QListView, not QComboBox
+        list_deselect_on_escape = deselect_on_escape and _is_list_view(widget_instance)
         setup_selection_bindings(
             host,
             widget_instance,
@@ -1172,6 +1177,7 @@ def apply_model_binding(
             field_info.selected_text,
             resolve_or_create_variable_fn=resolve_or_create_variable_fn,
             root_variable=root_variable,  # Pass root for nested path subscriptions
+            deselect_on_escape=list_deselect_on_escape,
         )
         # Set up embedded widget for QListView (not QComboBox)
         if field_info.embed_widget is not None and _is_list_view(widget_instance):

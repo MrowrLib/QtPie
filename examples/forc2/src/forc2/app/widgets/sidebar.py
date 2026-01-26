@@ -20,35 +20,26 @@ class TextValueDialog(Dialog):
 
 @dialog(layout="form", size=(450, 150), title="Add Collection")
 class AddCollectionDialog(Dialog):
+    ### Variables ###
+    selected_collection: Var[Collection | None]
+
     ### Widgets ###
     name: Var[str, QLineEdit] = new()(
         label="Collection Name",
         placeholderText="Enter collection name...",
         # validator=filename_safe_validator,
     )
-    parent_collection: Var[Collection | None, QLabel] = new(None)(bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}")
-    make_root_collection: Var[bool, QCheckBox] = new(False)(label="Set as Root Collection")
+    parent_collection: QLabel = new(
+        bind="{selected_collection.name}",
+        label="Parent Collection",
+        visible="{selected_collection is not None and not make_root_collection}",
+    )
+    make_root_collection: Var[bool, QCheckBox] = new(False)(
+        label="Set as Root Collection",
+        visible="{selected_collection is not None}",
+    )
 
     ### Dialog Buttons ###
-    _ok: DialogButton = new(enabled="{name != ''}")
-    _cancel: DialogButton
-
-
-@dialog(layout="form", size=(450, 150), title="Add Collection")
-class DifferentDialog(Dialog):
-    name: Var[str, QLineEdit] = new()(
-        label="Collection Name",
-        placeholderText="Enter collection name...",
-    )
-    make_root_collection: Var[bool, QCheckBox] = new(False)(label="Set as Root Collection")
-
-    parent_collection: Var[Collection | None, QLabel] = new(None)(
-        bind="{#var.name}",
-        label="Parent Collection",
-        visible="{not make_root_collection}",  # <--- if I comment this out, the mini dialog doesn't appear
-    )
-
-    #
     _ok: DialogButton = new(enabled="{name != ''}")
     _cancel: DialogButton
 
@@ -70,16 +61,8 @@ class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
 
     # ### Methods ###
     def _on_new_collection(self) -> None:
-        # DifferentDialog()
-        AddCollectionDialog()
-        # if dialog.show_dialog():
-        #     print("YES")
-        # else:
-        #     print("NO")
-        # # d = QDialog()
-        # ...
-        # if dialog.show_dialog():
-        #     ...
+        self.open_dialog(AddCollectionDialog)
+        ...
 
 
 @widget(layout="horizontal", margins=0)

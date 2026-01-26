@@ -2588,3 +2588,122 @@ class TestTableViewColumnResizeMode:
         assert_that(header.sectionResizeMode(1)).is_equal_to(QHeaderView.ResizeMode.Interactive)
         # But last column also stretches
         assert_that(header.stretchLastSection()).is_true()
+
+
+# =============================================================================
+# deselectOnEscape Tests
+# =============================================================================
+
+
+class TestTableViewDeselectOnEscape:
+    """Test deselectOnEscape= for QTableView (default: True)."""
+
+    def test_escape_clears_selection_by_default(self, qt: QtDriver) -> None:
+        """Pressing Escape clears table selection and selectedItem Variable by default."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _table: QTableView = new(bind="_items", selectedItem="_selected")
+            _items: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected: Variable[Dog | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._table.model()
+        index = model.index(0, 0)
+        instance._table.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection - both Qt and Variable
+        assert instance._table.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+        assert instance._selected.value.name == "Fido"
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._table, event)
+        qt.process_events()
+
+        # Selection should be cleared - both Qt and Variable
+        assert not instance._table.selectionModel().hasSelection()
+        assert instance._selected.value is None
+
+    def test_escape_clears_selected_items_list(self, qt: QtDriver) -> None:
+        """Pressing Escape clears selectedItems list Variable."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtWidgets import QAbstractItemView
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _table: QTableView = new(bind="_items", selectedItems="_selected_list")
+            _items: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5), Dog("Max", 2)])
+            _selected_list: Variable[list[Dog]] = new([])
+
+        instance = qt.track(TestWidget())
+        instance._table.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        instance.show()
+        qt.process_events()
+
+        # Select multiple items
+        model = instance._table.model()
+        sm = instance._table.selectionModel()
+        sm.select(model.index(0, 0), sm.SelectionFlag.Select | sm.SelectionFlag.Rows)
+        sm.select(model.index(1, 0), sm.SelectionFlag.Select | sm.SelectionFlag.Rows)
+        qt.process_events()
+
+        # Verify multiple selection
+        assert len(instance._selected_list.value) == 2
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._table, event)
+        qt.process_events()
+
+        # selectedItems should be empty
+        assert instance._selected_list.value == []
+
+    def test_deselect_on_escape_false_keeps_selection(self, qt: QtDriver) -> None:
+        """Pressing Escape does NOT clear selection when deselectOnEscape=False."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _table: QTableView = new(bind="_items", selectedItem="_selected", deselectOnEscape=False)
+            _items: Variable[list[Dog]] = new([Dog("Fido", 3), Dog("Rex", 5)])
+            _selected: Variable[Dog | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._table.model()
+        index = model.index(0, 0)
+        instance._table.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection
+        assert instance._table.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._table, event)
+        qt.process_events()
+
+        # Selection should still be there
+        assert instance._table.selectionModel().hasSelection()
+        assert instance._selected.value is not None

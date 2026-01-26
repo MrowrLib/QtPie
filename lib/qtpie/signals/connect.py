@@ -162,6 +162,7 @@ class _WidgetEventFilter(QObject):
         self.on_key_release: Callable[..., bool | None] | None = None
         self.on_enter_key: Callable[..., bool | None] | None = None
         self.on_delete_key: Callable[..., bool | None] | None = None
+        self.on_escape_key: Callable[..., bool | None] | None = None
         # Widget events
         self.on_show: Callable[..., bool | None] | None = None
         self.on_hide: Callable[..., bool | None] | None = None
@@ -223,6 +224,9 @@ class _WidgetEventFilter(QObject):
                         consumed = True
                 elif key == Qt.Key.Key_Delete and self.on_delete_key:
                     if self.on_delete_key(event) is True:
+                        consumed = True
+                elif key == Qt.Key.Key_Escape and self.on_escape_key:
+                    if self.on_escape_key(event) is True:
                         consumed = True
         elif t == QEvent.Type.KeyRelease and self.on_key_release:
             if self.on_key_release(event) is True:
@@ -415,6 +419,7 @@ _EVENT_MAPPINGS: dict[str, tuple[str, bool]] = {
     "onKeyRelease": ("on_key_release", True),
     "onEnterKey": ("on_enter_key", True),  # Event available for modifiers, etc.
     "onDeleteKey": ("on_delete_key", True),  # Event available for modifiers, etc.
+    "onEscapeKey": ("on_escape_key", True),  # Event available for modifiers, etc.
     # Widget
     "onShow": ("on_show", False),
     "onHide": ("on_hide", False),

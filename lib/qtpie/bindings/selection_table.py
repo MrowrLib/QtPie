@@ -25,6 +25,7 @@ def setup_table_selection_bindings(
     root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
     *,
     _items_var_path: str | None = None,  # Internal: for re-resolution of items_var
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
 ) -> None:
     """Set up selection bindings specific to QTableView.
 
@@ -34,11 +35,13 @@ def setup_table_selection_bindings(
 
     Args:
         root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.selected_row")
+        deselect_on_escape: If True, pressing Escape clears selection and sets Variables to None/[]
     """
     # Check if any binding is specified
     has_single = any([selected_row_path, selected_column_path, selected_cell_path, selected_item_path, selected_widget_path])
     has_multi = any([selected_rows_path, selected_columns_path, selected_cells_path, selected_items_path])
-    if not has_single and not has_multi:
+    has_bindings = has_single or has_multi
+    if not has_bindings and not deselect_on_escape:
         return
 
     from observant import Observable, ObservableList, ObservableProxy
@@ -130,6 +133,7 @@ def setup_table_selection_bindings(
         selected_item_path=selected_item_path,
         selected_items_path=selected_items_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+        deselect_on_escape=deselect_on_escape,
     )
 
 
@@ -151,6 +155,7 @@ def _setup_table_selection_bindings_impl(
     selected_item_path: str | None = None,  # For re-resolution
     selected_items_path: str | None = None,  # For re-resolution of multi-selection
     resolve_or_create_variable_fn: Any = None,  # For re-resolving nested paths
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
 ) -> None:
     """Implementation of table selection bindings (called after Variables are resolved)."""
     from observant import Observable, ObservableList, ObservableProxy
@@ -426,6 +431,78 @@ def _setup_table_selection_bindings_impl(
     if hasattr(model, "modelReset"):
         model.modelReset.connect(connect_selection_handler)  # pyright: ignore[reportUnknownMemberType]
 
+    # Install Escape key handler to clear selection and directly set Variables to None/[]
+    # This must be installed BEFORE the early return below, so it works even without selection bindings
+    if deselect_on_escape:
+        from qtpie.signals.connect import connect_event_handlers
+
+        def on_escape_clear_selection() -> bool:
+            # Use updating flag to prevent recursion from Variable change callbacks
+            if updating["flag"]:
+                return True
+            updating["flag"] = True
+            try:
+                # Clear Qt selection model
+                sm = container["selection_model"]
+                if sm is not None:
+                    sm.clear()  # pyright: ignore[reportUnknownMemberType]
+
+                # Directly set Variables - don't rely on Qt signals
+                # IMPORTANT: Check if value is already the target before setting to avoid
+                # triggering notification chains when sibling proxies share the same value
+
+                # Single selection variables
+                rv = container["row_var"]
+                if rv is not None and get_var_value(rv) != -1:
+                    set_var_value(rv, -1)
+
+                cv = container["column_var"]
+                if cv is not None and get_var_value(cv) != -1:
+                    set_var_value(cv, -1)
+
+                cellv = container["cell_var"]
+                if cellv is not None and get_var_value(cellv) is not None:
+                    set_var_value(cellv, None)
+
+                iv = container["item_var"]
+                if iv is not None and get_var_value(iv) is not None:
+                    set_var_value(iv, None)
+
+                wv = container["widget_var"]
+                if wv is not None and get_var_value(wv) is not None:
+                    set_var_value(wv, None)
+
+                # Multi-selection variables - check if already empty
+                rsv = container["rows_var"]
+                if rsv is not None:
+                    current = get_var_value(rsv)
+                    if current:  # Not empty
+                        set_var_value(rsv, [])
+
+                csv = container["columns_var"]
+                if csv is not None:
+                    current = get_var_value(csv)
+                    if current:  # Not empty
+                        set_var_value(csv, [])
+
+                cellsv = container["cells_var"]
+                if cellsv is not None:
+                    current = get_var_value(cellsv)
+                    if current:  # Not empty
+                        set_var_value(cellsv, [])
+
+                isv = container["items_var"]
+                if isv is not None:
+                    current_items = get_items_var_value()
+                    if current_items:  # Not empty
+                        set_items_var_value([])
+            finally:
+                updating["flag"] = False
+
+            return True  # Consume the event
+
+        connect_event_handlers(host, widget, "", {"onEscapeKey": on_escape_clear_selection})
+
     # Now do initialization and Variable → Widget bindings
     # (only if variables are already resolved)
 
@@ -434,7 +511,7 @@ def _setup_table_selection_bindings_impl(
     has_multi = rows_var is not None or columns_var is not None or cells_var is not None or items_var is not None
 
     if not has_single and not has_multi:
-        return  # No vars yet, handler is connected and will work when vars are set
+        return  # No vars yet, escape handler is connected and will work
 
     # Initialize single selection variables from current state
     current_row = get_current_row()

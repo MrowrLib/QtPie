@@ -22,6 +22,7 @@ def setup_tree_selection_bindings(
     root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
     *,
     _items_var_path: str | None = None,  # Internal: for re-resolution of items_var
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
 ) -> None:
     """Set up selection bindings for QTreeView.
 
@@ -34,8 +35,10 @@ def setup_tree_selection_bindings(
         selected_widget_path: Variable path for embedded widget binding (e.g., "_selected_widget")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
         root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.selected_item")
+        deselect_on_escape: If True, pressing Escape clears selection and sets Variables to None/[]
     """
-    if selected_item_path is None and selected_items_path is None and selected_widget_path is None:
+    has_bindings = selected_item_path is not None or selected_items_path is not None or selected_widget_path is not None
+    if not has_bindings and not deselect_on_escape:
         return
 
     from observant import Observable, ObservableList, ObservableProxy
@@ -82,6 +85,7 @@ def setup_tree_selection_bindings(
         selected_item_path=selected_item_path,
         selected_items_path=selected_items_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+        deselect_on_escape=deselect_on_escape,
     )
 
 
@@ -95,6 +99,7 @@ def _setup_tree_selection_bindings_impl(
     root_variable: Any = None,  # Root Variable for nested paths (from model_binding)
     selected_item_path: str | None = None,  # Original path for re-resolution
     selected_items_path: str | None = None,  # Original path for re-resolution of multi-selection
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
     resolve_or_create_variable_fn: Any = None,  # For re-resolving nested paths
 ) -> None:
     """Implementation of tree selection bindings (called after Variables are resolved)."""
@@ -316,10 +321,49 @@ def _setup_tree_selection_bindings_impl(
     if hasattr(model, "modelReset"):
         model.modelReset.connect(connect_selection_handler)  # pyright: ignore[reportUnknownMemberType]
 
+    # Install Escape key handler to clear selection and directly set Variables to None/[]
+    # This must be installed BEFORE the early return below, so it works even without selection bindings
+    if deselect_on_escape:
+        from qtpie.signals.connect import connect_event_handlers
+
+        def on_escape_clear_selection() -> bool:
+            # Use updating flag to prevent recursion from Variable change callbacks
+            if updating["flag"]:
+                return True
+            updating["flag"] = True
+            try:
+                # Clear Qt selection model
+                sm = container["selection_model"]
+                if sm is not None:
+                    sm.clear()  # pyright: ignore[reportUnknownMemberType]
+
+                # Directly set Variables - don't rely on Qt signals
+                # IMPORTANT: Check if value is already None/[] before setting to avoid
+                # triggering notification chains when sibling proxies share the same value
+                iv = container["item_var"]
+                if iv is not None and get_var_value(iv) is not None:
+                    set_var_value(iv, None)
+
+                isv = container["items_var"]
+                if isv is not None:
+                    current_items = get_items_var_value()
+                    if current_items:  # Only set if not already empty
+                        set_items_var_value([])
+
+                wv = container["widget_var"]
+                if wv is not None and get_var_value(wv) is not None:
+                    set_var_value(wv, None)
+            finally:
+                updating["flag"] = False
+
+            return True  # Consume the event
+
+        connect_event_handlers(host, widget, "", {"onEscapeKey": on_escape_clear_selection})
+
     # Now do initialization and Variable → Widget bindings
     # (only if variables are already resolved)
     if item_var is None and items_var is None and widget_var is None:
-        return  # No vars yet, handler is connected and will work when vars are set
+        return  # No vars yet, escape handler is connected and will work
 
     # Initialize from current state or Variable defaults
     if item_var is not None:

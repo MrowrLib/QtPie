@@ -657,12 +657,19 @@ class ObservableProxy[T]:
         """Replace the underlying target object and update all field observables.
 
         This triggers change notifications so all bound widgets update.
+        If the new target is the same object (by identity), this is a no-op.
 
         Args:
             new_target: The new object to wrap.
         """
         # Get old target for registry update
         old_target = object.__getattribute__(self, "_target")
+
+        # Skip if target is the same object - nothing to update
+        # This prevents infinite recursion when sibling proxies share the same value
+        # (e.g., two Variables both set to None trigger each other's callbacks)
+        if new_target is old_target:
+            return
 
         # Replace the target
         object.__setattr__(self, "_target", new_target)

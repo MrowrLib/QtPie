@@ -5,7 +5,7 @@
 """Tests for form and grid layouts with label= and grid= params."""
 
 import pytest
-from qtpy.QtWidgets import QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox
+from qtpy.QtWidgets import QCheckBox, QFormLayout, QGridLayout, QLabel, QLineEdit, QSpinBox
 
 from qtpie import Variable, Widget, new, widget
 from qtpie.testing import QtDriver
@@ -359,3 +359,59 @@ class TestFormLayoutRowVisibility:
 
         assert not w._name.isHidden()
         assert layout.isRowVisible(w._name)
+
+    def test_variable_with_widget_visible_hides_row(self, qt: QtDriver) -> None:
+        """Variable[T, W] in form layout with visible= hides entire row."""
+
+        @widget(layout="form")
+        class TestForm(Widget):
+            _show: Variable[bool] = new(True)
+            _check: Variable[bool, QCheckBox] = new(False)(label="Check Me", visible="_show")
+
+        w = qt.track(TestForm())
+        layout = w.layout()
+        assert isinstance(layout, QFormLayout)
+
+        # Get the checkbox widget from the Variable
+        checkbox = w._check.widget
+        assert isinstance(checkbox, QCheckBox)
+
+        # Initially visible
+        assert not checkbox.isHidden()
+        assert layout.isRowVisible(checkbox)
+
+        # Hide via variable
+        w._show.value = False
+        qt.process_events()
+
+        # Widget hidden
+        assert checkbox.isHidden()
+        # Row should also be hidden (THIS IS THE BUG - row label stays visible)
+        assert not layout.isRowVisible(checkbox)
+
+    def test_variable_with_widget_visible_expression_hides_row(self, qt: QtDriver) -> None:
+        """Variable[T, W] in form layout with expression visible= hides entire row."""
+
+        @widget(layout="form")
+        class TestForm(Widget):
+            _count: Variable[int] = new(5)
+            _check: Variable[bool, QCheckBox] = new(False)(label="Check Me", visible="{_count > 3}")
+
+        w = qt.track(TestForm())
+        layout = w.layout()
+        assert isinstance(layout, QFormLayout)
+
+        checkbox = w._check.widget
+        assert isinstance(checkbox, QCheckBox)
+
+        # Initially visible (5 > 3)
+        assert not checkbox.isHidden()
+        assert layout.isRowVisible(checkbox)
+
+        # Change to make expression false
+        w._count.value = 2
+        qt.process_events()
+
+        # Row should be hidden
+        assert checkbox.isHidden()
+        assert not layout.isRowVisible(checkbox)

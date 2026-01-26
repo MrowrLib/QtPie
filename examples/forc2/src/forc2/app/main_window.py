@@ -4,9 +4,11 @@ from qtpy.QtWidgets import QLabel, QPushButton
 from forc2.app.menus import FileMenu, ViewMenu
 from forc2.app.widgets import RequestWidget, SidebarWidget
 from forc2.domain import Request, TreeItem, Workspace
+from forc2.domain.collection import Collection
 from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 
 
+# TODO add _
 @widget
 class CentralWidget(Widget[Workspace | None]):
     app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
@@ -16,6 +18,7 @@ class CentralWidget(Widget[Workspace | None]):
     stretch: Stretch
 
 
+# TODO add _
 @window(dockTabsClosable=True, dockTabsHideTitleBar=True, dockTabsMovable=True, dockTabsDragToUndock=True, size=(1920, 1080))
 class MainWindow(Window[Workspace | None]):
     ### Menus ###
@@ -23,10 +26,12 @@ class MainWindow(Window[Workspace | None]):
     view_menu: ViewMenu = new(visible="{#record is not None}")
 
     ### Variables ###
-    selected_sidebar_item: Var[TreeItem | None] = new(None, onChange="_on_selected_sidebar_item_changed")
-    selected_request_index: Var[int]
-    current_request: Var[Request | None]
+    # TODO: make 'public' ones for DI not have _ and make the private ones start with _
     request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Horizontal)
+    selected_sidebar_item: Var[TreeItem | None] = new(None, onChange="_on_selected_sidebar_item_changed")
+    selected_collection: Var[Collection | None] = new(None)
+    current_request: Var[Request | None]
+    selected_request_index: Var[int]
 
     ### Docks ###
     sidebar_dock: Dock[SidebarWidget] = new(
@@ -51,10 +56,13 @@ class MainWindow(Window[Workspace | None]):
 
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
-        print("Selected sidebar item changed")
-        print("Selected sidebar item changed:", self.selected_sidebar_item())
         item = self.selected_sidebar_item()
-        if isinstance(item, Request):
+        if item is None:
+            self.selected_collection = None  # <--- this causes recursion
+        elif isinstance(item, Collection):
+            self.selected_collection = item
+        else:
+            self.selected_collection = item.collection
             # If it's already added, then simply switch to that tab:
             for index, editor in enumerate(self.editor_docked_tabs()):
                 if editor is item:

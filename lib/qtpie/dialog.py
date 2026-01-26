@@ -71,11 +71,10 @@ class _ShowDialogDescriptor[T]:
                 **kwargs: Any,
             ) -> DialogResult[T]:
                 assert objtype is not None
-                instance = objtype(**kwargs)  # Forward kwargs to constructor
+                # Pass parent to constructor so it's set early for Variable resolution
+                instance = objtype(parent=parent, **kwargs)
                 if record is not None and hasattr(instance, "record"):
                     instance.record = record  # type: ignore[assignment]
-                if parent is not None:
-                    instance.setParent(parent)
                 return instance._show_dialog()
 
             return class_show_dialog
@@ -160,6 +159,7 @@ class DialogResult[T = None]:
     accepted: bool
     button: ButtonInfo | None  # None if closed via X or Escape
     record: T | None  # For Dialog[T]
+    dialog: Dialog[T] | None = None  # The dialog instance
 
     @property
     def rejected(self) -> bool:
@@ -429,6 +429,7 @@ class Dialog[T = None](QDialog, QtPieComponentBase):
             accepted=accepted,
             button=self._clicked_button,
             record=record,
+            dialog=self,
         )
 
     def _simulate_button_click(self, button_type: str) -> None:
@@ -660,6 +661,9 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
     config = cls._qtpie_config
 
     def wrapped_init(self: Dialog[Any], *args: Any, **kwargs: Any) -> None:
+        # Extract parent kwarg - we'll set it after original_init with proper flags
+        qtpie_parent = kwargs.pop("parent", None)
+
         # Extract _qtpie_bindings before passing kwargs to original init
         _qtpie_bindings = kwargs.pop("_qtpie_bindings", None)
 
@@ -693,6 +697,14 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
             apply_variable_kwargs(self, variable_kwargs)
 
         original_init(self, *args, **kwargs)
+
+        # Set Qt parent with Dialog flag to preserve modal dialog behavior
+        # (plain setParent() would embed the dialog, breaking exec())
+        if qtpie_parent is not None:
+            from qtpy.QtCore import Qt
+
+            if isinstance(qtpie_parent, QWidget):
+                self.setParent(qtpie_parent, Qt.Dialog)  # type: ignore[arg-type]
 
         # Initialize buttons dict
         self._buttons = {}
@@ -1025,6 +1037,14 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                 _validate_layout_params(name, config.layout, var_label, grid)
                                 _add_to_layout(target, var.widget, config.layout, var_label, grid, var_label_translatable)
 
+                                # Sync form row visibility: if the widget is already hidden
+                                # (from a visible= binding applied before layout), hide the row too
+                                if config.layout == "form" and var.widget.isHidden():
+                                    from qtpy.QtWidgets import QFormLayout
+
+                                    form_layout = cast(QFormLayout, target)
+                                    form_layout.setRowVisible(var.widget, False)
+
                                 # Apply format binding to form label if it was a format string
                                 if is_format_label and config.layout == "form" and isinstance(raw_label, str):
                                     from qtpy.QtWidgets import QFormLayout
@@ -1037,6 +1057,13 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
                                         create_format_binding(self, raw_label, label_widget.setText)  # type: ignore[union-attr]
                             else:
                                 _add_widget_to_nested_layout(target, var.widget, var_label, grid, name)
+
+                                # Sync form row visibility for nested QFormLayout
+                                if var.widget.isHidden():
+                                    from qtpy.QtWidgets import QFormLayout
+
+                                    if isinstance(target, QFormLayout):
+                                        target.setRowVisible(var.widget, False)
 
                 # Create button box at END of layout (if not explicit)
                 if not config.has_explicit_button_box and config.button_configs:

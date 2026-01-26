@@ -4,15 +4,18 @@
 # pyright: reportUnknownMemberType=false
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportUnusedClass=false
+# pyright: reportMissingImports=false
+# pyright: reportUnknownVariableType=false
+# pyright: reportUntypedClassDecorator=false
 """Tests for Dialog, DialogButton, DialogButtons, @dialog, @buttons."""
 
 from dataclasses import dataclass
-from typing import override
+from typing import Any, override
 
 import pytest
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QLineEdit, QSpinBox, QVBoxLayout
 
-from qtpie import Dialog, DialogButton, DialogButtons, DialogResult, Variable, buttons, dialog, new
+from qtpie import Dialog, DialogButton, DialogButtons, DialogResult, Variable, Widget, Window, buttons, dialog, new, widget, window
 from qtpie.testing import QtDriver
 
 
@@ -25,6 +28,22 @@ class Person:
 @pytest.fixture
 def qt(qtbot) -> QtDriver:  # type: ignore[no-untyped-def]
     return QtDriver(qtbot)
+
+
+# Components that can call open_dialog() - QtPieComponentBase subclasses only
+# (Menu, Frame, GroupBox use WidgetBase which doesn't have open_dialog)
+SHOW_DIALOG_CALLER_TYPES = [
+    pytest.param(Widget, widget, id="Widget"),
+    pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
+]
+
+
+def create_and_track(qt: QtDriver, decorated_class: type, base_class: type, **kwargs: Any) -> Any:
+    """Create an instance and track it appropriately."""
+    instance = decorated_class(**kwargs)
+    qt.track(instance)
+    return instance
 
 
 # =============================================================================
@@ -701,3 +720,693 @@ class TestDialogEdgeCases:
         # Both should work independently
         assert d1._get_button("ok") is not None
         assert d2._get_button("ok") is not None
+
+
+# =============================================================================
+# DialogResult.dialog Field
+# =============================================================================
+
+
+class TestDialogResultDialog:
+    def test_result_has_dialog_instance(self, qt: QtDriver) -> None:
+        """result.dialog gives access to the dialog instance."""
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        result = d._build_result(QDialog.DialogCode.Accepted)
+        assert result.dialog is d
+
+    def test_result_dialog_accessible_after_accept(self, qt: QtDriver) -> None:
+        """Can access dialog fields after accept."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _value: Variable[str] = new("test_value")
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        result = d._build_result(QDialog.DialogCode.Accepted)
+        assert result.dialog is not None
+        assert result.dialog._value.value == "test_value"
+
+    def test_result_dialog_accessible_after_reject(self, qt: QtDriver) -> None:
+        """Can access dialog fields after reject."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _value: Variable[str] = new("rejected_value")
+            ok: DialogButton
+            cancel: DialogButton
+
+        d = qt.track(TestDialog())
+        result = d._build_result(QDialog.DialogCode.Rejected)
+        assert result.dialog is not None
+        assert result.dialog._value.value == "rejected_value"
+
+    def test_result_dialog_is_same_instance(self, qt: QtDriver) -> None:
+        """result.dialog is the exact same object."""
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+        result = d._build_result(QDialog.DialogCode.Accepted)
+        assert result.dialog is d
+        # Verify it's the same instance by id
+        assert id(result.dialog) == id(d)
+
+
+# =============================================================================
+# Dialog Parent Variable Resolution
+# =============================================================================
+
+
+class TestDialogParentVariableResolution:
+    def test_bare_variable_resolves_from_parent(self, qt: QtDriver) -> None:
+        """Dialog bare Variable[T] resolves from parent widget."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _name: Variable[str]  # Bare - should resolve from parent
+            ok: DialogButton
+
+        @widget
+        class ParentWidget(Widget):
+            _name: Variable[str] = new("parent_value")
+
+        parent = qt.track(ParentWidget())
+        # Create dialog with parent
+        d = qt.track(TestDialog(parent=parent))
+        # Bare variable should have resolved from parent
+        assert d._name.value == "parent_value"
+
+    def test_bare_variable_bidirectional_sync(self, qt: QtDriver) -> None:
+        """Changes to dialog's resolved bare Variable sync back to parent."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _count: Variable[int]  # Bare - resolves from parent
+            ok: DialogButton
+
+        @widget
+        class ParentWidget(Widget):
+            _count: Variable[int] = new(10)
+
+        parent = qt.track(ParentWidget())
+        d = qt.track(TestDialog(parent=parent))
+
+        # Verify initial resolution
+        assert d._count.value == 10
+
+        # Change via dialog - should sync to parent
+        d._count.value = 20
+        assert parent._count.value == 20
+
+        # Change via parent - should sync to dialog
+        parent._count.value = 30
+        assert d._count.value == 30
+
+    def test_multiple_bare_variables_resolve(self, qt: QtDriver) -> None:
+        """Multiple bare Variables each resolve correctly."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _name: Variable[str]
+            _count: Variable[int]
+            _active: Variable[bool]
+            ok: DialogButton
+
+        @widget
+        class ParentWidget(Widget):
+            _name: Variable[str] = new("Alice")
+            _count: Variable[int] = new(42)
+            _active: Variable[bool] = new(True)
+
+        parent = qt.track(ParentWidget())
+        d = qt.track(TestDialog(parent=parent))
+
+        assert d._name.value == "Alice"
+        assert d._count.value == 42
+        assert d._active.value is True
+
+
+# =============================================================================
+# Dialog Parent Patterns
+# =============================================================================
+
+
+# =============================================================================
+# Regression: Dialog Actually Opens
+# =============================================================================
+
+
+class TestDialogActuallyOpens:
+    """Regression tests to ensure dialogs actually open (exec() works).
+
+    These tests verify the dialog is visible and responsive, not just that
+    the DialogResult is returned. Previous tests mocked _show_dialog which
+    hid bugs where the dialog wouldn't actually show.
+    """
+
+    def test_dialog_exec_shows_dialog(self, qt: QtDriver) -> None:
+        """Dialog.exec() actually shows the dialog (not mocked)."""
+        from PySide6.QtCore import QTimer
+
+        dialog_was_visible = False
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        d = qt.track(TestDialog())
+
+        # Schedule accept after dialog opens
+        def accept_dialog() -> None:
+            nonlocal dialog_was_visible
+            dialog_was_visible = d.isVisible()
+            d.accept()
+
+        QTimer.singleShot(50, accept_dialog)
+        result = d.show_dialog()
+
+        assert result.accepted
+        assert dialog_was_visible, "Dialog was never visible - exec() broken"
+
+    def test_open_dialog_actually_opens(self, qt: QtDriver) -> None:
+        """open_dialog() actually shows the dialog (not mocked)."""
+        from PySide6.QtCore import QTimer
+
+        dialog_instance: Dialog | None = None
+        dialog_was_visible = False
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                nonlocal dialog_instance
+                super().__init__(**kwargs)
+                dialog_instance = self
+
+        @widget
+        class ParentWidget(Widget):
+            pass
+
+        parent = qt.track(ParentWidget())
+
+        def accept_dialog() -> None:
+            nonlocal dialog_was_visible
+            if dialog_instance is not None:
+                dialog_was_visible = dialog_instance.isVisible()
+                dialog_instance.accept()
+
+        QTimer.singleShot(50, accept_dialog)
+        result = parent.open_dialog(TestDialog)
+
+        assert result.accepted
+        assert dialog_was_visible, "Dialog was never visible - open_dialog() broken"
+        if dialog_instance:
+            qt.track(dialog_instance)
+
+    def test_class_show_dialog_actually_opens(self, qt: QtDriver) -> None:
+        """Class.show_dialog() actually shows the dialog (not mocked)."""
+        from PySide6.QtCore import QTimer
+
+        dialog_instance: Dialog | None = None
+        dialog_was_visible = False
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                nonlocal dialog_instance
+                super().__init__(**kwargs)
+                dialog_instance = self
+
+        @widget
+        class ParentWidget(Widget):
+            pass
+
+        parent = qt.track(ParentWidget())
+
+        def accept_dialog() -> None:
+            nonlocal dialog_was_visible
+            if dialog_instance is not None:
+                dialog_was_visible = dialog_instance.isVisible()
+                dialog_instance.accept()
+
+        QTimer.singleShot(50, accept_dialog)
+        result = TestDialog.show_dialog(parent=parent)
+
+        assert result.accepted
+        assert dialog_was_visible, "Dialog was never visible - show_dialog(parent=) broken"
+        if dialog_instance:
+            qt.track(dialog_instance)
+
+
+# =============================================================================
+# Dialog Parent Patterns
+# =============================================================================
+
+
+class TestDialogParentPatterns:
+    def test_parent_via_constructor(self, qt: QtDriver) -> None:
+        """MyDialog(parent=widget) sets parent correctly."""
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        @widget
+        class ParentWidget(Widget):
+            pass
+
+        parent = qt.track(ParentWidget())
+        d = qt.track(TestDialog(parent=parent))
+        assert d.parent() is parent
+
+    def test_parent_via_class_show_dialog(self, qt: QtDriver) -> None:
+        """MyDialog.show_dialog(parent=widget) passes parent to constructor."""
+        instances_created: list[Dialog] = []
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self) -> None:
+                super().__init__()
+                instances_created.append(self)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @widget
+        class ParentWidget(Widget):
+            pass
+
+        parent = qt.track(ParentWidget())
+        TestDialog.show_dialog(parent=parent)
+
+        assert len(instances_created) == 1
+        d = instances_created[0]
+        qt.track(d)
+        assert d.parent() is parent
+
+    def test_parent_via_instance_after_constructor(self, qt: QtDriver) -> None:
+        """dialog = MyDialog(parent=w); dialog.show_dialog() uses existing parent."""
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+        @widget
+        class ParentWidget(Widget):
+            pass
+
+        parent = qt.track(ParentWidget())
+        d = qt.track(TestDialog(parent=parent))
+        d._show_dialog = lambda: d._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        result = d.show_dialog()
+        assert result.accepted
+        assert d.parent() is parent
+
+
+# =============================================================================
+# open_dialog() Helper Method (Parameterized)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", SHOW_DIALOG_CALLER_TYPES)
+class TestOpenDialogHelper:
+    def test_open_dialog_returns_result(self, base_class: type, decorator, qt: QtDriver) -> None:  # type: ignore[no-untyped-def]
+        """self.open_dialog(DialogClass) returns DialogResult from all component types."""
+
+        @dialog
+        class TestDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @decorator
+        class TestComponent(base_class):  # type: ignore[misc]
+            pass
+
+        component = create_and_track(qt, TestComponent, base_class)
+        result = component.open_dialog(TestDialog)
+
+        assert isinstance(result, DialogResult)
+        assert result.accepted
+
+    def test_open_dialog_passes_parent_for_variable_resolution(self, base_class: type, decorator, qt: QtDriver) -> None:  # type: ignore[no-untyped-def]
+        """self.open_dialog() passes parent so bare Variables resolve."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _api_url: Variable[str]  # Bare - should resolve from parent
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @decorator
+        class TestComponent(base_class):  # type: ignore[misc]
+            _api_url: Variable[str] = new("http://api.example.com")
+
+        component = create_and_track(qt, TestComponent, base_class)
+        result = component.open_dialog(TestDialog)
+
+        # Dialog should have resolved _api_url from parent
+        assert result.dialog is not None
+        assert result.dialog._api_url.value == "http://api.example.com"
+
+    def test_open_dialog_with_kwargs(self, base_class: type, decorator, qt: QtDriver) -> None:  # type: ignore[no-untyped-def]
+        """self.open_dialog(DialogClass, var=value) passes kwargs to constructor."""
+
+        @dialog
+        class TestDialog(Dialog):
+            _custom: Variable[str] = new("default")
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @decorator
+        class TestComponent(base_class):  # type: ignore[misc]
+            pass
+
+        component = create_and_track(qt, TestComponent, base_class)
+        result = component.open_dialog(TestDialog, _custom="custom_value")
+
+        assert result.dialog is not None
+        assert result.dialog._custom.value == "custom_value"
+
+    def test_open_dialog_with_record(self, base_class: type, decorator, qt: QtDriver) -> None:  # type: ignore[no-untyped-def]
+        """self.open_dialog(DialogClass, record=obj) sets record on Dialog[T]."""
+
+        @dialog
+        class TestDialog(Dialog[Person]):
+            name: QLineEdit = new()
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @decorator
+        class TestComponent(base_class):  # type: ignore[misc]
+            pass
+
+        component = create_and_track(qt, TestComponent, base_class)
+        person = Person("Bob", 25)
+        result = component.open_dialog(TestDialog, record=person)
+
+        assert result.record is not None
+        assert result.record.name == "Bob"
+        assert result.record.age == 25
+
+
+# =============================================================================
+# Nested Dialogs
+# =============================================================================
+
+
+class TestNestedDialogs:
+    def test_dialog_can_spawn_another_dialog(self, qt: QtDriver) -> None:
+        """Dialog.show_dialog(AnotherDialog) works."""
+
+        @dialog
+        class InnerDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @dialog
+        class OuterDialog(Dialog):
+            ok: DialogButton
+
+            def spawn_inner(self) -> DialogResult:  # type: ignore[type-arg]
+                return self.open_dialog(InnerDialog)
+
+        outer = qt.track(OuterDialog())
+        result = outer.spawn_inner()
+
+        assert isinstance(result, DialogResult)
+        assert result.accepted
+
+    def test_nested_dialog_variable_resolution(self, qt: QtDriver) -> None:
+        """Nested dialog resolves variables from first dialog's parent."""
+
+        @dialog
+        class InnerDialog(Dialog):
+            _api_url: Variable[str]  # Should resolve from OuterDialog's parent
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @dialog
+        class OuterDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+            def spawn_inner(self) -> DialogResult:  # type: ignore[type-arg]
+                return self.open_dialog(InnerDialog)
+
+        @widget
+        class RootWidget(Widget):
+            _api_url: Variable[str] = new("http://root.example.com")
+
+        root = qt.track(RootWidget())
+        outer = qt.track(OuterDialog(parent=root))
+        result = outer.spawn_inner()
+
+        # InnerDialog should have resolved _api_url from OuterDialog's hierarchy
+        # which includes RootWidget
+        assert result.dialog is not None
+        assert result.dialog._api_url.value == "http://root.example.com"
+
+    def test_deeply_nested_dialogs(self, qt: QtDriver) -> None:
+        """Dialog → Dialog → Dialog works (3 levels)."""
+
+        @dialog
+        class DeepDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+        @dialog
+        class MiddleDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+            def spawn_deep(self) -> DialogResult:  # type: ignore[type-arg]
+                return self.open_dialog(DeepDialog)
+
+        @dialog
+        class OuterDialog(Dialog):
+            ok: DialogButton
+
+            def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                super().__init__(**kwargs)
+                self._show_dialog = lambda: self._build_result(QDialog.DialogCode.Accepted)  # type: ignore[method-assign]
+
+            def spawn_middle(self) -> DialogResult:  # type: ignore[type-arg]
+                return self.open_dialog(MiddleDialog)
+
+        outer = qt.track(OuterDialog())
+        middle_result = outer.spawn_middle()
+        assert middle_result.dialog is not None
+        qt.track(middle_result.dialog)
+
+        deep_result = middle_result.dialog.spawn_deep()
+        assert deep_result.accepted
+        assert deep_result.dialog is not None
+        qt.track(deep_result.dialog)
+
+
+# =============================================================================
+# Dialog Form Layout with Variable[T, W] Visibility
+# =============================================================================
+
+
+class TestDialogFormLayoutVariableVisibility:
+    """Test that visible= on Variable[T, W] in Dialog form layout hides the row label."""
+
+    def test_variable_widget_visible_hides_form_row(self, qt: QtDriver) -> None:
+        """Variable[T, W] in dialog form layout with visible= hides entire row."""
+        from PySide6.QtWidgets import QCheckBox, QFormLayout
+
+        @dialog(layout="form")
+        class TestDialog(Dialog):
+            _show: Variable[bool] = new(True)
+            _check: Variable[bool, QCheckBox] = new(False)(label="Check Me", visible="_show")
+
+        d = qt.track(TestDialog())
+        layout = d.layout()
+        assert isinstance(layout, QFormLayout)
+
+        checkbox = d._check.widget
+        assert isinstance(checkbox, QCheckBox)
+
+        # Initially visible
+        assert not checkbox.isHidden()
+        assert layout.isRowVisible(checkbox)
+
+        # Hide via variable
+        d._show.value = False
+        qt.process_events()
+
+        # Widget hidden
+        assert checkbox.isHidden()
+        # Row should also be hidden
+        assert not layout.isRowVisible(checkbox)
+
+    def test_variable_widget_visible_with_none_union_expression(self, qt: QtDriver) -> None:
+        """Variable[T, W] visible= expression with 'is not None' hides form row."""
+        from PySide6.QtWidgets import QCheckBox, QFormLayout
+
+        @dataclass
+        class Collection:
+            name: str = ""
+
+        @dialog(layout="form")
+        class TestDialog(Dialog):
+            selected_collection: Variable[Collection | None] = new(None)
+            _check: Variable[bool, QCheckBox] = new(False)(
+                label="Check Me",
+                visible="{selected_collection is not None}",
+            )
+
+        d = qt.track(TestDialog())
+        d.show()
+        qt.process_events()
+
+        layout = d.layout()
+        assert isinstance(layout, QFormLayout)
+
+        checkbox = d._check.widget
+        assert isinstance(checkbox, QCheckBox)
+
+        # Initially hidden (selected_collection is None)
+        assert checkbox.isHidden(), "Checkbox should be hidden when selected_collection is None"
+        assert not layout.isRowVisible(checkbox), "Row should be hidden when checkbox is hidden"
+
+        # Set a collection - should become visible
+        d.selected_collection.value = Collection("Test")
+        qt.process_events()
+
+        assert not checkbox.isHidden(), "Checkbox should be visible when selected_collection is not None"
+        assert layout.isRowVisible(checkbox), "Row should be visible when selected_collection is not None"
+
+    def test_variable_widget_visible_simple_bool(self, qt: QtDriver) -> None:
+        """Variable[T, W] visible= with simple bool Variable hides form row."""
+        from PySide6.QtWidgets import QCheckBox, QFormLayout
+
+        @dialog(layout="form")
+        class TestDialog(Dialog):
+            _show: Variable[bool] = new(True)
+            _check: Variable[bool, QCheckBox] = new(False)(
+                label="Check Me",
+                visible="_show",
+            )
+
+        d = qt.track(TestDialog())
+        qt.process_events()
+
+        layout = d.layout()
+        assert isinstance(layout, QFormLayout)
+
+        checkbox = d._check.widget
+        assert isinstance(checkbox, QCheckBox)
+
+        # Initially visible
+        assert not checkbox.isHidden(), "Checkbox should be visible when _show is True"
+        assert layout.isRowVisible(checkbox), "Row should be visible when _show is True"
+
+        # Hide
+        d._show.value = False
+        qt.process_events()
+
+        assert checkbox.isHidden(), "Checkbox should be hidden when _show is False"
+        assert not layout.isRowVisible(checkbox), "Row should be hidden when _show is False"
+
+    def test_variable_widget_visible_with_bool_expression(self, qt: QtDriver) -> None:
+        """Variable[T, W] visible= with expression using int Variable hides form row."""
+        from PySide6.QtWidgets import QCheckBox
+
+        @dialog(layout="form")
+        class TestDialog(Dialog):
+            _count: Variable[int] = new(5)
+            _check: Variable[bool, QCheckBox] = new(False)(
+                label="Check Me",
+                visible="{_count > 3}",
+            )
+
+        d = qt.track(TestDialog())
+        qt.process_events()
+
+        layout = d.layout()
+        checkbox = d._check.widget
+
+        # Initially visible (5 > 3)
+        assert not checkbox.isHidden(), "Checkbox should be visible when _count > 3"
+        assert layout.isRowVisible(checkbox), "Row should be visible when _count > 3"
+
+        # Make expression false
+        d._count.value = 2
+        qt.process_events()
+
+        assert checkbox.isHidden(), "Checkbox should be hidden when _count <= 3"
+        assert not layout.isRowVisible(checkbox), "Row should be hidden when _count <= 3"
+
+    def test_variable_widget_visible_with_proxy_expression(self, qt: QtDriver) -> None:
+        """Variable[T, W] visible= with expression using ObservableProxy hides form row."""
+        from PySide6.QtWidgets import QCheckBox
+
+        @dataclass
+        class MyData:
+            active: bool = True
+
+        @dialog(layout="form")
+        class TestDialog(Dialog):
+            _data: Variable[MyData] = new()
+            _check: Variable[bool, QCheckBox] = new(False)(
+                label="Check Me",
+                visible="{_data.active}",
+            )
+
+        d = qt.track(TestDialog())
+        qt.process_events()
+
+        layout = d.layout()
+        checkbox = d._check.widget
+
+        # Initially visible (active=True)
+        assert not checkbox.isHidden(), "Checkbox should be visible when _data.active is True"
+        assert layout.isRowVisible(checkbox), "Row should be visible when _data.active is True"
+
+        # Make expression false
+        d._data.active = False
+        qt.process_events()
+
+        assert checkbox.isHidden(), "Checkbox should be hidden when _data.active is False"
+        assert not layout.isRowVisible(checkbox), "Row should be hidden when _data.active is False"

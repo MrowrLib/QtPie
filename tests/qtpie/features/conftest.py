@@ -114,6 +114,17 @@ SIGNAL_CLASS_TYPES = [
     pytest.param(GroupBox, groupbox, id="GroupBox"),
 ]
 
+# Components that can call show_dialog() - all QtPieComponentBase subclasses
+# that are QWidgets (can be used as parent)
+SHOW_DIALOG_CALLER_TYPES = [
+    pytest.param(Widget, widget, id="Widget"),
+    pytest.param(Window, window, id="Window"),
+    pytest.param(Dialog, dialog, id="Dialog"),
+    pytest.param(Menu, menu, id="Menu"),
+    pytest.param(Frame, frame, id="Frame"),
+    pytest.param(GroupBox, groupbox, id="GroupBox"),
+]
+
 
 def create_and_track(
     qt: QtDriver,

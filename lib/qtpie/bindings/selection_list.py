@@ -20,6 +20,8 @@ def setup_selection_bindings(
     selected_text_path: str | None = None,
     resolve_or_create_variable_fn: Any = None,  # Callable to resolve/create variables
     root_variable: Any = None,  # Root Variable for nested paths (passed from model_binding)
+    *,
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
 ) -> None:
     """Set up two-way selection bindings for model widgets.
 
@@ -35,11 +37,13 @@ def setup_selection_bindings(
         selected_text_path: Variable path for text binding - matches by display text (e.g., "_selected_name")
         resolve_or_create_variable_fn: Function to resolve/create variables (injected from apply.py)
         root_variable: Root Variable for nested binding paths (e.g., workspace for "workspace?.active_env")
+        deselect_on_escape: If True, pressing Escape clears selection and sets Variables to None/[]/-1
     """
     has_single = selected_index_path is not None or selected_item_path is not None or selected_text_path is not None
     has_multi = selected_indexes_path is not None or selected_items_list_path is not None
     has_widget = selected_widget_path is not None
-    if not has_single and not has_multi and not has_widget:
+    has_bindings = has_single or has_multi or has_widget
+    if not has_bindings and not deselect_on_escape:
         return
 
     from observant import Observable, ObservableList, ObservableProxy
@@ -113,6 +117,7 @@ def setup_selection_bindings(
         text_var_path=selected_text_path,
         items_list_var_path=selected_items_list_path,
         resolve_or_create_variable_fn=resolve_or_create_variable_fn,
+        deselect_on_escape=deselect_on_escape,
     )
 
 
@@ -132,6 +137,7 @@ def _setup_selection_bindings_impl(
     text_var_path: str | None = None,  # Original path for re-resolution
     items_list_var_path: str | None = None,  # Original path for re-resolution (multi-selection)
     resolve_or_create_variable_fn: Any | None = None,  # For re-resolving nested paths
+    deselect_on_escape: bool = False,  # Install Escape key handler to clear selection
 ) -> None:
     """Implementation of selection bindings (called after Variables are resolved)."""
     from observant import Observable, ObservableList, ObservableProxy
@@ -1203,3 +1209,75 @@ def _setup_selection_bindings_impl(
             None,
             on_items_list_resolved,
         )
+
+    # Install Escape key handler to clear selection and directly set Variables to None/[]/-1
+    # This is more reliable than relying on Qt signals from sm.clear()
+    # Only install for QListView, not QComboBox (deselect_on_escape is already filtered by caller)
+    if deselect_on_escape and not isinstance(widget, QComboBox):
+        from qtpie.signals.connect import connect_event_handlers
+
+        def on_escape_clear_selection() -> bool:
+            # Use updating flag to prevent recursion from Variable change callbacks
+            if updating["flag"]:
+                return True
+            updating["flag"] = True
+            try:
+                # Clear Qt selection model
+                sm = binding_container.get("selection_model")
+                if sm is not None:
+                    sm.clear()  # pyright: ignore[reportUnknownMemberType]
+
+                # Directly set single selection Variables - don't rely on Qt signals
+                # IMPORTANT: Check if value is already the target before setting to avoid
+                # triggering notification chains when sibling proxies share the same value
+
+                idxv = binding_container.get("index_var")
+                if idxv is not None:
+                    current_idx = get_index_var_value()
+                    if current_idx != -1:  # Only set if not already -1
+                        if binding_container.get("is_index_observable"):
+                            idxv.set(-1)  # pyright: ignore[reportUnknownMemberType]
+                        else:
+                            idxv.value = -1  # pyright: ignore[reportUnknownMemberType]
+
+                itemv = binding_container.get("item_var")
+                if itemv is not None:
+                    current_item = get_item_var_value()
+                    if current_item is not None:  # Only set if not already None
+                        if binding_container.get("is_item_observable"):
+                            itemv.set(None)  # pyright: ignore[reportUnknownMemberType]
+                        else:
+                            itemv.value = None  # pyright: ignore[reportUnknownMemberType]
+
+                txtv = binding_container.get("text_var")
+                if txtv is not None:
+                    current_text = txtv.value if not binding_container.get("is_text_observable") else txtv.get()  # pyright: ignore[reportUnknownMemberType]
+                    if current_text:  # Only set if not already empty
+                        txtv.value = ""  # pyright: ignore[reportUnknownMemberType]
+
+                wgtv = binding_container.get("widget_var")
+                if wgtv is not None:
+                    if wgtv.value is not None:  # pyright: ignore[reportUnknownMemberType]
+                        wgtv.value = None  # pyright: ignore[reportUnknownMemberType]
+
+                # Directly set multi-selection Variables - check if already empty
+                if indexes_var is not None:
+                    current_indexes = indexes_var.value  # pyright: ignore[reportUnknownMemberType]
+                    if current_indexes:  # Not empty
+                        indexes_var.value = []  # pyright: ignore[reportUnknownMemberType]
+
+                if items_list_var is not None:
+                    is_obs_list = isinstance(items_list_var, ObservableList)
+                    if is_obs_list:
+                        if len(items_list_var) > 0:  # pyright: ignore[reportUnknownArgumentType]
+                            items_list_var.clear()  # pyright: ignore[reportUnknownMemberType]
+                    else:
+                        current_items = items_list_var.value  # pyright: ignore[reportUnknownMemberType]
+                        if current_items:  # Not empty
+                            items_list_var.value = []  # pyright: ignore[reportUnknownMemberType]
+            finally:
+                updating["flag"] = False
+
+            return True  # Consume the event
+
+        connect_event_handlers(host, widget, "", {"onEscapeKey": on_escape_clear_selection})

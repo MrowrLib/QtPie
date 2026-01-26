@@ -2541,3 +2541,122 @@ class TestListViewOnEdited:
         assert_that(callback_calls).is_length(1)
         assert_that(callback_calls[0][1]).is_equal_to("Original")
         assert_that(callback_calls[0][2]).is_equal_to("Modified")
+
+
+# =============================================================================
+# deselectOnEscape Tests
+# =============================================================================
+
+
+class TestListViewDeselectOnEscape:
+    """Test deselectOnEscape= for QListView (default: True)."""
+
+    def test_escape_clears_selection_by_default(self, qt: QtDriver) -> None:
+        """Pressing Escape clears list selection and selectedItem Variable by default."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _list: QListView = new(bind="_items", selectedItem="_selected")
+            _items: Variable[list[str]] = new(["A", "B", "C"])
+            _selected: Variable[str | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._list.model()
+        index = model.index(0, 0)
+        instance._list.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection - both Qt and Variable
+        assert instance._list.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+        assert instance._selected.value == "A"
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._list, event)
+        qt.process_events()
+
+        # Selection should be cleared - both Qt and Variable
+        assert not instance._list.selectionModel().hasSelection()
+        assert instance._selected.value is None
+
+    def test_escape_clears_selected_items_list(self, qt: QtDriver) -> None:
+        """Pressing Escape clears selectedItems list Variable."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+        from PySide6.QtWidgets import QAbstractItemView
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _list: QListView = new(bind="_items", selectedItems="_selected_list")
+            _items: Variable[list[str]] = new(["A", "B", "C"])
+            _selected_list: Variable[list[str]] = new([])
+
+        instance = qt.track(TestWidget())
+        instance._list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        instance.show()
+        qt.process_events()
+
+        # Select multiple items
+        model = instance._list.model()
+        sm = instance._list.selectionModel()
+        sm.select(model.index(0, 0), sm.SelectionFlag.Select)
+        sm.select(model.index(1, 0), sm.SelectionFlag.Select)
+        qt.process_events()
+
+        # Verify multiple selection
+        assert len(instance._selected_list.value) == 2
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._list, event)
+        qt.process_events()
+
+        # selectedItems should be empty
+        assert instance._selected_list.value == []
+
+    def test_deselect_on_escape_false_keeps_selection(self, qt: QtDriver) -> None:
+        """Pressing Escape does NOT clear selection when deselectOnEscape=False."""
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        from qtpie import Widget, widget
+
+        @widget
+        class TestWidget(Widget):
+            _list: QListView = new(bind="_items", selectedItem="_selected", deselectOnEscape=False)
+            _items: Variable[list[str]] = new(["A", "B", "C"])
+            _selected: Variable[str | None] = new(None)
+
+        instance = qt.track(TestWidget())
+        instance.show()
+        qt.process_events()
+
+        # Select first item
+        model = instance._list.model()
+        index = model.index(0, 0)
+        instance._list.setCurrentIndex(index)
+        qt.process_events()
+
+        # Verify selection
+        assert instance._list.selectionModel().hasSelection()
+        assert instance._selected.value is not None
+
+        # Send Escape key
+        event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(instance._list, event)
+        qt.process_events()
+
+        # Selection should still be there
+        assert instance._list.selectionModel().hasSelection()
+        assert instance._selected.value is not None

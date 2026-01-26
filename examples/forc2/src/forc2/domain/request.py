@@ -1,14 +1,20 @@
 # pyright: reportUnknownVariableType=false
 """Request - the atomic unit of an HTTP request definition."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from qtpie import State, Var, new, state
 
 from .auth import Auth
 from .body import BodyType
+
+if TYPE_CHECKING:
+    from .collection import Collection
 
 
 class HttpMethod(Enum):
@@ -43,6 +49,16 @@ class Request(State):
     body_fields: Var[list[RequestKeyValue]] = new([])
     auth: Var[Auth | None] = new(None)
     filename: Var[str | None] = new(None)
+
+    ### Properties ###
+    @property
+    def collection(self) -> Collection | None:
+        from .collection import Collection
+
+        parent = self.state_parent
+        if isinstance(parent, Collection):
+            return parent
+        return None
 
     ### Methods ###
     def _get_full_path(self) -> Path | None:
