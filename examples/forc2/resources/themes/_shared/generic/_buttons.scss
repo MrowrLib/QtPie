@@ -19,9 +19,9 @@ QPushButton:pressed {
 }
 
 QPushButton:disabled {
-    background-color: $bg-secondary;
-    color: $text-muted;
-    border-color: $border-subtle;
+    background-color: $bg-disabled;
+    color: $text-disabled;
+    border-color: $bg-primary;
 }
 
 // Primary/accent button
@@ -41,8 +41,8 @@ QPushButton[class~="btn-primary"]:pressed {
 }
 
 QPushButton[class~="btn-primary"]:disabled {
-    background-color: $accent-muted;
-    color: $text-muted;
+    background-color: $accent-disabled;
+    color: $text-disabled;
 }
 
 // Icon-only button (minimal, no chrome)
@@ -55,6 +55,10 @@ QPushButton[class~="btn-icon"] {
 QPushButton[class~="btn-icon"]:hover {
     background-color: $bg-hover;
     border-radius: $radius-md;
+}
+
+QPushButton[class~="btn-icon"]:disabled {
+    color: $text-disabled;
 }
 
 // Delete button (icon button with danger hover)
@@ -75,22 +79,28 @@ QPushButton[class~="btn-add"]:hover {
     background-color: rgba(124, 58, 237, 0.1);
 }
 
-// QToolButton with icon and text
+QPushButton[class~="btn-add"]:disabled {
+    border-color: $bg-secondary;
+    color: $text-disabled;
+}
+
+// QToolButton (icon buttons)
 QToolButton {
-    background-color: $bg-tertiary;
+    background: transparent;
     color: $text-primary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-md;
-    padding: 0.46em 0.92em;
-    min-height: 1.54em;
-    spacing: 0.46em;
+    border: none;
+    padding: 0.25em;
 }
 
 QToolButton:hover {
     background-color: $bg-hover;
-    border-color: $border-strong;
+    border-radius: $radius-md;
 }
 
 QToolButton:pressed {
     background-color: $bg-selected;
+}
+
+QToolButton:disabled {
+    color: $text-disabled;
 }

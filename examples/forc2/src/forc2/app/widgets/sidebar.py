@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QTreeView
+from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
 
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.workspace import Workspace
@@ -46,6 +46,9 @@ class AddCollectionDialog(Dialog):
 
 @widget(layout="horizontal")
 class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
+    ### Variables ###
+    selected_collection: Var[Collection | None]
+
     ### Widgets ###
     _new_collection_button: QPushButton = new(
         "+ New Collection",
@@ -55,7 +58,7 @@ class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
     _new_request_button: QPushButton = new(
         "+ New Request",
         # clicked="_on_new_request",
-        # enabled="{current_workspace_item is not None}",
+        enabled="{selected_collection is not None}",
         classes=["btn-add"],
     )
 
@@ -98,16 +101,26 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
         return True
 
 
+@widget(layout="horizontal")
+class CollectionsTreeActionsWidget(Widget[Collection | None]):
+    ### Widgets ###
+    _filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
+
+    # TODO: different buttons based on the theme, use a helper or something? but needs live dynamic too
+    _expand_all_button: QToolButton = new(icon=":/expand-all-dark.svg", clicked="{items.expandAll()}", tooltip="Expand All")
+    _collapse_all_button: QToolButton = new(icon=":/collapse-all-dark.svg", clicked="{items.collapseAll()}", tooltip="Collapse All")
+
+
 @widget
 class CollectionsTreeWidget(Widget[Collection | None]):
     ### Widgets ###
-    _filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
+    _actions: CollectionsTreeActionsWidget
     _items: QTreeView = new(
         children="items",
         widget=CollectionsTreeWidgetRow,
         expand=True,
         selectedItem="selected_sidebar_item",
-        filter="{_filter_text.lower()} in {(name or '').lower()}",
+        # filter="{_filter_text.lower()} in {(name or '').lower()}",
     )
 
     # The old one:
