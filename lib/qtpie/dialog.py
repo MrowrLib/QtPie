@@ -402,6 +402,14 @@ class Dialog[T = None](QDialog, QtPieComponentBase):
 
         Tests can override this to avoid blocking exec().
         """
+        # Force layout to calculate sizes before showing
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
+        # Set initial size so dialog opens at correct size immediately
+        hint = self.sizeHint()
+        if hint.isValid():
+            self.resize(hint)
         result_code = QDialog.DialogCode(self.exec())
         return self._build_result(result_code)
 
@@ -684,7 +692,6 @@ def _wrap_init_for_dialog(cls: type[Dialog[Any]]) -> None:
 
             apply_variable_kwargs(self, variable_kwargs)
 
-        # Call original __init__
         original_init(self, *args, **kwargs)
 
         # Initialize buttons dict

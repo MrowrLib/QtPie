@@ -34,6 +34,25 @@ class AddCollectionDialog(Dialog):
     _cancel: DialogButton
 
 
+@dialog(layout="form", size=(450, 150), title="Add Collection")
+class DifferentDialog(Dialog):
+    name: Var[str, QLineEdit] = new()(
+        label="Collection Name",
+        placeholderText="Enter collection name...",
+    )
+    make_root_collection: Var[bool, QCheckBox] = new(False)(label="Set as Root Collection")
+
+    parent_collection: Var[Collection | None, QLabel] = new(None)(
+        bind="{#var.name}",
+        label="Parent Collection",
+        visible="{not make_root_collection}",  # <--- if I comment this out, the mini dialog doesn't appear
+    )
+
+    #
+    _ok: DialogButton = new(enabled="{name != ''}")
+    _cancel: DialogButton
+
+
 @widget(layout="horizontal")
 class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
     ### Widgets ###
@@ -51,9 +70,16 @@ class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
 
     # ### Methods ###
     def _on_new_collection(self) -> None:
-        dialog = AddCollectionDialog()
-        if dialog.show_dialog():
-            ...
+        # DifferentDialog()
+        AddCollectionDialog()
+        # if dialog.show_dialog():
+        #     print("YES")
+        # else:
+        #     print("NO")
+        # # d = QDialog()
+        # ...
+        # if dialog.show_dialog():
+        #     ...
 
 
 @widget(layout="horizontal", margins=0)

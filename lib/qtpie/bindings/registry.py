@@ -273,6 +273,35 @@ def _register_default_bindings(registry: BindingRegistry) -> None:
         """Set widget visibility, handling special cases like QFormLayout and QMenu."""
         visible = bool(v) if v is not None else True
 
+        # Avoid calling setVisible(True) on widgets that could trigger a Dialog to flash.
+        # On Windows, setVisible(True) on a child can cause an unshown parent Dialog to appear.
+        # Widgets are visible by default, so they'll show when their parent window is shown.
+        if visible:
+            # Check if any ancestor is an unshown top-level window (like QDialog)
+            ancestor = w.parentWidget()
+            while ancestor is not None:
+                if ancestor.isWindow() and not ancestor.isVisible():
+                    # Inside an unshown top-level window - skip setVisible(True)
+                    return
+                ancestor = ancestor.parentWidget()
+
+            # If no parent yet, widget might be added to a Dialog later.
+            # Defer the setVisible(True) call to avoid triggering Dialog flash.
+            if w.parentWidget() is None:
+                from qtpy.QtCore import QTimer
+
+                def deferred_set_visible() -> None:
+                    # Re-check: if now inside an unshown window, skip
+                    anc = w.parentWidget()
+                    while anc is not None:
+                        if anc.isWindow() and not anc.isVisible():
+                            return
+                        anc = anc.parentWidget()
+                    w.setVisible(True)
+
+                QTimer.singleShot(0, deferred_set_visible)
+                return
+
         # QMenu in a menu bar: use menuAction().setVisible() instead
         if isinstance(w, QMenu):
             w.menuAction().setVisible(visible)
