@@ -16,6 +16,8 @@ from qtpy.QtCore import QEvent, QObject, QPoint, Qt, QTimer
 from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QMenu, QTabBar, QTabWidget, QWidget
 
+from .dock import resize_all_docks
+
 
 class DockTabConfig(Protocol):
     """Protocol for dock tab configuration (shared by WindowConfig and AppConfig)."""
@@ -497,6 +499,7 @@ class DockTabEventFilter(QObject):
         siblings = self._window.tabifiedDockWidgets(dock_widget)
         for sibling in siblings:
             sibling.close()
+        resize_all_docks(self._window)
 
     def _close_to_right(self, dock_widget: QDockWidget, current_index: int) -> None:
         """Close all tabs to the right of the given dock."""
@@ -510,6 +513,7 @@ class DockTabEventFilter(QObject):
                             if dock.windowTitle() == tab_title:
                                 dock.close()
                                 break
+                    resize_all_docks(self._window)
                     return
 
     def _close_to_left(self, dock_widget: QDockWidget, current_index: int) -> None:
@@ -524,6 +528,7 @@ class DockTabEventFilter(QObject):
                             if dock.windowTitle() == tab_title:
                                 dock.close()
                                 break
+                    resize_all_docks(self._window)
                     return
 
     def _close_all(self, dock_widget: QDockWidget) -> None:
@@ -532,6 +537,7 @@ class DockTabEventFilter(QObject):
         siblings.append(dock_widget)
         for dock in siblings:
             dock.close()
+        resize_all_docks(self._window)
 
 
 def _setup_title_bar_hooks(

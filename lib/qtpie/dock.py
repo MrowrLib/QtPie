@@ -2,8 +2,59 @@
 
 from __future__ import annotations
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QTimer
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QTabBar, QWidget
+
+
+def resize_all_docks(main_window: QMainWindow) -> None:
+    """Resize all docks based on their configured sizes.
+
+    This should be called after closing docks to restore proper proportions.
+    Uses the _qtpie_configured_width/height properties stored on each dock.
+    """
+
+    def _resolve_configured_size(d: QDockWidget, prop: str, window_size: int) -> int:
+        """Get the configured size for a dock, resolving fractional values."""
+        configured = d.property(prop)
+        if configured is not None:
+            if isinstance(configured, float) and 0.0 < configured < 1.0:
+                return int(window_size * configured)
+            return int(configured)
+        # No configured size - use current size
+        return d.width() if "width" in prop else d.height()
+
+    def apply_resize() -> None:
+        # Gather ALL visible horizontal docks and resize together to maintain proportions
+        all_h_docks: list[QDockWidget] = []
+        all_h_sizes: list[int] = []
+        all_v_docks: list[QDockWidget] = []
+        all_v_sizes: list[int] = []
+
+        for d in main_window.findChildren(QDockWidget):
+            if d.isVisible() and not d.isFloating():
+                dock_area = main_window.dockWidgetArea(d)
+                if dock_area in (
+                    Qt.DockWidgetArea.LeftDockWidgetArea,
+                    Qt.DockWidgetArea.RightDockWidgetArea,
+                ):
+                    all_h_docks.append(d)
+                    size = _resolve_configured_size(d, "_qtpie_configured_width", main_window.width())
+                    all_h_sizes.append(size)
+                elif dock_area in (
+                    Qt.DockWidgetArea.TopDockWidgetArea,
+                    Qt.DockWidgetArea.BottomDockWidgetArea,
+                ):
+                    all_v_docks.append(d)
+                    size = _resolve_configured_size(d, "_qtpie_configured_height", main_window.height())
+                    all_v_sizes.append(size)
+
+        if all_h_docks:
+            main_window.resizeDocks(all_h_docks, all_h_sizes, Qt.Orientation.Horizontal)
+        if all_v_docks:
+            main_window.resizeDocks(all_v_docks, all_v_sizes, Qt.Orientation.Vertical)
+
+    # Defer to allow Qt to process the close events first
+    QTimer.singleShot(0, apply_resize)
 
 
 class Dock[W: QWidget]:
@@ -242,6 +293,9 @@ class Dock[W: QWidget]:
         for sibling in siblings:
             sibling.close()
 
+        # Resize remaining docks to restore configured proportions
+        resize_all_docks(main_window)
+
     def close_to_right(self) -> None:
         """Close all tabs to the right in the tab bar."""
         main_window = self._get_main_window()
@@ -262,6 +316,8 @@ class Dock[W: QWidget]:
                             if dock.windowTitle() == tab_title:
                                 dock.close()
                                 break
+                    # Resize remaining docks to restore configured proportions
+                    resize_all_docks(main_window)
                     return
 
     def close_to_left(self) -> None:
@@ -284,6 +340,8 @@ class Dock[W: QWidget]:
                             if dock.windowTitle() == tab_title:
                                 dock.close()
                                 break
+                    # Resize remaining docks to restore configured proportions
+                    resize_all_docks(main_window)
                     return
 
     def close_all(self) -> None:
@@ -299,6 +357,9 @@ class Dock[W: QWidget]:
 
         for dock in siblings:
             dock.close()
+
+        # Resize remaining docks to restore configured proportions
+        resize_all_docks(main_window)
 
     # -------------------------------------------------------------------------
     # Helper methods

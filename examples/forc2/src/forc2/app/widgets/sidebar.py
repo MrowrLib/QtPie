@@ -104,7 +104,7 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
 @widget(layout="horizontal")
 class CollectionsTreeActionsWidget(Widget[Collection | None]):
     ### Widgets ###
-    _filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
+    filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
 
     # TODO: different buttons based on the theme, use a helper or something? but needs live dynamic too
     _expand_all_button: QToolButton = new(icon=":/expand-all-dark.svg", clicked="{items.expandAll()}", tooltip="Expand All")
@@ -120,7 +120,7 @@ class CollectionsTreeWidget(Widget[Collection | None]):
         widget=CollectionsTreeWidgetRow,
         expand=True,
         selectedItem="selected_sidebar_item",
-        # filter="{_filter_text.lower()} in {(name or '').lower()}",
+        filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
     )
 
     # The old one:
