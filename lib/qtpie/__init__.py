@@ -14,7 +14,7 @@ from .entrypoint import entrypoint
 from .event import Event
 from .frame import Frame, frame
 from .groupbox import GroupBox, groupbox
-from .layout import Stretch
+from .layout import Spacer, Stretch
 from .menu import Menu, MenuConfig, Section, Separator, menu
 from .messagebox import MessageBoxResult, confirm, messagebox
 from .new import new, none
@@ -65,6 +65,7 @@ __all__ = [
     "Frame",
     "GroupBox",
     "MessageBoxResult",
+    "Spacer",
     "Stretch",
     "app",
     "buttons",

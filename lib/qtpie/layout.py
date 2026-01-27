@@ -35,3 +35,53 @@ class Stretch:
     """
 
     pass
+
+
+class Spacer:
+    """Marker class for fixed-size layout spacing.
+
+    Adds fixed pixel space to a layout using QBoxLayout.addSpacing(size).
+    Unlike Stretch which expands, Spacer adds a fixed number of pixels.
+
+    Usage:
+        @widget
+        class MyWidget(Widget):
+            _top: QLabel = new("Top")
+            _space: Spacer = new(20)       # addSpacing(20) - 20px fixed space
+            _bottom: QLabel = new("Bottom")
+
+        @widget
+        class MyWidget(Widget):
+            _nested: QHBoxLayout = new()
+            _space_in_nested: Spacer = new(10, layout="_nested")  # Add to nested layout
+
+    Note: The size argument is REQUIRED. Spacer = new() without a size is an error.
+    """
+
+    pass
+
+
+# Layout configuration type aliases
+# SizeConstraint maps to QLayout.SizeConstraint enum
+SizeConstraint = Literal[
+    "default",  # SetDefaultConstraint
+    "fixed",  # SetFixedSize
+    "minimum",  # SetMinimumSize
+    "maximum",  # SetMaximumSize
+    "min_max",  # SetMinAndMaxSize
+    "no_constraint",  # SetNoConstraint
+]
+
+# RowWrapPolicy maps to QFormLayout.RowWrapPolicy enum
+RowWrapPolicy = Literal[
+    "dont_wrap",  # DontWrapRows
+    "wrap_long",  # WrapLongRows
+    "wrap_all",  # WrapAllRows
+]
+
+# FieldGrowthPolicy maps to QFormLayout.FieldGrowthPolicy enum
+FieldGrowthPolicy = Literal[
+    "fields_stay_at_size",  # FieldsStayAtSizeHint
+    "expanding_fields_grow",  # ExpandingFieldsGrow
+    "all_non_fixed_fields_grow",  # AllNonFixedFieldsGrow
+]

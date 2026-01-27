@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, overload
 
 import qasync  # type: ignore[import-untyped]
-from qtpy.QtCore import QTimer
+from qtpy.QtCore import Qt, QTimer
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
     QApplication,
@@ -23,13 +23,13 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from qtpie.layout import GridPosition, LayoutType
+from qtpie.layout import FieldGrowthPolicy, GridPosition, LayoutType, RowWrapPolicy, SizeConstraint
 from qtpie.mixins import QtPieComponentBase
 from qtpie.new_field import NewField
 from qtpie.signals import create_signal_expression_handler
 from qtpie.styles.color_scheme import ColorScheme, apply_deferred_color_scheme, set_color_scheme
 from qtpie.styles.loader import load_stylesheet as _load_stylesheet
-from qtpie.utils.layouts import add_to_layout, create_layout, resolve_icon
+from qtpie.utils.layouts import add_to_layout, apply_layout_config, create_layout, resolve_icon
 from qtpie.utils.type_checks import extract_record_type_from_bases
 from qtpie.widget import _validate_layout_params
 
@@ -74,6 +74,15 @@ class AppConfig:
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
     margins: int | tuple[int, int, int, int] | None = None
+    # Layout configuration
+    spacing: int | None = None
+    size_constraint: SizeConstraint | None = None
+    horizontal_spacing: int | None = None
+    vertical_spacing: int | None = None
+    row_wrap_policy: RowWrapPolicy | None = None
+    label_alignment: Qt.AlignmentFlag | None = None
+    form_alignment: Qt.AlignmentFlag | None = None
+    field_growth_policy: FieldGrowthPolicy | None = None
 
     # Feature toggles
     window: bool = True  # Auto-create Window for QWidget/QMenu fields
@@ -619,6 +628,15 @@ def app[A: AppBase[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> Callable[[type[A]], type[A]]: ...
 
@@ -669,6 +687,15 @@ def app[A: AppBase[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> type[A] | Callable[[type[A]], type[A]]:
     """Decorator for App/AppBase classes with declarative features.
@@ -766,6 +793,18 @@ def app[A: AppBase[Any]](
         config.signal_connections = signal_connections
         config.org = org
         config.app_name = app_name
+
+        # Store layout configuration
+        config.spacing = spacing
+        config.size_constraint = size_constraint
+        # Only store grid/form specific settings if layout type matches
+        config.horizontal_spacing = horizontal_spacing if layout in ("grid", "form") else None
+        config.vertical_spacing = vertical_spacing if layout in ("grid", "form") else None
+        # Only store form-specific settings if layout is form
+        config.row_wrap_policy = row_wrap_policy if layout == "form" else None
+        config.label_alignment = label_alignment if layout == "form" else None
+        config.form_alignment = form_alignment if layout == "form" else None
+        config.field_growth_policy = field_growth_policy if layout == "form" else None
 
         # Wrap __init__
         _wrap_init_for_app(target)
@@ -1039,8 +1078,8 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     # Check if we have dock fields
     has_docks = bool(config.dock_fields) or bool(config.variable_dock_fields)
 
-    # Check if we have layout items (nested layouts, stretch, spacers)
-    has_layout_items = any(field.is_nested_layout or field.is_stretch or field.is_spacer_item for field in config.fields.values())
+    # Check if we have layout items (nested layouts, stretch, spacer, spacer items)
+    has_layout_items = any(field.is_nested_layout or field.is_stretch or field.is_spacer or field.is_spacer_item for field in config.fields.values())
 
     # Only create window if there are fields to display
     if not menu_fields and not widget_fields and not has_docks and not has_layout_items:
@@ -1093,6 +1132,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
         from qtpie.widget import (
             _add_layout_to_nested_layout,
             _add_spacer_to_layout,
+            _add_spacing_to_layout,
             _add_stretch_to_layout,
             _add_widget_to_groupbox,
             _add_widget_to_nested_layout,
@@ -1112,6 +1152,20 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             from qtpie.utils.layouts import apply_layout_margins
 
             apply_layout_margins(qt_layout, config.margins)
+
+            # Apply layout configuration
+            apply_layout_config(
+                qt_layout,
+                config.layout,
+                spacing=config.spacing,
+                size_constraint=config.size_constraint,
+                horizontal_spacing=config.horizontal_spacing,
+                vertical_spacing=config.vertical_spacing,
+                row_wrap_policy=config.row_wrap_policy,
+                label_alignment=config.label_alignment,
+                form_alignment=config.form_alignment,
+                field_growth_policy=config.field_growth_policy,
+            )
 
             # Track nested layouts by field name for later reference
             nested_layouts: dict[str, QLayout] = {}
@@ -1162,7 +1216,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                         setattr(app, name, frame_instance)
                         frames[name] = frame_instance
 
-            # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
+            # Second pass: Add child widgets, Variables, Stretch, Spacer, and QSpacerItem to layouts
             from qtpie.layout import Stretch
 
             for name in getattr(cls, "__annotations__", {}):
@@ -1269,6 +1323,11 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                     # Handle Stretch
                     if field.is_stretch:
                         _add_stretch_to_layout(target, field.stretch_factor)
+                        continue
+
+                    # Handle Spacer (fixed pixel space)
+                    if field.is_spacer:
+                        _add_spacing_to_layout(target, field.spacer_size)
                         continue
 
                     # Handle QSpacerItem

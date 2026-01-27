@@ -10,6 +10,7 @@
 # pyright: reportCallIssue=false
 # pyright: reportIndexIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportUnusedClass=false
 """Tests for layouts across Widget, Window, and App.
 
 Tests vertical, horizontal, form, and grid layouts.
@@ -982,3 +983,296 @@ class TestNestedLayoutOrdering:
         # Verify name field is inside form layout
         form = items[form_idx]
         assert form.count() > 0, "Form should have items"
+
+
+# =============================================================================
+# Spacer (fixed pixel spacing)
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestSpacer:
+    """Spacer adds fixed pixel space to layouts via addSpacing()."""
+
+    def test_spacer_with_size(self, base_class, decorator, qt: QtDriver) -> None:
+        """Spacer with required size argument."""
+        from qtpie import Spacer
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            top: QLabel = new("Top")
+            _space: Spacer = new(20)  # 20px fixed space
+            bottom: QLabel = new("Bottom")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: top label, spacer, bottom label
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_spacer_in_horizontal(self, base_class, decorator, qt: QtDriver) -> None:
+        """Spacer works in horizontal layouts."""
+        from qtpie import Spacer
+
+        @decorator(layout="horizontal")
+        class TestClass(base_class):
+            left: QLabel = new("Left")
+            _space: Spacer = new(30)
+            right: QLabel = new("Right")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout).is_instance_of(QHBoxLayout)
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_spacer_in_nested_layout(self, base_class, decorator, qt: QtDriver) -> None:
+        """Spacer can be added to nested layout."""
+        from qtpie import Spacer
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _row: QHBoxLayout = new()
+            left: QLabel = new("Left", layout="_row")
+            _space: Spacer = new(10, layout="_row")
+            right: QLabel = new("Right", layout="_row")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Nested layout: left, spacer, right
+        assert_that(instance._row.count()).is_equal_to(3)
+
+    def test_multiple_spacers(self, base_class, decorator, qt: QtDriver) -> None:
+        """Multiple spacers in one layout."""
+        from qtpie import Spacer
+
+        @decorator(layout="vertical")
+        class TestClass(base_class):
+            _space1: Spacer = new(10)
+            middle: QLabel = new("Middle")
+            _space2: Spacer = new(20)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        # 3 items: spacer, label, spacer
+        assert_that(layout.count()).is_equal_to(3)
+
+    def test_spacer_requires_size(self, base_class, decorator, qt: QtDriver) -> None:
+        """Spacer without size argument raises error."""
+        from qtpie import Spacer
+
+        with pytest.raises(TypeError, match="requires a size argument"):
+
+            @decorator(layout="vertical")
+            class TestClass(base_class):
+                top: QLabel = new("Top")
+                _space: Spacer = new()  # Missing size!
+                bottom: QLabel = new("Bottom")
+
+
+# =============================================================================
+# Layout Spacing Configuration
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestLayoutSpacing:
+    """Test spacing= kwarg for all layout types."""
+
+    def test_vertical_layout_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """spacing= sets layout.setSpacing() for vertical layout."""
+
+        @decorator(layout="vertical", spacing=15)
+        class TestClass(base_class):
+            label1: QLabel = new("One")
+            label2: QLabel = new("Two")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.spacing()).is_equal_to(15)
+
+    def test_horizontal_layout_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """spacing= sets layout.setSpacing() for horizontal layout."""
+
+        @decorator(layout="horizontal", spacing=20)
+        class TestClass(base_class):
+            label1: QLabel = new("One")
+            label2: QLabel = new("Two")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.spacing()).is_equal_to(20)
+
+    def test_form_layout_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """spacing= sets layout.setSpacing() for form layout."""
+
+        @decorator(layout="form", spacing=12)
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+            email: QLineEdit = new(label="Email")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.spacing()).is_equal_to(12)
+
+    def test_grid_layout_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """spacing= sets layout.setSpacing() for grid layout."""
+
+        @decorator(layout="grid", spacing=8)
+        class TestClass(base_class):
+            btn_00: QLabel = new("00", grid=(0, 0))
+            btn_01: QLabel = new("01", grid=(0, 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.spacing()).is_equal_to(8)
+
+
+# =============================================================================
+# Grid/Form Horizontal/Vertical Spacing
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestLayoutHorizontalVerticalSpacing:
+    """Test horizontal_spacing= and vertical_spacing= for grid/form layouts."""
+
+    def test_grid_horizontal_vertical_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """horizontal_spacing= and vertical_spacing= work for grid layout."""
+
+        @decorator(layout="grid", horizontal_spacing=10, vertical_spacing=20)
+        class TestClass(base_class):
+            btn_00: QLabel = new("00", grid=(0, 0))
+            btn_01: QLabel = new("01", grid=(0, 1))
+            btn_10: QLabel = new("10", grid=(1, 0))
+            btn_11: QLabel = new("11", grid=(1, 1))
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.horizontalSpacing()).is_equal_to(10)
+        assert_that(layout.verticalSpacing()).is_equal_to(20)
+
+    def test_form_horizontal_vertical_spacing(self, base_class, decorator, qt: QtDriver) -> None:
+        """horizontal_spacing= and vertical_spacing= work for form layout."""
+
+        @decorator(layout="form", horizontal_spacing=15, vertical_spacing=25)
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+            email: QLineEdit = new(label="Email")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.horizontalSpacing()).is_equal_to(15)
+        assert_that(layout.verticalSpacing()).is_equal_to(25)
+
+
+# =============================================================================
+# Form Layout Configuration
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestFormLayoutConfig:
+    """Test form-specific layout configuration kwargs."""
+
+    def test_form_row_wrap_policy(self, base_class, decorator, qt: QtDriver) -> None:
+        """row_wrap_policy= sets QFormLayout.setRowWrapPolicy()."""
+
+        @decorator(layout="form", row_wrap_policy="wrap_all")
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.rowWrapPolicy()).is_equal_to(QFormLayout.RowWrapPolicy.WrapAllRows)
+
+    def test_form_field_growth_policy(self, base_class, decorator, qt: QtDriver) -> None:
+        """field_growth_policy= sets QFormLayout.setFieldGrowthPolicy()."""
+
+        @decorator(layout="form", field_growth_policy="expanding_fields_grow")
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.fieldGrowthPolicy()).is_equal_to(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+
+    def test_form_label_alignment(self, base_class, decorator, qt: QtDriver) -> None:
+        """label_alignment= sets QFormLayout.setLabelAlignment()."""
+        from qtpy.QtCore import Qt
+
+        @decorator(layout="form", label_alignment=Qt.AlignmentFlag.AlignRight)
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.labelAlignment()).is_equal_to(Qt.AlignmentFlag.AlignRight)
+
+    def test_form_alignment(self, base_class, decorator, qt: QtDriver) -> None:
+        """form_alignment= sets QFormLayout.setFormAlignment()."""
+        from qtpy.QtCore import Qt
+
+        @decorator(layout="form", form_alignment=Qt.AlignmentFlag.AlignHCenter)
+        class TestClass(base_class):
+            name: QLineEdit = new(label="Name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.formAlignment()).is_equal_to(Qt.AlignmentFlag.AlignHCenter)
+
+
+# =============================================================================
+# Size Constraint
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestSizeConstraint:
+    """Test size_constraint= kwarg for all layout types."""
+
+    def test_size_constraint_fixed(self, base_class, decorator, qt: QtDriver) -> None:
+        """size_constraint='fixed' sets SetFixedSize constraint."""
+        from PySide6.QtWidgets import QLayout
+
+        @decorator(layout="vertical", size_constraint="fixed")
+        class TestClass(base_class):
+            label: QLabel = new("Label")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.sizeConstraint()).is_equal_to(QLayout.SizeConstraint.SetFixedSize)
+
+    def test_size_constraint_minimum(self, base_class, decorator, qt: QtDriver) -> None:
+        """size_constraint='minimum' sets SetMinimumSize constraint."""
+        from PySide6.QtWidgets import QLayout
+
+        @decorator(layout="horizontal", size_constraint="minimum")
+        class TestClass(base_class):
+            label: QLabel = new("Label")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.sizeConstraint()).is_equal_to(QLayout.SizeConstraint.SetMinimumSize)
+
+    def test_size_constraint_maximum(self, base_class, decorator, qt: QtDriver) -> None:
+        """size_constraint='maximum' sets SetMaximumSize constraint."""
+        from PySide6.QtWidgets import QLayout
+
+        @decorator(layout="vertical", size_constraint="maximum")
+        class TestClass(base_class):
+            label: QLabel = new("Label")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.sizeConstraint()).is_equal_to(QLayout.SizeConstraint.SetMaximumSize)
+
+    def test_size_constraint_no_constraint(self, base_class, decorator, qt: QtDriver) -> None:
+        """size_constraint='no_constraint' sets SetNoConstraint."""
+        from PySide6.QtWidgets import QLayout
+
+        @decorator(layout="vertical", size_constraint="no_constraint")
+        class TestClass(base_class):
+            label: QLabel = new("Label")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        layout = get_layout(instance, base_class)
+        assert_that(layout.sizeConstraint()).is_equal_to(QLayout.SizeConstraint.SetNoConstraint)

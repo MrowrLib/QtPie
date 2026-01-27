@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Any, Literal
 
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon, QPixmap
 from qtpy.QtWidgets import (
     QApplication,
@@ -15,7 +16,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from qtpie.layout import LayoutType
+from qtpie.layout import FieldGrowthPolicy, LayoutType, RowWrapPolicy, SizeConstraint
 
 # Type alias for icon parameter
 # - None: inherit from parent/active window (default)
@@ -163,6 +164,93 @@ def apply_layout_margins(
         layout.setContentsMargins(margins, margins, margins, margins)
     else:
         layout.setContentsMargins(*margins)
+
+
+def _get_size_constraint(value: SizeConstraint) -> QLayout.SizeConstraint:
+    """Convert SizeConstraint string to Qt enum."""
+    mapping: dict[SizeConstraint, QLayout.SizeConstraint] = {
+        "default": QLayout.SizeConstraint.SetDefaultConstraint,
+        "fixed": QLayout.SizeConstraint.SetFixedSize,
+        "minimum": QLayout.SizeConstraint.SetMinimumSize,
+        "maximum": QLayout.SizeConstraint.SetMaximumSize,
+        "min_max": QLayout.SizeConstraint.SetMinAndMaxSize,
+        "no_constraint": QLayout.SizeConstraint.SetNoConstraint,
+    }
+    return mapping.get(value, QLayout.SizeConstraint.SetDefaultConstraint)
+
+
+def _get_row_wrap_policy(value: RowWrapPolicy) -> QFormLayout.RowWrapPolicy:
+    """Convert RowWrapPolicy string to Qt enum."""
+    mapping: dict[RowWrapPolicy, QFormLayout.RowWrapPolicy] = {
+        "dont_wrap": QFormLayout.RowWrapPolicy.DontWrapRows,
+        "wrap_long": QFormLayout.RowWrapPolicy.WrapLongRows,
+        "wrap_all": QFormLayout.RowWrapPolicy.WrapAllRows,
+    }
+    return mapping.get(value, QFormLayout.RowWrapPolicy.DontWrapRows)
+
+
+def _get_field_growth_policy(value: FieldGrowthPolicy) -> QFormLayout.FieldGrowthPolicy:
+    """Convert FieldGrowthPolicy string to Qt enum."""
+    mapping: dict[FieldGrowthPolicy, QFormLayout.FieldGrowthPolicy] = {
+        "fields_stay_at_size": QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint,
+        "expanding_fields_grow": QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow,
+        "all_non_fixed_fields_grow": QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow,
+    }
+    return mapping.get(value, QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+
+
+def apply_layout_config(
+    layout: QLayout,
+    layout_type: LayoutType,
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
+) -> None:
+    """Apply layout configuration settings.
+
+    Args:
+        layout: The Qt layout to configure.
+        layout_type: The type of layout (for determining which settings apply).
+        spacing: Universal spacing (setSpacing).
+        size_constraint: Layout size constraint (setSizeConstraint).
+        horizontal_spacing: Grid/Form horizontal spacing (setHorizontalSpacing).
+        vertical_spacing: Grid/Form vertical spacing (setVerticalSpacing).
+        row_wrap_policy: Form row wrap policy (setRowWrapPolicy).
+        label_alignment: Form label alignment (setLabelAlignment).
+        form_alignment: Form alignment (setFormAlignment).
+        field_growth_policy: Form field growth policy (setFieldGrowthPolicy).
+    """
+    # Universal: spacing and size_constraint work on all layouts
+    if spacing is not None:
+        layout.setSpacing(spacing)
+
+    if size_constraint is not None:
+        layout.setSizeConstraint(_get_size_constraint(size_constraint))
+
+    # Grid and Form: horizontal/vertical spacing
+    if layout_type in ("grid", "form"):
+        if horizontal_spacing is not None:
+            if isinstance(layout, (QGridLayout, QFormLayout)):
+                layout.setHorizontalSpacing(horizontal_spacing)
+        if vertical_spacing is not None:
+            if isinstance(layout, (QGridLayout, QFormLayout)):
+                layout.setVerticalSpacing(vertical_spacing)
+
+    # Form only settings
+    if layout_type == "form" and isinstance(layout, QFormLayout):
+        if row_wrap_policy is not None:
+            layout.setRowWrapPolicy(_get_row_wrap_policy(row_wrap_policy))
+        if label_alignment is not None:
+            layout.setLabelAlignment(label_alignment)
+        if form_alignment is not None:
+            layout.setFormAlignment(form_alignment)
+        if field_growth_policy is not None:
+            layout.setFieldGrowthPolicy(_get_field_growth_policy(field_growth_policy))
 
 
 def apply_object_name_and_classes(

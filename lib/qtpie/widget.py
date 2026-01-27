@@ -15,7 +15,7 @@ from qtpy.QtWidgets import (
 )
 
 from .event import extract_event_args, is_event_hint
-from .layout import GridPosition, LayoutType
+from .layout import FieldGrowthPolicy, GridPosition, LayoutType, RowWrapPolicy, SizeConstraint
 from .mixins import QtPieComponentBase
 from .new_field import NewField
 from .new_fields import new_fields
@@ -23,7 +23,7 @@ from .qt_pie_state import QtPieState
 from .qtpie_config import _QtPieConfig
 from .signals import create_signal_expression_handler
 from .utils.common import detect_required_bindings
-from .utils.layouts import IconType, add_to_layout, create_layout, resolve_icon
+from .utils.layouts import IconType, add_to_layout, apply_layout_config, create_layout, resolve_icon
 from .utils.type_checks import extract_record_type_from_bases
 from .variable import NO_DEFAULT, RecordVariable, Variable, _create_observable_for_type, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget_base import WidgetBase
@@ -377,6 +377,15 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     record: Any | None = None,
     attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
     styledBackground: bool = False,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
 
@@ -398,6 +407,15 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
     styledBackground: bool = False,
     stylesheet: str | None = None,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator to configure Widget layout.
@@ -479,6 +497,18 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         target._qtpie_config.icon = icon
         target._qtpie_config.size = size
         target._qtpie_config.signal_connections = signal_connections
+
+        # Store layout configuration
+        target._qtpie_config.spacing = spacing
+        target._qtpie_config.size_constraint = size_constraint
+        # Only store grid/form specific settings if layout type matches
+        target._qtpie_config.horizontal_spacing = horizontal_spacing if layout in ("grid", "form") else None
+        target._qtpie_config.vertical_spacing = vertical_spacing if layout in ("grid", "form") else None
+        # Only store form-specific settings if layout is form
+        target._qtpie_config.row_wrap_policy = row_wrap_policy if layout == "form" else None
+        target._qtpie_config.label_alignment = label_alignment if layout == "form" else None
+        target._qtpie_config.form_alignment = form_alignment if layout == "form" else None
+        target._qtpie_config.field_growth_policy = field_growth_policy if layout == "form" else None
 
         # Build attributes dict from attributes param and styledBackground shorthand
         attrs: dict[Qt.WidgetAttribute, bool] = {}
@@ -575,6 +605,20 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                 from .utils.layouts import apply_layout_margins
 
                 apply_layout_margins(qt_layout, config.margins)
+
+                # Apply layout configuration
+                apply_layout_config(
+                    qt_layout,
+                    config.layout,
+                    spacing=config.spacing,
+                    size_constraint=config.size_constraint,
+                    horizontal_spacing=config.horizontal_spacing,
+                    vertical_spacing=config.vertical_spacing,
+                    row_wrap_policy=config.row_wrap_policy,
+                    label_alignment=config.label_alignment,
+                    form_alignment=config.form_alignment,
+                    field_growth_policy=config.field_growth_policy,
+                )
 
                 # Track nested layouts by field name for later reference
                 nested_layouts: dict[str, QLayout] = {}
@@ -731,6 +775,11 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                         # Handle Stretch
                         if field.is_stretch:
                             _add_stretch_to_layout(target, field.stretch_factor)
+                            continue
+
+                        # Handle Spacer (fixed pixel space)
+                        if field.is_spacer:
+                            _add_spacing_to_layout(target, field.spacer_size)
                             continue
 
                         # Handle QSpacerItem
@@ -1034,6 +1083,18 @@ def _add_stretch_to_layout(layout: QLayout, factor: int = 1) -> None:
 
     if isinstance(layout, QBoxLayout):
         layout.addStretch(factor)
+
+
+def _add_spacing_to_layout(layout: QLayout, size: int) -> None:
+    """Add fixed pixel spacing to a layout.
+
+    Only works for QBoxLayout (QVBoxLayout, QHBoxLayout).
+    For other layout types, this is a no-op.
+    """
+    from qtpy.QtWidgets import QBoxLayout
+
+    if isinstance(layout, QBoxLayout):
+        layout.addSpacing(size)
 
 
 def _create_spacer_item(field: NewField) -> QSpacerItem:

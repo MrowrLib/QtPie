@@ -18,14 +18,14 @@ from qtpy.QtWidgets import (
 )
 
 from .event import extract_event_args, is_event_hint
-from .layout import GridPosition, LayoutType
+from .layout import FieldGrowthPolicy, GridPosition, LayoutType, RowWrapPolicy, SizeConstraint
 from .mixins import QtPieComponentBase
 from .new_field import NewField
 from .new_fields import new_fields
 from .qt_pie_state import QtPieState
 from .signals import create_signal_expression_handler
 from .utils.common import detect_required_bindings
-from .utils.layouts import add_to_layout, create_layout
+from .utils.layouts import add_to_layout, apply_layout_config, create_layout
 from .utils.type_checks import extract_record_type_from_bases
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
 from .widget import IconType, _validate_layout_params
@@ -46,6 +46,15 @@ class WindowConfig:
     # Layout configuration for central widget
     layout: LayoutType = "vertical"
     margins: int | tuple[int, int, int, int] | None = None
+    # Layout configuration kwargs
+    spacing: int | None = None
+    size_constraint: SizeConstraint | None = None
+    horizontal_spacing: int | None = None
+    vertical_spacing: int | None = None
+    row_wrap_policy: RowWrapPolicy | None = None
+    label_alignment: Qt.AlignmentFlag | None = None
+    form_alignment: Qt.AlignmentFlag | None = None
+    field_growth_policy: FieldGrowthPolicy | None = None
     # Record type from Window[T]
     record_type: type[Any] | None = None
     # Initial record value from @window(record=...)
@@ -315,6 +324,15 @@ def window[W: Window[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> Callable[[type[W]], type[W]]: ...
 
@@ -354,6 +372,15 @@ def window[W: Window[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Layout configuration
+    spacing: int | None = None,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> type[W] | Callable[[type[W]], type[W]]:
     """Decorator for Window classes.
@@ -443,6 +470,18 @@ def window[W: Window[Any]](
         config.size = size
         config.signal_connections = signal_connections
 
+        # Store layout configuration
+        config.spacing = spacing
+        config.size_constraint = size_constraint
+        # Only store grid/form specific settings if layout type matches
+        config.horizontal_spacing = horizontal_spacing if layout in ("grid", "form") else None
+        config.vertical_spacing = vertical_spacing if layout in ("grid", "form") else None
+        # Only store form-specific settings if layout is form
+        config.row_wrap_policy = row_wrap_policy if layout == "form" else None
+        config.label_alignment = label_alignment if layout == "form" else None
+        config.form_alignment = form_alignment if layout == "form" else None
+        config.field_growth_policy = field_growth_policy if layout == "form" else None
+
         # Build attributes dict from attributes param and styledBackground shorthand
         attrs: dict[Qt.WidgetAttribute, bool] = {}
         if attributes is not None:
@@ -496,7 +535,7 @@ def _has_layout_items(
         if name in config.fields:
             field = config.fields[name]
             # These types go in the layout
-            if field.is_stretch or field.is_spacer_item or field.is_nested_layout:
+            if field.is_stretch or field.is_spacer or field.is_spacer_item or field.is_nested_layout:
                 return True
             # Check if field type is a QWidget (not QMenu)
             if field.field_type is not None:
@@ -722,7 +761,15 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Option 2: Create a container with layout for non-menu/non-layout fields
         elif config.layout is not None and _has_layout_items(cls, config, dock_field_names, variable_dock_field_names):
             from .variable import _VariableDescriptor
-            from .widget import _add_layout_to_nested_layout, _add_spacer_to_layout, _add_stretch_to_layout, _add_widget_to_nested_layout, _create_spacer_item, _get_target_layout
+            from .widget import (
+                _add_layout_to_nested_layout,
+                _add_spacer_to_layout,
+                _add_spacing_to_layout,
+                _add_stretch_to_layout,
+                _add_widget_to_nested_layout,
+                _create_spacer_item,
+                _get_target_layout,
+            )
 
             central = QWidget()
             qt_layout = create_layout(config.layout)
@@ -733,6 +780,20 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 from .utils.layouts import apply_layout_margins
 
                 apply_layout_margins(qt_layout, config.margins)
+
+                # Apply layout configuration
+                apply_layout_config(
+                    qt_layout,
+                    config.layout,
+                    spacing=config.spacing,
+                    size_constraint=config.size_constraint,
+                    horizontal_spacing=config.horizontal_spacing,
+                    vertical_spacing=config.vertical_spacing,
+                    row_wrap_policy=config.row_wrap_policy,
+                    label_alignment=config.label_alignment,
+                    form_alignment=config.form_alignment,
+                    field_growth_policy=config.field_growth_policy,
+                )
 
                 # Track nested layouts by field name for later reference
                 nested_layouts: dict[str, QLayout] = {}
@@ -791,7 +852,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
                 _create_list_widget_fields(self, config)  # type: ignore[arg-type]
 
-                # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
+                # Second pass: Add child widgets, Variables, Stretch, Spacer, and QSpacerItem to layouts
                 from qtpie.layout import Stretch
 
                 from .widget import _add_widget_to_groupbox, _get_target_container, _get_target_splitter
@@ -903,6 +964,11 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                         # Handle Stretch
                         if field.is_stretch:
                             _add_stretch_to_layout(target, field.stretch_factor)
+                            continue
+
+                        # Handle Spacer (fixed pixel space)
+                        if field.is_spacer:
+                            _add_spacing_to_layout(target, field.spacer_size)
                             continue
 
                         # Handle QSpacerItem

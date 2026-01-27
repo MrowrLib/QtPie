@@ -4,7 +4,7 @@ from typing import Any
 
 from qtpy.QtCore import Qt
 
-from .layout import LayoutType
+from .layout import FieldGrowthPolicy, LayoutType, RowWrapPolicy, SizeConstraint
 from .new_field import NewField
 from .utils.layouts import IconType
 
@@ -32,6 +32,15 @@ class _QtPieConfig:
         "signal_connections",
         "event_new_fields",
         "attributes",
+        # Layout configuration
+        "spacing",
+        "size_constraint",
+        "horizontal_spacing",
+        "vertical_spacing",
+        "row_wrap_policy",
+        "label_alignment",
+        "form_alignment",
+        "field_growth_policy",
     )
 
     def __init__(self) -> None:
@@ -52,3 +61,12 @@ class _QtPieConfig:
         self.signal_connections: dict[str, str] = {}  # Signal connections from decorator
         self.event_new_fields: dict[str, NewField] = {}  # Event[T] fields with new(on=...)
         self.attributes: dict[Qt.WidgetAttribute, bool] = {}  # Widget attributes to set
+        # Layout configuration
+        self.spacing: int | None = None  # layout.setSpacing()
+        self.size_constraint: SizeConstraint | None = None  # layout.setSizeConstraint()
+        self.horizontal_spacing: int | None = None  # QGridLayout/QFormLayout.setHorizontalSpacing()
+        self.vertical_spacing: int | None = None  # QGridLayout/QFormLayout.setVerticalSpacing()
+        self.row_wrap_policy: RowWrapPolicy | None = None  # QFormLayout.setRowWrapPolicy()
+        self.label_alignment: Qt.AlignmentFlag | None = None  # QFormLayout.setLabelAlignment()
+        self.form_alignment: Qt.AlignmentFlag | None = None  # QFormLayout.setFormAlignment()
+        self.field_growth_policy: FieldGrowthPolicy | None = None  # QFormLayout.setFieldGrowthPolicy()

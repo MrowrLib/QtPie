@@ -7,7 +7,7 @@ from typing import Any, Literal, cast, get_args, get_origin, get_type_hints
 
 from .computed import Computed, create_computed_descriptor
 from .event import is_event_hint
-from .layout import GridPosition, Stretch
+from .layout import GridPosition, Spacer, Stretch
 from .setting import Setting
 from .utils.common import is_signal_on_type
 from .utils.type_checks import (
@@ -211,9 +211,11 @@ class NewField:
         self.variable_bindings: dict[str, Any] = {}  # child_var_name -> binding_value
         # Ref bindings - deferred attribute references to resolve after field instantiation
         self.ref_bindings: dict[str, Any] = {}  # kwarg_name -> Ref instance
-        # Layout item support (Stretch, QSpacerItem, QLayout)
+        # Layout item support (Stretch, Spacer, QSpacerItem, QLayout)
         self.is_stretch: bool = False  # True if field type is Stretch
         self.stretch_factor: int = 1  # Factor for addStretch()
+        self.is_spacer: bool = False  # True if field type is Spacer
+        self.spacer_size: int = 0  # Size in pixels for addSpacing()
         self.is_spacer_item: bool = False  # True if field type is QSpacerItem
         self.is_nested_layout: bool = False  # True if field type is QLayout subclass
         self.target_layout: str | None = None  # Layout to add this item to (field name reference)
@@ -693,6 +695,17 @@ class NewField:
             # Extract stretch factor from first arg (default 1)
             if self.args:
                 self.stretch_factor = int(self.args[0])
+            # Extract target layout reference (layout=nested_layout or layout="nested_layout")
+            self._extract_target_layout()
+            return
+
+        # Handle Spacer - adds fixed pixel space to layout
+        if self.field_type is Spacer:
+            self.is_spacer = True
+            # Extract spacer size from first arg (REQUIRED)
+            if not self.args:
+                raise TypeError(f"Spacer field '{name}' requires a size argument. Use: _space: Spacer = new(20)")
+            self.spacer_size = int(self.args[0])
             # Extract target layout reference (layout=nested_layout or layout="nested_layout")
             self._extract_target_layout()
             return
