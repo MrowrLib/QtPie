@@ -1,6 +1,5 @@
 """QtPie - Declarative UI framework for Qt."""
 
-from . import debug as _debug  # noqa: F401 # pyright: ignore[reportUnusedImport] - import for side effect
 from .app import App, AppBase, AppConfig, app, run_app
 from .bindings import bind, register_binding
 from .computed import Computed

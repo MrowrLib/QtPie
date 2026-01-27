@@ -1,9 +1,6 @@
 import logging
-import os
 
-os.environ["QTPIE_DEBUG"] = "1"
-
-logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s", handlers=[logging.FileHandler("forc_debug.log", mode="w"), logging.StreamHandler()])
+logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s", handlers=[logging.FileHandler("forc_debug.log", mode="w"), logging.StreamHandler()])
 
 from forc2.app.application import Application  # noqa: E402
 from forc2.app.qrc_resources import qt_resource_data  # noqa: E402  # pyright: ignore[reportAttributeAccessIssue,reportUnknownVariableType]

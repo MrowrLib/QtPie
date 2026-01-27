@@ -9,7 +9,7 @@ from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 
 
 # TODO add _
-@widget
+@widget(margins=0, spacing=0)
 class CentralWidget(Widget[Workspace | None]):
     app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
     load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.", visible="{#record is None}")
@@ -71,3 +71,8 @@ class MainWindow(Window[Workspace | None]):
             # Otherwise, add a new tab:
             self.editor_docked_tabs.append(item)
             self.selected_request_index = len(self.editor_docked_tabs) - 1
+
+        # Debug the lost of editor tabs:
+        print("Current editor tabs:")
+        for index, editor in enumerate(self.editor_docked_tabs()):
+            print(f" Tab {index}: {editor.name}")

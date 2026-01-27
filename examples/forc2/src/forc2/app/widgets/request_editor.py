@@ -116,7 +116,7 @@ class RequestBodyWidget(Widget[Request]):
         self.record.body_fields.remove(field)
 
 
-@widget(classes=["request-editor"])
+@widget(classes=["request-editor"], margins=0, spacing=0)
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
     _address_bar: RequestAddressBarWidget

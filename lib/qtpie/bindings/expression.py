@@ -1,10 +1,13 @@
 """Expression binding utilities shared across Widget, Window, App, Menu."""
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Any, cast
 
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy
+
+logger = logging.getLogger("qtpie.bindings")
 
 
 def _try_get_variable_from_obj(obj: Any, var_name: str) -> Any | None:
@@ -607,10 +610,8 @@ def create_expression_binding(
                     # Debug: check if nested proxy was created
                     nested_proxies: dict[str, Any] = object.__getattribute__(record_proxy, "_nested_proxies")
                     field_obs: dict[str, Any] = object.__getattribute__(record_proxy, "_field_observables")
-                    import logging
-
-                    logging.getLogger("qtpie.bindings").warning(
-                        "DEBUG compute: var=%s, proxy_id=%d, nested_proxies=%s, field_obs=%s, value_type=%s",
+                    logger.debug(
+                        "compute: var=%s, proxy_id=%d, nested_proxies=%s, field_obs=%s, value_type=%s",
                         var_name,
                         id(target),
                         list(nested_proxies.keys()),
