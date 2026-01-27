@@ -1,0 +1,29 @@
+// Main window and central widget styles
+
+#MainWindow {
+    background-color: $bg-base;
+}
+
+// Central widget (shown when no workspace or no tabs open)
+#CentralWidget {
+    background-color: $bg-primary;
+    padding: 2.46em;
+}
+
+#CentralWidget > QLabel {
+    color: $text-secondary;
+    padding: 0.62em;
+}
+
+// App header label
+#CentralWidget > QLabel:first-of-type {
+    font-size: $font-size-large;
+    font-weight: 600;
+    color: $text-primary;
+    padding-bottom: 1.23em;
+}
+
+// Load workspace button
+#CentralWidget > QPushButton {
+    margin-top: 0.92em;
+}

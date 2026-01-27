@@ -1,4 +1,9 @@
 # pyright: reportPrivateUsage=false
+# pyright: reportUnknownVariableType=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportMissingImports=false
+# pyright: reportUnknownParameterType=false
+# pyright: reportUnknownArgumentType=false
 """Tests for HTTP client service."""
 
 import json

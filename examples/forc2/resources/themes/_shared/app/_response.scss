@@ -1,2 +1,83 @@
 // Response viewer widget styles
-// Currently empty - will be re-styled as app is rebuilt
+
+#ResponseViewerWidget {
+    background-color: $bg-primary;
+    padding: 0.62em;
+}
+
+// "Send a request" placeholder message
+#ResponseViewerWidget > QLabel {
+    color: $text-muted;
+    font-style: italic;
+    padding: 1.54em;
+}
+
+// Status bar with stats
+#ResponseStatsWidget {
+    background-color: $bg-secondary;
+    border: $border-width solid $border-default;
+    border-radius: $radius-sm;
+    padding: 0.46em 0.92em;
+    margin-bottom: 0.62em;
+}
+
+#ResponseStatsWidget QLabel {
+    font-size: $font-size-small;
+    padding: 0 0.62em;
+}
+
+// Status badge coloring
+#ResponseStatsWidget QLabel[class~="status-2xx"] {
+    color: $success;
+    font-weight: 600;
+}
+
+#ResponseStatsWidget QLabel[class~="status-3xx"] {
+    color: $info;
+    font-weight: 600;
+}
+
+#ResponseStatsWidget QLabel[class~="status-4xx"] {
+    color: $warning;
+    font-weight: 600;
+}
+
+#ResponseStatsWidget QLabel[class~="status-5xx"] {
+    color: $error;
+    font-weight: 600;
+}
+
+// Time and size labels
+#ResponseStatsWidget QLabel:not([class~="status-badge"]) {
+    color: $text-secondary;
+}
+
+// Response body tab
+#ResponseBodyWidget {
+    padding: 0.62em;
+}
+
+#ResponseBodyWidget QLabel {
+    color: $text-secondary;
+    font-size: $font-size-small;
+    margin-bottom: 0.46em;
+}
+
+#ResponseBodyWidget QPlainTextEdit {
+    font-family: $font-family-code;
+    font-size: $font-size-base;
+    background-color: $bg-secondary;
+    border: $border-width solid $border-default;
+    border-radius: $radius-sm;
+    padding: 0.62em;
+}
+
+// Response headers tab
+#ResponseHeadersWidget {
+    padding: 0.62em;
+}
+
+// Response cookies tab
+#ResponseCookiesWidget {
+    padding: 0.62em;
+}

@@ -65,6 +65,7 @@
 @import "generic/_splitter.scss";
 @import "generic/_dialogs.scss";
 @import "generic/_badges.scss";
+@import "generic/_docks.scss";
 
 // ============================================
 // Typography classes (uses font + color vars)
@@ -74,6 +75,7 @@
 // ============================================
 // App-specific component styles (by feature)
 // ============================================
+@import "app/_main_window.scss";
 @import "app/_sidebar.scss";
 @import "app/_request.scss";
 @import "app/_request_editor.scss";

@@ -1,0 +1,71 @@
+// Dock widget styles
+
+QDockWidget {
+    background-color: $bg-primary;
+    color: $text-primary;
+    titlebar-close-icon: url(:/close.svg);
+    titlebar-normal-icon: url(:/float.svg);
+}
+
+QDockWidget::title {
+    background-color: $bg-secondary;
+    color: $text-primary;
+    padding: 0.46em 0.62em;
+    border-bottom: $border-width solid $border-default;
+    text-align: left;
+}
+
+QDockWidget::close-button,
+QDockWidget::float-button {
+    background: transparent;
+    border: none;
+    padding: 0.15em;
+    border-radius: $radius-sm;
+}
+
+QDockWidget::close-button:hover,
+QDockWidget::float-button:hover {
+    background-color: $bg-hover;
+}
+
+QDockWidget::close-button:pressed,
+QDockWidget::float-button:pressed {
+    background-color: $bg-selected;
+}
+
+// Dock tab bar (when multiple docks are tabbed together)
+QTabBar#DockWidgetTabBar {
+    background: transparent;
+}
+
+QTabBar#DockWidgetTabBar::tab {
+    background-color: $bg-secondary;
+    color: $text-secondary;
+    border: none;
+    border-bottom: $border-width-thick solid transparent;
+    padding: 0.62em 1.23em;
+    margin-right: 0;
+}
+
+QTabBar#DockWidgetTabBar::tab:hover {
+    background-color: $bg-tertiary;
+    color: $text-primary;
+}
+
+QTabBar#DockWidgetTabBar::tab:selected {
+    background-color: $bg-primary;
+    color: $text-primary;
+    border-bottom-color: $accent;
+}
+
+// Close button on dock tabs
+QTabBar#DockWidgetTabBar::close-button {
+    subcontrol-position: right;
+    margin: 0.15em;
+    padding: 0.15em;
+    border-radius: $radius-sm;
+}
+
+QTabBar#DockWidgetTabBar::close-button:hover {
+    background-color: $error-muted;
+}

@@ -174,6 +174,8 @@ def load_request(path: Path) -> Request:
         # Default to Auth() instead of None so the UI has something to bind to
         request.auth = Auth()
 
+    request.reset_dirty()
+
     return request
 
 

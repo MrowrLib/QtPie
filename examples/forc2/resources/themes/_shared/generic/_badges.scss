@@ -1,5 +1,5 @@
 // HTTP Method Badges
-.method-badge {
+QLabel[class~="method-badge"] {
   padding: 0.15em 0.46em;
   border-radius: $radius-lg;
   font-size: $font-size-tiny;
@@ -11,43 +11,43 @@
   qproperty-alignment: AlignCenter;
 }
 
-.method-GET {
-  //   background-color: $method-get-bg;
+QLabel[class~="method-GET"] {
+  background-color: $method-get-bg;
   color: $method-get;
 }
 
-.method-POST {
-  //   background-color: $method-post-bg;
+QLabel[class~="method-POST"] {
+  background-color: $method-post-bg;
   color: $method-post;
 }
 
-.method-PUT {
-  //   background-color: $method-put-bg;
+QLabel[class~="method-PUT"] {
+  background-color: $method-put-bg;
   color: $method-put;
 }
 
-.method-PATCH {
-  //   background-color: $method-patch-bg;
+QLabel[class~="method-PATCH"] {
+  background-color: $method-patch-bg;
   color: $method-patch;
 }
 
-.method-DELETE {
-  //   background-color: $method-delete-bg;
+QLabel[class~="method-DELETE"] {
+  background-color: $method-delete-bg;
   color: $method-delete;
 }
 
-.method-OPTIONS {
-  //   background-color: $method-options-bg;
+QLabel[class~="method-OPTIONS"] {
+  background-color: $method-options-bg;
   color: $method-options;
 }
 
-.method-HEAD {
-  //   background-color: $method-head-bg;
+QLabel[class~="method-HEAD"] {
+  background-color: $method-head-bg;
   color: $method-head;
 }
 
 // Fallback for unknown methods or None
-.method-None {
+QLabel[class~="method-None"] {
   background-color: transparent;
   color: $text-muted;
 }

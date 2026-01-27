@@ -1,2 +1,18 @@
-// Request editor widget styles
-// Currently empty - will be re-styled as app is rebuilt
+// Request widget styles (container for editor + response)
+
+#RequestWidget {
+    background-color: $bg-primary;
+}
+
+// Splitter between request editor and response viewer
+#RequestWidget > QSplitter {
+    background-color: $bg-primary;
+}
+
+#RequestWidget > QSplitter::handle {
+    background-color: $border-default;
+}
+
+#RequestWidget > QSplitter::handle:hover {
+    background-color: $accent;
+}

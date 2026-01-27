@@ -17,10 +17,10 @@ import pytest
 from assertpy import assert_that
 from observant import Observable
 
-from qtpie import Variable, new
+from qtpie import State, Variable, new, state
 from qtpie.testing import QtDriver
 
-from .conftest import ALL_CLASS_TYPES, create_and_track
+from .conftest import ALL_CLASS_TYPES, RECORD_CLASS_TYPES, create_and_track
 
 # =============================================================================
 # Basic Dirty State
@@ -532,3 +532,284 @@ class TestDirtyEdgeCases:
         instance._name.value = "third"
 
         assert_that(instance.dirty_fields).is_equal_to({"_name"})
+
+
+# =============================================================================
+# Dirty Tracking with State Records
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", RECORD_CLASS_TYPES)
+class TestDirtyWithStateRecord:
+    """Dirty tracking when record is a State."""
+
+    def test_state_record_change_via_proxy_makes_widget_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State record field via proxy makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_dirty.get()).is_false()
+
+        # Change via proxy setter (how bindings work)
+        instance.record.name = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_state_record_change_via_state_makes_widget_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State record field directly via State Variable makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_dirty.get()).is_false()
+
+        # Get the actual State target and change its Variable directly
+        # This bypasses the proxy - tests that State's dirty integrates with Widget
+        state_target: Person = instance._qtpie._record.observable._target  # type: ignore[attr-defined]
+        state_target.name.value = "Alice"
+
+        # Widget should see the State's dirty state
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_state_record_dirty_fields(self, base_class, decorator, qt: QtDriver) -> None:
+        """dirty_fields includes State record field names."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+            age: Variable[int] = new(0)
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            _extra: Variable[str] = new("")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        instance._extra.value = "extra"
+        instance.record.name = "Alice"
+
+        # Should include Widget Variable
+        assert_that(instance.dirty_fields).contains("_extra")
+        # Should be dirty
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_state_record_reset_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """reset_dirty clears State record dirty state."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.record.name = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+        instance.reset_dirty()
+        assert_that(instance.is_dirty.get()).is_false()
+
+    def test_state_record_on_dirty_changed_hook(self, base_class, decorator, qt: QtDriver) -> None:
+        """on_dirty_changed hook fires when State record changes."""
+        dirty_states: list[bool] = []
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            @override
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.record.name = "Alice"
+
+        assert_that(dirty_states).contains(True)
+
+
+# =============================================================================
+# Dirty Tracking with Variable[State]
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestDirtyWithVariableState:
+    """Dirty tracking when Variable holds a State."""
+
+    def test_variable_state_change_makes_widget_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State inside Variable makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _person: Variable[Person] = new(default=Person())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_dirty.get()).is_false()
+
+        # Get the State and change its Variable
+        person: Person = instance._person.value
+        person.name.value = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_variable_state_reset_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """reset_dirty clears State inside Variable."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _person: Variable[Person] = new(default=Person())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        person: Person = instance._person.value
+        person.name.value = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+        instance.reset_dirty()
+        assert_that(instance.is_dirty.get()).is_false()
+
+    def test_variable_list_of_states_change_makes_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State in list[State] Variable makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new(default=[Person()])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.reset_dirty()  # Clear initial state
+
+        # Change a State inside the list
+        person: Person = instance._people.value[0]
+        person.name.value = "Bob"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_variable_dict_of_states_change_makes_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State in dict[str, State] Variable makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[dict[str, Person]] = new(default={"alice": Person()})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.reset_dirty()  # Clear initial state
+
+        # Change a State inside the dict
+        person: Person = instance._people.value["alice"]
+        person.name.value = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_variable_set_of_states_change_makes_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State in set[State] Variable makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        person_instance = Person()
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[set[Person]] = new(default={person_instance})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.reset_dirty()  # Clear initial state
+
+        # Change a State inside the set
+        person_instance.name.value = "Bob"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_variable_list_of_states_reset_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """reset_dirty clears States inside list[State] Variable."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new(default=[Person()])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        person: Person = instance._people.value[0]
+        person.name.value = "Alice"
+        assert_that(instance.is_dirty.get()).is_true()
+
+        instance.reset_dirty()
+        assert_that(instance.is_dirty.get()).is_false()
+
+    def test_variable_list_of_states_add_new_state_tracks_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Adding new State to list then changing it makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new(default=[])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.reset_dirty()  # Clear initial state
+
+        # Add a new State to the list
+        new_person = Person()
+        instance._people.observable.append(new_person)  # type: ignore[union-attr]
+        instance.reset_dirty()  # Clear state after append
+
+        # Now change the newly added State
+        new_person.name.value = "New Person"
+        assert_that(instance.is_dirty.get()).is_true()
+
+    def test_variable_dict_of_states_add_new_state_tracks_dirty(self, base_class, decorator, qt: QtDriver) -> None:
+        """Adding new State to dict then changing it makes Widget dirty."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[dict[str, Person]] = new(default={})
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.reset_dirty()  # Clear initial state
+
+        # Add a new State to the dict
+        new_person = Person()
+        instance._people.observable["bob"] = new_person  # type: ignore[index]
+        instance.reset_dirty()  # Clear state after insert
+
+        # Now change the newly added State
+        new_person.name.value = "Bob Smith"
+        assert_that(instance.is_dirty.get()).is_true()

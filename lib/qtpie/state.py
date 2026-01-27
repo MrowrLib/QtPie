@@ -33,6 +33,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast, overload, override
 
+from observant import Observable
+
 from .event import Event, is_event_hint
 from .variable import Variable, _RequiredBindingDescriptor, _VariableDescriptor
 
@@ -109,6 +111,92 @@ class State:
         if not hasattr(self, "_state_instance"):
             self._state_instance = StateInstance()
         self._state_instance.state_parent = parent
+
+    # -------------------------------------------------------------------------
+    # Dirty Tracking
+    # -------------------------------------------------------------------------
+
+    # Dirty tracking state (per-instance, for on_dirty_changed hook)
+    _dirty_was_dirty: bool
+
+    def _ensure_qtpie(self) -> Any:
+        """Ensure _qtpie state exists, creating it lazily if needed."""
+        from .qt_pie_state import QtPieState
+
+        if not hasattr(self, "_qtpie"):
+            self._qtpie = QtPieState(self)  # type: ignore[attr-defined]
+        return self._qtpie
+
+    @property
+    def is_dirty(self) -> Observable[bool]:
+        """Check if any Variable has changed. Returns Observable[bool] for reactive bindings.
+
+        Example:
+            if state.is_dirty.get():
+                state.save()
+
+            # Or subscribe reactively
+            state.is_dirty.on_change(lambda dirty: print(f"Dirty: {dirty}"))
+        """
+        return self._ensure_qtpie().is_dirty
+
+    @property
+    def dirty_fields(self) -> set[str]:
+        """Return set of field names that have changed.
+
+        Example:
+            if "name" in state.dirty_fields:
+                print("Name was modified")
+        """
+        return self._ensure_qtpie().dirty_fields
+
+    def reset_dirty(self) -> None:
+        """Mark all Variables as clean.
+
+        Example:
+            state.name.value = "new name"
+            assert state.is_dirty.get() is True
+
+            state.reset_dirty()
+            assert state.is_dirty.get() is False
+        """
+        if hasattr(self, "_qtpie"):
+            self._qtpie.reset_dirty()  # type: ignore[attr-defined]
+
+    def on_dirty_changed(self, is_dirty: bool) -> None:
+        """Called when dirty state transitions (clean->dirty or dirty->clean).
+
+        Override this to react to dirty state changes.
+
+        Example:
+            @state
+            class MyState(State):
+                name: Variable[str] = new("")
+
+                def on_dirty_changed(self, is_dirty: bool) -> None:
+                    if is_dirty:
+                        print("State has unsaved changes")
+        """
+        pass
+
+    def _ensure_state_instance(self) -> StateInstance:
+        """Ensure _state_instance exists, creating it if needed."""
+        if not hasattr(self, "_state_instance"):
+            self._state_instance = StateInstance()
+        return self._state_instance
+
+    def _enable_dirty_hook(self) -> None:
+        """Enable the on_dirty_changed hook (called after __setup__)."""
+        if not hasattr(self, "_dirty_was_dirty"):
+            self._dirty_was_dirty = False
+
+        def check_dirty_transition(is_now_dirty: bool) -> None:
+            if self._dirty_was_dirty != is_now_dirty:
+                self._dirty_was_dirty = is_now_dirty
+                self.on_dirty_changed(is_now_dirty)
+
+        # Subscribe to the aggregated is_dirty Observable
+        self.is_dirty.on_change(check_dirty_transition)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a dict of all Variable fields with their unwrapped values.
@@ -406,6 +494,9 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
             setup_method()
+
+        # Enable dirty tracking hook AFTER __setup__ (so initial setup doesn't trigger it)
+        self._enable_dirty_hook()
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._state_config.init_wrapped = True

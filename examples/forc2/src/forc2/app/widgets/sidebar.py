@@ -78,10 +78,10 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
         bind="{method?.value}",
         classes=["method-badge", "method-{method?.value}"],
         visible="{#record?.method is not None}",
-        onEnterKey="_start_editing",
+        onEnterKey="start_editing",
     )
-    _text_label: QLabel = new(bind="{name}", visible="{not _is_editing}", onMouseDoubleClick="{_start_editing()}")
-    _text_edit: QLineEdit = new(
+    _name_label: QLabel = new(bind="{name}", visible="{not _is_editing}", onMouseDoubleClick="{start_editing()}")
+    _name_edit: QLineEdit = new(
         bind="name",
         visible="{_is_editing}",
         # validator=filename_safe_validator,
@@ -90,14 +90,15 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
     )
 
     # ### Methods ###
-    def _start_editing(self) -> None:
+    def start_editing(self) -> None:
         self._is_editing = True
-        self._text_edit.setFocus()
+        self._name_edit.setFocus()
 
     def _stop_editing(self) -> bool:
-        self._text_edit.clearFocus()
+        self._name_edit.clearFocus()
         self._is_editing = False
-        # self.emit_event("on_rename", self.record_value, self._text_edit.text())
+        # self.emit_event("on_rename", self.record_value, self._name_edit.text())
+        print("Is the TreeItem dirty?", self.is_dirty.get())
         return True
 
 
@@ -113,14 +114,19 @@ class CollectionsTreeActionsWidget(Widget[Collection | None]):
 
 @widget
 class CollectionsTreeWidget(Widget[Collection | None]):
+    ### Variables ###
+    _current_tree_row: Var[CollectionsTreeWidgetRow | None]
+
     ### Widgets ###
     _actions: CollectionsTreeActionsWidget
     _items: QTreeView = new(
         children="items",
         widget=CollectionsTreeWidgetRow,
-        expand=True,
+        selectedWidget="_current_tree_row",
         selectedItem="selected_sidebar_item",
         filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
+        expand=True,
+        onEnterKey="{_current_tree_row.start_editing()}",
     )
 
     # The old one:
@@ -128,9 +134,7 @@ class CollectionsTreeWidget(Widget[Collection | None]):
     #  treeview: QTreeView = new(
     #         validator=filename_safe_validator,
     #         clicked="{on_current_workspace_item_changed()}",
-    #         onEnterKey="_on_enter_key",
     #         onDeleteKey="_on_delete_key",
-    #         selectedWidget="current_tree_widget_row",
     #     )
 
 

@@ -58,10 +58,53 @@ class QtPieStateBase:
 
     def _compute_is_dirty(self) -> bool:
         """Compute the aggregated dirty state."""
-        return any(var.is_dirty.get() for var in self.variables.values())
+        from .state import State
+
+        for var in self.variables.values():
+            if var.is_dirty.get():
+                return True
+            # Also check if variable value is a State
+            val = var.value
+            if isinstance(val, State) and val.is_dirty.get():
+                return True
+            # Check States inside collections
+            for state in self._extract_states_from_value(val):
+                if state.is_dirty.get():
+                    return True
+        return False
+
+    def _extract_states_from_value(self, val: Any) -> list[Any]:
+        """Extract all State instances from a value (list, dict, set, or direct)."""
+        from observant import ObservableDict, ObservableList, ObservableSet
+
+        from .state import State
+
+        states: list[Any] = []
+
+        # Direct State (already handled in _compute_is_dirty but useful for reset_dirty)
+        if isinstance(val, State):
+            states.append(val)
+        # List of States
+        elif isinstance(val, (list, ObservableList)):
+            for item in val:  # pyright: ignore[reportUnknownVariableType]
+                if isinstance(item, State):
+                    states.append(item)
+        # Dict with State values
+        elif isinstance(val, (dict, ObservableDict)):
+            for item in val.values():  # pyright: ignore[reportUnknownVariableType]
+                if isinstance(item, State):
+                    states.append(item)
+        # Set of States
+        elif isinstance(val, (set, ObservableSet)):
+            for item in val:  # pyright: ignore[reportUnknownVariableType]
+                if isinstance(item, State):
+                    states.append(item)
+
+        return states
 
     def _setup_is_dirty_aggregation(self) -> None:
         """Subscribe to all Variables' is_dirty and aggregate."""
+        from .state import State
 
         def update_aggregated(_: Any = None) -> None:
             assert self._aggregated_is_dirty is not None
@@ -70,9 +113,58 @@ class QtPieStateBase:
         # Subscribe to existing variables
         for var in self.variables.values():
             var.is_dirty.on_change(update_aggregated)
+            # Also subscribe to State's is_dirty if variable value is a State or collection of States
+            try:
+                val = var.value
+                if isinstance(val, State):
+                    val.is_dirty.on_change(update_aggregated)
+                # Subscribe to States inside collections
+                for state in self._extract_states_from_value(val):
+                    state.is_dirty.on_change(update_aggregated)
+                # Subscribe to new items added to collections
+                self._subscribe_collection_inserts(var, update_aggregated)
+            except Exception:
+                pass  # Variable might not have value yet
 
         # Initial update
         update_aggregated()
+
+    def _subscribe_collection_inserts(self, var: Variable[Any], update_cb: Callable[[Any], None]) -> None:
+        """Subscribe to on_insert for ObservableLists/Dicts to track new States."""
+        from observant import ObservableDict, ObservableList, ObservableSet
+
+        from .state import State
+
+        try:
+            obs = var.observable
+            if isinstance(obs, ObservableList):
+                # When new items are added to the list, check if they're States
+                def on_list_insert(index: int, item: Any) -> None:
+                    if isinstance(item, State):
+                        item.is_dirty.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_insert(on_list_insert)
+
+            elif isinstance(obs, ObservableDict):
+                # When new items are added to the dict, check if values are States
+                def on_dict_insert(key: Any, value: Any) -> None:
+                    if isinstance(value, State):
+                        value.is_dirty.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_insert(on_dict_insert)
+
+            elif isinstance(obs, ObservableSet):
+                # When new items are added to the set, check if they're States
+                def on_set_add(item: Any) -> None:
+                    if isinstance(item, State):
+                        item.is_dirty.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_add(on_set_add)
+        except Exception:
+            pass  # Observable might not be available yet
 
     @property
     def dirty_fields(self) -> set[str]:
@@ -87,8 +179,22 @@ class QtPieStateBase:
 
     def reset_dirty(self) -> None:
         """Mark all Variables as clean."""
+        from .state import State
+
         for var in self.variables.values():
             var.reset_dirty()
+            # Also reset State's dirty if variable value is a State or collection of States
+            val = var.value
+            if isinstance(val, State):
+                val.reset_dirty()
+            # Reset States inside collections
+            for state in self._extract_states_from_value(val):
+                state.reset_dirty()
+        # Also reset State's dirty if record target is a State
+        if self._record is not None:
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State):
+                target.reset_dirty()
 
     @property
     def record_state(self) -> RecordVariable[Any] | Variable[Any]:
@@ -239,12 +345,27 @@ class QtPieStateBase:
 
         # Subscribe to is_dirty aggregation
         if self._aggregated_is_dirty is not None:
+            from .state import State
 
             def update_is_dirty(_: Any = None) -> None:
                 assert self._aggregated_is_dirty is not None
                 self._aggregated_is_dirty.set(self._compute_is_dirty())
 
             var.is_dirty.on_change(update_is_dirty)
+
+            # Also subscribe to State's is_dirty if variable value is a State or collection of States
+            try:
+                val = var.value
+                if isinstance(val, State):
+                    val.is_dirty.on_change(update_is_dirty)
+                # Subscribe to States inside collections
+                for state in self._extract_states_from_value(val):
+                    state.is_dirty.on_change(update_is_dirty)
+                # Subscribe to new items added to collections
+                self._subscribe_collection_inserts(var, update_is_dirty)
+            except Exception:
+                pass  # Variable might not have value yet
+
             update_is_dirty()
 
     def enable_valid_hook(self) -> None:
@@ -418,16 +539,24 @@ class QtPieState(QtPieStateBase):
 
     def _compute_widget_is_dirty(self) -> bool:
         """Compute widget-level dirty: Variables OR record is dirty."""
+        from .state import State
+
         # Check Variables via view_model
         if self.is_dirty.get():
             return True
         # Check record if present
         if self._record is not None:
-            return self._record.is_dirty.get()
+            if self._record.is_dirty.get():
+                return True
+            # Also check if record target is a State with its own dirty tracking
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State) and target.is_dirty.get():
+                return True
         return False
 
     def _setup_widget_is_dirty(self) -> None:
         """Subscribe to view_model.is_dirty and record.is_dirty."""
+        from .state import State
 
         def update_widget_dirty(_: Any = None) -> None:
             assert self._widget_is_dirty is not None
@@ -439,12 +568,18 @@ class QtPieState(QtPieStateBase):
         # Subscribe to record if present
         if self._record is not None:
             self._record.is_dirty.on_change(update_widget_dirty)
+            # Also subscribe to State's is_dirty if record target is a State
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State):
+                target.is_dirty.on_change(update_widget_dirty)
 
         # Initial update
         update_widget_dirty()
 
     def _subscribe_record_to_widget_dirty(self) -> None:
         """Subscribe record to widget-level dirty aggregation (called when record is created)."""
+        from .state import State
+
         if self._widget_is_dirty is not None and self._record is not None:
 
             def update_widget_dirty(_: Any = None) -> None:
@@ -452,6 +587,12 @@ class QtPieState(QtPieStateBase):
                 self._widget_is_dirty.set(self._compute_widget_is_dirty())
 
             self._record.is_dirty.on_change(update_widget_dirty)
+
+            # Also subscribe to State's is_dirty if record target is a State
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State):
+                target.is_dirty.on_change(update_widget_dirty)
+
             update_widget_dirty()
 
     @property

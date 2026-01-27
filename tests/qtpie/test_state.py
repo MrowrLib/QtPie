@@ -5,6 +5,7 @@
 # pyright: reportUnknownLambdaType=false
 # pyright: reportCallIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportImplicitOverride=false
 """Tests for State - QtPie primitive for reactive state without Qt dependencies."""
 
 from assertpy import assert_that
@@ -1012,3 +1013,356 @@ class TestStateEventNewOn:
 
         assert_that(new_calls).is_equal_to(["new"])
         assert_that(decorator_calls).is_equal_to(["decorator"])
+
+
+class TestStateDirtyTracking:
+    """Test dirty tracking on State."""
+
+    def test_initially_not_dirty(self) -> None:
+        """New State is not dirty."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+
+    def test_dirty_after_change(self) -> None:
+        """State becomes dirty after Variable change."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        s.name.value = "changed"
+        assert_that(s.is_dirty.get()).is_true()
+
+    def test_dirty_fields_tracks_changed(self) -> None:
+        """dirty_fields contains only changed fields."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+            count: Variable[int] = new(0)
+
+        s = MyState()
+        s.name.value = "changed"
+
+        assert_that(s.dirty_fields).is_equal_to({"name"})
+
+    def test_dirty_fields_multiple(self) -> None:
+        """dirty_fields tracks all changed fields."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+            count: Variable[int] = new(0)
+
+        s = MyState()
+        s.name.value = "changed"
+        s.count.value = 42
+
+        assert_that(s.dirty_fields).is_equal_to({"name", "count"})
+
+    def test_reset_dirty_clears_all(self) -> None:
+        """reset_dirty() marks all Variables as clean."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+            count: Variable[int] = new(0)
+
+        s = MyState()
+        s.name.value = "changed"
+        s.count.value = 42
+        assert_that(s.is_dirty.get()).is_true()
+
+        s.reset_dirty()
+        assert_that(s.is_dirty.get()).is_false()
+        assert_that(s.dirty_fields).is_equal_to(set())
+
+    def test_dirty_after_reset_and_change(self) -> None:
+        """After reset, changing a value makes it dirty again."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        s.name.value = "first"
+        s.reset_dirty()
+
+        s.name.value = "second"
+        assert_that(s.is_dirty.get()).is_true()
+
+
+class TestStateIsDirtyObservable:
+    """Test that State.is_dirty is Observable[bool] for reactive bindings."""
+
+    def test_is_dirty_is_observable(self) -> None:
+        """State.is_dirty should return Observable[bool]."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        assert_that(s.is_dirty).is_instance_of(Observable)
+        assert_that(s.is_dirty.get()).is_false()
+
+    def test_is_dirty_reactive_updates(self) -> None:
+        """State.is_dirty Observable should update when dirty state changes."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        dirty_changes: list[bool] = []
+        s.is_dirty.on_change(lambda v: dirty_changes.append(v))
+
+        # Initially clean
+        assert_that(s.is_dirty.get()).is_false()
+
+        # Become dirty
+        s.name.value = "changed"
+        assert_that(s.is_dirty.get()).is_true()
+        assert_that(dirty_changes).contains(True)
+
+        # Become clean again
+        s.reset_dirty()
+        assert_that(s.is_dirty.get()).is_false()
+        assert_that(dirty_changes).contains(False)
+
+
+class TestStateOnDirtyChangedHook:
+    """Test on_dirty_changed lifecycle hook on State."""
+
+    def test_hook_fires_on_dirty(self) -> None:
+        """on_dirty_changed fires when State becomes dirty."""
+        dirty_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        s = MyState()
+        s.name.value = "changed"
+
+        assert_that(dirty_states).is_equal_to([True])
+
+    def test_hook_fires_on_clean(self) -> None:
+        """on_dirty_changed fires when State becomes clean."""
+        dirty_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        s = MyState()
+        s.name.value = "changed"
+        s.reset_dirty()
+
+        assert_that(dirty_states).is_equal_to([True, False])
+
+    def test_hook_fires_on_transition_only(self) -> None:
+        """on_dirty_changed only fires on state transitions, not every change."""
+        dirty_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+            count: Variable[int] = new(0)
+
+            def on_dirty_changed(self, is_dirty: bool) -> None:
+                dirty_states.append(is_dirty)
+
+        s = MyState()
+        s.name.value = "first"  # clean -> dirty
+        s.name.value = "second"  # dirty -> dirty (no fire)
+        s.count.value = 42  # dirty -> dirty (no fire)
+
+        assert_that(dirty_states).is_equal_to([True])
+
+    def test_hook_not_required(self) -> None:
+        """State without on_dirty_changed still works."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        s.name.value = "changed"
+        # Should not raise
+        assert_that(s.is_dirty.get()).is_true()
+
+
+class TestStateDirtyWithList:
+    """Test dirty tracking with list Variables on State."""
+
+    def test_list_append_makes_dirty(self) -> None:
+        """Appending to list makes State dirty."""
+
+        @state
+        class MyState(State):
+            items: Variable[list[str]] = new([])
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+
+        s.items.append("a")
+        assert_that(s.is_dirty.get()).is_true()
+        assert_that(s.dirty_fields).contains("items")
+
+    def test_list_remove_makes_dirty(self) -> None:
+        """Removing from list makes State dirty."""
+
+        @state
+        class MyState(State):
+            items: Variable[list[str]] = new(["a", "b"])
+
+        s = MyState()
+        s.reset_dirty()  # Clear initial state
+
+        s.items.remove("a")
+        assert_that(s.is_dirty.get()).is_true()
+
+    def test_list_clear_makes_dirty(self) -> None:
+        """Clearing list makes State dirty."""
+
+        @state
+        class MyState(State):
+            items: Variable[list[str]] = new(["a", "b"])
+
+        s = MyState()
+        s.reset_dirty()
+
+        s.items.clear()
+        assert_that(s.is_dirty.get()).is_true()
+
+
+class TestStateDirtyWithDict:
+    """Test dirty tracking with dict Variables on State."""
+
+    def test_dict_setitem_makes_dirty(self) -> None:
+        """Setting dict item makes State dirty."""
+
+        @state
+        class MyState(State):
+            data: Variable[dict[str, int]] = new({})
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+
+        s.data["key"] = 42
+        assert_that(s.is_dirty.get()).is_true()
+        assert_that(s.dirty_fields).contains("data")
+
+    def test_dict_delitem_makes_dirty(self) -> None:
+        """Deleting dict item makes State dirty."""
+
+        @state
+        class MyState(State):
+            data: Variable[dict[str, int]] = new({"key": 42})
+
+        s = MyState()
+        s.reset_dirty()
+
+        del s.data["key"]
+        assert_that(s.is_dirty.get()).is_true()
+
+
+class TestStateDirtyWithSet:
+    """Test dirty tracking with set Variables on State."""
+
+    def test_set_add_makes_dirty(self) -> None:
+        """Adding to set makes State dirty."""
+
+        @state
+        class MyState(State):
+            tags: Variable[set[str]] = new(set())
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+
+        s.tags.add("tag")
+        assert_that(s.is_dirty.get()).is_true()
+        assert_that(s.dirty_fields).contains("tags")
+
+    def test_set_discard_makes_dirty(self) -> None:
+        """Discarding from set makes State dirty."""
+
+        @state
+        class MyState(State):
+            tags: Variable[set[str]] = new({"a", "b"})
+
+        s = MyState()
+        s.reset_dirty()
+
+        s.tags.discard("a")
+        assert_that(s.is_dirty.get()).is_true()
+
+
+class TestStateDirtyEdgeCases:
+    """Edge cases for State dirty tracking."""
+
+    def test_reset_on_clean_is_safe(self) -> None:
+        """reset_dirty on already-clean State is safe."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+
+        s.reset_dirty()  # Should not raise
+        assert_that(s.is_dirty.get()).is_false()
+
+    def test_empty_state_not_dirty(self) -> None:
+        """State with no Variables starts not dirty."""
+
+        @state
+        class MyState(State):
+            pass
+
+        s = MyState()
+        assert_that(s.is_dirty.get()).is_false()
+        assert_that(s.dirty_fields).is_equal_to(set())
+
+    def test_multiple_changes_same_field(self) -> None:
+        """Multiple changes to same field only tracked once in dirty_fields."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        s.name.value = "first"
+        s.name.value = "second"
+        s.name.value = "third"
+
+        assert_that(s.dirty_fields).is_equal_to({"name"})
+
+    def test_per_instance_dirty_tracking(self) -> None:
+        """Each State instance has independent dirty tracking."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s1 = MyState()
+        s2 = MyState()
+
+        s1.name.value = "changed"
+
+        assert_that(s1.is_dirty.get()).is_true()
+        assert_that(s2.is_dirty.get()).is_false()

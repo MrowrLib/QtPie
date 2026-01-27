@@ -2,66 +2,134 @@
 // Layout and spacing specific to the request editor section
 
 // Main container
+#RequestEditorWidget,
 QWidget[class~="request-editor"] {
   background-color: $bg-primary;
   padding: 0.62em;
 }
 
 // Address bar (method + URL + send)
-// QWidget[class~="address-bar"] {
-#RequestAddressBarWidget {
-  background: transparent;
-}
-
-QWidget[class~="address-bar"] QComboBox[class~="method-chooser"] {
-  // padding: 5px;
-  min-height: 28px * $scale;
-}
-
-QWidget[class~="address-bar"] QComboBox[class~="method-chooser"]:hover {
+#RequestAddressBarWidget,
+QWidget[class~="address-bar"] {
+  background-color: $bg-secondary;
   border: $border-width solid $border-default;
+  border-radius: $radius-md;
+  padding: 0.31em;
+  margin-bottom: 0.62em;
+}
+
+// Method chooser in address bar
+QWidget[class~="address-bar"] QComboBox[class~="method-chooser"],
+#RequestAddressBarWidget QComboBox {
+  min-height: 28px * $scale;
+  font-weight: 700;
+  font-size: $font-size-small;
+  border: none;
+  background-color: transparent;
+  padding: 0.46em 0.77em;
+}
+
+QWidget[class~="address-bar"] QComboBox[class~="method-chooser"]:hover,
+#RequestAddressBarWidget QComboBox:hover {
+  background-color: $bg-hover;
+  border-radius: $radius-sm;
 }
 
 // URL input inside address bar (borderless, transparent)
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"] {
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"],
+#RequestAddressBarWidget QLineEdit {
   background-color: transparent;
   border: none;
   font-size: $font-size-large;
   padding: 0.62em;
 }
 
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:hover {
-  border: $border-width solid $border-default;
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:hover,
+#RequestAddressBarWidget QLineEdit:hover {
+  background-color: $bg-tertiary;
+  border-radius: $radius-sm;
 }
 
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:focus {
-  border: $border-width solid $border-default;
-  background-color: transparent;
+QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:focus,
+#RequestAddressBarWidget QLineEdit:focus {
+  background-color: $bg-tertiary;
+  border-radius: $radius-sm;
 }
 
-// Send button sizing
-QWidget[class~="address-bar"] QPushButton[class~="btn-send"] {
-  padding: 0.4em 1.2em;
+// Send button
+QWidget[class~="address-bar"] QPushButton[class~="btn-send"],
+#RequestAddressBarWidget QPushButton {
+  background-color: $accent;
+  color: white;
+  border: none;
+  border-radius: $radius-sm;
+  padding: 0.62em 1.54em;
+  font-weight: 600;
   font-size: $font-size-base;
+}
+
+QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:hover,
+#RequestAddressBarWidget QPushButton:hover {
+  background-color: $accent-hover;
+}
+
+QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:pressed,
+#RequestAddressBarWidget QPushButton:pressed {
+  background-color: $accent-active;
+}
+
+QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:disabled,
+#RequestAddressBarWidget QPushButton:disabled {
+  background-color: $accent-disabled;
+  color: $text-disabled;
 }
 
 // Tab content panels
 QWidget[class~="tab-content"] {
   padding: 0.92em;
+  background-color: transparent;
 }
 
 // Auth form layout
-QWidget[class~="auth-form"] {
+QWidget[class~="auth-form"],
+#RequestAuthFormWidget {
   margin-top: 0.62em;
 }
 
 QWidget[class~="auth-form"] QLineEdit,
-QWidget[class~="auth-form"] QComboBox {
+QWidget[class~="auth-form"] QComboBox,
+#RequestAuthFormWidget QLineEdit,
+#RequestAuthFormWidget QComboBox {
   min-width: 200px * $scale;
 }
 
 // Delete cell in tables (minimal width)
-QWidget[class~="delete-cell"] {
+QWidget[class~="delete-cell"],
+#DeleteWidget {
   background: transparent;
   max-width: 40px * $scale;
+}
+
+#DeleteWidget QPushButton,
+QWidget[class~="delete-cell"] QPushButton {
+  background: transparent;
+  border: none;
+  padding: 0.31em;
+  font-size: $font-size-large;
+}
+
+#DeleteWidget QPushButton:hover,
+QWidget[class~="delete-cell"] QPushButton:hover {
+  background-color: $error-muted;
+  border-radius: $radius-sm;
+}
+
+// Code editor (body text area)
+QPlainTextEdit[class~="code-editor"] {
+  font-family: $font-family-code;
+  font-size: $font-size-base;
+  background-color: $bg-secondary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-sm;
+  padding: 0.62em;
 }

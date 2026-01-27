@@ -1,2 +1,101 @@
 // Sidebar widget styles
-// Currently empty - will be re-styled as app is rebuilt
+
+// Main sidebar container
+#SidebarWidget {
+    background-color: $bg-secondary;
+    border-right: $border-width solid $border-default;
+}
+
+// Workspace name header
+#SidebarWidget > QLabel {
+    font-size: $font-size-large;
+    font-weight: 600;
+    color: $text-primary;
+    padding: 0.92em;
+    background-color: $bg-secondary;
+}
+
+// Action buttons row
+#WorkspaceActionButtonsWidget {
+    padding: 0.31em 0.62em;
+    background-color: transparent;
+}
+
+#WorkspaceActionButtonsWidget QPushButton {
+    font-size: $font-size-small;
+}
+
+// Collections tree - transparent so sidebar background shows through
+#CollectionsTreeWidget {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidget QTreeView {
+    background-color: transparent;
+    border: none;
+    font-size: $font-size-base;
+}
+
+#CollectionsTreeWidget QTreeView::item {
+    padding: 0.31em 0.46em;
+    border-radius: $radius-sm;
+}
+
+#CollectionsTreeWidget QTreeView::item:hover {
+    background-color: $bg-hover;
+}
+
+#CollectionsTreeWidget QTreeView::item:selected {
+    background-color: $bg-selected;
+}
+
+// Tree row widget (method badge + name)
+#CollectionsTreeWidgetRow {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidgetRow QLabel {
+    background-color: transparent;
+}
+
+#CollectionsTreeWidgetRow QLineEdit {
+    background-color: $bg-tertiary;
+    border: $border-width solid $border-focus;
+    padding: 0.23em 0.46em;
+}
+
+// Tree actions (filter + expand/collapse)
+#CollectionsTreeActionsWidget {
+    padding: 0.46em;
+    background-color: transparent;
+}
+
+#CollectionsTreeActionsWidget QLineEdit {
+    background-color: $bg-tertiary;
+    border: $border-width solid $border-subtle;
+    font-size: $font-size-small;
+}
+
+#CollectionsTreeActionsWidget QToolButton {
+    background-color: transparent;
+    border: none;
+    padding: 0.31em;
+    border-radius: $radius-sm;
+}
+
+#CollectionsTreeActionsWidget QToolButton:hover {
+    background-color: $bg-hover;
+}
+
+// Environment selector at bottom
+#SidebarWidget > QLabel:last-of-type {
+    font-size: $font-size-tiny;
+    color: $text-muted;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.62em;
+}
+
+#SidebarWidget > QComboBox {
+    margin: 0.46em;
+}
