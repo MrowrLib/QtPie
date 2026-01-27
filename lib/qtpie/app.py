@@ -854,6 +854,11 @@ def _wrap_init_for_app(cls: type[AppBase[Any]]) -> None:
         # Connect Event[T] = new(on=...) fields
         _connect_event_new_fields(self, config)
 
+        # Register validators from validate= parameter (before __setup__ so they're active)
+        from .widget import _register_validators
+
+        _register_validators(self, config)  # type: ignore[arg-type]
+
         # Set initial record value if provided via @app(record=...)
         # new_fields may have already set this (so child widgets can bind to parent.record)
         # Only set if _qtpie doesn't exist yet (indicating new_fields didn't set it)

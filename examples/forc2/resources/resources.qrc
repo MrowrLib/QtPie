@@ -23,6 +23,12 @@
     <file alias="collapse-all-dark.svg">images/icons/collapse-all-dark.svg</file>
     <file alias="collapse-all-light.svg">images/icons/collapse-all-light.svg</file>
 
+    <!-- Dock controls -->
+    <file alias="close-dark.svg">images/icons/close-dark.svg</file>
+    <file alias="close-light.svg">images/icons/close-light.svg</file>
+    <file alias="float-dark.svg">images/icons/float-dark.svg</file>
+    <file alias="float-light.svg">images/icons/float-light.svg</file>
+
     <!-- Avrile Sans (OTF) -->
     <file alias="fonts/AvrileSans-Thin.otf">fonts/avrile-sans/AvrileSans-Thin.otf</file>
     <file alias="fonts/AvrileSans-ThinItalic.otf">fonts/avrile-sans/AvrileSans-ThinItalic.otf</file>

@@ -1,0 +1,54 @@
+// =============================================================================
+// DEBUG STYLES - Comment out the @import in dark.scss to disable
+// =============================================================================
+// Use gnarly bright colors to visualize widget boundaries and debug layout issues
+
+// Test if this file loads at all
+* {
+    border: 1px solid #ff0000;
+}
+
+// Sidebar wrapper widget
+#SidebarWidget {
+    border: 3px solid #ff00ff; // Magenta
+}
+
+// Collections tree container widget
+#CollectionsTreeWidget {
+    border: 2px solid #00ff00; // Green
+}
+
+// The actual QTreeView
+#CollectionsTreeWidget QTreeView {
+    border: 3px solid #ff0000; // Red
+}
+
+// Tree actions bar (filter + buttons)
+#CollectionsTreeActionsWidget {
+    border: 2px solid #ffff00; // Yellow
+}
+
+// Dock widgets
+QDockWidget {
+    border: 2px solid #00ffff; // Cyan
+}
+
+// Dock widget content area
+QDockWidget > QWidget {
+    border: 2px dashed #ff8800; // Orange dashed
+}
+
+// Request editor
+#RequestEditorWidget {
+    border: 2px solid #8800ff; // Purple
+}
+
+// Response viewer
+#ResponseViewerWidget {
+    border: 2px solid #ff0088; // Pink
+}
+
+// Address bar
+#RequestAddressBarWidget {
+    border: 2px solid #88ff00; // Lime
+}

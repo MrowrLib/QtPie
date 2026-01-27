@@ -24,9 +24,7 @@ class AddCollectionDialog(Dialog):
         placeholderText="Enter collection name...",
         validator=filename_safe_validator,
     )
-    parent_collection: Variable[Collection | None, QLabel] = new(None)(
-        bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}"
-    )
+    parent_collection: Variable[Collection | None, QLabel] = new(None)(bind="{#var.name}", label="Parent Collection", visible="{not make_root_collection}")
     make_root_collection: Variable[bool, QCheckBox] = new(False)(label="Set as Root Collection")
     _ok: DialogButton = new(enabled="{name != ''}")
     _cancel: DialogButton

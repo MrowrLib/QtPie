@@ -166,6 +166,43 @@ class QtPieStateBase:
         except Exception:
             pass  # Observable might not be available yet
 
+    def _subscribe_collection_inserts_for_validity(self, var: Variable[Any], update_cb: Callable[[Any], None]) -> None:
+        """Subscribe to on_insert for ObservableLists/Dicts to track new States' validity."""
+        from observant import ObservableDict, ObservableList, ObservableSet
+
+        from .state import State
+
+        try:
+            obs = var.observable
+            if isinstance(obs, ObservableList):
+                # When new items are added to the list, check if they're States
+                def on_list_insert(index: int, item: Any) -> None:
+                    if isinstance(item, State):
+                        item.is_valid.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_insert(on_list_insert)
+
+            elif isinstance(obs, ObservableDict):
+                # When new items are added to the dict, check if values are States
+                def on_dict_insert(key: Any, value: Any) -> None:
+                    if isinstance(value, State):
+                        value.is_valid.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_insert(on_dict_insert)
+
+            elif isinstance(obs, ObservableSet):
+                # When new items are added to the set, check if they're States
+                def on_set_add(item: Any) -> None:
+                    if isinstance(item, State):
+                        item.is_valid.on_change(update_cb)
+                    update_cb(None)
+
+                obs.on_add(on_set_add)
+        except Exception:
+            pass  # Observable might not be available yet
+
     @property
     def dirty_fields(self) -> set[str]:
         """Return set of field names that have changed (Variables + record fields)."""
@@ -252,10 +289,24 @@ class QtPieStateBase:
 
     def _compute_is_valid(self) -> bool:
         """Compute the aggregated validity state."""
-        return all(var.is_valid.get() for var in self.variables.values())
+        from .state import State
+
+        for var in self.variables.values():
+            if not var.is_valid.get():
+                return False
+            # Also check if variable value is a State
+            val = var.value
+            if isinstance(val, State) and not val.is_valid.get():
+                return False
+            # Check States inside collections
+            for state in self._extract_states_from_value(val):
+                if not state.is_valid.get():
+                    return False
+        return True
 
     def _setup_is_valid_aggregation(self) -> None:
         """Subscribe to all Variables' is_valid and aggregate."""
+        from .state import State
 
         def update_aggregated(_: Any = None) -> None:
             assert self._aggregated_is_valid is not None
@@ -264,6 +315,18 @@ class QtPieStateBase:
         # Subscribe to existing variables
         for var in self.variables.values():
             var.is_valid.on_change(update_aggregated)
+            # Also subscribe to State's is_valid if variable value is a State or collection of States
+            try:
+                val = var.value
+                if isinstance(val, State):
+                    val.is_valid.on_change(update_aggregated)
+                # Subscribe to States inside collections
+                for state in self._extract_states_from_value(val):
+                    state.is_valid.on_change(update_aggregated)
+                # Subscribe to new items added to collections (for validity tracking)
+                self._subscribe_collection_inserts_for_validity(var, update_aggregated)
+            except Exception:
+                pass  # Variable might not have value yet
 
         # Initial update
         update_aggregated()
@@ -370,9 +433,13 @@ class QtPieStateBase:
 
     def enable_valid_hook(self) -> None:
         """Enable the on_valid_changed hook (called after __setup__)."""
+        # For Widgets, use widget_is_valid (includes record); for State, use is_valid
+        is_widget = hasattr(self._host, "_qtpie_config")
 
-        def check_valid_transition(_: bool) -> None:
-            is_now_valid = self.is_valid.get()
+        def check_valid_transition(_: Any = None) -> None:
+            # Use widget_is_valid for Widgets (includes record), is_valid for States
+            # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType] - widget_is_valid only on QtPieState
+            is_now_valid: bool = self.widget_is_valid.get() if is_widget else self.is_valid.get()  # type: ignore[attr-defined]
             if self._was_valid != is_now_valid:
                 self._was_valid = is_now_valid
                 hook = getattr(self._host, "on_valid_changed", None)
@@ -382,11 +449,15 @@ class QtPieStateBase:
         self._check_valid = check_valid_transition
 
         # Sync _was_valid with current state (after __setup__ ran and added validators)
-        self._was_valid = self.is_valid.get()
+        self._was_valid = self.widget_is_valid.get() if is_widget else self.is_valid.get()  # type: ignore[attr-defined]
 
         # Subscribe to each variable's is_valid
         for var in self.variables.values():
             var.is_valid.on_change(check_valid_transition)
+
+        # For Widgets, also subscribe to widget_is_valid (includes record validation)
+        if is_widget:
+            self.widget_is_valid.on_change(check_valid_transition)  # type: ignore[attr-defined]
 
     def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
         """Add named validator to a specific field."""
@@ -605,16 +676,24 @@ class QtPieState(QtPieStateBase):
 
     def _compute_widget_is_valid(self) -> bool:
         """Compute widget-level validity: Variables AND record are valid."""
+        from .state import State
+
         # Check Variables via view_model
         if not self.is_valid.get():
             return False
         # Check record if present
         if self._record is not None:
-            return self._record.is_valid.get()
+            if not self._record.is_valid.get():
+                return False
+            # Also check if record target is a State with its own validation
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State) and not target.is_valid.get():
+                return False
         return True
 
     def _setup_widget_is_valid(self) -> None:
         """Subscribe to view_model.is_valid and record.is_valid."""
+        from .state import State
 
         def update_widget_valid(_: Any = None) -> None:
             assert self._widget_is_valid is not None
@@ -626,12 +705,18 @@ class QtPieState(QtPieStateBase):
         # Subscribe to record if present
         if self._record is not None:
             self._record.is_valid.on_change(update_widget_valid)
+            # Also subscribe to State's is_valid if record target is a State
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State):
+                target.is_valid.on_change(update_widget_valid)
 
         # Initial update
         update_widget_valid()
 
     def _subscribe_record_to_widget_valid(self) -> None:
         """Subscribe record to widget-level validity aggregation (called when record is created)."""
+        from .state import State
+
         if self._widget_is_valid is not None and self._record is not None:
 
             def update_widget_valid(_: Any = None) -> None:
@@ -639,6 +724,12 @@ class QtPieState(QtPieStateBase):
                 self._widget_is_valid.set(self._compute_widget_is_valid())
 
             self._record.is_valid.on_change(update_widget_valid)
+
+            # Also subscribe to State's is_valid if record target is a State
+            target = self._record.observable._target  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+            if isinstance(target, State):
+                target.is_valid.on_change(update_widget_valid)
+
             update_widget_valid()
 
 

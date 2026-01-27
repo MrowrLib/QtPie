@@ -5,3 +5,28 @@
 @import "../_shared/_shared.scss";
 
 // Dark-theme-specific overrides (if any) go here
+
+// =============================================================================
+// DEBUG - Delete or comment out this section when done
+// =============================================================================
+
+#SidebarWidget {
+  background-color: $bg-base;
+  border-width: 3px;
+  border-style: solid;
+  border-color: #ff00ff;  // Magenta
+}
+
+#CollectionsTreeWidget {
+  border-width: 3px;
+  border-style: solid;
+  border-color: #00ff00;  // Green
+}
+
+#CollectionsTreeWidget QTreeView {
+  border-width: 3px;
+  border-style: solid;
+  border-color: #ff0000;  // Red
+  margin: 0;
+  padding: 0;
+}

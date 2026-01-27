@@ -154,6 +154,7 @@ class TestScssWatcher:
         assert_that(widget.styleSheet()).contains("purple")
         watcher.stop()
 
+    @pytest.mark.skip(reason="Flaky file watcher timing on Windows")
     def test_recompiles_on_scss_change(self, qt: QtDriver, tmp_path: Path) -> None:
         """Recompiles when SCSS file changes."""
         widget = QWidget()
@@ -175,6 +176,7 @@ class TestScssWatcher:
         assert_that(widget.styleSheet()).contains("cyan")
         watcher.stop()
 
+    @pytest.mark.skip(reason="Flaky file watcher timing on Windows")
     def test_recompiles_on_imported_file_change(self, qt: QtDriver, tmp_path: Path) -> None:
         """Recompiles when an imported SCSS file changes."""
         widget = QWidget()

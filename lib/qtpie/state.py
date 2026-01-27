@@ -185,6 +185,110 @@ class State:
             self._state_instance = StateInstance()
         return self._state_instance
 
+    # -------------------------------------------------------------------------
+    # Validation
+    # -------------------------------------------------------------------------
+
+    # Validation state (per-instance, for on_valid_changed hook)
+    _valid_was_valid: bool
+
+    @property
+    def is_valid(self) -> Observable[bool]:
+        """Check if all Variables are valid. Returns Observable[bool] for reactive bindings.
+
+        Example:
+            if state.is_valid.get():
+                state.save()
+
+            # Or subscribe reactively
+            state.is_valid.on_change(lambda valid: print(f"Valid: {valid}"))
+        """
+        return self._ensure_qtpie().is_valid
+
+    @property
+    def validation_errors(self) -> dict[str, dict[str, list[str]]]:
+        """Get validation errors: {field: {validator: [errors]}}.
+
+        Example:
+            for field, validators in state.validation_errors.items():
+                for validator_name, errors in validators.items():
+                    print(f"{field}.{validator_name}: {errors}")
+        """
+        return self._ensure_qtpie().validation_errors
+
+    @property
+    def validation_error_messages(self) -> Observable[list[str]]:
+        """Aggregated validation errors from all Variables. Reactive/bindable.
+
+        Example:
+            for msg in state.validation_error_messages.get():
+                print(msg)
+        """
+        return self._ensure_qtpie().validation_error_messages
+
+    def add_validator(self, field: str, name: str, validator: Callable[[Any], None | str | list[str]]) -> None:
+        """Add a named validator to a specific field.
+
+        Args:
+            field: The field name to validate
+            name: A unique name for this validator
+            validator: Function that returns None (valid) or str/list[str] (errors)
+
+        Example:
+            def validate_name(value: str) -> str | None:
+                if not value:
+                    return "Name is required"
+                return None
+
+            state.add_validator("name", "required", validate_name)
+        """
+        self._ensure_qtpie().add_validator(field, name, validator)
+
+    def remove_validator(self, field: str, name: str) -> None:
+        """Remove a named validator from a specific field.
+
+        Args:
+            field: The field name
+            name: The validator name to remove
+
+        Example:
+            state.remove_validator("name", "required")
+        """
+        self._ensure_qtpie().remove_validator(field, name)
+
+    def on_valid_changed(self, is_valid: bool) -> None:
+        """Called when validity state transitions (valid->invalid or invalid->valid).
+
+        Override this to react to validity state changes.
+
+        Example:
+            @state
+            class MyState(State):
+                name: Variable[str] = new("")
+
+                def on_valid_changed(self, is_valid: bool) -> None:
+                    if not is_valid:
+                        print("State has validation errors")
+        """
+        pass
+
+    def _enable_valid_hook(self) -> None:
+        """Enable the on_valid_changed hook (called after __setup__)."""
+        if not hasattr(self, "_valid_was_valid"):
+            self._valid_was_valid = True
+
+        def check_valid_transition(_: bool) -> None:
+            is_now_valid = self.is_valid.get()
+            if self._valid_was_valid != is_now_valid:
+                self._valid_was_valid = is_now_valid
+                self.on_valid_changed(is_now_valid)
+
+        # Subscribe to the aggregated is_valid Observable
+        self.is_valid.on_change(check_valid_transition)
+
+        # Sync with current state
+        self._valid_was_valid = self.is_valid.get()
+
     def _enable_dirty_hook(self) -> None:
         """Enable the on_dirty_changed hook (called after __setup__)."""
         if not hasattr(self, "_dirty_was_dirty"):
@@ -490,6 +594,9 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
         # Wire Events from new(on=...) fields
         _wire_event_new_fields_for_state(self, config.event_new_fields)
 
+        # Register validators from validate= parameter (before __setup__ so they're active)
+        _register_validators_for_state(self, config)
+
         # Call __setup__ hook if defined
         setup_method = getattr(self, "__setup__", None)
         if setup_method is not None:
@@ -497,6 +604,9 @@ def _wrap_init_for_state(cls: type[State], event_wiring: dict[str, str] | None =
 
         # Enable dirty tracking hook AFTER __setup__ (so initial setup doesn't trigger it)
         self._enable_dirty_hook()
+
+        # Enable validation hook AFTER __setup__ (so initial validators are set up)
+        self._enable_valid_hook()
 
     cls.__init__ = wrapped_init  # type: ignore[method-assign]
     cls._state_config.init_wrapped = True
@@ -604,6 +714,75 @@ def _setup_auto_parenting(instance: State) -> None:
                 return on_insert
 
             observable.on_insert(make_parent_hook(instance))
+
+
+def _register_validators_for_state(state: State, config: StateConfig) -> None:
+    """Register validators defined via validate= parameter on Variables.
+
+    Supports multiple formats:
+    - validate="method_name" → single string method
+    - validate=callable → single callable
+    - validate=["method1", "method2"] → list of method names
+    - validate=[callable1, callable2] → list of callables
+    - validate=[("custom_name", "method")] → tuple with explicit validator name
+    - validate=[("custom_name", callable)] → tuple with explicit name and callable
+    """
+    from .variable import Variable, _VariableDescriptor
+
+    cls = type(state)
+
+    for name in config.variable_names:
+        # Get the descriptor to access validators list
+        descriptor = getattr(cls, name, None)
+        if not isinstance(descriptor, _VariableDescriptor):
+            continue
+
+        if not descriptor.validators:
+            continue
+
+        # Access the Variable instance to register validators
+        var = getattr(state, name, None)
+        if not isinstance(var, Variable):
+            continue
+
+        # Normalize validators to a list
+        raw_validators: Any = descriptor.validators
+        validators_list: list[Any] = cast(list[Any], raw_validators) if isinstance(raw_validators, list) else [raw_validators]
+
+        for spec in validators_list:
+            validator_name: str
+            validator_fn: Callable[..., Any]
+
+            if isinstance(spec, tuple) and len(spec) == 2:  # pyright: ignore[reportUnknownArgumentType]
+                # ("name", "method") or ("name", callable)
+                name_part = str(spec[0])  # pyright: ignore[reportUnknownArgumentType]
+                fn_part = cast(Any, spec[1])
+                if isinstance(fn_part, str):
+                    fn = getattr(state, fn_part, None)
+                    if fn is None or not callable(fn):
+                        raise AttributeError(f"Validator method '{fn_part}' not found on {cls.__name__}")
+                    validator_name = name_part
+                    validator_fn = fn
+                elif callable(fn_part):  # pyright: ignore[reportUnknownArgumentType]
+                    validator_name = name_part
+                    validator_fn = fn_part
+                else:
+                    raise TypeError(f"Invalid validator spec: {spec}")
+            elif isinstance(spec, str):
+                # "method_name" → name defaults to method name
+                validator_name = spec
+                fn = getattr(state, spec, None)
+                if fn is None or not callable(fn):
+                    raise AttributeError(f"Validator method '{spec}' not found on {cls.__name__}")
+                validator_fn = fn
+            elif callable(spec):  # pyright: ignore[reportUnknownArgumentType]
+                # callable → name from __name__ attribute
+                validator_name = getattr(spec, "__name__", str(spec))
+                validator_fn = spec
+            else:
+                raise TypeError(f"Invalid validator spec: {spec}")
+
+            var.add_validator(validator_name, validator_fn)  # pyright: ignore[reportUnknownMemberType]
 
 
 def _apply_variable_kwargs_for_state(instance: State, variable_kwargs: dict[str, Any]) -> None:

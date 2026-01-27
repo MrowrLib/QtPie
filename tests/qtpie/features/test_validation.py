@@ -18,10 +18,10 @@ import pytest
 from assertpy import assert_that
 from observant import Observable
 
-from qtpie import Variable, new
+from qtpie import State, Variable, new, state
 from qtpie.testing import QtDriver
 
-from .conftest import ALL_CLASS_TYPES, create_and_track
+from .conftest import ALL_CLASS_TYPES, RECORD_CLASS_TYPES, create_and_track
 
 
 def get_validation_error_messages(instance: object, base_class: type) -> list[str]:
@@ -598,3 +598,187 @@ class TestValidationEdgeCases:
 
         instance._name.value = ""
         assert_that(valid_changes).contains(False)
+
+
+# =============================================================================
+# Validation with State Record (Widget[State])
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", RECORD_CLASS_TYPES)
+class TestValidationWithStateRecord:
+    """Validation when record is a State."""
+
+    def test_state_record_validation_makes_widget_invalid(self, base_class, decorator, qt: QtDriver) -> None:
+        """State record with failing validator makes Widget invalid."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_false()
+
+    def test_state_record_becomes_valid_when_fixed(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget becomes valid when State record validates."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_false()
+
+        instance.record.name = "Alice"
+        assert_that(instance.is_valid.get()).is_true()
+
+    def test_state_record_validation_via_state_variable(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State record Variable directly affects Widget validity."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("Alice", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            pass
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_true()
+
+        # Get the actual State target and change its Variable directly
+        state_target: Person = instance._qtpie._record.observable._target  # type: ignore[attr-defined]
+        state_target.name.value = ""
+
+        # Widget should see the State's validation state
+        assert_that(instance.is_valid.get()).is_false()
+
+    def test_state_record_validation_errors_included(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget validation_errors includes State record errors."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            _extra: Variable[str] = new("", validate="validate_extra")
+
+            def validate_extra(self, value: str) -> str | None:
+                return None if value else "Extra required"
+
+        instance = create_and_track(qt, TestClass, base_class)
+        msgs = instance.validation_error_messages.get()
+
+        assert_that(msgs).contains("Extra required")
+
+    def test_state_record_on_valid_changed_hook(self, base_class, decorator, qt: QtDriver) -> None:
+        """on_valid_changed hook fires when State record validation changes."""
+        valid_states: list[bool] = []
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator(record=Person())
+        class TestClass(base_class[Person]):  # type: ignore[misc]
+            @override
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        instance = create_and_track(qt, TestClass, base_class)
+        instance.record.name = "Alice"
+
+        assert_that(valid_states).contains(True)
+
+
+# =============================================================================
+# Validation with Variable[State]
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", ALL_CLASS_TYPES)
+class TestValidationWithVariableState:
+    """Validation when Variable holds a State."""
+
+    def test_variable_state_validation_makes_widget_invalid(self, base_class, decorator, qt: QtDriver) -> None:
+        """State inside Variable with failing validator makes Widget invalid."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator
+        class TestClass(base_class):
+            _person: Variable[Person] = new(default=Person())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_false()
+
+    def test_variable_state_becomes_valid_when_fixed(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widget becomes valid when State inside Variable validates."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator
+        class TestClass(base_class):
+            _person: Variable[Person] = new(default=Person())
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_false()
+
+        instance._person.value.name.value = "Alice"
+        assert_that(instance.is_valid.get()).is_true()
+
+    def test_variable_list_of_states_validation(self, base_class, decorator, qt: QtDriver) -> None:
+        """Changing State in list[State] Variable affects Widget validity."""
+
+        @state
+        class Person(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person]] = new(default=[Person()])
+
+        instance = create_and_track(qt, TestClass, base_class)
+        assert_that(instance.is_valid.get()).is_false()
+
+        # Fix the State inside the list
+        person: Person = instance._people.value[0]
+        person.name.value = "Alice"
+        assert_that(instance.is_valid.get()).is_true()

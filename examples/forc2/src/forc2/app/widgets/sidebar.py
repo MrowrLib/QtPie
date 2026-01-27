@@ -112,7 +112,7 @@ class CollectionsTreeActionsWidget(Widget[Collection | None]):
     _collapse_all_button: QToolButton = new(icon=":/collapse-all-dark.svg", clicked="{items.collapseAll()}", tooltip="Collapse All")
 
 
-@widget
+@widget(margins=0)
 class CollectionsTreeWidget(Widget[Collection | None]):
     ### Variables ###
     _current_tree_row: Var[CollectionsTreeWidgetRow | None]
@@ -129,6 +129,9 @@ class CollectionsTreeWidget(Widget[Collection | None]):
         onEnterKey="{_current_tree_row.start_editing()}",
     )
 
+    # def __setup__(self) -> None:
+    #     self._items.setAttribute(Qt.WA_StyledBackground, True)
+
     # The old one:
     #
     #  treeview: QTreeView = new(
@@ -138,7 +141,9 @@ class CollectionsTreeWidget(Widget[Collection | None]):
     #     )
 
 
-@widget
+# @frame
+# class SidebarWidget(Frame[Workspace | None]):
+@widget(styledBackground=True, margins=0, spacing=0)
 class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
     _workspace_name: QLabel = new(bind="Workspace: {name}")

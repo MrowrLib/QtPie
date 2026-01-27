@@ -24,6 +24,7 @@
 #ResponseStatsWidget QLabel {
     font-size: $font-size-small;
     padding: 0 0.62em;
+    color: $text-secondary;  // Default for time/size labels; status classes override
 }
 
 // Status badge coloring
@@ -47,10 +48,8 @@
     font-weight: 600;
 }
 
-// Time and size labels
-#ResponseStatsWidget QLabel:not([class~="status-badge"]) {
-    color: $text-secondary;
-}
+// Time and size labels (styled via the general #ResponseStatsWidget QLabel rule)
+// Note: QSS doesn't support :not() selector
 
 // Response body tab
 #ResponseBodyWidget {

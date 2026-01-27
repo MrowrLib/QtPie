@@ -1366,3 +1366,262 @@ class TestStateDirtyEdgeCases:
 
         assert_that(s1.is_dirty.get()).is_true()
         assert_that(s2.is_dirty.get()).is_false()
+
+
+# =============================================================================
+# Validation
+# =============================================================================
+
+
+class TestStateValidation:
+    """Test validation on State."""
+
+    def test_initially_valid_without_validators(self) -> None:
+        """State without validators is valid."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        assert_that(s.is_valid.get()).is_true()
+
+    def test_validate_method_name_makes_invalid(self) -> None:
+        """validate='method_name' makes State invalid when validation fails."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        s = MyState()
+        assert_that(s.is_valid.get()).is_false()
+
+    def test_valid_after_passing_validation(self) -> None:
+        """State becomes valid when validator passes."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        s = MyState()
+        assert_that(s.is_valid.get()).is_false()
+
+        s.name.value = "Alice"
+        assert_that(s.is_valid.get()).is_true()
+
+    def test_validate_list_of_method_names(self) -> None:
+        """validate=['m1', 'm2'] registers multiple validators."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate=["validate_required", "validate_length"])
+
+            def validate_required(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def validate_length(self, value: str) -> str | None:
+                return None if len(value) >= 3 else "Too short"
+
+        s = MyState()
+        msgs = s.name.validation_error_messages.get()
+        assert_that(msgs).contains("Required", "Too short")
+
+        s.name.value = "ab"
+        msgs = s.name.validation_error_messages.get()
+        assert_that(msgs).is_equal_to(["Too short"])
+
+        s.name.value = "abc"
+        assert_that(s.name.is_valid.get()).is_true()
+
+    def test_validate_with_callable(self) -> None:
+        """validate=callable registers a callable as validator."""
+
+        def check_not_empty(value: str) -> str | None:
+            return None if value else "Cannot be empty"
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate=check_not_empty)
+
+        s = MyState()
+        assert_that(s.name.is_valid.get()).is_false()
+        assert_that(s.name.validation_error_messages.get()).contains("Cannot be empty")
+
+    def test_validate_with_tuple_explicit_name(self) -> None:
+        """validate=[('name', 'method')] uses explicit validator name."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate=[("custom_name", "validate_required")])
+
+            def validate_required(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        s = MyState()
+        errors = s.name.validation_errors.get()
+        assert_that(errors).contains_key("custom_name")
+
+    def test_validate_with_lambda(self) -> None:
+        """validate= with inline lambda."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate=[("required", lambda v: None if v else "Required")])
+
+        s = MyState()
+        errors = s.name.validation_errors.get()
+        assert_that(errors).contains_key("required")
+        assert_that(errors["required"]).is_equal_to(["Required"])
+
+    def test_validation_errors_aggregated(self) -> None:
+        """validation_errors aggregates across all fields."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+            email: Variable[str] = new("", validate="validate_email")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name required"
+
+            def validate_email(self, value: str) -> str | None:
+                return None if "@" in value else "Invalid email"
+
+        s = MyState()
+        errors = s.validation_errors
+        assert_that(errors).contains_key("name")
+        assert_that(errors).contains_key("email")
+
+    def test_validation_error_messages_flat_list(self) -> None:
+        """validation_error_messages is a flat list of all errors."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Name is required"
+
+        s = MyState()
+        msgs = s.validation_error_messages.get()
+        assert_that(msgs).contains("Name is required")
+
+    def test_is_valid_is_observable(self) -> None:
+        """is_valid is Observable[bool]."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("")
+
+        s = MyState()
+        assert_that(s.is_valid).is_instance_of(Observable)
+
+    def test_is_valid_reactive_updates(self) -> None:
+        """is_valid Observable updates reactively."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        s = MyState()
+        valid_changes: list[bool] = []
+        s.is_valid.on_change(lambda v: valid_changes.append(v))
+
+        s.name.value = "Alice"  # invalid -> valid
+        s.name.value = ""  # valid -> invalid
+
+        assert_that(valid_changes).contains(True)
+        assert_that(valid_changes).contains(False)
+
+
+class TestStateOnValidChangedHook:
+    """Test on_valid_changed lifecycle hook on State."""
+
+    def test_hook_fires_on_invalid(self) -> None:
+        """on_valid_changed fires when State becomes invalid."""
+        valid_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("Alice", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        s = MyState()
+        # Currently valid (name="Alice"), now make invalid
+        s.name.value = ""
+
+        assert_that(valid_states).contains(False)
+
+    def test_hook_fires_on_valid(self) -> None:
+        """on_valid_changed fires when State becomes valid."""
+        valid_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        s = MyState()
+        # Currently invalid, now make valid
+        s.name.value = "Alice"
+
+        assert_that(valid_states).contains(True)
+
+    def test_hook_fires_on_transition_only(self) -> None:
+        """on_valid_changed only fires on state transitions."""
+        valid_states: list[bool] = []
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("Alice", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+            def on_valid_changed(self, is_valid: bool) -> None:
+                valid_states.append(is_valid)
+
+        s = MyState()
+
+        # Still valid (name="Alice") -> valid (no fire)
+        s.name.value = "Bob"
+        s.name.value = "Charlie"
+
+        # valid -> invalid (fires)
+        s.name.value = ""
+
+        # Should only have one transition (valid -> invalid)
+        assert_that(valid_states).is_equal_to([False])
+
+    def test_hook_not_required(self) -> None:
+        """State without on_valid_changed still works."""
+
+        @state
+        class MyState(State):
+            name: Variable[str] = new("", validate="validate_name")
+
+            def validate_name(self, value: str) -> str | None:
+                return None if value else "Required"
+
+        s = MyState()
+        # Should not raise
+        assert_that(s.is_valid.get()).is_false()
