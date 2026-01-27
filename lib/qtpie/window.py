@@ -45,9 +45,9 @@ class WindowConfig:
     variable_names: list[str] = field(default_factory=lambda: [])
     # Layout configuration for central widget
     layout: LayoutType = "vertical"
-    margins: int | tuple[int, int, int, int] | None = None
+    margins: int | tuple[int, int, int, int] = 0
     # Layout configuration kwargs
-    spacing: int | None = None
+    spacing: int = 0
     size_constraint: SizeConstraint | None = None
     horizontal_spacing: int | None = None
     vertical_spacing: int | None = None
@@ -294,7 +294,7 @@ def window[W: Window[Any]](
     cls: None = None,
     *,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -325,7 +325,7 @@ def window[W: Window[Any]](
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,
@@ -341,7 +341,7 @@ def window[W: Window[Any]](
     cls: type[W] | None = None,
     *,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -373,7 +373,7 @@ def window[W: Window[Any]](
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,

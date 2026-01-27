@@ -13,8 +13,23 @@
 
 // Remove gap between dock areas
 QMainWindow::separator {
-  width: 0px;
-  height: 0px;
+  background-color: $separator-bg;
+  width: 10px;
+  height: 10px;
+  image: url(:/splitter-grip-dark.svg);
+}
+
+QSplitter::handle {
+  background-color: $separator-bg;
+  image: url(:/splitter-grip-dark.svg);
+}
+
+QSplitter::handle:horizontal {
+  width: 10px;
+}
+
+QSplitter::handle:vertical {
+  height: 10px;
 }
 
 // Remove tab bar spacing

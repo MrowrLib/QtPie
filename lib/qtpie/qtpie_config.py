@@ -45,7 +45,7 @@ class _QtPieConfig:
 
     def __init__(self) -> None:
         self.layout: LayoutType = "vertical"
-        self.margins: int | tuple[int, int, int, int] | None = None
+        self.margins: int | tuple[int, int, int, int] = 0
         self.fields: dict[str, NewField] = {}
         self.variable_names: list[str] = []
         self.init_wrapped: bool = False
@@ -62,7 +62,7 @@ class _QtPieConfig:
         self.event_new_fields: dict[str, NewField] = {}  # Event[T] fields with new(on=...)
         self.attributes: dict[Qt.WidgetAttribute, bool] = {}  # Widget attributes to set
         # Layout configuration
-        self.spacing: int | None = None  # layout.setSpacing()
+        self.spacing: int = 0  # layout.setSpacing()
         self.size_constraint: SizeConstraint | None = None  # layout.setSizeConstraint()
         self.horizontal_spacing: int | None = None  # QGridLayout/QFormLayout.setHorizontalSpacing()
         self.vertical_spacing: int | None = None  # QGridLayout/QFormLayout.setVerticalSpacing()

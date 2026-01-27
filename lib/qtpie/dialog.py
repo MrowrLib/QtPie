@@ -212,9 +212,9 @@ class DialogConfig:
     fields: dict[str, NewField] = field(default_factory=lambda: {})
     variable_names: list[str] = field(default_factory=lambda: [])
     layout: LayoutType = "vertical"
-    margins: int | tuple[int, int, int, int] | None = None
+    margins: int | tuple[int, int, int, int] = 0
     # Layout configuration kwargs
-    spacing: int | None = None
+    spacing: int = 0
     size_constraint: SizeConstraint | None = None
     horizontal_spacing: int | None = None
     vertical_spacing: int | None = None
@@ -552,7 +552,7 @@ def dialog[D: Dialog[Any]](
     title: str | None = None,
     icon: IconType = None,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     size: tuple[int, int] | None = None,
     auto_bind: bool = True,
     name: str | None = None,
@@ -561,7 +561,7 @@ def dialog[D: Dialog[Any]](
     attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
     styledBackground: bool = False,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,
@@ -579,7 +579,7 @@ def dialog[D: Dialog[Any]](
     title: str | None = None,
     icon: IconType = None,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     size: tuple[int, int] | None = None,
     auto_bind: bool = True,
     name: str | None = None,
@@ -589,7 +589,7 @@ def dialog[D: Dialog[Any]](
     styledBackground: bool = False,
     stylesheet: str | None = None,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,

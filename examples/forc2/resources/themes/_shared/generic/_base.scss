@@ -69,6 +69,17 @@ QLabel {
     padding: 0.15em;
 }
 
+// Frames (used for dividers/separators)
+QFrame {
+    background: transparent;
+}
+
+// Horizontal/Vertical lines
+QFrame[frameShape="4"],
+QFrame[frameShape="5"] {
+    color: $separator-bg;
+}
+
 // Section header (uppercase, muted, small)
 QLabel[class~="section-header"] {
     font-weight: 600;

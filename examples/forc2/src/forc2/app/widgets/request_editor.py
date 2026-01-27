@@ -9,7 +9,7 @@ from qtpie.variable import Var
 # TODO: update all to use _private names for the widgets, simple names, but private to avoid conflicts with the record's attributes
 
 
-@widget(classes=["delete-cell"])
+@widget
 class DeleteWidget[T](Widget[T]):
     ### Widgets ###
     _delete_button: QPushButton = new("🗑️", clicked="{on_delete(record)}", classes=["btn-icon", "btn-delete"])
@@ -19,7 +19,7 @@ class DeleteWidget[T](Widget[T]):
 class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
 
 
-@widget(layout="horizontal", classes=["address-bar"], styledBackground=True, margins=0)
+@widget(layout="horizontal", styledBackground=True, margins=0)
 class RequestAddressBarWidget(Widget[Request]):
     ### Widgets ###
     _request_method_chooser: QComboBox = new(bind=HttpMethod, selectedItem="method", classes=["flat", "method-chooser"])
@@ -27,7 +27,7 @@ class RequestAddressBarWidget(Widget[Request]):
     _send_request_button: QPushButton = new("Send", clicked="on_send_request", enabled="{not is_sending}", classes=["btn-primary", "btn-send"])
 
 
-@widget(title="Params", classes=["tab-content", "params-tab"])
+@widget(title="Params", classes=["tab-content"])
 class RequestParamsWidget(Widget[Request]):
     ### Events ###
     on_delete: Event[RequestKeyValue] = new(on="_on_delete")
@@ -45,7 +45,7 @@ class RequestParamsWidget(Widget[Request]):
         self.record.query_params.remove(param)
 
 
-@widget(title="Headers", classes=["tab-content", "headers-tab"])
+@widget(title="Headers", classes=["tab-content"])
 class RequestHeadersWidget(Widget[Request]):
     ### Events ###
     on_delete: Event[RequestKeyValue] = new(on="_on_delete")
@@ -64,7 +64,7 @@ class RequestHeadersWidget(Widget[Request]):
         self.record.headers.remove(header)
 
 
-@widget(layout="form", classes=["auth-form"])
+@widget(layout="form")
 class RequestAuthFormWidget(Widget[Auth]):
     ### Widgets ###
     # Basic Auth
@@ -84,7 +84,7 @@ class RequestAuthFormWidget(Widget[Auth]):
     )
 
 
-@widget(title="Auth", classes=["tab-content", "auth-tab"])
+@widget(title="Auth", classes=["tab-content"])
 class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     _header: QLabel = new("Authentication:", classes=["section-header"])
@@ -93,7 +93,7 @@ class RequestAuthWidget(Widget[Request]):
     _stretch: Stretch
 
 
-@widget(title="Body", classes=["tab-content", "body-tab"])
+@widget(title="Body", classes=["tab-content"])
 class RequestBodyWidget(Widget[Request]):
     ### Events ###
     on_delete: Event = new(on="_on_delete")

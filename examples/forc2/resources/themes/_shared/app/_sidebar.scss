@@ -6,14 +6,6 @@
     border-right: $border-width solid $border-default;
 }
 
-// Workspace name header
-#SidebarWidget > QLabel {
-    font-size: $font-size-large;
-    font-weight: 600;
-    color: $text-primary;
-    padding: 0.92em;
-    background-color: $bg-secondary;
-}
 
 // Action buttons row
 #WorkspaceActionButtonsWidget {
@@ -74,6 +66,7 @@
     background-color: $bg-tertiary;
     border: $border-width solid $border-subtle;
     font-size: $font-size-small;
+    margin-right: 0.25em;
 }
 
 #CollectionsTreeActionsWidget QToolButton {

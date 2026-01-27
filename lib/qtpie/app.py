@@ -73,9 +73,9 @@ class AppConfig:
 
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
-    margins: int | tuple[int, int, int, int] | None = None
+    margins: int | tuple[int, int, int, int] = 0
     # Layout configuration
-    spacing: int | None = None
+    spacing: int = 0
     size_constraint: SizeConstraint | None = None
     horizontal_spacing: int | None = None
     vertical_spacing: int | None = None
@@ -594,7 +594,7 @@ def app[A: AppBase[Any]](
     # Window settings
     title: str | None = None,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -629,7 +629,7 @@ def app[A: AppBase[Any]](
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,
@@ -652,7 +652,7 @@ def app[A: AppBase[Any]](
     # Window settings
     title: str | None = None,
     layout: LayoutType = "vertical",
-    margins: int | tuple[int, int, int, int] | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
     size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -688,7 +688,7 @@ def app[A: AppBase[Any]](
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
     # Layout configuration
-    spacing: int | None = None,
+    spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
     horizontal_spacing: int | None = None,
     vertical_spacing: int | None = None,

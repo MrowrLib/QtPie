@@ -1,3 +1,4 @@
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QSplitter
 
 from forc2.app.widgets.request_editor import RequestEditorWidget
@@ -21,7 +22,8 @@ class RequestWidget(Widget[Request]):
     is_sending: Var[bool] = new(False)
 
     ### Widgets ###
-    splitter: QSplitter = new(bind="request_splitter_orientation")
+    splitter: QSplitter = new(orientation=Qt.Orientation.Vertical)
+    # new(bind="request_splitter_orientation")
     request_editor: RequestEditorWidget = new(splitter="splitter")
     response_viewer: ResponseViewerWidget = new(bind="response", splitter="splitter")
 

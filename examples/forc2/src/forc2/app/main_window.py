@@ -11,10 +11,10 @@ from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 # TODO add _
 @widget
 class CentralWidget(Widget[Workspace | None]):
-    app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
+    app_header_label: QLabel = new("Forc - Free Open-source Rest Client", classes=["h1"])
     load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.", visible="{#record is None}")
     load_workspace_button: QPushButton = new("Load Workspace", clicked="on_choose_workspace", visible="{#record is None}")
-    label_if_workspace_loaded: QLabel = new("Workspace loaded. Please select or create a request to get started.", visible="{#record is not None}")
+    label_if_workspace_loaded: QLabel = new("Workspace loaded. Please select or create a request to get started.", visible="{#record is not None}", classes=["italic"])
     stretch: Stretch
 
 
@@ -27,7 +27,8 @@ class MainWindow(Window[Workspace | None]):
 
     ### Variables ###
     # TODO: make 'public' ones for DI not have _ and make the private ones start with _
-    request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Horizontal)
+    request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Vertical)
+    # request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Horizontal)
     selected_sidebar_item: Var[TreeItem | None] = new(None, onChange="_on_selected_sidebar_item_changed")
     selected_collection: Var[Collection | None] = new(None)
     current_request: Var[Request | None]

@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
+from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
 
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.workspace import Workspace
@@ -44,7 +44,7 @@ class AddCollectionDialog(Dialog):
     _cancel: DialogButton
 
 
-@widget(layout="horizontal")
+@widget(layout="horizontal", spacing=10, margins=(10, 10, 10, 0))
 class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
     ### Variables ###
     selected_collection: Var[Collection | None]
@@ -102,7 +102,8 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
         return True
 
 
-@widget(layout="horizontal")
+# (left, top, right, bottom)
+@widget(layout="horizontal", margins=(10, 0, 10, 10))
 class CollectionsTreeActionsWidget(Widget[Collection | None]):
     ### Widgets ###
     filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
@@ -143,12 +144,13 @@ class CollectionsTreeWidget(Widget[Collection | None]):
 
 # @frame
 # class SidebarWidget(Frame[Workspace | None]):
-# @widget(margins=0, spacing=0, styledBackground=True)
-@widget(margins=5, spacing=0, styledBackground=True)
+@widget
 class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
-    _workspace_name: QLabel = new(bind="Workspace: {name}")
+    _workspace_name: QLabel = new(bind="Workspace: {name}", classes=["heading-3", "bg-secondary", "p-2"])
     _action_buttons: WorkspaceActionButtonsWidget
+    _divider1: QFrame = new(frameShape=QFrame.Shape.HLine)
     _collection: CollectionsTreeWidget
-    _environment_label: QLabel = new("Environment")
+    _divider2: QFrame = new(frameShape=QFrame.Shape.HLine)
+    _environment_label: QLabel = new("Environment", classes=["heading-4", "bg-secondary", "p-2"])
     _environments: QComboBox = new(format="{name}", selectedItem="active_environment")

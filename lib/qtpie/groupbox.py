@@ -5,9 +5,11 @@
 from collections.abc import Callable
 from typing import Any, overload
 
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QGroupBox
 
-from .layout import LayoutType
+from .layout import FieldGrowthPolicy, LayoutType, RowWrapPolicy, SizeConstraint
+from .utils.layouts import IconType
 from .widget import widget
 from .widget_base import WidgetBase
 
@@ -53,6 +55,26 @@ def groupbox[G: GroupBox[Any]](
     cls: str,
     *,
     layout: LayoutType = "vertical",
+    margins: int | tuple[int, int, int, int] = 0,
+    auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
+    icon: IconType = None,
+    size: tuple[int, int] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
+    # Layout configuration
+    spacing: int = 0,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> Callable[[type[G]], type[G]]: ...
 
@@ -63,6 +85,26 @@ def groupbox[G: GroupBox[Any]](
     *,
     layout: LayoutType = "vertical",
     title: str | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
+    auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
+    icon: IconType = None,
+    size: tuple[int, int] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
+    # Layout configuration
+    spacing: int = 0,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> Callable[[type[G]], type[G]]: ...
 
@@ -72,6 +114,26 @@ def groupbox[G: GroupBox[Any]](  # pyright: ignore[reportInconsistentOverload]
     *,
     layout: LayoutType = "vertical",
     title: str | None = None,
+    margins: int | tuple[int, int, int, int] = 0,
+    auto_bind: bool = True,
+    name: str | None = None,
+    classes: list[str] | None = None,
+    icon: IconType = None,
+    size: tuple[int, int] | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    record: Any | None = None,
+    attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
+    styledBackground: bool = False,
+    # Layout configuration
+    spacing: int = 0,
+    size_constraint: SizeConstraint | None = None,
+    horizontal_spacing: int | None = None,
+    vertical_spacing: int | None = None,
+    row_wrap_policy: RowWrapPolicy | None = None,
+    label_alignment: Qt.AlignmentFlag | None = None,
+    form_alignment: Qt.AlignmentFlag | None = None,
+    field_growth_policy: FieldGrowthPolicy | None = None,
     **kwargs: Any,
 ) -> type[G] | Callable[[type[G]], type[G]]:
     """Decorator for GroupBox classes.
@@ -90,6 +152,25 @@ def groupbox[G: GroupBox[Any]](  # pyright: ignore[reportInconsistentOverload]
         cls: The class to decorate, or a title string.
         layout: Layout type ("vertical", "horizontal", "form", "grid", None).
         title: GroupBox title (can also be passed as first positional arg).
+        margins: Layout margins. int applies to all sides, or tuple (left, top, right, bottom).
+        auto_bind: Whether to auto-bind fields to record properties.
+        name: Widget object name.
+        classes: CSS classes for styling.
+        icon: Window icon.
+        size: Fixed size (width, height).
+        width: Fixed width.
+        height: Fixed height.
+        record: Record instance for Widget[T] pattern.
+        attributes: Qt widget attributes to set.
+        styledBackground: Enable styled background.
+        spacing: Layout spacing.
+        size_constraint: Layout size constraint.
+        horizontal_spacing: Horizontal spacing (grid/form layouts).
+        vertical_spacing: Vertical spacing (grid/form layouts).
+        row_wrap_policy: Form layout row wrap policy.
+        label_alignment: Form layout label alignment.
+        form_alignment: Form layout form alignment.
+        field_growth_policy: Form layout field growth policy.
         **kwargs: Additional QGroupBox properties (checkable, flat, etc.).
     """
     # Determine the actual title
@@ -102,7 +183,30 @@ def groupbox[G: GroupBox[Any]](  # pyright: ignore[reportInconsistentOverload]
 
     # Get the widget decorator result
     # After the isinstance check above, cls is either type[G] or None
-    widget_decorator = widget(cls=cls, layout=layout, **kwargs)  # type: ignore[arg-type]
+    widget_decorator = widget(
+        cls=cls,  # type: ignore[arg-type]
+        layout=layout,
+        margins=margins,
+        auto_bind=auto_bind,
+        name=name,
+        classes=classes,
+        icon=icon,
+        size=size,
+        width=width,
+        height=height,
+        record=record,
+        attributes=attributes,
+        styledBackground=styledBackground,
+        spacing=spacing,
+        size_constraint=size_constraint,
+        horizontal_spacing=horizontal_spacing,
+        vertical_spacing=vertical_spacing,
+        row_wrap_policy=row_wrap_policy,
+        label_alignment=label_alignment,
+        form_alignment=form_alignment,
+        field_growth_policy=field_growth_policy,
+        **kwargs,
+    )
 
     # If cls was provided (bare @groupbox), widget returns the decorated class
     if not callable(widget_decorator) or (cls is not None and isinstance(widget_decorator, type)):
