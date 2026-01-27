@@ -728,3 +728,327 @@ class TestListWidgetRecordBinding:
         # Verify all levels work
         assert_that(request_widget._response._headers_xxx.widget_count()).is_equal_to(2)
         assert_that(request_widget._response._headers_outside_of_tab._headers_xxx.widget_count()).is_equal_to(2)
+
+
+# =============================================================================
+# Proxy Cleanup on Widget Removal (prevents RuntimeError on deleted Qt objects)
+# =============================================================================
+
+
+@dataclass
+class Person:
+    """Test dataclass for proxy cleanup tests."""
+
+    name: str
+    age: int = 0
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestListRepeaterProxyCleanup:
+    """Test that removing and re-adding items doesn't crash due to stale proxies."""
+
+    def test_remove_and_readd_same_item_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing an item and re-adding the same object should not crash.
+
+        When a widget is removed, its ObservableProxy callbacks must be cleaned up.
+        Otherwise, when the same item is re-added, sibling proxy notifications
+        will fire stale callbacks that reference deleted Qt widgets.
+        """
+        from qtpie import Widget, widget
+
+        @widget
+        class PersonWidget(Widget[Person]):
+            _name: QLabel = new(bind="{name}")
+            _age: QLabel = new(bind="{age}")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person], PersonWidget] = new([])  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+        repeater = instance._people.widget
+
+        # Create a person and add it
+        alice = Person("Alice", 30)
+        instance._people.append(alice)
+        qt.process_events()
+        assert_that(repeater.widget_count()).is_equal_to(1)
+
+        # Remove it
+        instance._people.remove(alice)
+        qt.process_events()
+        assert_that(repeater.widget_count()).is_equal_to(0)
+
+        # Re-add the SAME object - this should not crash
+        instance._people.append(alice)
+        qt.process_events()
+        assert_that(repeater.widget_count()).is_equal_to(1)
+
+        # Trigger a change on the item - this is where the crash would happen
+        # if stale callbacks weren't cleaned up
+        alice.name = "Alice Updated"
+        instance._people.observable[0] = alice  # Trigger replace notification
+        qt.process_events()
+
+    def test_remove_and_readd_triggers_change_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """After remove/re-add, changing the item's properties should not crash."""
+        from qtpie import Widget, widget
+
+        @widget
+        class PersonWidget(Widget[Person]):
+            _name: QLineEdit = new(bind="name")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person], PersonWidget] = new([])  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        bob = Person("Bob", 25)
+        instance._people.append(bob)
+        qt.process_events()
+
+        # Remove and re-add
+        instance._people.remove(bob)
+        qt.process_events()
+        instance._people.append(bob)
+        qt.process_events()
+
+        # Get the new widget and change the value via the widget
+        # This triggers proxy notifications that would crash with stale callbacks
+        new_widget = instance._people.widget.widget_at(0)
+        new_widget._name.setText("Bob Changed")
+        qt.process_events()
+
+    def test_clear_and_readd_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Clearing all items and re-adding should not crash."""
+        from qtpie import Widget, widget
+
+        @widget
+        class PersonWidget(Widget[Person]):
+            _name: QLabel = new(bind="{name}")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[list[Person], PersonWidget] = new([])  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        alice = Person("Alice", 30)
+        bob = Person("Bob", 25)
+        instance._people.append(alice)
+        instance._people.append(bob)
+        qt.process_events()
+
+        # Clear all
+        instance._people.clear()
+        qt.process_events()
+
+        # Re-add the same objects
+        instance._people.append(alice)
+        instance._people.append(bob)
+        qt.process_events()
+
+        assert_that(instance._people.widget.widget_count()).is_equal_to(2)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestDictRepeaterProxyCleanup:
+    """Test dict repeater proxy cleanup on removal."""
+
+    def test_remove_and_readd_same_key_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing a key and re-adding it should not crash."""
+        from qtpie import Widget, widget
+
+        @widget
+        class PersonWidget(Widget[Person]):
+            _name: QLabel = new(bind="{name}")
+
+        @decorator
+        class TestClass(base_class):
+            _people: Variable[dict[str, Person]] = new({})
+            _widgets: list[PersonWidget] = new(bind="_people")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        alice = Person("Alice", 30)
+        instance._people["alice"] = alice
+        qt.process_events()
+
+        # Remove
+        del instance._people.observable["alice"]
+        qt.process_events()
+
+        # Re-add same key with same object
+        instance._people["alice"] = alice
+        qt.process_events()
+
+        assert_that(instance._widgets.widget_count()).is_equal_to(1)
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestSetRepeaterProxyCleanup:
+    """Test set repeater proxy cleanup on removal."""
+
+    def test_discard_and_readd_same_item_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Discarding an item and re-adding it should not crash."""
+
+        # Use a simple hashable type for set
+        @decorator
+        class TestClass(base_class):
+            _tags: Variable[set[str], QLabel] = new(set())  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        instance._tags.observable.add("python")
+        qt.process_events()
+
+        instance._tags.observable.discard("python")
+        qt.process_events()
+
+        instance._tags.observable.add("python")
+        qt.process_events()
+
+        assert_that(instance._tags.widget.widget_count()).is_equal_to(1)
+
+
+# =============================================================================
+# Plain QLabel Repeater Proxy Cleanup (wrapper.dispose() is essential here)
+# =============================================================================
+# These tests use plain Qt widgets (QLabel) instead of Widget[T] subclasses.
+# Unlike Widget[T], plain QLabel has no _qtpie state, so dispose_widget_proxies
+# won't find the wrapper proxy. The wrapper.dispose() call is the ONLY thing
+# that cleans up these proxies.
+
+
+@dataclass
+class Animal:
+    """Test dataclass for plain widget proxy cleanup tests."""
+
+    name: str
+    species: str = "unknown"
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestPlainWidgetRepeaterProxyCleanup:
+    """Test that wrapper.dispose() is essential for plain Qt widget repeaters.
+
+    When using list[QLabel] bound to complex objects, the wrapper proxy is NOT
+    assigned to the QLabel (it has no _qtpie state). So dispose_widget_proxies
+    cannot find it. Only wrapper.dispose() cleans up these proxies.
+
+    These tests SHOULD FAIL when wrapper.dispose() is commented out.
+    """
+
+    def test_list_qlabel_proxy_cleanup_on_remove(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing item from list[QLabel] repeater should dispose the wrapper proxy.
+
+        THIS TEST SHOULD FAIL when wrapper.dispose() is commented out.
+        """
+        from observant.observable_proxy import _proxy_registry
+
+        @decorator
+        class TestClass(base_class):
+            _animals: Variable[list[Animal], QLabel] = new([])  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create an animal and add it
+        cat = Animal("Whiskers", "cat")
+        cat_id = id(cat)
+
+        instance._animals.append(cat)
+        qt.process_events()
+
+        # Verify proxy was created
+        assert cat_id in _proxy_registry, "Proxy should be registered for the animal"
+        proxies_before = len(_proxy_registry[cat_id])
+        assert proxies_before > 0, "At least one proxy should exist"
+
+        # Remove the animal
+        instance._animals.remove(cat)
+        qt.process_events()
+
+        # Check if proxy was cleaned up
+        proxies_after = len(_proxy_registry.get(cat_id, []))
+
+        assert proxies_after == 0, (
+            f"Wrapper proxy should be disposed when item is removed from plain QLabel repeater, "
+            f"but {proxies_after} proxies remain (was {proxies_before}). "
+            f"This fails when wrapper.dispose() is commented out."
+        )
+
+    def test_list_qlabel_proxy_cleanup_on_clear(self, base_class, decorator, qt: QtDriver) -> None:
+        """Clearing list[QLabel] repeater should dispose all wrapper proxies.
+
+        THIS TEST SHOULD FAIL when wrapper.dispose() is commented out.
+        """
+        from observant.observable_proxy import _proxy_registry
+
+        @decorator
+        class TestClass(base_class):
+            _animals: Variable[list[Animal], QLabel] = new([])  # type: ignore[type-arg]
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Add multiple animals
+        dog = Animal("Rex", "dog")
+        bird = Animal("Tweety", "bird")
+        dog_id = id(dog)
+        bird_id = id(bird)
+
+        instance._animals.append(dog)
+        instance._animals.append(bird)
+        qt.process_events()
+
+        # Verify proxies were created
+        assert dog_id in _proxy_registry, "Proxy should be registered for dog"
+        assert bird_id in _proxy_registry, "Proxy should be registered for bird"
+
+        # Clear all
+        instance._animals.clear()
+        qt.process_events()
+
+        # Check if proxies were cleaned up
+        dog_proxies = len(_proxy_registry.get(dog_id, []))
+        bird_proxies = len(_proxy_registry.get(bird_id, []))
+
+        assert dog_proxies == 0, f"Dog wrapper proxy should be disposed on clear, but {dog_proxies} remain. This fails when wrapper.dispose() is commented out."
+        assert bird_proxies == 0, f"Bird wrapper proxy should be disposed on clear, but {bird_proxies} remain. This fails when wrapper.dispose() is commented out."
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestPlainDictWidgetProxyCleanup:
+    """Test wrapper.dispose() for dict repeaters with plain QLabel widgets."""
+
+    def test_dict_qlabel_proxy_cleanup_on_remove(self, base_class, decorator, qt: QtDriver) -> None:
+        """Removing key from dict[str, Animal] with QLabel should dispose proxy.
+
+        THIS TEST SHOULD FAIL when wrapper.dispose() is commented out.
+        """
+        from observant.observable_proxy import _proxy_registry
+
+        @decorator
+        class TestClass(base_class):
+            _pets: Variable[dict[str, Animal]] = new({})
+            _labels: list[QLabel] = new(bind="_pets", format="{#key}: {name}")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Add a pet
+        hamster = Animal("Hammy", "hamster")
+        hamster_id = id(hamster)
+
+        instance._pets["hammy"] = hamster
+        qt.process_events()
+
+        # Verify proxy was created
+        assert hamster_id in _proxy_registry, "Proxy should be registered"
+
+        # Remove it
+        del instance._pets.observable["hammy"]
+        qt.process_events()
+
+        # Check cleanup
+        proxies_after = len(_proxy_registry.get(hamster_id, []))
+        assert proxies_after == 0, f"Wrapper proxy should be disposed, but {proxies_after} remain. This fails when wrapper.dispose() is commented out."

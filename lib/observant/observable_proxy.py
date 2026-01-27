@@ -460,6 +460,46 @@ class ObservableProxy[T]:
         if callback not in callbacks:
             callbacks.append(callback)
 
+    def dispose(self) -> None:
+        """Dispose this proxy, clearing all callbacks and unregistering from global registry.
+
+        Call this when the proxy's associated widget is being destroyed to prevent
+        stale callbacks from firing and accessing deleted Qt objects.
+
+        After calling dispose(), the proxy should not be used.
+        """
+        # Clear all callbacks
+        callbacks: list[Callable[[], None]] = object.__getattribute__(self, "_callbacks")
+        callbacks.clear()
+
+        # Unregister from global registry
+        target = object.__getattribute__(self, "_target")
+        _unregister_proxy(self, target)
+
+        # Dispose nested proxies recursively
+        nested_proxies: dict[str, ObservableProxy[Any]] = object.__getattribute__(self, "_nested_proxies")
+        for proxy in nested_proxies.values():
+            proxy.dispose()
+        nested_proxies.clear()
+
+        # Clear field observables' callbacks too
+        field_observables: dict[str, Observable[Any]] = object.__getattribute__(self, "_field_observables")
+        for obs in field_observables.values():
+            obs._callbacks.clear()  # pyright: ignore[reportPrivateUsage]
+        field_observables.clear()
+
+        # Clear field lists
+        field_lists: dict[str, ObservableList[Any]] = object.__getattribute__(self, "_field_lists")
+        for obs_list in field_lists.values():
+            obs_list._callbacks.clear()  # pyright: ignore[reportPrivateUsage]
+        field_lists.clear()
+
+        # Clear field dicts
+        field_dicts: dict[str, ObservableDict[Any, Any]] = object.__getattribute__(self, "_field_dicts")
+        for obs_dict in field_dicts.values():
+            obs_dict._callbacks.clear()  # pyright: ignore[reportPrivateUsage]
+        field_dicts.clear()
+
     @property
     def is_dirty(self) -> Observable[bool]:
         """Aggregated dirty state across all fields."""

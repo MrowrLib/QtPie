@@ -9,7 +9,17 @@ from observant import Observable, ObservableDict, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, rebind_child_widgets, resolve_sort, setup_repeater_layout
+from .repeaters.utils import (
+    bind_callable_format,
+    bind_computed_format,
+    connect_child_signals,
+    create_item_wrapper,
+    create_styled_widget,
+    dispose_widget_proxies,
+    rebind_child_widgets,
+    resolve_sort,
+    setup_repeater_layout,
+)
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -315,10 +325,18 @@ class DictWidgetRepeater[K, V](QWidget):
     def _on_remove(self, key: K, value: V) -> None:
         """Handle key removal."""
         if key in self._entries:
-            widget, _, _ = self._entries.pop(key)
+            widget, key_wrapper, value_wrapper = self._entries.pop(key)
             self._key_order.remove(key)
             if key in self._layout_order:
                 self._layout_order.remove(key)
+
+            # Dispose proxies before deleting widget
+            dispose_widget_proxies(widget)
+            if isinstance(key_wrapper, ObservableProxy):
+                key_wrapper.dispose()
+            if isinstance(value_wrapper, ObservableProxy):
+                value_wrapper.dispose()
+
             self._layout.removeWidget(widget)
             widget.deleteLater()
 
@@ -347,7 +365,13 @@ class DictWidgetRepeater[K, V](QWidget):
     def _on_clear(self, removed_items: dict[K, V]) -> None:
         """Handle dict clear."""
         # Remove all widgets
-        for widget, _, _ in self._entries.values():
+        for widget, key_wrapper, value_wrapper in self._entries.values():
+            # Dispose proxies before deleting widget
+            dispose_widget_proxies(widget)
+            if isinstance(key_wrapper, ObservableProxy):
+                key_wrapper.dispose()
+            if isinstance(value_wrapper, ObservableProxy):
+                value_wrapper.dispose()
             self._layout.removeWidget(widget)
             widget.deleteLater()
         self._entries.clear()

@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QWidget
+from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QTabWidget, QWidget
 
 from qtpie import Dock, Variable, Widget, new, widget
 from qtpie.testing import QtDriver
@@ -4520,3 +4520,434 @@ class TestFractionalDockWidth:
         editor_dock_widget = instance._editors.widget[0].dock_widget
         editor_configured = editor_dock_widget.property("_qtpie_configured_width")
         assert editor_configured == 0.8, f"Editor expected 0.8, got {editor_configured}"
+
+
+# =============================================================================
+# Dock Widget Proxy Cleanup (prevents RuntimeError on deleted Qt objects)
+# =============================================================================
+
+
+@dataclass
+class AuthItem:
+    """Nested auth item for dock proxy cleanup tests."""
+
+    auth_type: str = "NONE"
+    username: str = ""
+    password: str = ""
+
+
+@dataclass
+class RequestItem:
+    """Test item for dock proxy cleanup tests."""
+
+    name: str
+    method: str = "GET"
+    url: str = ""
+    auth: AuthItem | None = None
+
+    def __post_init__(self) -> None:
+        if self.auth is None:
+            self.auth = AuthItem()
+
+
+# Define widget classes at module level so they can be referenced in type hints
+
+
+@widget
+class _RequestWidgetSimple(Widget[RequestItem]):
+    """Simple request widget for proxy cleanup tests."""
+
+    _name: QLabel = new(bind="{name}")
+    _method: QLabel = new(bind="{method}")
+
+
+@widget
+class _MethodWidget(Widget[RequestItem]):
+    """Nested method widget for proxy cleanup tests."""
+
+    _method: QLineEdit = new(bind="method")
+
+
+@widget
+class _RequestWidgetNested(Widget[RequestItem]):
+    """Request widget with nested child for proxy cleanup tests."""
+
+    _name: QLabel = new(bind="{name}")
+    _method_widget: _MethodWidget  # Nested Widget[T] - shares record proxy
+
+
+@widget
+class _RequestWidgetWithUrl(Widget[RequestItem]):
+    """Request widget with URL field for proxy cleanup tests."""
+
+    _name: QLabel = new(bind="{name}")
+    _url: QLineEdit = new(bind="url")
+
+
+# Widgets that match the Forc2 structure: nested Widget[Auth] inside Widget[Request]
+@widget(layout="form")
+class _AuthFormWidget(Widget[AuthItem]):
+    """Auth form widget - has bindings that create callbacks on Auth proxy.
+
+    This matches RequestAuthFormWidget in Forc2 which has bindings like:
+    visible="{type.name == 'BASIC'}"
+    """
+
+    _username: QLineEdit = new(label="Username:", bind="username", visible="{auth_type == 'BASIC'}")
+    _password: QLineEdit = new(label="Password:", bind="password", visible="{auth_type == 'BASIC'}")
+    _token: QLineEdit = new(label="Token:", visible="{auth_type == 'BEARER'}")
+
+
+@widget
+class _AuthWidget(Widget[RequestItem]):
+    """Auth widget - contains nested Widget[AuthItem].
+
+    This matches RequestAuthWidget in Forc2.
+    """
+
+    _header: QLabel = new("Authentication:")
+    _auth_form: _AuthFormWidget = new(bind="auth")  # Binds to request.auth
+
+
+@widget
+class _EditorWidget(Widget[RequestItem]):
+    """Editor widget with tabs - matches RequestEditorWidget in Forc2."""
+
+    _name: QLabel = new(bind="{name}")
+    _tabs: QTabWidget = new(tabs=[_AuthWidget])
+
+
+@widget
+class _RequestWidgetDeep(Widget[RequestItem]):
+    """Deep nested widget matching Forc2 structure.
+
+    Structure:
+    - RequestWidgetDeep(Widget[RequestItem])
+      - _EditorWidget(Widget[RequestItem])
+        - QTabWidget
+          - _AuthWidget(Widget[RequestItem])
+            - _AuthFormWidget(Widget[AuthItem])  ← has bindings that create callbacks
+    """
+
+    _editor: _EditorWidget
+
+
+# Simple widget for testing independent proxy creation
+@widget(layout="form")
+class _SimpleAuthWidget(Widget[AuthItem]):
+    """Auth widget for independent proxy test."""
+
+    _username: QLineEdit = new(label="Username:", bind="username")
+    _password: QLineEdit = new(label="Password:", bind="password")
+
+
+@widget
+class _RequestWidgetWithAuthChild(Widget[RequestItem]):
+    """Request widget with a child auth widget (no bind= on child)."""
+
+    _name: QLabel = new(bind="{name}")
+    _auth_widget: _SimpleAuthWidget = new()  # No bind= - will be set up manually in test
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockWidgetRepeaterProxyCleanup:
+    """Test that closing and reopening docks doesn't crash due to stale proxies.
+
+    When a dock is closed, the widget inside is destroyed. If the widget had
+    ObservableProxy instances (via Widget[T].record), those proxies' callbacks
+    must be cleaned up. Otherwise, when the same item is reopened, sibling
+    proxy notifications will fire stale callbacks that reference deleted widgets.
+    """
+
+    def test_close_and_reopen_same_item_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Closing a dock and reopening the same item should not crash."""
+        from PySide6.QtCore import QCoreApplication, QEvent
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetSimple]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add an item
+        request = RequestItem(name="GET Users", method="GET", url="/users")
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+        # Remove it (simulates closing the dock tab)
+        del instance._editors[0]
+        qt.process_events()
+        # Force Qt to process deferred deletions (deleteLater)
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt.process_events()
+        assert len(instance._editors.widget) == 0
+
+        # Re-add the SAME object - this should not crash
+        # Without proper cleanup, this triggers sibling proxy notifications
+        # that try to access the deleted widget
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+    def test_close_and_reopen_with_nested_widgets_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Closing a dock with nested Widget[T] children and reopening should not crash."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetNested]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        request = RequestItem(name="POST Login", method="POST", url="/login")
+        instance._editors.append(request)
+        qt.process_events()
+
+        # Close
+        del instance._editors[0]
+        qt.process_events()
+
+        # Reopen same item
+        instance._editors.append(request)
+        qt.process_events()
+
+        # Trigger a change via the nested widget - this would crash without cleanup
+        new_widget = instance._editors.widget[0].widget
+        new_widget._method_widget._method.setText("PUT")
+        qt.process_events()
+
+    def test_close_multiple_reopen_one_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Closing multiple docks and reopening one should not crash."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetSimple]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        req1 = RequestItem(name="Request 1")
+        req2 = RequestItem(name="Request 2")
+        req3 = RequestItem(name="Request 3")
+
+        instance._editors.append(req1)
+        instance._editors.append(req2)
+        instance._editors.append(req3)
+        qt.process_events()
+        assert len(instance._editors.widget) == 3
+
+        # Close all
+        instance._editors.clear()
+        qt.process_events()
+        assert len(instance._editors.widget) == 0
+
+        # Reopen just one
+        instance._editors.append(req2)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+    def test_rapid_open_close_cycles_no_crash(self, base_class, decorator, qt: QtDriver) -> None:
+        """Rapidly opening and closing the same item multiple times should not crash."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetWithUrl]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        request = RequestItem(name="Cycle Test", url="/test")
+
+        # Do multiple open/close cycles
+        for _ in range(5):
+            instance._editors.append(request)
+            qt.process_events()
+            assert len(instance._editors.widget) == 1
+
+            del instance._editors[0]
+            qt.process_events()
+            assert len(instance._editors.widget) == 0
+
+        # Final open should work
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+    def test_nested_widget_proxy_callbacks_cleaned_up(self, base_class, decorator, qt: QtDriver) -> None:
+        """Verify that nested Widget[T] proxies are disposed when dock is closed.
+
+        When a dock contains Widget[Parent] with a child Widget[Child] (where Child
+        is a field of Parent), the child widget gets its own ObservableProxy for
+        the Child object. When the dock is closed:
+        - Without cleanup: the Child proxy retains callbacks referencing deleted widgets
+        - With cleanup: the Child proxy is disposed, callbacks are cleared
+
+        This test verifies the cleanup happens by checking that reopening the same
+        item doesn't crash due to stale sibling proxy callbacks.
+        """
+        from observant.observable_proxy import _proxy_registry
+        from PySide6.QtCore import QCoreApplication, QEvent
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetDeep]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Create request with auth - the auth object will have proxies created for it
+        auth = AuthItem(auth_type="BASIC", username="user", password="pass")
+        request = RequestItem(name="Test", auth=auth)
+
+        # Open dock
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+        # Get the auth object's ID - proxies are registered by object ID
+        auth_id = id(auth)
+
+        # Verify proxies were created for the auth object
+        assert auth_id in _proxy_registry, "Auth object should have proxies registered"
+        proxies_before_close = len([ref for ref in _proxy_registry[auth_id] if ref() is not None])
+        assert proxies_before_close > 0, "Should have at least one proxy for auth"
+
+        # Close the dock
+        del instance._editors[0]
+        qt.process_events()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt.process_events()
+
+        # After close, proxies should be disposed (unregistered)
+        # Without dispose_widget_proxies, the old proxy remains registered
+        if auth_id in _proxy_registry:
+            proxies_after_close = len([ref for ref in _proxy_registry[auth_id] if ref() is not None])
+        else:
+            proxies_after_close = 0
+
+        # This assertion will fail if dispose_widget_proxies is not working
+        assert proxies_after_close == 0, f"Proxies should be disposed after dock close, but {proxies_after_close} remain"
+
+        # Reopen - should not crash
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+    def test_independent_proxy_cleanup_required(self, base_class, decorator, qt: QtDriver) -> None:
+        """Test that dispose_widget_proxies cleans up independently-created proxies.
+
+        This test creates a scenario where a child widget creates its OWN proxy
+        (not shared with the parent's nested proxy). This proxy is NOT disposed
+        by wrapper.dispose() - it requires dispose_widget_proxies to clean up.
+
+        THIS TEST SHOULD FAIL when dispose_widget_proxies body is commented out.
+        """
+        from observant import ObservableProxy
+        from observant.observable_proxy import _proxy_registry
+        from PySide6.QtCore import QCoreApplication, QEvent
+
+        from qtpie.bindings.apply import apply_auto_bindings
+        from qtpie.variable import RecordVariable
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[RequestItem], Dock[_RequestWidgetWithAuthChild]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Create request with auth
+        auth = AuthItem(auth_type="BASIC", username="testuser", password="secret")
+        request = RequestItem(name="Test Request", auth=auth)
+
+        # Open dock
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1
+
+        # Get the dock widget and its child auth widget
+        dock = instance._editors.widget[0]
+        content_widget = dock.widget
+        auth_child = content_widget._auth_widget
+
+        # Now manually create an INDEPENDENT proxy for the auth object
+        # This simulates a scenario where a child widget creates its own proxy
+        # (not obtained via parent.record.observable.auth which would share nested proxy)
+        independent_proxy: ObservableProxy[AuthItem] = ObservableProxy(auth)
+        record_var: RecordVariable[AuthItem] = RecordVariable(independent_proxy)
+        auth_child.record = record_var  # type: ignore[assignment]
+
+        # Apply bindings to create callbacks on the independent proxy
+        auth_config = getattr(type(auth_child), "_qtpie_config", None)
+        if auth_config is not None:
+            apply_auto_bindings(auth_child, auth_config)
+        qt.process_events()
+
+        # Get the auth object's ID
+        auth_id = id(auth)
+
+        # Verify at least one proxy was created for auth
+        assert auth_id in _proxy_registry, "Auth should have proxies registered"
+        proxies_before = len([ref for ref in _proxy_registry[auth_id] if ref() is not None])
+        assert proxies_before >= 1, f"Should have at least one proxy, got {proxies_before}"
+
+        # Close the dock
+        del instance._editors[0]
+        qt.process_events()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        qt.process_events()
+
+        # Check if proxies are cleaned up
+        # WITHOUT dispose_widget_proxies: the independent proxy remains registered
+        # WITH dispose_widget_proxies: all proxies are disposed
+        if auth_id in _proxy_registry:
+            proxies_after = len([ref for ref in _proxy_registry[auth_id] if ref() is not None])
+        else:
+            proxies_after = 0
+
+        # This assertion SHOULD FAIL when dispose_widget_proxies is commented out
+        # because the independent proxy is NOT disposed by wrapper.dispose()
+        assert proxies_after == 0, f"Independent proxies should be disposed by dispose_widget_proxies, but {proxies_after} remain. This indicates dispose_widget_proxies is not working."
+
+        # Reopen - should not crash (but would crash without cleanup due to stale callbacks)
+        instance._editors.append(request)
+        qt.process_events()
+        assert len(instance._editors.widget) == 1

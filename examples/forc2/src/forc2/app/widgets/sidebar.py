@@ -143,7 +143,8 @@ class CollectionsTreeWidget(Widget[Collection | None]):
 
 # @frame
 # class SidebarWidget(Frame[Workspace | None]):
-@widget(styledBackground=True, margins=0, spacing=0)
+# @widget(margins=0, spacing=0, styledBackground=True)
+@widget(margins=5, spacing=0, styledBackground=True)
 class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
     _workspace_name: QLabel = new(bind="Workspace: {name}")

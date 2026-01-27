@@ -2,15 +2,13 @@
 // Layout and spacing specific to the request editor section
 
 // Main container
-#RequestEditorWidget,
-QWidget[class~="request-editor"] {
+#RequestEditorWidget {
   background-color: $bg-primary;
   padding: 0.62em;
 }
 
 // Address bar (method + URL + send)
-#RequestAddressBarWidget,
-QWidget[class~="address-bar"] {
+#RequestAddressBarWidget {
   background-color: $bg-secondary;
   border: $border-width solid $border-default;
   border-radius: $radius-md;
@@ -19,7 +17,6 @@ QWidget[class~="address-bar"] {
 }
 
 // Method chooser in address bar
-QWidget[class~="address-bar"] QComboBox[class~="method-chooser"],
 #RequestAddressBarWidget QComboBox {
   min-height: 28px * $scale;
   font-weight: 700;
@@ -29,14 +26,12 @@ QWidget[class~="address-bar"] QComboBox[class~="method-chooser"],
   padding: 0.46em 0.77em;
 }
 
-QWidget[class~="address-bar"] QComboBox[class~="method-chooser"]:hover,
 #RequestAddressBarWidget QComboBox:hover {
   background-color: $bg-hover;
   border-radius: $radius-sm;
 }
 
 // URL input inside address bar (borderless, transparent)
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"],
 #RequestAddressBarWidget QLineEdit {
   background-color: transparent;
   border: none;
@@ -44,20 +39,17 @@ QWidget[class~="address-bar"] QLineEdit[class~="url-input"],
   padding: 0.62em;
 }
 
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:hover,
 #RequestAddressBarWidget QLineEdit:hover {
   background-color: $bg-tertiary;
   border-radius: $radius-sm;
 }
 
-QWidget[class~="address-bar"] QLineEdit[class~="url-input"]:focus,
 #RequestAddressBarWidget QLineEdit:focus {
   background-color: $bg-tertiary;
   border-radius: $radius-sm;
 }
 
 // Send button
-QWidget[class~="address-bar"] QPushButton[class~="btn-send"],
 #RequestAddressBarWidget QPushButton {
   background-color: $accent;
   color: white;
@@ -68,17 +60,14 @@ QWidget[class~="address-bar"] QPushButton[class~="btn-send"],
   font-size: $font-size-base;
 }
 
-QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:hover,
 #RequestAddressBarWidget QPushButton:hover {
   background-color: $accent-hover;
 }
 
-QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:pressed,
 #RequestAddressBarWidget QPushButton:pressed {
   background-color: $accent-active;
 }
 
-QWidget[class~="address-bar"] QPushButton[class~="btn-send"]:disabled,
 #RequestAddressBarWidget QPushButton:disabled {
   background-color: $accent-disabled;
   color: $text-disabled;
@@ -91,35 +80,29 @@ QWidget[class~="tab-content"] {
 }
 
 // Auth form layout
-QWidget[class~="auth-form"],
 #RequestAuthFormWidget {
   margin-top: 0.62em;
 }
 
-QWidget[class~="auth-form"] QLineEdit,
-QWidget[class~="auth-form"] QComboBox,
 #RequestAuthFormWidget QLineEdit,
 #RequestAuthFormWidget QComboBox {
   min-width: 200px * $scale;
 }
 
 // Delete cell in tables (minimal width)
-QWidget[class~="delete-cell"],
 #DeleteWidget {
   background: transparent;
   max-width: 40px * $scale;
 }
 
-#DeleteWidget QPushButton,
-QWidget[class~="delete-cell"] QPushButton {
+#DeleteWidget QPushButton {
   background: transparent;
   border: none;
   padding: 0.31em;
   font-size: $font-size-large;
 }
 
-#DeleteWidget QPushButton:hover,
-QWidget[class~="delete-cell"] QPushButton:hover {
+#DeleteWidget QPushButton:hover {
   background-color: $error-muted;
   border-radius: $radius-sm;
 }

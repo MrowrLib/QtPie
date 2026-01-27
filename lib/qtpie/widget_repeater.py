@@ -9,7 +9,17 @@ from observant import Observable, ObservableList, ObservableProxy
 from qtpy.QtWidgets import QWidget
 
 from .bindings import bind
-from .repeaters.utils import bind_callable_format, bind_computed_format, connect_child_signals, create_item_wrapper, create_styled_widget, rebind_child_widgets, resolve_sort, setup_repeater_layout
+from .repeaters.utils import (
+    bind_callable_format,
+    bind_computed_format,
+    connect_child_signals,
+    create_item_wrapper,
+    create_styled_widget,
+    dispose_widget_proxies,
+    rebind_child_widgets,
+    resolve_sort,
+    setup_repeater_layout,
+)
 from .utils.common import PLACEHOLDER_RE, is_primitive_type
 from .variable import Variable
 
@@ -300,7 +310,13 @@ class WidgetRepeater[T](QWidget):
     def _on_remove(self, index: int, item: T) -> None:
         """Handle item removal."""
         if index < len(self._items):
-            widget, _, _ = self._items.pop(index)
+            widget, wrapper, _ = self._items.pop(index)
+
+            # Dispose proxies before deleting widget to prevent stale callbacks
+            dispose_widget_proxies(widget)
+            if isinstance(wrapper, ObservableProxy):
+                wrapper.dispose()
+
             self._layout.removeWidget(widget)
             widget.deleteLater()
 
@@ -339,7 +355,11 @@ class WidgetRepeater[T](QWidget):
     def _on_clear(self, removed_items: list[T]) -> None:
         """Handle list clear."""
         # Remove all widgets
-        for widget, _, _ in self._items:
+        for widget, wrapper, _ in self._items:
+            # Dispose proxies before deleting widget
+            dispose_widget_proxies(widget)
+            if isinstance(wrapper, ObservableProxy):
+                wrapper.dispose()
             self._layout.removeWidget(widget)
             widget.deleteLater()
         self._items.clear()

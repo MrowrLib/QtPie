@@ -9,7 +9,7 @@ from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 
 
 # TODO add _
-@widget(margins=0, spacing=0)
+@widget
 class CentralWidget(Widget[Workspace | None]):
     app_header_label: QLabel = new("Forc - Free Open-source Rest Client")
     load_workspace_message: QLabel = new("No workspace loaded. Please load a workspace to get started.", visible="{#record is None}")
@@ -57,6 +57,8 @@ class MainWindow(Window[Workspace | None]):
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
         item = self.selected_sidebar_item()
+        print("Selected sidebar item changed:", item.name if item else None)
+
         if item is None:
             self.selected_collection = None  # <--- this causes recursion
         elif isinstance(item, Collection):

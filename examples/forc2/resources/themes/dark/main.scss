@@ -10,3 +10,15 @@
 #SidebarWidget {
   background-color: $bg-base;
 }
+
+// Remove gap between dock areas
+QMainWindow::separator {
+  width: 0px;
+  height: 0px;
+}
+
+// Remove tab bar spacing
+QTabBar {
+  margin: 0;
+  padding: 0;
+}

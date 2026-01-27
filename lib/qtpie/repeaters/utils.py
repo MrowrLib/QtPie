@@ -12,6 +12,38 @@ from qtpie.utils.common import HANDLER_SPEC_RE, PLACEHOLDER_RE, is_primitive_typ
 from qtpie.utils.properties import resolve_nested_property
 
 
+def dispose_widget_proxies(widget: QWidget) -> None:
+    """Dispose all ObservableProxies in a widget hierarchy.
+
+    When a widget is being destroyed, this clears all callbacks and unregisters
+    proxies from the global registry to prevent stale callbacks from firing
+    and accessing deleted Qt objects.
+
+    Call this before destroying any dynamically created Widget[T] instances.
+
+    Args:
+        widget: The root widget whose proxies should be disposed.
+    """
+    # Dispose the widget's own record proxy if it has one
+    qtpie_state = getattr(widget, "_qtpie", None)
+    if qtpie_state is not None:
+        record = getattr(qtpie_state, "_record", None)
+        if record is not None:
+            obs = getattr(record, "observable", None)
+            if obs is not None and isinstance(obs, ObservableProxy):
+                obs.dispose()
+
+    # Recursively dispose child widgets' proxies
+    for child in widget.findChildren(QWidget):
+        child_state = getattr(child, "_qtpie", None)
+        if child_state is not None:
+            child_record = getattr(child_state, "_record", None)
+            if child_record is not None:
+                child_obs = getattr(child_record, "observable", None)
+                if child_obs is not None and isinstance(child_obs, ObservableProxy):
+                    child_obs.dispose()
+
+
 def resolve_sort[T](
     sort: bool | str | Callable[[T], Any] | None,
     parent_widget: Any | None,

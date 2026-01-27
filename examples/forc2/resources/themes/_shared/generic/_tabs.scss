@@ -36,9 +36,6 @@ QTabBar::tab:selected {
     border-bottom: $border-width-thick solid $accent;
 }
 
-QTabBar::tab:!selected {
-    margin-top: 2px * $scale;
-}
 
 // Close button on tabs (if any)
 QTabBar::close-button {

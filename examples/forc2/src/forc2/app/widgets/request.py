@@ -8,7 +8,7 @@ from forc2.domain.workspace import Workspace
 from qtpie import Event, Var, Widget, new, slot, widget
 
 
-@widget(margins=0, spacing=0)
+@widget
 class RequestWidget(Widget[Request]):
     ### Events ###
     on_send_request: Event = new(on="_on_send_request")

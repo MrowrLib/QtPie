@@ -16,7 +16,7 @@ from .bindings.format_binding import (
     create_item_formatter_with_context,
 )
 from .dock import Dock
-from .repeaters.utils import create_item_wrapper, rebind_child_widgets
+from .repeaters.utils import create_item_wrapper, dispose_widget_proxies, rebind_child_widgets
 from .variable import Variable
 
 
@@ -285,7 +285,12 @@ class DockWidgetRepeater[T, W: QWidget]:
             # Check if focus moved to this dock (floating or not)
             if new is None:
                 return
-            if not dock_widget.isAncestorOf(new) and new is not dock_widget:
+            # Guard against accessing deleted Qt object (dock was closed)
+            try:
+                if not dock_widget.isAncestorOf(new) and new is not dock_widget:
+                    return
+            except RuntimeError:
+                # Qt object was deleted - ignore this focus change
                 return
             update_selection()
 
@@ -512,11 +517,20 @@ class DockWidgetRepeater[T, W: QWidget]:
     def _on_remove(self, index: int, item: T) -> None:
         """Handle item removal."""
         if index < len(self._items):
-            dock, _, index_holder = self._items.pop(index)
+            dock, wrapper, index_holder = self._items.pop(index)
 
             # Invalidate the index holder so the CloseFilter won't try to
             # delete from the list again (which would cause a cascade delete)
             index_holder[0] = -1
+
+            # Dispose all proxies in the widget hierarchy BEFORE closing/deleting.
+            # This clears callbacks and unregisters from global registry, preventing
+            # stale callbacks from firing when the same item is reopened.
+            dispose_widget_proxies(dock.widget)
+
+            # Also dispose the wrapper proxy
+            if isinstance(wrapper, ObservableProxy):
+                wrapper.dispose()
 
             # Remove and delete dock widget
             dock.dock_widget.close()
@@ -549,7 +563,11 @@ class DockWidgetRepeater[T, W: QWidget]:
     def _on_clear(self, removed_items: list[T]) -> None:
         """Handle list clear."""
         # Remove all docks
-        for dock, _, _ in self._items:
+        for dock, wrapper, _ in self._items:
+            # Dispose all proxies in the widget hierarchy
+            dispose_widget_proxies(dock.widget)
+            if isinstance(wrapper, ObservableProxy):
+                wrapper.dispose()
             dock.dock_widget.close()
             dock.dock_widget.deleteLater()
         self._items.clear()
