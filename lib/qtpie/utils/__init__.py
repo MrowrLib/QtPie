@@ -16,6 +16,7 @@ from qtpie.utils.layouts import (
     apply_widget_props,
     create_layout,
     resolve_icon,
+    resolve_margins,
 )
 from qtpie.utils.properties import resolve_nested_property
 from qtpie.utils.type_checks import (
@@ -63,5 +64,6 @@ __all__ = [
     "is_signal",
     "is_signal_on_type",
     "resolve_icon",
+    "resolve_margins",
     "resolve_nested_property",
 ]

@@ -366,6 +366,10 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -395,6 +399,10 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -487,8 +495,10 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
                 widget_props[key] = value
 
         # Store layout config
+        from .utils.layouts import resolve_margins
+
         target._qtpie_config.layout = layout
-        target._qtpie_config.margins = margins
+        target._qtpie_config.margins = resolve_margins(margins, marginLeft, marginTop, marginRight, marginBottom)
         target._qtpie_config.auto_bind = auto_bind
         target._qtpie_config.record_default = record
         target._qtpie_config.widget_props = widget_props
@@ -648,6 +658,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                         elif field.is_splitter:
                             # Create the splitter instance (but don't add to layout yet - preserve order)
                             splitter_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
+                            _apply_field_margins(splitter_instance, field)
                             setattr(self, name, splitter_instance)
                             splitters[name] = splitter_instance
 
@@ -656,6 +667,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             groupbox_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             # QGroupBox needs a layout for its children (based on inner_layout=)
                             groupbox_instance.setLayout(_create_groupbox_layout(field.inner_layout))
+                            _apply_field_margins(groupbox_instance, field)
                             setattr(self, name, groupbox_instance)
                             groupboxes[name] = groupbox_instance
 
@@ -664,6 +676,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                             frame_instance = field.field_type(*field.args, **field.kwargs)  # type: ignore[misc]
                             # QFrame needs a layout for its children (based on inner_layout=)
                             frame_instance.setLayout(_create_groupbox_layout(field.inner_layout))
+                            _apply_field_margins(frame_instance, field)
                             setattr(self, name, frame_instance)
                             frames[name] = frame_instance
 
@@ -1012,6 +1025,23 @@ def _get_target_container(
     if result is not None:
         return result
     return frames.get(target_name)
+
+
+def _apply_field_margins(instance: Any, field: NewField) -> None:
+    """Apply per-widget margins from a NewField to a widget instance.
+
+    Handles margin=, marginLeft=, marginTop=, marginRight=, marginBottom= kwargs
+    extracted in NewField.__set_name__. Uses resolve_margins() to merge values.
+    """
+    if field.margin is not None or field.margin_left is not None or field.margin_top is not None or field.margin_right is not None or field.margin_bottom is not None:
+        from .utils.layouts import resolve_margins
+
+        base_margin = field.margin if field.margin is not None else 0
+        resolved = resolve_margins(base_margin, field.margin_left, field.margin_top, field.margin_right, field.margin_bottom)
+        if isinstance(resolved, int):
+            instance.setContentsMargins(resolved, resolved, resolved, resolved)
+        else:
+            instance.setContentsMargins(*resolved)
 
 
 def _create_groupbox_layout(inner_layout: str | None) -> QLayout:

@@ -1,4 +1,5 @@
-from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableView, QTabWidget
+from qtpy.QtGui import Qt
+from qtpy.QtWidgets import QComboBox, QFrame, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableView, QTabWidget
 
 from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyLocation, Auth, AuthType
 from forc2.domain.body import BODY_TYPE_LABELS, BodyType
@@ -19,7 +20,7 @@ class DeleteWidget[T](Widget[T]):
 class DeleteRequestKeyValueWidget(DeleteWidget[RequestKeyValue]): ...
 
 
-@widget(layout="horizontal", styledBackground=True, margins=0)
+@widget(layout="horizontal")
 class RequestAddressBarWidget(Widget[Request]):
     ### Widgets ###
     _request_method_chooser: QComboBox = new(bind=HttpMethod, selectedItem="method", classes=["flat", "method-chooser"])
@@ -116,10 +117,11 @@ class RequestBodyWidget(Widget[Request]):
         self.record.body_fields.remove(field)
 
 
-@widget
+@widget(styledBackground=True)
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
+    _divider1: QFrame = new(frameShape=QFrame.Shape.HLine)
     _request_tabs: QTabWidget = new(
         tabs=[
             RequestParamsWidget,
@@ -127,6 +129,8 @@ class RequestEditorWidget(Widget[Request]):
             RequestAuthWidget,
             RequestBodyWidget,
         ],
-        classes=["request-tabs"],
     )
     _stretch: Stretch
+
+    def __setup__(self) -> None:
+        self._request_tabs.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)

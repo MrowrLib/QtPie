@@ -553,6 +553,10 @@ def dialog[D: Dialog[Any]](
     icon: IconType = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
     auto_bind: bool = True,
     name: str | None = None,
@@ -580,6 +584,10 @@ def dialog[D: Dialog[Any]](
     icon: IconType = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
     auto_bind: bool = True,
     name: str | None = None,
@@ -644,8 +652,10 @@ def dialog[D: Dialog[Any]](
             else:
                 widget_props[key] = value
 
+        from .utils.layouts import resolve_margins
+
         config.layout = layout
-        config.margins = margins
+        config.margins = resolve_margins(margins, marginLeft, marginTop, marginRight, marginBottom)
         config.size = size
         config.icon = icon
         config.auto_bind = auto_bind

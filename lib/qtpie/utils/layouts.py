@@ -148,6 +148,44 @@ def apply_widget_props(
             raise AttributeError(f"{type(target).__name__} has no setter '{setter_name}' for property '{prop_name}'")
 
 
+def resolve_margins(
+    margins: int | tuple[int, int, int, int],
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
+) -> int | tuple[int, int, int, int]:
+    """Resolve individual margin overrides into a final margins value.
+
+    Individual values (marginLeft, etc.) override the corresponding part of margins.
+
+    Args:
+        margins: Base margins - single int (all sides) or tuple (left, top, right, bottom).
+        marginLeft: Override left margin.
+        marginTop: Override top margin.
+        marginRight: Override right margin.
+        marginBottom: Override bottom margin.
+
+    Returns:
+        Resolved margins value.
+    """
+    if marginLeft is None and marginTop is None and marginRight is None and marginBottom is None:
+        return margins
+    if isinstance(margins, int):
+        left, top, right, bottom = margins, margins, margins, margins
+    else:
+        left, top, right, bottom = margins
+    if marginLeft is not None:
+        left = marginLeft
+    if marginTop is not None:
+        top = marginTop
+    if marginRight is not None:
+        right = marginRight
+    if marginBottom is not None:
+        bottom = marginBottom
+    return (left, top, right, bottom)
+
+
 def apply_layout_margins(
     layout: QLayout,
     margins: int | tuple[int, int, int, int] | None,

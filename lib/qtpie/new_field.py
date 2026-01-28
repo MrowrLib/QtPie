@@ -278,6 +278,12 @@ class NewField:
         # - str: Variable name binding (e.g., "content_type" or "_content_type")
         # - NewField: Direct Variable reference
         self.editor_content_type: str | None = None
+        # Per-widget margins (applied via setContentsMargins() after widget creation)
+        self.margin: int | tuple[int, int, int, int] | None = None
+        self.margin_left: int | None = None
+        self.margin_top: int | None = None
+        self.margin_right: int | None = None
+        self.margin_bottom: int | None = None
         # Chaining support: track all chained () calls for multi-level patterns
         # e.g., new(var_default)(dock_kwargs)(widget_kwargs)
         self._chain_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -735,6 +741,8 @@ class NewField:
             self._extract_target_splitter()
             # Extract bind= for property binding (e.g., bind="orientation")
             self.bind = self.kwargs.pop("bind", None)
+            # Extract per-widget margin kwargs
+            self._extract_margin_kwargs()
             # Remaining kwargs are passed directly to QSplitter constructor
             return
 
@@ -747,6 +755,8 @@ class NewField:
             self._extract_target_group()
             # Extract inner_layout for groupbox's internal layout type
             self._extract_inner_layout()
+            # Extract per-widget margin kwargs
+            self._extract_margin_kwargs()
             # Remaining kwargs are passed directly to QGroupBox constructor
             return
 
@@ -759,6 +769,8 @@ class NewField:
             self._extract_target_group()
             # Extract inner_layout for frame's internal layout type
             self._extract_inner_layout()
+            # Extract per-widget margin kwargs
+            self._extract_margin_kwargs()
             # Remaining kwargs are passed directly to QFrame constructor
             return
 
@@ -1173,6 +1185,9 @@ class NewField:
             # Extract width= and height= for initial size (applied via resize())
             self.initial_width = self.kwargs.pop("width", None)
             self.initial_height = self.kwargs.pop("height", None)
+
+            # Extract per-widget margin kwargs
+            self._extract_margin_kwargs()
 
             # Extract signal connections (e.g., clicked="on_clicked")
             self._extract_signal_connections()
@@ -1621,6 +1636,19 @@ class NewField:
     def _is_qframe_type(self) -> bool:
         """Check if the field type is QFrame."""
         return is_qframe(self.field_type)
+
+    def _extract_margin_kwargs(self) -> None:
+        """Extract margin= and individual margin override kwargs.
+
+        Pops margin, marginLeft, marginTop, marginRight, marginBottom from
+        self.kwargs so they don't get passed to the Qt constructor.
+        Applied via setContentsMargins() in new_fields.py after widget creation.
+        """
+        self.margin = self.kwargs.pop("margin", None)
+        self.margin_left = self.kwargs.pop("marginLeft", None)
+        self.margin_top = self.kwargs.pop("marginTop", None)
+        self.margin_right = self.kwargs.pop("marginRight", None)
+        self.margin_bottom = self.kwargs.pop("marginBottom", None)
 
     def _extract_target_layout(self) -> None:
         """Extract layout= parameter for targeting nested layouts.

@@ -295,6 +295,10 @@ def window[W: Window[Any]](
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -342,6 +346,10 @@ def window[W: Window[Any]](
     *,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -441,8 +449,10 @@ def window[W: Window[Any]](
             else:
                 widget_props[key] = value
 
+        from .utils.layouts import resolve_margins
+
         config.layout = layout
-        config.margins = margins
+        config.margins = resolve_margins(margins, marginLeft, marginTop, marginRight, marginBottom)
         config.auto_bind = auto_bind
         config.record_default = record
         config.widget_props = widget_props

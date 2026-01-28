@@ -275,6 +275,17 @@ def new_fields[T](cls: type[T]) -> type[T]:
                                 h = int(init_h) if init_h is not None else instance.height()
                                 instance.resize(w, h)
 
+                        # Apply per-widget margins (margin=/marginLeft=/marginTop=/marginRight=/marginBottom=)
+                        if field.margin is not None or field.margin_left is not None or field.margin_top is not None or field.margin_right is not None or field.margin_bottom is not None:
+                            from .utils.layouts import resolve_margins
+
+                            base_margin = field.margin if field.margin is not None else 0
+                            resolved = resolve_margins(base_margin, field.margin_left, field.margin_top, field.margin_right, field.margin_bottom)
+                            if isinstance(resolved, int):
+                                instance.setContentsMargins(resolved, resolved, resolved, resolved)
+                            else:
+                                instance.setContentsMargins(*resolved)
+
                         # Apply input validator (QLineEdit, QComboBox, etc.)
                         if field.validator is not None:
                             if hasattr(instance, "setValidator"):

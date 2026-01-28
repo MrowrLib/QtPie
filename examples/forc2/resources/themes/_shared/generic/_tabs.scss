@@ -1,67 +1,70 @@
 // Tab widget styles
 
 QTabWidget {
-    background: transparent;
+  background: $bg-base;
 }
 
-QTabWidget::pane {
-    background-color: $bg-primary;
-    border: $border-width solid $border-default;
-    border-top: none;
+// QTabWidget QWidget {
+//   background: $bg-primary;
+// }
+
+QTabWidget::tab-bar {
+  background: red;
+  // background: $bg-base;
 }
 
 QTabBar {
-    background: transparent;
+  background: green;
 }
 
 QTabBar::tab {
-    background-color: $bg-secondary;
-    color: $text-secondary;
-    border: $border-width solid $border-default;
-    border-bottom: none;
-    padding: 0.62em 1.23em;
-    margin-right: 3px * $scale;
-    border-top-left-radius: $radius-md;
-    border-top-right-radius: $radius-md;
+  background-color: $bg-secondary;
+  color: $text-secondary;
+  border: $border-width solid $border-default;
+  border-bottom: none;
+  padding: 0.5em 1em;
+  margin-right: 4px * $scale;
+  border-top-left-radius: $radius-md;
+  border-top-right-radius: $radius-md;
+  margin-top: 6px;
 }
 
 QTabBar::tab:hover {
-    background-color: $bg-tertiary;
-    color: $text-primary;
+  background-color: $bg-tertiary;
+  color: $text-primary;
 }
 
 QTabBar::tab:selected {
-    background-color: $bg-primary;
-    color: $text-primary;
-    border-bottom: $border-width-thick solid $accent;
+  background-color: $bg-primary;
+  color: $text-primary;
+  border-bottom: $border-width-thick solid $accent;
 }
-
 
 // Close button on tabs (if any)
 QTabBar::close-button {
-    subcontrol-position: right;
-    margin: 0.31em;
-    padding: 0.15em;
-    border-radius: $radius-sm;
-    background-color: rgba(239, 68, 68, 0.3);
+  // subcontrol-position: right;
+  margin: 0.31em;
+  padding: 0.15em;
+  border-radius: $radius-sm;
+  background-color: rgba(239, 68, 68, 0.3);
 }
 
 QTabBar::close-button:hover {
-    background-color: $error;
+  background-color: $error;
 }
 
 // Tab widget in document mode (flatter, for request tabs at top)
 QTabBar[documentMode="true"]::tab {
-    border: none;
-    border-bottom: $border-width-thick solid transparent;
-    border-radius: 0;
-    padding: 0.77em 1.23em;
+  border: none;
+  border-bottom: $border-width-thick solid transparent;
+  border-radius: 0;
+  padding: 0.77em 1.23em;
 }
 
 QTabBar[documentMode="true"]::tab:selected {
-    border-bottom-color: $accent;
+  border-bottom-color: $accent;
 }
 
 QTabBar[documentMode="true"]::tab:hover:!selected {
-    border-bottom-color: $border-strong;
+  border-bottom-color: $border-strong;
 }

@@ -595,6 +595,10 @@ def app[A: AppBase[Any]](
     title: str | None = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -653,6 +657,10 @@ def app[A: AppBase[Any]](
     title: str | None = None,
     layout: LayoutType = "vertical",
     margins: int | tuple[int, int, int, int] = 0,
+    marginLeft: int | None = None,
+    marginTop: int | None = None,
+    marginRight: int | None = None,
+    marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -758,8 +766,10 @@ def app[A: AppBase[Any]](
             else:
                 widget_props[key] = value
 
+        from .utils.layouts import resolve_margins
+
         config.layout = layout
-        config.margins = margins
+        config.margins = resolve_margins(margins, marginLeft, marginTop, marginRight, marginBottom)
         config.auto_bind = auto_bind
         config.record_default = record
         config.widget_props = widget_props
