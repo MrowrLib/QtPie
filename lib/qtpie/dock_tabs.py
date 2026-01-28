@@ -9,6 +9,8 @@ This module provides window-level dock tab features:
 - dockTabsDragToUndock: Drag tab outside tab bar to float dock
 """
 
+import logging
+import sys
 from collections.abc import Callable
 from typing import Any, Protocol, cast, override
 
@@ -17,6 +19,18 @@ from qtpy.QtGui import QMouseEvent
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QMenu, QTabBar, QTabWidget, QWidget
 
 from .dock import resize_all_docks
+from .floating_dock_titlebar import FloatingDockTitleBar
+
+logger = logging.getLogger(__name__)
+
+
+def _debug(msg: str) -> None:
+    """Debug log with immediate flush to catch crashes."""
+    logger.debug(msg)
+    for handler in logging.root.handlers + logger.handlers:
+        handler.flush()
+    sys.stderr.flush()
+    sys.stdout.flush()
 
 
 class DockTabConfig(Protocol):
@@ -30,6 +44,8 @@ class DockTabConfig(Protocol):
     dock_tabs_drag_to_undock: bool
     dock_tabs_drag_margin: int
     dock_tabs_middle_click_close: bool
+    dock_disable_floating_double_click: bool
+    dock_maximize_floating_on_double_click: bool
     # Context menu configuration
     dock_menu: bool
     dock_menu_close: bool
@@ -97,12 +113,15 @@ def install_dock_tab_features(
     # - Any tab feature is enabled (closable, drag-to-undock, hide title bar, middle-click close, context menu)
     # - OR if movable is explicitly False (need to override Qt's default of True)
     # - OR if any per-dock override wants to hide title bar
+    # - OR if floating dock double-click behavior is customized
     needs_customization = any(
         [
             config.dock_tabs_closable,
             config.dock_tabs_drag_to_undock,
             config.dock_tabs_hide_title_bar,
             config.dock_tabs_middle_click_close,
+            config.dock_disable_floating_double_click,
+            config.dock_maximize_floating_on_double_click,
             config.dock_menu,
             any_dock_wants_hide_titlebar,
             any_dock_has_hide_titlebar,
@@ -116,12 +135,13 @@ def install_dock_tab_features(
     event_filter = DockTabEventFilter(window, config, overrides)
     window.installEventFilter(event_filter)
 
-    # If middle-click close is enabled, install filters on existing docks
-    if config.dock_tabs_middle_click_close:
+    # If middle-click close or floating double-click customization is enabled, install filters on existing docks
+    if config.dock_tabs_middle_click_close or config.dock_disable_floating_double_click or config.dock_maximize_floating_on_double_click:
         event_filter.install_dock_title_bar_filters()
 
-    # If hide title bar is enabled (window-level or any per-dock override), set up hooks
-    if config.dock_tabs_hide_title_bar or any_dock_wants_hide_titlebar or any_dock_has_hide_titlebar:
+    # If hide title bar is enabled (window-level or any per-dock override), OR
+    # if double-click features are enabled (need to update title bar when floating state changes)
+    if config.dock_tabs_hide_title_bar or any_dock_wants_hide_titlebar or any_dock_has_hide_titlebar or config.dock_disable_floating_double_click or config.dock_maximize_floating_on_double_click:
         _setup_title_bar_hooks(window, config, overrides)
 
 
@@ -154,7 +174,7 @@ class DockTabEventFilter(QObject):
             # A layout change occurred - check for new tab bars and new docks
             self._customize_tab_bars()
             self._setup_new_dock_hooks()
-            if self._config.dock_tabs_middle_click_close:
+            if self._config.dock_tabs_middle_click_close or self._config.dock_disable_floating_double_click or self._config.dock_maximize_floating_on_double_click:
                 self.install_dock_title_bar_filters()
         elif isinstance(watched, QTabBar):
             if self._config.dock_tabs_drag_to_undock:
@@ -162,14 +182,24 @@ class DockTabEventFilter(QObject):
             if self._config.dock_tabs_middle_click_close:
                 if self._handle_middle_click(watched, event):
                     return True  # Event consumed
-        elif isinstance(watched, QDockWidget) and self._config.dock_tabs_middle_click_close:
-            if self._handle_dock_title_bar_middle_click(watched, event):
-                return True  # Event consumed
+        elif isinstance(watched, QDockWidget):
+            if self._config.dock_tabs_middle_click_close:
+                if self._handle_dock_title_bar_middle_click(watched, event):
+                    return True  # Event consumed
+            if self._config.dock_disable_floating_double_click or self._config.dock_maximize_floating_on_double_click:
+                if self._handle_dock_title_bar_double_click(watched, event):
+                    return True  # Event consumed
+        elif isinstance(watched, FloatingDockTitleBar):
+            # Handle double-click on custom title bar
+            if self._config.dock_disable_floating_double_click or self._config.dock_maximize_floating_on_double_click:
+                if self._handle_custom_titlebar_double_click(watched, event):
+                    return True  # Event consumed
         return super().eventFilter(watched, event)
 
     def _setup_new_dock_hooks(self) -> None:
         """Set up title bar hooks for any newly added docks and update all title bars."""
-        if not self._config.dock_tabs_hide_title_bar:
+        needs_hooks = self._config.dock_tabs_hide_title_bar or self._config.dock_disable_floating_double_click or self._config.dock_maximize_floating_on_double_click
+        if not needs_hooks:
             return
 
         for dock in self._window.findChildren(QDockWidget):
@@ -178,6 +208,9 @@ class DockTabEventFilter(QObject):
 
             def make_handler(d: QDockWidget) -> Callable[..., None]:
                 def handler(*_args: Any) -> None:
+                    dock_title = d.windowTitle()
+                    is_floating = d.isFloating()
+                    _debug(f"SIGNAL: topLevelChanged/dockLocationChanged for dock={dock_title!r}, is_floating={is_floating}")
                     _update_title_bar_for_dock(self._window, d, self._config, self._dock_overrides)
 
                 return handler  # noqa: B023 - closure factory pattern, `d` is captured via parameter
@@ -307,12 +340,18 @@ class DockTabEventFilter(QObject):
         return False
 
     def install_dock_title_bar_filters(self) -> None:
-        """Install event filters on dock widgets for title bar middle-click detection."""
+        """Install event filters on dock widgets and custom title bars."""
         for dock in self._window.findChildren(QDockWidget):
-            if dock.property("_qtpie_middle_click_filter"):
-                continue
-            dock.installEventFilter(self)
-            dock.setProperty("_qtpie_middle_click_filter", True)
+            if not dock.property("_qtpie_dock_filter"):
+                dock.installEventFilter(self)
+                dock.setProperty("_qtpie_dock_filter", True)
+
+            # Also install on custom title bar if present
+            title_bar = dock.titleBarWidget()
+            if isinstance(title_bar, FloatingDockTitleBar):
+                if not title_bar.property("_qtpie_titlebar_filter"):
+                    title_bar.installEventFilter(self)
+                    title_bar.setProperty("_qtpie_titlebar_filter", True)
 
     def _handle_dock_title_bar_middle_click(self, dock: QDockWidget, event: QEvent) -> bool:
         """Handle middle mouse button click on dock title bar to close dock.
@@ -343,6 +382,76 @@ class DockTabEventFilter(QObject):
                 return False
 
         dock.close()
+        return True
+
+    def _handle_dock_title_bar_double_click(self, dock: QDockWidget, event: QEvent) -> bool:
+        """Handle double-click on dock title bar for floating docks.
+
+        If dock_maximize_floating_on_double_click is enabled, toggles maximize/restore.
+        If only dock_disable_floating_double_click is enabled, just consumes the event.
+
+        Returns True if event was consumed, False otherwise.
+        """
+        if event.type() != QEvent.Type.MouseButtonDblClick:
+            return False
+
+        mouse_event = cast(QMouseEvent, event)
+        if mouse_event.button() != Qt.MouseButton.LeftButton:
+            return False
+
+        # Only handle floating docks
+        if not dock.isFloating():
+            return False
+
+        # Check if click is in the title bar area (same logic as middle-click)
+        title_bar = cast(QWidget | None, dock.titleBarWidget())
+        if title_bar is not None and title_bar.height() > 0:
+            title_bar_rect = title_bar.geometry()
+            if not title_bar_rect.contains(mouse_event.pos()):
+                return False
+        else:
+            title_bar_height = 30
+            if mouse_event.pos().y() > title_bar_height:
+                return False
+
+        # Handle based on config
+        if self._config.dock_maximize_floating_on_double_click:
+            if dock.isMaximized():
+                dock.showNormal()
+            else:
+                dock.showMaximized()
+        # else: just consume the event (disable_floating_double_click)
+
+        return True
+
+    def _handle_custom_titlebar_double_click(self, title_bar: FloatingDockTitleBar, event: QEvent) -> bool:
+        """Handle double-click on custom title bar widget.
+
+        The custom title bar is only used for floating docks, so we don't need
+        to check the floating state or title bar area.
+
+        Returns True if event was consumed, False otherwise.
+        """
+        if event.type() != QEvent.Type.MouseButtonDblClick:
+            return False
+
+        mouse_event = cast(QMouseEvent, event)
+        if mouse_event.button() != Qt.MouseButton.LeftButton:
+            return False
+
+        # Get the parent dock widget
+        dock = title_bar.parent()
+        if not isinstance(dock, QDockWidget):
+            return False
+
+        # Handle based on config
+        if self._config.dock_maximize_floating_on_double_click:
+            if dock.isMaximized():
+                dock.showNormal()
+            else:
+                dock.showMaximized()
+        # else: just consume the event (disable_floating_double_click)
+
         return True
 
     # -------------------------------------------------------------------------
@@ -556,6 +665,9 @@ def _setup_title_bar_hooks(
 
         def make_handler(d: QDockWidget) -> Callable[..., None]:
             def handler(*_args: Any) -> None:
+                dock_title = d.windowTitle()
+                is_floating = d.isFloating()
+                _debug(f"SIGNAL: topLevelChanged/dockLocationChanged for dock={dock_title!r}, is_floating={is_floating}")
                 _update_title_bar_for_dock(window, d, config, dock_overrides)
 
             return handler  # noqa: B023 - closure factory pattern, `d` is captured via parameter
@@ -586,11 +698,20 @@ def _update_title_bar_for_dock(
         config: Configuration with dock_tabs_hide_title_bar setting
         dock_overrides: Per-dock overrides
     """
+    dock_title = dock.windowTitle()
+    _debug(f"_update_title_bar_for_dock: dock={dock_title!r}")
+
+    # Determine if we need a custom title bar for floating docks
+    # (to intercept double-click events that native title bars don't expose)
+    needs_custom_titlebar = config.dock_disable_floating_double_click or config.dock_maximize_floating_on_double_click
+    is_floating = dock.isFloating()
+    _debug(f"  needs_custom_titlebar={needs_custom_titlebar}, is_floating={is_floating}")
+
     # Check if this dock has hideTitleBar=True (hidden unless floating)
     always_hide = dock_overrides.get(dock, {}).get("hide_title_bar")
     if always_hide is True:
-        if dock.isFloating():
-            _show_titlebar(dock)
+        if is_floating:
+            _show_titlebar(dock, use_custom=needs_custom_titlebar)
         else:
             _hide_titlebar(dock)
         return
@@ -601,50 +722,100 @@ def _update_title_bar_for_dock(
 
     if not should_hide:
         # Feature disabled for this dock - ensure title bar is shown
-        _show_titlebar(dock)
+        # Use custom title bar for floating docks if double-click features enabled
+        use_custom = needs_custom_titlebar and is_floating
+        _show_titlebar(dock, use_custom=use_custom)
         return
 
     # Check if dock is tabified
     is_tabified = len(window.tabifiedDockWidgets(dock)) > 0
-    is_floating = dock.isFloating()
 
     if is_tabified and not is_floating:
         _hide_titlebar(dock)
     else:
-        _show_titlebar(dock)
+        # Use custom title bar for floating docks if double-click features enabled
+        use_custom = needs_custom_titlebar and is_floating
+        _show_titlebar(dock, use_custom=use_custom)
 
 
 def _hide_titlebar(dock: QDockWidget) -> None:
     """Hide a dock widget's title bar by replacing it with a zero-height widget."""
+    dock_title = dock.windowTitle()
+    _debug(f"_hide_titlebar: dock={dock_title!r}")
     if dock.property("_qtpie_titlebar_hidden"):
+        _debug("  -> early return: already hidden")
         return  # Already hidden
     hidden = QWidget()
     hidden.setFixedHeight(0)
     dock.setTitleBarWidget(hidden)
     dock.setProperty("_qtpie_titlebar_hidden", True)
+    _debug("  -> title bar hidden")
 
 
-def _show_titlebar(dock: QDockWidget) -> None:
-    """Restore a dock widget's default title bar."""
-    if not dock.property("_qtpie_titlebar_hidden"):
-        return  # Not hidden by us
+def _show_titlebar(dock: QDockWidget, use_custom: bool = False) -> None:
+    """Restore or set a dock widget's title bar.
+
+    Args:
+        dock: The dock widget to update
+        use_custom: If True, use a custom title bar widget instead of the native one.
+                   This is needed for intercepting double-click events on floating docks.
+    """
+    dock_title = dock.windowTitle()
+    _debug(f"_show_titlebar: dock={dock_title!r}, use_custom={use_custom}")
+
+    was_hidden = dock.property("_qtpie_titlebar_hidden")
+    has_custom = dock.property("_qtpie_custom_titlebar")
+    _debug(f"  was_hidden={was_hidden}, has_custom={has_custom}")
+
+    # Check if we need to do anything
+    if not was_hidden and not use_custom and not has_custom:
+        _debug("  -> early return: title bar is already native and we don't need custom")
+        return  # Title bar is already native and we don't need custom
+    if use_custom and has_custom:
+        _debug("  -> early return: already using custom title bar")
+        return  # Already using custom title bar
 
     # Set property first to prevent recursion
     dock.setProperty("_qtpie_titlebar_hidden", False)
 
     was_floating = dock.isFloating()
+    _debug(f"  was_floating={was_floating}")
 
-    # If already floating, we must unfloat first - setTitleBarWidget(None) doesn't
-    # restore the title bar properly when the dock is already floating.
-    # Block signals to prevent re-entry during the unfloat/refloat dance.
-    if was_floating:
-        dock.blockSignals(True)
-        dock.setFloating(False)
+    # Use custom title bar if requested (for double-click interception)
+    if use_custom:
+        # Setting a custom titlebar works directly even when floating
+        _debug("  -> creating FloatingDockTitleBar")
+        custom_titlebar = FloatingDockTitleBar(dock)
+        _debug("  -> setTitleBarWidget(custom_titlebar)")
+        dock.setTitleBarWidget(custom_titlebar)
+        dock.setProperty("_qtpie_custom_titlebar", True)
+        _debug("  -> custom title bar set")
+    else:
+        # Restoring native titlebar requires unfloat/refloat dance when floating
+        # because setTitleBarWidget(None) doesn't work properly when dock is floating
+        if was_floating:
+            _debug("  -> blockSignals(True)")
+            dock.blockSignals(True)
+            _debug("  -> setFloating(False)")
+            dock.setFloating(False)
+            _debug("  -> setFloating(False) completed")
 
-    # Restore the default title bar
-    dock.setTitleBarWidget(None)  # type: ignore[arg-type]
+        _debug("  -> setTitleBarWidget(None) to restore native")
+        # Get the old titlebar before replacing it
+        old_titlebar = dock.titleBarWidget()
+        # Restore the default title bar
+        dock.setTitleBarWidget(None)  # type: ignore[arg-type]
+        dock.setProperty("_qtpie_custom_titlebar", False)
+        # Explicitly delete the old custom titlebar to avoid dangling references
+        if isinstance(old_titlebar, FloatingDockTitleBar):
+            _debug("  -> deleting old FloatingDockTitleBar")
+            old_titlebar.deleteLater()
+        _debug("  -> native title bar restored")
 
-    # Refloat if it was floating
-    if was_floating:
-        dock.setFloating(True)
-        dock.blockSignals(False)
+        # Refloat if it was floating
+        if was_floating:
+            _debug("  -> setFloating(True)")
+            dock.setFloating(True)
+            _debug("  -> blockSignals(False)")
+            dock.blockSignals(False)
+            _debug("  -> refloat completed")

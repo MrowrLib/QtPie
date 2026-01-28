@@ -62,6 +62,8 @@ class AppConfig:
     dock_tabs_drag_to_undock: bool = False  # Drag tab outside tab bar to float dock
     dock_tabs_drag_margin: int = 50  # Pixel margin for drag-to-undock detection
     dock_tabs_middle_click_close: bool = True  # Middle-click on tab closes dock
+    dock_disable_floating_double_click: bool = False  # Disable double-click dock/undock for floating docks
+    dock_maximize_floating_on_double_click: bool = False  # Maximize/restore floating dock on double-click
     # Dock tab context menu configuration
     dock_menu: bool = True  # Enable/disable dock tab context menu
     dock_menu_close: bool = True  # Show "Close" action
@@ -624,6 +626,8 @@ def app[A: AppBase[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    dockDisableFloatingDoubleClick: bool = False,
+    dockMaximizeFloatingOnDoubleClick: bool = False,
     # Dock tab context menu options
     dockMenu: bool = True,
     dockMenuClose: bool = True,
@@ -687,6 +691,8 @@ def app[A: AppBase[Any]](
     dockTabsDragToUndock: bool = False,
     dockTabsDragMargin: int = 50,
     dockTabsMiddleClickClose: bool = True,
+    dockDisableFloatingDoubleClick: bool = False,
+    dockMaximizeFloatingOnDoubleClick: bool = False,
     # Dock tab context menu options
     dockMenu: bool = True,
     dockMenuClose: bool = True,
@@ -792,6 +798,8 @@ def app[A: AppBase[Any]](
         config.dock_tabs_drag_to_undock = dockTabsDragToUndock
         config.dock_tabs_drag_margin = dockTabsDragMargin
         config.dock_tabs_middle_click_close = dockTabsMiddleClickClose
+        config.dock_disable_floating_double_click = dockDisableFloatingDoubleClick
+        config.dock_maximize_floating_on_double_click = dockMaximizeFloatingOnDoubleClick
         config.dock_menu = dockMenu
         config.dock_menu_close = dockMenuClose
         config.dock_menu_close_others = dockMenuCloseOthers
@@ -2634,10 +2642,14 @@ def _setup_floating_dock_focus_for_group_app(
             def on_focus_changed(old: QWidget | None, new: QWidget | None) -> None:
                 if updating[0]:
                     return
-                if new is None or not d.dock_widget.isFloating():
-                    return
-                if not d.dock_widget.isAncestorOf(new) and new is not d.dock_widget:
-                    return
+                # Guard against deleted C++ object (can happen during test cleanup)
+                try:
+                    if new is None or not d.dock_widget.isFloating():
+                        return
+                    if not d.dock_widget.isAncestorOf(new) and new is not d.dock_widget:
+                        return
+                except RuntimeError:
+                    return  # C++ object was deleted
 
                 # This floating dock gained focus - update selection
                 updating[0] = True

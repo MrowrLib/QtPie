@@ -4951,3 +4951,220 @@ class TestDockWidgetRepeaterProxyCleanup:
         instance._editors.append(request)
         qt.process_events()
         assert len(instance._editors.widget) == 1
+
+
+# =============================================================================
+# Double-Click on Floating Dock Behavior
+# =============================================================================
+
+
+def send_double_click_on_dock(dock_widget: QDockWidget, y_pos: int = 10) -> None:
+    """Send a double-click left mouse button event to a dock widget at the given y position."""
+    from PySide6.QtCore import QCoreApplication, QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonDblClick,
+        QPointF(50, y_pos),  # x=50, y as specified
+        QPointF(100, 100),  # global pos
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QCoreApplication.sendEvent(dock_widget, event)
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockDisableFloatingDoubleClick:
+    """Test dockDisableFloatingDoubleClick window-level option."""
+
+    def test_disable_floating_double_click_default_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockDisableFloatingDoubleClick is False by default."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Check config has this disabled by default
+        assert instance._qtpie_config.dock_disable_floating_double_click is False
+
+    def test_disable_floating_double_click_consumes_event(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click on floating dock title bar is consumed when dockDisableFloatingDoubleClick=True."""
+
+        @decorator(dockDisableFloatingDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Float the dock
+        dock_widget = instance._explorer.dock_widget
+        dock_widget.setFloating(True)
+        qt.process_events()
+
+        assert instance._explorer.is_floating is True
+
+        # Double-click on title bar area - should be consumed
+        send_double_click_on_dock(dock_widget, y_pos=10)
+        qt.process_events()
+
+        # Dock should still be floating (event was consumed, not processed by Qt to dock it)
+        assert instance._explorer.is_floating is True
+
+    def test_non_floating_dock_not_affected(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click on non-floating dock is not handled (Qt's default behavior applies)."""
+
+        @decorator(dockDisableFloatingDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Dock is not floating
+        assert instance._explorer.is_floating is False
+
+        dock_widget = instance._explorer.dock_widget
+
+        # Double-click on title bar - should NOT be consumed (dock is not floating)
+        # The event filter returns False, allowing Qt's default behavior
+        send_double_click_on_dock(dock_widget, y_pos=10)
+        qt.process_events()
+
+        # We can't easily test that Qt's default behavior happened,
+        # but we can verify the event filter didn't break anything
+        # and the dock is still visible
+        assert instance._explorer.is_visible is True
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockMaximizeFloatingOnDoubleClick:
+    """Test dockMaximizeFloatingOnDoubleClick window-level option."""
+
+    def test_maximize_floating_double_click_default_false(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockMaximizeFloatingOnDoubleClick is False by default."""
+
+        @decorator
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Check config has this disabled by default
+        assert instance._qtpie_config.dock_maximize_floating_on_double_click is False
+
+    def test_double_click_maximizes_floating_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click on floating dock title bar maximizes it."""
+
+        @decorator(dockMaximizeFloatingOnDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Float the dock
+        dock_widget = instance._explorer.dock_widget
+        dock_widget.setFloating(True)
+        qt.process_events()
+
+        assert instance._explorer.is_floating is True
+        assert dock_widget.isMaximized() is False
+
+        # Double-click on title bar area - should maximize
+        send_double_click_on_dock(dock_widget, y_pos=10)
+        qt.process_events()
+
+        # Dock should now be maximized
+        assert dock_widget.isMaximized() is True
+        # And still floating
+        assert instance._explorer.is_floating is True
+
+    def test_double_click_restores_maximized_floating_dock(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click on maximized floating dock restores it."""
+
+        @decorator(dockMaximizeFloatingOnDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Float and maximize the dock
+        dock_widget = instance._explorer.dock_widget
+        dock_widget.setFloating(True)
+        dock_widget.showMaximized()
+        qt.process_events()
+
+        assert dock_widget.isMaximized() is True
+
+        # Double-click on title bar area - should restore
+        send_double_click_on_dock(dock_widget, y_pos=10)
+        qt.process_events()
+
+        # Dock should now be restored (not maximized)
+        assert dock_widget.isMaximized() is False
+        # And still floating
+        assert instance._explorer.is_floating is True
+
+    def test_double_click_below_title_bar_not_handled(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click below title bar area is not handled."""
+
+        @decorator(dockMaximizeFloatingOnDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Float the dock
+        dock_widget = instance._explorer.dock_widget
+        dock_widget.setFloating(True)
+        qt.process_events()
+
+        assert instance._explorer.is_floating is True
+        assert dock_widget.isMaximized() is False
+
+        # Double-click below title bar area (y=100, well below 30px title bar)
+        send_double_click_on_dock(dock_widget, y_pos=100)
+        qt.process_events()
+
+        # Dock should NOT be maximized (click was below title bar)
+        assert dock_widget.isMaximized() is False
+
+    def test_non_floating_dock_not_maximized(self, base_class, decorator, qt: QtDriver) -> None:
+        """Double-click on non-floating dock does not maximize (Qt's default applies)."""
+
+        @decorator(dockMaximizeFloatingOnDoubleClick=True)
+        class TestClass(base_class):
+            _explorer: Dock[ExplorerPanel] = new(dock="left", title="Explorer")
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Dock is not floating
+        assert instance._explorer.is_floating is False
+
+        dock_widget = instance._explorer.dock_widget
+
+        # Double-click on title bar
+        send_double_click_on_dock(dock_widget, y_pos=10)
+        qt.process_events()
+
+        # Dock should not have been maximized (not floating, so event filter didn't handle it)
+        assert dock_widget.isMaximized() is False

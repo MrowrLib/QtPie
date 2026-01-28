@@ -7,6 +7,12 @@ from forc2.domain import Request, TreeItem, Workspace
 from forc2.domain.collection import Collection
 from qtpie import Dock, Stretch, Var, Widget, Window, new, widget, window
 
+# Can we let people define their own things like ... header: Heading1 = new("...") ? <---- this would be really nice to have, really really nice to have!
+#
+# @widget_alias
+# class MyWidgetAlias(WidgetAlias):
+#     content: QLabel = new("This is a widget alias example.")
+
 
 # TODO add _
 @widget
@@ -19,7 +25,14 @@ class CentralWidget(Widget[Workspace | None]):
 
 
 # TODO add _
-@window(dockTabsClosable=True, dockTabsHideTitleBar=True, dockTabsMovable=True, dockTabsDragToUndock=True, size=(1920, 1080))
+@window(
+    size=(1920, 1080),
+    dockTabsClosable=True,
+    dockTabsHideTitleBar=True,
+    dockTabsMovable=True,
+    dockTabsDragToUndock=True,
+    dockMaximizeFloatingOnDoubleClick=True,
+)
 class MainWindow(Window[Workspace | None]):
     ### Menus ###
     file_menu: FileMenu
