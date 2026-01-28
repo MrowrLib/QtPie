@@ -778,6 +778,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 _add_stretch_to_layout,
                 _add_widget_to_nested_layout,
                 _create_horizontal_line,
+                _create_line_for_layout,
                 _create_spacer_item,
                 _create_vertical_line,
                 _get_target_layout,
@@ -865,7 +866,7 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                 _create_list_widget_fields(self, config)  # type: ignore[arg-type]
 
                 # Second pass: Add child widgets, Variables, Stretch, Spacer, and QSpacerItem to layouts
-                from qtpie.layout import HorizontalLine, Stretch, VerticalLine
+                from qtpie.layout import HorizontalLine, Line, Stretch, VerticalLine
 
                 from .widget import _add_widget_to_groupbox, _get_target_container, _get_target_splitter
 
@@ -892,6 +893,13 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                     # Handle bare VerticalLine annotation (without = new())
                     if annotation is VerticalLine and name not in config.fields:
                         line = _create_vertical_line(central)
+                        setattr(self, name, line)
+                        _add_to_layout(qt_layout, line, config.layout, None, None, None)
+                        continue
+
+                    # Handle bare Line annotation (without = new()) - auto-select orientation
+                    if annotation is Line and name not in config.fields:
+                        line = _create_line_for_layout(central, qt_layout)
                         setattr(self, name, line)
                         _add_to_layout(qt_layout, line, config.layout, None, None, None)
                         continue
@@ -1007,6 +1015,13 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
                         # Handle VerticalLine
                         if field.is_vertical_line:
                             line = _create_vertical_line(central)
+                            setattr(self, name, line)
+                            _add_to_layout(target, line, config.layout, None, None, None)
+                            continue
+
+                        # Handle Line (auto-select orientation based on target layout)
+                        if field.is_line:
+                            line = _create_line_for_layout(central, target)
                             setattr(self, name, line)
                             _add_to_layout(target, line, config.layout, None, None, None)
                             continue

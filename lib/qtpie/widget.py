@@ -687,7 +687,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 # Use __annotations__ to preserve order across all field types
-                from qtpie.layout import HorizontalLine, Stretch, VerticalLine
+                from qtpie.layout import HorizontalLine, Line, Stretch, VerticalLine
 
                 for name in getattr(cls, "__annotations__", {}):
                     annotation = getattr(cls, "__annotations__", {}).get(name)
@@ -707,6 +707,13 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                     # Handle bare VerticalLine annotation (without = new())
                     if annotation is VerticalLine and name not in config.fields:
                         line = _create_vertical_line(self)
+                        setattr(self, name, line)
+                        _add_to_layout(qt_layout, line, config.layout, None, None, None)
+                        continue
+
+                    # Handle bare Line annotation (without = new()) - auto-select orientation
+                    if annotation is Line and name not in config.fields:
+                        line = _create_line_for_layout(self, qt_layout)
                         setattr(self, name, line)
                         _add_to_layout(qt_layout, line, config.layout, None, None, None)
                         continue
@@ -820,6 +827,13 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                         # Handle VerticalLine
                         if field.is_vertical_line:
                             line = _create_vertical_line(self)
+                            setattr(self, name, line)
+                            _add_to_layout(target, line, config.layout, None, None, None)
+                            continue
+
+                        # Handle Line (auto-select orientation based on target layout)
+                        if field.is_line:
+                            line = _create_line_for_layout(self, target)
                             setattr(self, name, line)
                             _add_to_layout(target, line, config.layout, None, None, None)
                             continue
@@ -1174,6 +1188,23 @@ def _create_vertical_line(parent: QWidget) -> QFrame:
     frame.setFrameShape(QFrame.Shape.VLine)
     frame.setFrameShadow(QFrame.Shadow.Sunken)
     return frame
+
+
+def _create_line_for_layout(parent: QWidget, layout: QLayout) -> QFrame:
+    """Create a line with orientation based on the layout type.
+
+    In QHBoxLayout (horizontal): creates VerticalLine
+    In all other layouts: creates HorizontalLine
+
+    This follows the principle that lines should be perpendicular to the
+    layout flow direction.
+    """
+    from qtpy.QtWidgets import QHBoxLayout
+
+    if isinstance(layout, QHBoxLayout):
+        return _create_vertical_line(parent)
+    else:
+        return _create_horizontal_line(parent)
 
 
 def _create_spacer_item(field: NewField) -> QSpacerItem:

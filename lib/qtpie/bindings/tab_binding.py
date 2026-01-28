@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     pass
 
 
+def _set_is_tab_property(widget: QWidget, is_tab: bool) -> None:
+    """Set or clear the is_tab property on a widget for QSS styling."""
+    if is_tab:
+        widget.setProperty("is_tab", "true")
+    else:
+        widget.setProperty("is_tab", None)
+
+
 def _recreate_list_widget_fields_for_record(
     child: Any,  # Widget[T]
     child_config: Any,  # _QtPieConfig
@@ -193,6 +201,7 @@ def _set_tabs_from_dict(
     tab_widgets: dict[str, QWidget] = {}
     for name, widget_type in tabs.items():
         widget = widget_type(parent=tab_widget)
+        _set_is_tab_property(widget, True)
         tab_widgets[name] = widget
         tab_widget.addTab(widget, name)
     return tab_widgets
@@ -207,6 +216,7 @@ def _set_tabs_from_list(
     tab_widgets: dict[str, QWidget] = {}
     for widget_type in tabs:
         widget = widget_type(parent=tab_widget)
+        _set_is_tab_property(widget, True)
         name = widget.windowTitle() or widget_type.__name__  # Fallback to class name
         tab_widgets[name] = widget
         tab_widget.addTab(widget, name)
@@ -281,6 +291,7 @@ def _set_tabs_from_normalized(
         else:
             continue  # Unknown type
 
+        _set_is_tab_property(widget, True)
         tab_widgets[name] = widget
         tab_widget.addTab(widget, name)
 
@@ -296,12 +307,14 @@ def _bind_tab_widget_to_dict(
 
     def on_insert(key: str, value: type[QWidget]) -> None:
         widget = value(parent=tab_widget)
+        _set_is_tab_property(widget, True)
         tab_widgets[key] = widget
         tab_widget.addTab(widget, key)
 
     def on_remove(key: str, _value: type[QWidget]) -> None:
         if key in tab_widgets:
             widget = tab_widgets.pop(key)
+            _set_is_tab_property(widget, False)
             idx = tab_widget.indexOf(widget)
             if idx >= 0:
                 tab_widget.removeTab(idx)
@@ -311,6 +324,9 @@ def _bind_tab_widget_to_dict(
         on_insert(key, new)
 
     def on_clear(_items: dict[str, type[QWidget]]) -> None:
+        # Clear is_tab property on all widgets before clearing
+        for widget in tab_widgets.values():
+            _set_is_tab_property(widget, False)
         tab_widget.clear()
         tab_widgets.clear()
 
@@ -331,6 +347,7 @@ def _bind_tab_widget_to_list(
 
     def on_insert(index: int, value: type[QWidget]) -> None:
         widget = value(parent=tab_widget)
+        _set_is_tab_property(widget, True)
         name = widget.windowTitle() or value.__name__
         widgets_by_index.insert(index, widget)
         tab_widgets[name] = widget
@@ -339,6 +356,7 @@ def _bind_tab_widget_to_list(
     def on_remove(index: int, _value: type[QWidget]) -> None:
         if 0 <= index < len(widgets_by_index):
             widget = widgets_by_index.pop(index)
+            _set_is_tab_property(widget, False)
             # Remove from name mapping
             for name, w in list(tab_widgets.items()):
                 if w is widget:
@@ -351,6 +369,9 @@ def _bind_tab_widget_to_list(
         on_insert(index, new)
 
     def on_clear(_items: list[type[QWidget]]) -> None:
+        # Clear is_tab property on all widgets before clearing
+        for widget in widgets_by_index:
+            _set_is_tab_property(widget, False)
         tab_widget.clear()
         tab_widgets.clear()
         widgets_by_index.clear()

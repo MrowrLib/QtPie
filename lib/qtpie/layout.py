@@ -105,6 +105,40 @@ class VerticalLine:
     pass
 
 
+class Line:
+    """Marker class for auto-selecting line orientation.
+
+    Automatically chooses HorizontalLine or VerticalLine based on layout:
+    - In QHBoxLayout (horizontal): creates VerticalLine
+    - In all other layouts (vertical, form, grid): creates HorizontalLine
+
+    This follows the principle that lines should be perpendicular to the
+    layout flow direction.
+
+    Usage:
+        @widget(layout="vertical")
+        class MyWidget(Widget):
+            _top: QLabel = new("Top")
+            _line: Line                    # Becomes HorizontalLine
+            _bottom: QLabel = new("Bottom")
+
+        @widget(layout="horizontal")
+        class MyWidget(Widget):
+            _left: QLabel = new("Left")
+            _line: Line                    # Becomes VerticalLine
+            _right: QLabel = new("Right")
+
+        @widget(layout="vertical")
+        class MyWidget(Widget):
+            _row: QHBoxLayout = new()
+            _left: QLabel = new("Left", layout="_row")
+            _line: Line = new(layout="_row")  # Becomes VerticalLine (in horizontal nested)
+            _right: QLabel = new("Right", layout="_row")
+    """
+
+    pass
+
+
 # Layout configuration type aliases
 # SizeConstraint maps to QLayout.SizeConstraint enum
 SizeConstraint = Literal[

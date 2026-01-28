@@ -7,7 +7,7 @@ from typing import Any, Literal, cast, get_args, get_origin, get_type_hints
 
 from .computed import Computed, create_computed_descriptor
 from .event import is_event_hint
-from .layout import GridPosition, HorizontalLine, Spacer, Stretch, VerticalLine
+from .layout import GridPosition, HorizontalLine, Line, Spacer, Stretch, VerticalLine
 from .setting import Setting
 from .utils.common import is_signal_on_type
 from .utils.type_checks import (
@@ -219,9 +219,10 @@ class NewField:
         self.is_spacer_item: bool = False  # True if field type is QSpacerItem
         self.is_nested_layout: bool = False  # True if field type is QLayout subclass
         self.target_layout: str | None = None  # Layout to add this item to (field name reference)
-        # Line dividers (HorizontalLine, VerticalLine)
+        # Line dividers (HorizontalLine, VerticalLine, Line)
         self.is_horizontal_line: bool = False  # True if field type is HorizontalLine
         self.is_vertical_line: bool = False  # True if field type is VerticalLine
+        self.is_line: bool = False  # True if field type is Line (auto-select orientation)
         # QSplitter support
         self.is_splitter: bool = False  # True if field type is QSplitter
         self.target_splitter: str | None = None  # Splitter to add this widget to (field name reference)
@@ -729,6 +730,13 @@ class NewField:
         # Handle VerticalLine - QFrame with VLine shape
         if self.field_type is VerticalLine:
             self.is_vertical_line = True
+            # Extract target layout reference (layout=nested_layout or layout="nested_layout")
+            self._extract_target_layout()
+            return
+
+        # Handle Line - auto-select orientation based on layout
+        if self.field_type is Line:
+            self.is_line = True
             # Extract target layout reference (layout=nested_layout or layout="nested_layout")
             self._extract_target_layout()
             return

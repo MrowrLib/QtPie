@@ -1170,3 +1170,245 @@ class TestTabWidgetFieldBindingDifferentRecordType:
 
         # username should now be hidden
         assert_that(auth_form._username.isVisible()).is_false()
+
+
+# =============================================================================
+# is_tab Property Tests
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
+class TestTabWidgetIsTabProperty:
+    """Test that widgets added to tabs get is_tab='true' property for QSS styling."""
+
+    def test_static_dict_tabs_have_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets added via tabs=dict get is_tab='true' property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tabs: QTabWidget = new(tabs={"First": TabA, "Second": TabB})
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab_a = instance._tabs.widget(0)
+        tab_b = instance._tabs.widget(1)
+
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+        assert_that(tab_b.property("is_tab")).is_equal_to("true")
+
+    def test_static_list_tabs_have_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets added via tabs=list get is_tab='true' property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tabs: QTabWidget = new(tabs=[TabA, TabB])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab_a = instance._tabs.widget(0)
+        tab_b = instance._tabs.widget(1)
+
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+        assert_that(tab_b.property("is_tab")).is_equal_to("true")
+
+    def test_field_ref_tabs_have_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets added via field references get is_tab='true' property."""
+
+        @widget(title="Panel A")
+        class PanelA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Panel B")
+        class PanelB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _panel_a: PanelA = new(layout=False)
+            _panel_b: PanelB = new(layout=False)
+            _tabs: QTabWidget = new(tabs=[_panel_a, _panel_b])
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        assert_that(instance._panel_a.property("is_tab")).is_equal_to("true")
+        assert_that(instance._panel_b.property("is_tab")).is_equal_to("true")
+
+    def test_reactive_dict_insert_sets_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets added reactively via dict insert get is_tab='true' property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[dict[str, type[Widget]]] = new({"First": TabA})
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial tab has property
+        tab_a = instance._tabs.widget(0)
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+
+        # Add new tab reactively
+        instance._tab_defs["Second"] = TabB
+        tab_b = instance._tabs.widget(1)
+        assert_that(tab_b.property("is_tab")).is_equal_to("true")
+
+    def test_reactive_dict_remove_clears_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets removed reactively via dict remove lose is_tab property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[dict[str, type[Widget]]] = new({"First": TabA, "Second": TabB})
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab_a = instance._tabs.widget(0)
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+
+        # Remove the tab
+        del instance._tab_defs["First"]
+
+        # Property should be cleared (None or not set)
+        assert_that(tab_a.property("is_tab")).is_none()
+
+    def test_reactive_dict_clear_clears_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets removed via dict clear lose is_tab property."""
+
+        @widget(title="Tab")
+        class SomeTab(Widget):
+            _label: QLabel = new("Content")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[dict[str, type[Widget]]] = new({"Tab1": SomeTab, "Tab2": SomeTab})
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab1 = instance._tabs.widget(0)
+        tab2 = instance._tabs.widget(1)
+        assert_that(tab1.property("is_tab")).is_equal_to("true")
+        assert_that(tab2.property("is_tab")).is_equal_to("true")
+
+        # Clear all
+        instance._tab_defs.clear()
+
+        # Properties should be cleared
+        assert_that(tab1.property("is_tab")).is_none()
+        assert_that(tab2.property("is_tab")).is_none()
+
+    def test_reactive_list_append_sets_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets added reactively via list append get is_tab='true' property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[list[type[Widget]]] = new([TabA])
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Initial tab has property
+        tab_a = instance._tabs.widget(0)
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+
+        # Append new tab
+        instance._tab_defs.append(TabB)
+        tab_b = instance._tabs.widget(1)
+        assert_that(tab_b.property("is_tab")).is_equal_to("true")
+
+    def test_reactive_list_remove_clears_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets removed reactively via list pop lose is_tab property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[list[type[Widget]]] = new([TabA, TabB])
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab_a = instance._tabs.widget(0)
+        assert_that(tab_a.property("is_tab")).is_equal_to("true")
+
+        # Remove the tab
+        instance._tab_defs.pop(0)
+
+        # Property should be cleared
+        assert_that(tab_a.property("is_tab")).is_none()
+
+    def test_reactive_list_clear_clears_is_tab_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Widgets removed via list clear lose is_tab property."""
+
+        @widget(title="Tab A")
+        class TabA(Widget):
+            _label: QLabel = new("A")
+
+        @widget(title="Tab B")
+        class TabB(Widget):
+            _label: QLabel = new("B")
+
+        @decorator
+        class TestClass(base_class):
+            _tab_defs: Variable[list[type[Widget]]] = new([TabA, TabB])
+            _tabs: QTabWidget = new(tabs="_tab_defs")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        tab1 = instance._tabs.widget(0)
+        tab2 = instance._tabs.widget(1)
+        assert_that(tab1.property("is_tab")).is_equal_to("true")
+        assert_that(tab2.property("is_tab")).is_equal_to("true")
+
+        # Clear all
+        instance._tab_defs.clear()
+
+        # Properties should be cleared
+        assert_that(tab1.property("is_tab")).is_none()
+        assert_that(tab2.property("is_tab")).is_none()
