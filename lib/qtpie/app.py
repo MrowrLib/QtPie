@@ -111,6 +111,7 @@ class AppConfig:
 
     # Window size
     size: tuple[int, int] | None = None  # Initial size (width, height)
+    center: bool = False  # Center window on screen before showing
 
     # For AppBase: track if we're in a real QApplication context
     is_qapplication: bool = False
@@ -396,6 +397,11 @@ class AppBase[T = None](QtPieComponentBase):
         """Show the auto-created window."""
         auto_window: QMainWindow | None = getattr(self, "_auto_window", None)
         if auto_window is not None:
+            config: AppConfig | None = getattr(type(self), "_qtpie_config", None)
+            if config is not None and config.center:
+                from qtpie.screen import center_on_screen
+
+                center_on_screen(auto_window)
             auto_window.show()
 
     def hide(self) -> None:
@@ -602,6 +608,7 @@ def app[A: AppBase[Any]](
     marginRight: int | None = None,
     marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -666,6 +673,7 @@ def app[A: AppBase[Any]](
     marginRight: int | None = None,
     marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     # Icon settings
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
@@ -808,6 +816,7 @@ def app[A: AppBase[Any]](
         config.dock_menu_close_all = dockMenuCloseAll
         config.dock_menu_prepend_actions = dockMenuPrependActions
         config.size = size
+        config.center = center
         config.signal_connections = signal_connections
         config.org = org
         config.app_name = app_name

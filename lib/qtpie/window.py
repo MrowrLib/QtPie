@@ -92,6 +92,7 @@ class WindowConfig:
     icon: IconType = None
     # Window size
     size: tuple[int, int] | None = None  # Initial size (width, height)
+    center: bool = False  # Center window on screen before showing
     # Signal connections from decorator: {signal_name: handler_name}
     signal_connections: dict[str, str] = field(default_factory=lambda: {})
     # Event[T] = new(on=...) fields
@@ -307,6 +308,7 @@ def window[W: Window[Any]](
     title: str | None = None,
     icon: IconType = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     record: Any | None = None,
     attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
     styledBackground: bool = False,
@@ -360,6 +362,7 @@ def window[W: Window[Any]](
     title: str | None = None,
     icon: IconType = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     record: Any | None = None,
     attributes: dict[Qt.WidgetAttribute, bool] | tuple[Qt.WidgetAttribute, ...] | None = None,
     styledBackground: bool = False,
@@ -486,6 +489,7 @@ def window[W: Window[Any]](
         config.dock_menu_prepend_actions = dockMenuPrependActions
         config.icon = icon
         config.size = size
+        config.center = center
         config.signal_connections = signal_connections
 
         # Store layout configuration
@@ -720,6 +724,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # Apply initial size
         if config.size is not None:
             self.resize(*config.size)
+
+        # Apply centering if requested
+        if config.center:
+            from qtpie.screen import center_on_screen
+
+            center_on_screen(self)
 
         # Apply objectName and CSS classes
         apply_object_name_and_classes(

@@ -20,6 +20,7 @@ from .new import new, none
 from .new_field import ColumnResizeMode
 from .new_fields import new_fields
 from .ref import Ref, ref
+from .screen import center_on_screen
 from .set_widget_repeater import SetWidgetRepeater
 from .setting import Setting
 from .slot import slot
@@ -71,6 +72,7 @@ __all__ = [
     "VerticalLine",
     "app",
     "buttons",
+    "center_on_screen",
     "confirm",
     "create_instance",
     "dialog",

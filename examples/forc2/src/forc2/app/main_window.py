@@ -27,6 +27,7 @@ class CentralWidget(Widget[Workspace | None]):
 # TODO add _
 @window(
     size=(1920, 1080),
+    center=True,
     dockTabsClosable=True,
     dockTabsHideTitleBar=True,
     dockTabsMovable=True,

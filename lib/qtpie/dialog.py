@@ -223,6 +223,7 @@ class DialogConfig:
     form_alignment: Qt.AlignmentFlag | None = None
     field_growth_policy: FieldGrowthPolicy | None = None
     size: tuple[int, int] | None = None
+    center: bool = False
     icon: IconType = None
     record_type: type[Any] | None = None
     record_default: Any | None = None
@@ -419,6 +420,14 @@ class Dialog[T = None](QDialog, QtPieComponentBase):
         hint = self.sizeHint()
         if hint.isValid():
             self.resize(hint)
+
+        # Center on screen if requested
+        config: DialogConfig = type(self)._qtpie_config
+        if config.center:
+            from qtpie.screen import center_on_screen
+
+            center_on_screen(self)
+
         result_code = QDialog.DialogCode(self.exec())
         return self._build_result(result_code)
 
@@ -558,6 +567,7 @@ def dialog[D: Dialog[Any]](
     marginRight: int | None = None,
     marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -589,6 +599,7 @@ def dialog[D: Dialog[Any]](
     marginRight: int | None = None,
     marginBottom: int | None = None,
     size: tuple[int, int] | None = None,
+    center: bool = False,
     auto_bind: bool = True,
     name: str | None = None,
     classes: list[str] | None = None,
@@ -657,6 +668,7 @@ def dialog[D: Dialog[Any]](
         config.layout = layout
         config.margins = resolve_margins(margins, marginLeft, marginTop, marginRight, marginBottom)
         config.size = size
+        config.center = center
         config.icon = icon
         config.auto_bind = auto_bind
         config.record_default = record

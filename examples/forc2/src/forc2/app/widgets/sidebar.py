@@ -2,7 +2,7 @@ from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPus
 
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.workspace import Workspace
-from qtpie import Dialog, DialogButton, Var, Widget, dialog, new, widget
+from qtpie import Dialog, DialogButton, Frame, Var, Widget, dialog, frame, new, widget
 
 
 @dialog(layout="form", size=(400, 100), title="{kind}")
@@ -142,10 +142,10 @@ class CollectionsTreeWidget(Widget[Collection | None]):
     #     )
 
 
-# @frame
-# class SidebarWidget(Frame[Workspace | None]):
-@widget
-class SidebarWidget(Widget[Workspace | None]):
+@frame
+class SidebarWidget(Frame[Workspace | None]):  # <--- the QTreeView is empty when I use Frame :)
+    # @widget
+    # class SidebarWidget(Widget[Workspace | None]):
     ### Widgets ###
     _workspace_name: QLabel = new(bind="Workspace: {name}", classes=["heading-3", "bg-secondary", "p-2"])
     _action_buttons: WorkspaceActionButtonsWidget
