@@ -897,3 +897,36 @@ def service[S: State](
     Semantically equivalent to @state, but conveys intent for service-layer logic.
     """
     return state(cls, **event_wiring)
+
+
+# Aliases for semantic distinction (Models are States for data structures)
+Model = State
+"""Alias for State. Models are States intended for data modeling."""
+
+
+@overload
+def model[S: State](cls: type[S]) -> type[S]: ...
+
+
+@overload
+def model[S: State](
+    cls: None = None,
+    **event_wiring: str,
+) -> Callable[[type[S]], type[S]]: ...
+
+
+def model[S: State](
+    cls: type[S] | None = None,
+    **event_wiring: str,
+) -> type[S] | Callable[[type[S]], type[S]]:
+    """Alias for @state decorator. Use for data models.
+
+    Usage:
+        @model
+        class UserModel(Model):
+            name: Variable[str] = new("")
+            email: Variable[str] = new("")
+
+    Semantically equivalent to @state, but conveys intent for data modeling.
+    """
+    return state(cls, **event_wiring)
