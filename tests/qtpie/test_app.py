@@ -50,12 +50,16 @@ class TestAppClass:
 
     def test_app_load_stylesheet_from_file(self, qapp: App, tmp_path: Path) -> None:
         """App should be able to load a stylesheet from a file."""
-        qss_file = tmp_path / "test.qss"
-        qss_file.write_text("QWidget { background-color: red; }")
+        original_stylesheet = qapp.styleSheet()
+        try:
+            qss_file = tmp_path / "test.qss"
+            qss_file.write_text("QWidget { background-color: red; }")
 
-        qapp.load_stylesheet(str(qss_file))
+            qapp.load_stylesheet(str(qss_file))
 
-        assert_that(qapp.styleSheet()).contains("background-color")
+            assert_that(qapp.styleSheet()).contains("background-color")
+        finally:
+            qapp.setStyleSheet(original_stylesheet)
 
     def test_app_load_stylesheet_nonexistent_file(self, qapp: App) -> None:
         """App should handle nonexistent stylesheet gracefully."""

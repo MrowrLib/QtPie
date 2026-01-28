@@ -14,11 +14,13 @@ These tests verify the theme runtime API and theme application
 when used with real Qt widgets and applications.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from assertpy import assert_that
 
+from qtpie import App
 from qtpie.styles import (
     get_theme,
     get_themes,
@@ -31,6 +33,20 @@ from qtpie.testing import QtDriver
 
 # Path to test fixtures
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures" / "themes"
+
+
+@pytest.fixture(autouse=True)
+def restore_app_stylesheet(qapp: App) -> Iterator[None]:
+    """Restore the QApplication stylesheet after each test.
+
+    Theme tests modify the global QApplication stylesheet which persists
+    across tests. This fixture ensures we always restore it afterward.
+    """
+    original_stylesheet = qapp.styleSheet()
+    try:
+        yield
+    finally:
+        qapp.setStyleSheet(original_stylesheet)
 
 
 class TestThemeRuntimeAPI:
