@@ -1,51 +1,52 @@
 // Response viewer widget styles
 
 #ResponseViewerWidget {
-    background-color: $bg-primary;
-    padding: 0.62em;
+  background-color: $bg-primary;
+  padding: 0.62em;
 }
 
 // "Send a request" placeholder message
 #ResponseViewerWidget > QLabel {
-    color: $text-muted;
-    font-style: italic;
-    padding: 1.54em;
+  color: $text-muted;
+  font-style: italic;
+  padding: 1.54em;
 }
 
 // Status bar with stats
-#ResponseStatsWidget {
-    background-color: $bg-secondary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-sm;
-    padding: 0.46em 0.92em;
-    margin-bottom: 0.62em;
-}
+// #ResponseStatsWidget {
+// //   background-color: $bg-secondary;
+// //   border: $border-width solid $border-default;
+// //   border-radius: $radius-sm;
+// //   padding: 0.46em 0.92em;
+// //   margin-bottom: 0.62em;
+// }
 
 #ResponseStatsWidget QLabel {
-    font-size: $font-size-small;
-    padding: 0 0.62em;
-    color: $text-secondary;  // Default for time/size labels; status classes override
+  font-size: $font-size-small;
+  //   padding: 0 0.62em;
+  padding-bottom: 10px;
+  color: $text-secondary; // Default for time/size labels; status classes override
 }
 
 // Status badge coloring
 #ResponseStatsWidget QLabel[class~="status-2xx"] {
-    color: $success;
-    font-weight: 600;
+  color: $success;
+  font-weight: 600;
 }
 
 #ResponseStatsWidget QLabel[class~="status-3xx"] {
-    color: $info;
-    font-weight: 600;
+  color: $info;
+  font-weight: 600;
 }
 
 #ResponseStatsWidget QLabel[class~="status-4xx"] {
-    color: $warning;
-    font-weight: 600;
+  color: $warning;
+  font-weight: 600;
 }
 
 #ResponseStatsWidget QLabel[class~="status-5xx"] {
-    color: $error;
-    font-weight: 600;
+  color: $error;
+  font-weight: 600;
 }
 
 // Time and size labels (styled via the general #ResponseStatsWidget QLabel rule)
@@ -53,30 +54,30 @@
 
 // Response body tab
 #ResponseBodyWidget {
-    padding: 0.62em;
+  padding: 0.62em;
 }
 
 #ResponseBodyWidget QLabel {
-    color: $text-secondary;
-    font-size: $font-size-small;
-    margin-bottom: 0.46em;
+  color: $text-secondary;
+  font-size: $font-size-small;
+  margin-bottom: 0.46em;
 }
 
 #ResponseBodyWidget QPlainTextEdit {
-    font-family: $font-family-code;
-    font-size: $font-size-base;
-    background-color: $bg-secondary;
-    border: $border-width solid $border-default;
-    border-radius: $radius-sm;
-    padding: 0.62em;
+  font-family: $font-family-code;
+  font-size: $font-size-base;
+  background-color: $bg-secondary;
+  border: $border-width solid $border-default;
+  border-radius: $radius-sm;
+  padding: 0.62em;
 }
 
 // Response headers tab
 #ResponseHeadersWidget {
-    padding: 0.62em;
+  padding: 0.62em;
 }
 
 // Response cookies tab
 #ResponseCookiesWidget {
-    padding: 0.62em;
+  padding: 0.62em;
 }

@@ -7,9 +7,9 @@
 // Dark-theme-specific overrides (if any) go here
 
 // Sidebar background override
-#SidebarWidget {
-  background-color: $bg-base;
-}
+// #SidebarWidget {
+//   background-color: $bg-base;
+// }
 
 // Remove gap between dock areas
 QMainWindow::separator {
@@ -36,4 +36,24 @@ QSplitter::handle:vertical {
 QTabBar {
   margin: 0;
   padding: 0;
+}
+
+// *[is_tab="true"] {
+//   background: blue;
+// }
+
+// QWidget[is_tab="true"] {
+//   background: blue;
+// }
+
+// // #RequestParamsWidget {
+// //   background-color: red;
+// // }
+
+#RequestEditorWidget {
+  background: $bg-base;
+}
+
+#ResponseViewerWidget {
+  background: $bg-base;
 }

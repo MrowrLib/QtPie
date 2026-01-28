@@ -35,7 +35,7 @@ class ResponseCookiesWidget(Widget[Response]):
     _cookies: QTableView
 
 
-@widget
+@widget(styledBackground=True, margins=10)
 class ResponseViewerWidget(Widget[Response]):
     ### Widgets ###
     _stats: ResponseStatsWidget

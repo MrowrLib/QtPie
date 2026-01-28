@@ -9,7 +9,7 @@ from forc2.domain.workspace import Workspace
 from qtpie import Event, Var, Widget, new, slot, widget
 
 
-@widget
+@widget(styledBackground=True)
 class RequestWidget(Widget[Request]):
     ### Events ###
     on_send_request: Event = new(on="_on_send_request")
@@ -30,6 +30,7 @@ class RequestWidget(Widget[Request]):
     ### Methods ###
     def __setup__(self) -> None:
         self.splitter.setSizes([1000, 1000])
+        self.splitter.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
     @slot
     async def _on_send_request(self) -> None:

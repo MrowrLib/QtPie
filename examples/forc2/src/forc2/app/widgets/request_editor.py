@@ -1,11 +1,9 @@
-from qtpy.QtGui import Qt
-from qtpy.QtWidgets import QComboBox, QFrame, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableView, QTabWidget
+from qtpy.QtWidgets import QComboBox, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableView, QTabWidget
 
 from forc2.domain.auth import API_KEY_LOCATION_LABELS, AUTH_TYPE_LABELS, ApiKeyLocation, Auth, AuthType
 from forc2.domain.body import BODY_TYPE_LABELS, BodyType
 from forc2.domain.request import HttpMethod, Request, RequestKeyValue
-from qtpie import Event, Stretch, Widget, new, widget
-from qtpie.variable import Var
+from qtpie import Event, Stretch, Var, Widget, new, widget
 
 # TODO: update all to use _private names for the widgets, simple names, but private to avoid conflicts with the record's attributes
 
@@ -28,7 +26,7 @@ class RequestAddressBarWidget(Widget[Request]):
     _send_request_button: QPushButton = new("Send", clicked="on_send_request", enabled="{not is_sending}", classes=["btn-primary", "btn-send"])
 
 
-@widget(title="Params", classes=["tab-content"])
+@widget(title="Params", styledBackground=True)
 class RequestParamsWidget(Widget[Request]):
     ### Events ###
     on_delete: Event[RequestKeyValue] = new(on="_on_delete")
@@ -46,7 +44,7 @@ class RequestParamsWidget(Widget[Request]):
         self.record.query_params.remove(param)
 
 
-@widget(title="Headers", classes=["tab-content"])
+@widget(title="Headers")
 class RequestHeadersWidget(Widget[Request]):
     ### Events ###
     on_delete: Event[RequestKeyValue] = new(on="_on_delete")
@@ -85,7 +83,7 @@ class RequestAuthFormWidget(Widget[Auth]):
     )
 
 
-@widget(title="Auth", classes=["tab-content"])
+@widget(title="Auth")
 class RequestAuthWidget(Widget[Request]):
     ### Widgets ###
     _header: QLabel = new("Authentication:", classes=["section-header"])
@@ -94,7 +92,8 @@ class RequestAuthWidget(Widget[Request]):
     _stretch: Stretch
 
 
-@widget(title="Body", classes=["tab-content"])
+# TODO make this based on is_tab=true instead, classes=["tab-content"])
+@widget(title="Body")
 class RequestBodyWidget(Widget[Request]):
     ### Events ###
     on_delete: Event = new(on="_on_delete")
@@ -118,19 +117,14 @@ class RequestBodyWidget(Widget[Request]):
 
 
 @widget(styledBackground=True)
+class RequestEditorTabsWidget(Widget[Request]):
+    ### Widgets ###
+    _request_tabs: QTabWidget = new(tabs=[RequestParamsWidget, RequestHeadersWidget, RequestAuthWidget, RequestBodyWidget])
+
+
+@widget(styledBackground=True, margins=10)
 class RequestEditorWidget(Widget[Request]):
     ### Widgets ###
     _address_bar: RequestAddressBarWidget
-    _divider1: QFrame = new(frameShape=QFrame.Shape.HLine)
-    _request_tabs: QTabWidget = new(
-        tabs=[
-            RequestParamsWidget,
-            RequestHeadersWidget,
-            RequestAuthWidget,
-            RequestBodyWidget,
-        ],
-    )
+    _request_tabs: RequestEditorTabsWidget
     _stretch: Stretch
-
-    def __setup__(self) -> None:
-        self._request_tabs.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)

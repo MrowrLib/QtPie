@@ -17,6 +17,11 @@ def _set_is_tab_property(widget: QWidget, is_tab: bool) -> None:
         widget.setProperty("is_tab", "true")
     else:
         widget.setProperty("is_tab", None)
+    # Force Qt to re-evaluate stylesheets after property change
+    style = widget.style()
+    style.unpolish(widget)
+    style.polish(widget)
+    widget.update()
 
 
 def _recreate_list_widget_fields_for_record(

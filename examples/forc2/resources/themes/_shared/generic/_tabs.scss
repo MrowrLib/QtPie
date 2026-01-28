@@ -1,21 +1,55 @@
 // Tab widget styles
 
-QTabWidget {
+// QTabWidget QWidget {
+//   // background: $bg-primary;
+//   background: red;
+// }
+
+// *[is_tab="true"] {
+//   background: blue;
+// }
+
+QTabBar {
   background: $bg-base;
 }
 
-// QTabWidget QWidget {
-//   background: $bg-primary;
+#RequestEditorTabsWidget {
+  background: $bg-base;
+}
+
+#RequestEditorTabsWidget QTabBar::tab,
+#ResponseViewerWidget QTabBar::tab {
+  margin-left: 0;
+  margin-right: 6px * $scale;
+}
+
+// #RequestWidget {
+//   background: blue;
+//   border: 5px solid white;
 // }
 
-QTabWidget::tab-bar {
-  background: red;
-  // background: $bg-base;
-}
+// QSplitter {
+//   background: red;
+//   border: 5px solid orange;
+// }
 
-QTabBar {
-  background: green;
-}
+// #RequestEditorWidget {
+//   background: green;
+//   border: 5px solid aqua;
+//   // padding: 100px;
+// }
+
+// #RequestEditorTabsWidget {
+//   background: aqua;
+//   border: 5px solid brown;
+// }
+
+// #RequestAddressBarWidget {
+//   background: lime;
+//   border: 5px solid magenta;
+//   // padding: 20px;
+//   // margin: 20px;
+// }
 
 QTabBar::tab {
   background-color: $bg-secondary;
@@ -23,7 +57,7 @@ QTabBar::tab {
   border: $border-width solid $border-default;
   border-bottom: none;
   padding: 0.5em 1em;
-  margin-right: 4px * $scale;
+  margin-left: 6px * $scale;
   border-top-left-radius: $radius-md;
   border-top-right-radius: $radius-md;
   margin-top: 6px;
