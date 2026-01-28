@@ -4,6 +4,7 @@
 # pyright: reportUntypedBaseClass=false
 # pyright: reportUntypedClassDecorator=false
 # pyright: reportUnknownArgumentType=false
+# pyright: reportUnknownVariableType=false
 """Tests for @frame decorator and Frame base class.
 
 This tests that Frame (QFrame + WidgetBase) works with the @frame decorator
@@ -411,3 +412,112 @@ class TestFrameRequiresDecorator:
 
         with pytest.raises(TypeError, match="must be decorated with @frame"):
             UndecoratedFrame()
+
+
+class TestFrameChildWidgetRecordPropagation:
+    """Frame should propagate records to child widgets the same as Widget does."""
+
+    def test_frame_with_same_record_type_as_child(self, qt: QtDriver) -> None:
+        """Test that Frame[T] propagates record to child Widget[T] with same T.
+
+        This is simpler - just test same-type propagation works for Frame.
+        """
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class Collection:
+            name: str = ""
+            items: list[str] = field(default_factory=list)
+
+        # Child widget with same record type
+        @widget
+        class CollectionWidget(Widget[Collection]):
+            _name_label: QLabel = new(bind="Name: {name}")
+            _item_count: QLabel = new(bind="Items: {len(items)}")
+
+        # Test with Widget parent - should work
+        @widget
+        class ParentAsWidget(Widget[Collection]):
+            _header: QLabel = new("Widget Parent")
+            _collection: CollectionWidget
+
+        # Test with Frame parent - should also work
+        @frame
+        class ParentAsFrame(Frame[Collection]):
+            _header: QLabel = new("Frame Parent")
+            _collection: CollectionWidget
+
+        # Create test data
+        collection = Collection(name="My Collection", items=["a", "b", "c"])
+
+        # Test Widget parent
+        widget_parent = qt.track(ParentAsWidget())
+        widget_parent.record = collection
+        assert_that(widget_parent._collection._name_label.text()).is_equal_to("Name: My Collection")
+        assert_that(widget_parent._collection._item_count.text()).is_equal_to("Items: 3")
+
+        # Test Frame parent - this should also work
+        frame_parent = qt.track(ParentAsFrame())
+        frame_parent.record = collection
+        # THIS IS THE BUG: Frame doesn't propagate record to children
+        assert_that(frame_parent._collection._name_label.text()).is_equal_to("Name: My Collection")
+        assert_that(frame_parent._collection._item_count.text()).is_equal_to("Items: 3")
+
+    def test_frame_child_auto_binds_by_field_name(self, qt: QtDriver) -> None:
+        """Test auto-bind by field name: _collection binds to parent.record.collection.
+
+        When a Frame[Workspace] has a child Widget[Collection] field named '_collection',
+        the child should auto-bind to parent.record.collection.
+        """
+        from dataclasses import dataclass, field
+
+        @dataclass
+        class Collection:
+            name: str = ""
+            items: list[str] = field(default_factory=list)
+
+        @dataclass
+        class Workspace:
+            name: str = ""
+            collection: Collection | None = None
+
+        # Child widget expects Collection record
+        @widget
+        class CollectionWidget(Widget[Collection | None]):
+            _name_label: QLabel = new(bind="Name: {name}")
+            _item_count: QLabel = new(bind="Items: {len(items)}")
+
+        # Test with Widget parent - should work
+        @widget
+        class ParentAsWidget(Widget[Workspace]):
+            _header: QLabel = new(bind="{name}")
+            # Field name '_collection' matches parent.record.collection
+            _collection: CollectionWidget
+
+        # Test with Frame parent - should also work
+        @frame
+        class ParentAsFrame(Frame[Workspace]):
+            _header: QLabel = new(bind="{name}")
+            # Field name '_collection' matches parent.record.collection
+            _collection: CollectionWidget
+
+        # Create test data
+        collection = Collection(name="My Collection", items=["a", "b", "c"])
+        workspace = Workspace(name="Test Workspace", collection=collection)
+
+        # Test Widget parent - auto-bind by field name works
+        widget_parent = qt.track(ParentAsWidget())
+        widget_parent.record = workspace
+        assert_that(widget_parent._header.text()).is_equal_to("Test Workspace")
+        # Child should have received collection record via field name auto-bind
+        assert_that(widget_parent._collection._name_label.text()).is_equal_to("Name: My Collection")
+        assert_that(widget_parent._collection._item_count.text()).is_equal_to("Items: 3")
+
+        # Test Frame parent - auto-bind by field name should also work
+        frame_parent = qt.track(ParentAsFrame())
+        frame_parent.record = workspace
+        assert_that(frame_parent._header.text()).is_equal_to("Test Workspace")
+        # Child should have received collection record via field name auto-bind
+        # THIS MIGHT BE THE BUG - Frame may not support field-name auto-bind
+        assert_that(frame_parent._collection._name_label.text()).is_equal_to("Name: My Collection")
+        assert_that(frame_parent._collection._item_count.text()).is_equal_to("Items: 3")

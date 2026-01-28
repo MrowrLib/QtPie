@@ -96,6 +96,16 @@ class _RecordDescriptor[T]:
         obj._qtpie._subscribe_record_to_widget_dirty()
         obj._qtpie._subscribe_record_to_widget_valid()
 
+        # Update children that are bound to fields on this record
+        # (e.g., Widget[Auth] child with bind="auth" on Frame[Request] parent)
+        _update_field_bound_children(obj)
+
+        # Resolve any deferred bindings that were waiting for this record to be set
+        # (e.g., child Widget[Collection] with bind="collection" on Frame[Workspace] parent)
+        from .new_fields import _resolve_deferred_bindings  # pyright: ignore[reportPrivateUsage]
+
+        _resolve_deferred_bindings(obj)
+
 
 class WidgetBase[T = None]:
     """Mixin that adds QtPie reactive features to any Qt widget.
@@ -170,6 +180,9 @@ class WidgetBase[T = None]:
 
         # Apply @new_fields to handle non-Variable instantiation
         new_fields(cls)
+
+        # Auto-record-bind: for child Widget[T] fields where T matches parent's T
+        _auto_record_bind_children(cls)
 
         # Auto-create record descriptor if WidgetBase[T] but no explicit record
         if cls._qtpie_config.record_type is not None and not has_explicit_record:
@@ -490,6 +503,60 @@ class WidgetBase[T = None]:
                     await self.save_data()
         """
         pass
+
+
+def _update_field_bound_children(widget: WidgetBase[Any]) -> None:
+    """Update children that are bound to fields on this widget's record.
+
+    When a Frame[Request] has a child Widget[Auth] with bind="auth", the child
+    should update when the parent's record changes. This function finds such
+    children and updates their record proxies.
+    """
+    import logging
+
+    from observant import ObservableProxy
+
+    from .variable import RecordVariable
+
+    logger = logging.getLogger("qtpie.widget_base")
+    logger.debug("_update_field_bound_children called for %s", type(widget).__name__)
+
+    # Get children registered for field binding updates
+    field_bound_children: list[tuple[Any, str, str]] | None = getattr(widget, "_qtpie_field_bound_children", None)
+    if not field_bound_children:
+        logger.debug("  -> no _qtpie_field_bound_children registered")
+        return
+    logger.debug("  -> found %d field_bound_children", len(field_bound_children))
+
+    # Get parent's record proxy
+    parent_record = getattr(widget, "record", None)
+    if parent_record is None:
+        return
+    parent_proxy = parent_record.observable
+    if not isinstance(parent_proxy, ObservableProxy):
+        return
+
+    for child, child_var_name, parent_field_path in field_bound_children:
+        try:
+            # Get the new field proxy from parent
+            new_field_proxy = parent_proxy.observable_for_path(parent_field_path)
+            if isinstance(new_field_proxy, ObservableProxy):
+                # Get new target
+                new_target = object.__getattribute__(new_field_proxy, "_target")
+                # Get child's record
+                child_record = getattr(child, child_var_name, None)
+                if child_record is not None and isinstance(child_record, RecordVariable):
+                    child_obs: ObservableProxy[Any] = child_record.observable  # pyright: ignore[reportAssignmentType,reportUnknownVariableType]
+                    if isinstance(child_obs, ObservableProxy):  # pyright: ignore[reportUnnecessaryIsInstance]
+                        logger.debug(
+                            "_update_field_bound_children: updating %s.%s to %s",
+                            type(child).__name__,
+                            child_var_name,
+                            new_target,
+                        )
+                        child_obs.replace_target(new_target)
+        except (AttributeError, ValueError) as e:
+            logger.debug("_update_field_bound_children: error updating %s: %s", type(child).__name__, e)
 
 
 def _detect_required_bindings(cls: type) -> None:
