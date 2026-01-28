@@ -1146,7 +1146,9 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
             _add_stretch_to_layout,
             _add_widget_to_groupbox,
             _add_widget_to_nested_layout,
+            _create_horizontal_line,
             _create_spacer_item,
+            _create_vertical_line,
             _get_target_container,
             _get_target_layout,
             _get_target_splitter,
@@ -1227,7 +1229,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                         frames[name] = frame_instance
 
             # Second pass: Add child widgets, Variables, Stretch, Spacer, and QSpacerItem to layouts
-            from qtpie.layout import Stretch
+            from qtpie.layout import HorizontalLine, Stretch, VerticalLine
 
             for name in getattr(cls, "__annotations__", {}):
                 # Skip system_tray field
@@ -1239,6 +1241,20 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                 # Handle bare Stretch annotation (without = new())
                 if annotation is Stretch and name not in config.fields:
                     _add_stretch_to_layout(qt_layout, 1)  # Default factor
+                    continue
+
+                # Handle bare HorizontalLine annotation (without = new())
+                if annotation is HorizontalLine and name not in config.fields:
+                    line = _create_horizontal_line(window)
+                    setattr(app, name, line)
+                    _add_to_layout_for_app(qt_layout, line, config.layout, None, None)
+                    continue
+
+                # Handle bare VerticalLine annotation (without = new())
+                if annotation is VerticalLine and name not in config.fields:
+                    line = _create_vertical_line(window)
+                    setattr(app, name, line)
+                    _add_to_layout_for_app(qt_layout, line, config.layout, None, None)
                     continue
 
                 if name in config.fields:
@@ -1338,6 +1354,20 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
                     # Handle Spacer (fixed pixel space)
                     if field.is_spacer:
                         _add_spacing_to_layout(target, field.spacer_size)
+                        continue
+
+                    # Handle HorizontalLine
+                    if field.is_horizontal_line:
+                        line = _create_horizontal_line(window)
+                        setattr(app, name, line)
+                        _add_to_layout_for_app(target, line, config.layout, None, None)
+                        continue
+
+                    # Handle VerticalLine
+                    if field.is_vertical_line:
+                        line = _create_vertical_line(window)
+                        setattr(app, name, line)
+                        _add_to_layout_for_app(target, line, config.layout, None, None)
                         continue
 
                     # Handle QSpacerItem

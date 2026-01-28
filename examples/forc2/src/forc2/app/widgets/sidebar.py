@@ -151,6 +151,5 @@ class SidebarWidget(Widget[Workspace | None]):
     _action_buttons: WorkspaceActionButtonsWidget
     _divider1: QFrame = new(frameShape=QFrame.Shape.HLine)
     _collection: CollectionsTreeWidget
-    _divider2: QFrame = new(frameShape=QFrame.Shape.HLine)
     _environment_label: QLabel = new("Environment", classes=["heading-4", "bg-secondary", "p-2"])
     _environments: QComboBox = new(format="{name}", selectedItem="active_environment")

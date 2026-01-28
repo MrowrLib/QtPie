@@ -61,6 +61,50 @@ class Spacer:
     pass
 
 
+class HorizontalLine:
+    """Marker class for horizontal divider lines.
+
+    Creates a QFrame with frameShape=QFrame.Shape.HLine.
+    Shorthand for: QFrame = new(frameShape=QFrame.Shape.HLine)
+
+    Usage:
+        @widget
+        class MyWidget(Widget):
+            _top: QLabel = new("Top")
+            _divider: HorizontalLine       # Bare annotation
+            _bottom: QLabel = new("Bottom")
+
+        @widget
+        class MyWidget(Widget):
+            _nested: QVBoxLayout = new()
+            _line: HorizontalLine = new(layout="_nested")  # In nested layout
+    """
+
+    pass
+
+
+class VerticalLine:
+    """Marker class for vertical divider lines.
+
+    Creates a QFrame with frameShape=QFrame.Shape.VLine.
+    Shorthand for: QFrame = new(frameShape=QFrame.Shape.VLine)
+
+    Usage:
+        @widget
+        class MyWidget(Widget):
+            _left: QLabel = new("Left")
+            _divider: VerticalLine         # Bare annotation
+            _right: QLabel = new("Right")
+
+        @widget
+        class MyWidget(Widget):
+            _nested: QHBoxLayout = new()
+            _line: VerticalLine = new(layout="_nested")  # In nested layout
+    """
+
+    pass
+
+
 # Layout configuration type aliases
 # SizeConstraint maps to QLayout.SizeConstraint enum
 SizeConstraint = Literal[

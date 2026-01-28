@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast, get_origin, overload
 from observant import Observable, ObservableDict, ObservableList, ObservableProxy, ObservableSet
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
+    QFrame,
     QLayout,
     QSpacerItem,
     QWidget,
@@ -639,7 +640,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                 splitters: dict[str, QSplitter] = {}
 
                 # Track group boxes by field name for later reference
-                from qtpy.QtWidgets import QFrame, QGroupBox
+                from qtpy.QtWidgets import QGroupBox
 
                 groupboxes: dict[str, QGroupBox] = {}
                 frames: dict[str, QFrame] = {}
@@ -686,7 +687,7 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
 
                 # Second pass: Add child widgets, Variables, Stretch, and QSpacerItem to layouts
                 # Use __annotations__ to preserve order across all field types
-                from qtpie.layout import Stretch
+                from qtpie.layout import HorizontalLine, Stretch, VerticalLine
 
                 for name in getattr(cls, "__annotations__", {}):
                     annotation = getattr(cls, "__annotations__", {}).get(name)
@@ -694,6 +695,20 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                     # Handle bare Stretch annotation (without = new())
                     if annotation is Stretch and name not in config.fields:
                         _add_stretch_to_layout(qt_layout, 1)  # Default factor
+                        continue
+
+                    # Handle bare HorizontalLine annotation (without = new())
+                    if annotation is HorizontalLine and name not in config.fields:
+                        line = _create_horizontal_line(self)
+                        setattr(self, name, line)
+                        _add_to_layout(qt_layout, line, config.layout, None, None, None)
+                        continue
+
+                    # Handle bare VerticalLine annotation (without = new())
+                    if annotation is VerticalLine and name not in config.fields:
+                        line = _create_vertical_line(self)
+                        setattr(self, name, line)
+                        _add_to_layout(qt_layout, line, config.layout, None, None, None)
                         continue
 
                     if name in config.fields:
@@ -793,6 +808,20 @@ def _wrap_init_for_layout(cls: type[Widget[Any]] | type[WidgetBase[Any]]) -> Non
                         # Handle Spacer (fixed pixel space)
                         if field.is_spacer:
                             _add_spacing_to_layout(target, field.spacer_size)
+                            continue
+
+                        # Handle HorizontalLine
+                        if field.is_horizontal_line:
+                            line = _create_horizontal_line(self)
+                            setattr(self, name, line)
+                            _add_to_layout(target, line, config.layout, None, None, None)
+                            continue
+
+                        # Handle VerticalLine
+                        if field.is_vertical_line:
+                            line = _create_vertical_line(self)
+                            setattr(self, name, line)
+                            _add_to_layout(target, line, config.layout, None, None, None)
                             continue
 
                         # Handle QSpacerItem
@@ -1125,6 +1154,26 @@ def _add_spacing_to_layout(layout: QLayout, size: int) -> None:
 
     if isinstance(layout, QBoxLayout):
         layout.addSpacing(size)
+
+
+def _create_horizontal_line(parent: QWidget) -> QFrame:
+    """Create a QFrame with HLine frameShape for use as a horizontal divider."""
+    from qtpy.QtWidgets import QFrame
+
+    frame = QFrame(parent)
+    frame.setFrameShape(QFrame.Shape.HLine)
+    frame.setFrameShadow(QFrame.Shadow.Sunken)
+    return frame
+
+
+def _create_vertical_line(parent: QWidget) -> QFrame:
+    """Create a QFrame with VLine frameShape for use as a vertical divider."""
+    from qtpy.QtWidgets import QFrame
+
+    frame = QFrame(parent)
+    frame.setFrameShape(QFrame.Shape.VLine)
+    frame.setFrameShadow(QFrame.Shadow.Sunken)
+    return frame
 
 
 def _create_spacer_item(field: NewField) -> QSpacerItem:
