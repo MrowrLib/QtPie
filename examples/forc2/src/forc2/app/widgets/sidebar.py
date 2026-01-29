@@ -145,8 +145,6 @@ class CollectionsTreeWidget(Widget[Collection | None]):
     #
     #  treeview: QTreeView = new(
     #         validator=filename_safe_validator,
-    #         clicked="{on_current_workspace_item_changed()}",
-    #         onDeleteKey="_on_delete_key",
     #     )
 
 
