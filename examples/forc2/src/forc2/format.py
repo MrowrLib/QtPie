@@ -87,6 +87,8 @@ def load_collection(path: Path) -> Collection:
             req = load_request(item_path)
             collection.items.append(req)
 
+    collection.reset_dirty()
+
     return collection
 
 
@@ -260,6 +262,8 @@ def save_collection(collection: Collection, path: Path) -> None:
             req_path = path / f"{file_stem}.yaml"
             save_request(item, req_path)
 
+    collection.reset_dirty()
+
 
 def save_request(request: Request, path: Path) -> None:
     """Save a Request to a YAML file."""
@@ -305,6 +309,8 @@ def save_request(request: Request, path: Path) -> None:
 
     with path.open("w") as f:
         yaml.dump(data, f)
+
+    request.reset_dirty()
 
 
 def _slugify(name: str) -> str:

@@ -39,11 +39,8 @@ class Application(App):
 
     ### Methods ###
     def _on_save(self) -> None:
-        print(self.selected_request)
-        print(self.selected_request.value)
-        # if self.current_request.value is not None:
-        #     print("Saving current request:", self.current_request.value.name)
-        #     self.current_request.value.save()
+        if self.selected_request.value is not None:
+            self.selected_request.value.save()
 
     def _on_reload_window(self) -> None:
         # Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh).

@@ -586,6 +586,91 @@ class TestRequestDelete:
         assert_that(list(coll.items.value)).is_empty()
 
 
+class TestRequestSaveDirtyReset:
+    """Tests for dirty flag reset after Request.save()."""
+
+    def test_save_resets_dirty_flag(self, tmp_path: Path) -> None:
+        """request.save() resets dirty flag after saving."""
+        # Create workspace structure
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "test.yaml").write_text("name: Test\nmethod: GET\nurl: /original\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        request = ws.collection.value.items.value[0]
+        assert isinstance(request, Request)
+
+        # Initially clean (just loaded)
+        assert_that(request.is_dirty.get()).is_false()
+
+        # Modify to make dirty
+        request.url.value = "/modified"
+        assert_that(request.is_dirty.get()).is_true()
+
+        # Save should reset dirty flag
+        request.save()
+        assert_that(request.is_dirty.get()).is_false()
+
+    def test_save_resets_dirty_fields(self, tmp_path: Path) -> None:
+        """request.save() clears dirty_fields after saving."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "test.yaml").write_text("name: Test\nmethod: GET\nurl: /test\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        request = ws.collection.value.items.value[0]
+        assert isinstance(request, Request)
+
+        # Modify multiple fields
+        request.name.value = "New Name"
+        request.url.value = "/new-url"
+        assert_that(request.dirty_fields).contains("name", "url")
+
+        # Save should clear dirty fields
+        request.save()
+        assert_that(request.dirty_fields).is_empty()
+
+
+class TestCollectionSaveDirtyReset:
+    """Tests for dirty flag reset after Collection.save()."""
+
+    def test_save_resets_dirty_flag(self, tmp_path: Path) -> None:
+        """collection.save() resets dirty flag after saving."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: Original\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+
+        # Initially clean (just loaded)
+        assert_that(ws.collection.value.is_dirty.get()).is_false()
+
+        # Modify to make dirty
+        ws.collection.value.name.value = "Modified"
+        assert_that(ws.collection.value.is_dirty.get()).is_true()
+
+        # Save should reset dirty flag
+        ws.collection.value.save()
+        assert_that(ws.collection.value.is_dirty.get()).is_false()
+
+
 class TestCollectionDelete:
     """Tests for Collection.delete() method."""
 
