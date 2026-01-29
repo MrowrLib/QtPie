@@ -142,7 +142,12 @@ def _setup_tree_record_watcher(
     from qtpie.variable import RecordVariable
 
     # Get host's record variable
-    record_var = getattr(host, "record", None)
+    # Wrap in try-except because Window.__getattr__ raises TypeError for 'record'
+    # when the Window doesn't have a record type (not Window[T])
+    try:
+        record_var = getattr(host, "record", None)
+    except TypeError:
+        return
     if record_var is None or not isinstance(record_var, RecordVariable):
         return
 

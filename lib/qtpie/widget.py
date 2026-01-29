@@ -2320,6 +2320,10 @@ def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) 
 
         # Handle model widgets (QTableView, QListView, QTreeView, QComboBox)
         if isinstance(widget_instance, (QComboBox, QListView, QTableView, QTreeView)):
+            # Skip if bind is not a string path (e.g., enum type for QComboBox enum binding)
+            if not isinstance(field.bind, str):
+                continue
+
             # Try to resolve the binding source
             source = resolve_binding_source(widget, field.bind)
             if source is None:
