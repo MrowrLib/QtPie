@@ -354,6 +354,11 @@ class ReactiveTreeModel[T](QAbstractItemModel):
             if current is None:
                 return default
             current = getattr(current, part, None)
+        if current is None:
+            return default
+        # Unwrap Variable to get its value (for State objects with Variable fields)
+        if hasattr(current, "value") and hasattr(current, "observable"):
+            current = current.value
         return current if current is not None else default
 
     def _set_nested_attr(self, obj: Any, path: str, value: Any) -> bool:

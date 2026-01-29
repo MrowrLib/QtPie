@@ -1,6 +1,6 @@
-from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QListView, QPushButton, QTableView, QToolButton, QTreeView
+from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
 
-from forc2.app.helpers import confirm_delete
+from forc2.app.helpers import confirm_delete, filename_safe_validator
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
@@ -87,7 +87,7 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
     _name_edit: QLineEdit = new(
         bind="name",
         visible="{_is_editing}",
-        # validator=filename_safe_validator,
+        validator=filename_safe_validator,
         onBlur="_stop_editing",
         onEnterKey="_stop_editing",
         onEscapeKey="_cancel_edit",
@@ -131,51 +131,16 @@ class CollectionsTreeWidget(Widget[Collection | None]):
 
     ### Widgets ###
     _actions: CollectionsTreeActionsWidget
-
-    # Someone remind me how the built-in editing works? without a custom widget?
-    #
-    # I wanna make sure ESCAPE blurs and cancels the edit.
-    #
-    # _items: QTreeView = new(
-    #     children="items",
-    #     # widget=CollectionsTreeWidgetRow,
-    #     # selectedWidget="_current_tree_row",
-    #     format="{name}",
-    #     selectedItem="selected_sidebar_item",
-    #     filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
-    #     expand=True,
-    #     # onEnterKey="{_current_tree_row.start_editing()}",
-    #     onDeleteKey="_on_delete",
-    # )
-
-    # _items: QTreeView = new(
-    #     children="items",
-    #     widget=CollectionsTreeWidgetRow,
-    #     selectedWidget="_current_tree_row",
-    #     selectedItem="selected_sidebar_item",
-    #     filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
-    #     expand=True,
-    #     onEnterKey="{_current_tree_row.start_editing()}",
-    #     onDeleteKey="_on_delete",
-    # )
-
-    # The old one:
-    #
-    #  treeview: QTreeView = new(
-    #         validator=filename_safe_validator,
-    #     )
-
-    _item_label: QLabel = new(bind="First Item Name: {items[0].name}")  # works
-
-    # # below do not work, they show nothing in the lists:
-
-    _item_list: QListView = new(bind="{items[0].items}", format="{name}")  # ... doesn't work, should it?!
-
-    _tree: QTreeView = new(bind="{items[0]}", children="items", format="{name}")  # WORKS!
-
-    _table: QTableView = new(bind="{items[0].items}")  # ... doesn't work, should it?!
-
-    _combo: QComboBox = new(bind="{items[0].items}", format="{name}")  # ... doesn't work, should it?!
+    _items: QTreeView = new(
+        children="items",
+        widget=CollectionsTreeWidgetRow,
+        selectedWidget="_current_tree_row",
+        selectedItem="selected_sidebar_item",
+        filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
+        expand=True,
+        onEnterKey="{_current_tree_row.start_editing()}",
+        onDeleteKey="_on_delete",
+    )
 
     ### Methods ###
     def _on_delete(self) -> None:

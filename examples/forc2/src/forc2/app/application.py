@@ -4,13 +4,14 @@ from typing import override
 from qtpy.QtWidgets import QFileDialog
 
 from forc2.app import MainWindow
-from forc2.domain import Workspace
+from forc2.domain import Request, Workspace
 from qtpie import App, Event, Setting, Var, app, new
 
 
 @app(app_name="Forc", org="MrowrPurr", title="Forc :: Free Open-source Rest Client", icon=":/icon.png")
 class Application(App):
     ### Events ###
+    on_save: Event = new(on="_on_save")
     on_quit: Event = new(on="quit")
     on_reload_window: Event = new(on="_on_reload_window")
     on_choose_workspace: Event = new(on="_on_choose_workspace")
@@ -21,6 +22,7 @@ class Application(App):
 
     ### Variables ###
     workspace: Var[Workspace | None] = new(None)
+    current_request: Var[Request | None]
 
     ### Window ###
     main_window: MainWindow = new(bind="workspace")
@@ -36,6 +38,13 @@ class Application(App):
             self._on_load_workspace(workspace_path)
 
     ### Methods ###
+    def _on_save(self) -> None:
+        print(self.current_request)
+        print(self.current_request.value)
+        # if self.current_request.value is not None:
+        #     print("Saving current request:", self.current_request.value.name)
+        #     self.current_request.value.save()
+
     def _on_reload_window(self) -> None:
         # Support for reloading the main window (for light mode / dark mode changes or stylesheet hard refresh).
         self.setQuitOnLastWindowClosed(False)

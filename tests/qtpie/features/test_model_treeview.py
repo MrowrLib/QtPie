@@ -18,7 +18,7 @@ from assertpy import assert_that
 from observant import ObservableList
 from PySide6.QtWidgets import QLabel, QTreeView, QWidget
 
-from qtpie import Variable, new
+from qtpie import State, Var, Variable, new, state
 from qtpie.testing import QtDriver
 
 from .conftest import RECORD_CLASS_TYPES, WIDGET_CLASS_TYPES, create_and_track
@@ -1454,6 +1454,21 @@ class NodeWithNested:
         return self.info.title
 
 
+@dataclass
+class ChildNode:
+    """Simple child node (no Variable fields)."""
+
+    name: str
+
+
+@state
+class EditableNodeWithVar(State):
+    """Tree node where name is a Variable[str], not plain str."""
+
+    name: Var[str] = new("")
+    items: Var[list[ChildNode]] = new([])
+
+
 @pytest.mark.parametrize("base_class,decorator", WIDGET_CLASS_TYPES)
 class TestTreeViewEditable:
     """Test QTreeView with editable= for inline text editing."""
@@ -1626,6 +1641,32 @@ class TestTreeViewEditable:
 
         # EditRole should return the raw field value (not formatted)
         edit_value = model.data(idx, Qt.ItemDataRole.EditRole)
+        assert_that(edit_value).is_equal_to("Test Value")
+
+    def test_edit_role_unwraps_variable_fields(self, base_class, decorator, qt: QtDriver) -> None:
+        """EditRole unwraps Variable fields to return actual value, not Variable object."""
+        from PySide6.QtCore import Qt
+
+        @decorator
+        class TestClass(base_class):
+            _nodes: Variable[list[EditableNodeWithVar]] = new([])
+            _tree: QTreeView = new(bind="_nodes", children="items", editable="name")
+
+        instance = create_and_track(qt, TestClass, base_class)
+
+        # Create a node with Variable field
+        node = EditableNodeWithVar()
+        node.name.value = "Test Value"
+        instance._nodes.append(node)
+        qt.process_events()
+
+        model = instance._tree.model()
+        idx = model.index(0, 0)
+
+        # EditRole should return the string "Test Value", NOT a Variable object
+        edit_value = model.data(idx, Qt.ItemDataRole.EditRole)
+        # First check it's actually a str, not a Variable that just has __str__
+        assert_that(edit_value).is_instance_of(str)
         assert_that(edit_value).is_equal_to("Test Value")
 
     def test_editable_nested_nodes(self, base_class, decorator, qt: QtDriver) -> None:
@@ -2334,7 +2375,7 @@ class TestTreeViewNestedWidgetRecordPropagation:
 
     def test_nested_widget_with_state_record_and_record_path_bind(self, qt: QtDriver) -> None:
         """Child widget with bind='#record?.items' where record is propagated from parent State."""
-        from qtpie import State, Var, Widget, new, state, widget
+        from qtpie import State, Widget, new, state, widget
 
         # Domain model - mirrors forc2's Collection/TreeItem structure
         @dataclass
@@ -2406,7 +2447,7 @@ class TestTreeViewNestedWidgetRecordPropagation:
 
     def test_child_widget_record_direct_items_bind(self, qt: QtDriver) -> None:
         """Widget[Collection | None] with bind='#record?.items' - simplest direct case."""
-        from qtpie import State, Var, Widget, new, state, widget
+        from qtpie import State, Widget, new, state, widget
 
         @dataclass
         class TreeItemState:
@@ -2453,7 +2494,7 @@ class TestTreeViewNestedWidgetRecordPropagation:
 
     def test_bind_items_without_record_prefix(self, qt: QtDriver) -> None:
         """Widget[Collection | None] with bind='items' (implicit record field)."""
-        from qtpie import State, Var, Widget, new, state, widget
+        from qtpie import State, Widget, new, state, widget
 
         @dataclass
         class TreeItemState:

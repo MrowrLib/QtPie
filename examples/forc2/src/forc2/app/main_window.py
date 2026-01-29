@@ -45,7 +45,6 @@ class MainWindow(Window[Workspace | None]):
     # request_splitter_orientation: Var[Qt.Orientation] = new(Qt.Orientation.Horizontal)
     selected_sidebar_item: Var[TreeItem | None] = new(None, onChange="_on_selected_sidebar_item_changed")
     selected_collection: Var[Collection | None] = new(None)
-    current_request: Var[Request | None]
     selected_request_index: Var[int]
 
     ### Docks ###
@@ -72,7 +71,6 @@ class MainWindow(Window[Workspace | None]):
     ### Methods ###
     def _on_selected_sidebar_item_changed(self) -> None:
         item = self.selected_sidebar_item()
-        print("Selected sidebar item changed:", item.name if item else None)
 
         if item is None:
             self.selected_collection = None  # <--- this causes recursion
@@ -88,8 +86,3 @@ class MainWindow(Window[Workspace | None]):
             # Otherwise, add a new tab:
             self.editor_docked_tabs.append(item)
             self.selected_request_index = len(self.editor_docked_tabs) - 1
-
-        # Debug the lost of editor tabs:
-        print("Current editor tabs:")
-        for index, editor in enumerate(self.editor_docked_tabs()):
-            print(f" Tab {index}: {editor.name}")
