@@ -102,6 +102,29 @@ If ANY check fails, fix it FIRST, then re-run ALL checks again.
 
 ---
 
+## ⚠️ TDD: TEST FIRST, ALWAYS ⚠️
+
+**NEVER implement code without a failing test first.**
+
+- Write the test FIRST that describes the expected behavior
+- Run the test and confirm it FAILS (red)
+- THEN implement the code to make it pass (green)
+- Refactor if needed while keeping tests green
+
+**This applies to:**
+- New features
+- Bug fixes
+- Refactors that change behavior
+
+**Exceptions:**
+- User explicitly asks to skip TDD
+- Pure refactoring with no behavior change (existing tests cover it)
+- Exploratory/prototype code the user explicitly marks as throwaway
+
+If you're about to write implementation code and there's no failing test yet - STOP and write the test first.
+
+---
+
 ## Design Principles
 
 1. **Declarative over imperative** - define what, not how
