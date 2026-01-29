@@ -258,6 +258,7 @@ class NewField:
         self.dock_hide_title_bar: bool | None = None  # hideTitleBar=True (always hide title bar)
         self.dock_hide_title_bar_when_tabbed: bool | None = None  # hideTitleBarWhenTabbed=True/False
         self.dock_context_menu: type | None = None  # contextMenu=MyMenu (custom context menu class)
+        self.dock_titlebar_classes: list[str] | str | None = None  # titleBarClasses=["foo"] or "{expr}"
         # Variable[T, Dock[W]] support - Variable with a docked widget
         self.is_variable_dock: bool = False
         self.variable_dock_content_type: type | None = None  # The widget type W inside Variable[T, Dock[W]]
@@ -482,6 +483,7 @@ class NewField:
                             "dock_movable": self.dock_movable,
                             "dock_visible": self.dock_visible,
                             "dock_context_menu": self.dock_context_menu,
+                            "dock_titlebar_classes": self.dock_titlebar_classes,
                             "is_list_dock": True,
                             "list_dock_item_type": self.variable_list_dock_item_type,
                             "list_dock_widget_type": self.variable_list_dock_widget_type,
@@ -1781,6 +1783,7 @@ class NewField:
             self.dock_hide_title_bar = source.pop("hideTitleBar", None)
             self.dock_hide_title_bar_when_tabbed = source.pop("hideTitleBarWhenTabbed", None)
             self.dock_context_menu = source.pop("contextMenu", None)
+            self.dock_titlebar_classes = source.pop("titleBarClasses", None)
 
     def _extract_embed_widget(self) -> None:
         """Extract widget= parameter for embedding widgets in QListView/QTreeView.

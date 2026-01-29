@@ -1690,6 +1690,46 @@ def _setup_dock_repeater_visible_binding(window: Window[Any], repeater: Any, bin
     set_group_visible(observable.get())
 
 
+def _setup_dock_repeater_titlebar_classes_binding(
+    window: Window[Any],
+    repeater: Any,
+    binding: str,
+) -> None:
+    """Set up binding between Variable and dock repeater titlebar classes.
+
+    For simple Variable bindings (e.g., "classes"), applies the Variable's
+    list[str] value as CSS classes to ALL docks in the repeater.
+    """
+    from observant import Observable, ObservableList
+
+    from .styles import set_classes
+    from .variable import _get_variable
+
+    var = _get_variable(window, binding)
+    if var is None:
+        return
+
+    def update_all_dock_classes() -> None:
+        raw_value: list[Any] | Any = var.value
+        class_list: list[str] = [str(c) for c in cast(list[Any], raw_value)] if isinstance(raw_value, list) else []
+        for dock in repeater.docks:
+            set_classes(dock.dock_widget, class_list)
+
+    # Subscribe to Variable changes based on wrapper type
+    wrapper = var.observable
+    if isinstance(wrapper, Observable):
+        wrapper.on_change(lambda _: update_all_dock_classes())
+    elif isinstance(wrapper, ObservableList):
+        wrapper.on_change(update_all_dock_classes)
+
+    # Also subscribe to repeater's list to apply classes when new docks are added
+    # The repeater's underlying list fires on_insert when docks are created
+    repeater._obs_list.on_insert(lambda _idx, _item: update_all_dock_classes())
+
+    # Set initial state
+    update_all_dock_classes()
+
+
 def _setup_dock_floating_binding(window: Window[Any], dock: Any, binding: str) -> None:
     """Set up two-way binding between Variable and dock floating state."""
     from .variable import _get_variable_observable
@@ -2518,6 +2558,7 @@ def _create_list_dock_fields(window: Window[Any], config: WindowConfig) -> None:
             selected_item_changed_callback=selected_item_changed_cb,
             selected_dock_changed_callback=selected_dock_changed_cb,
             context_menu=field.dock_context_menu,
+            titlebar_classes=field.dock_titlebar_classes,
         )
 
         # Store on window instance
@@ -2644,6 +2685,7 @@ def _create_variable_list_dock_field(
         selected_item_changed_callback=selected_item_changed_cb,
         selected_dock_changed_callback=selected_dock_changed_cb,
         context_menu=dock_info.get("dock_context_menu"),
+        titlebar_classes=dock_info.get("dock_titlebar_classes"),
     )
 
     # Store the repeater on the Variable's widget property
@@ -2653,3 +2695,8 @@ def _create_variable_list_dock_field(
     visible_binding = dock_info.get("dock_visible")
     if visible_binding:
         _setup_dock_repeater_visible_binding(window, repeater, visible_binding)
+
+    # Set up titlebar classes binding if it's a Variable reference (not expression)
+    titlebar_classes = dock_info.get("dock_titlebar_classes")
+    if titlebar_classes and isinstance(titlebar_classes, str) and "{" not in titlebar_classes:
+        _setup_dock_repeater_titlebar_classes_binding(window, repeater, titlebar_classes)

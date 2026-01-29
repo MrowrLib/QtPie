@@ -1,6 +1,6 @@
-name: HTML Simple
+name: A-B
 method: GET
 url: ${BASE_URL}/content/html/simple
 headers:
-  - name: Accept
-    value: text/html
+- name: Accept
+  value: text/html

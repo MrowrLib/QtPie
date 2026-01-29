@@ -15,6 +15,10 @@ QDockWidget::title {
   text-align: left;
 }
 
+QDockWidget[class~="invalid"] {
+  color: red;
+}
+
 QDockWidget[class~="invalid"]::title {
   color: red;
 }

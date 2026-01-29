@@ -62,6 +62,7 @@ class DockWidgetRepeater[T, W: QWidget]:
         selected_dock_changed_callback: Callable[[Dock[W] | None], None] | None = None,
         initial_visible: bool = True,
         context_menu: type | None = None,
+        titlebar_classes: list[str] | str | None = None,
     ) -> None:
         """Initialize the dock widget repeater.
 
@@ -87,6 +88,7 @@ class DockWidgetRepeater[T, W: QWidget]:
             selected_dock_changed_callback: Callback when selected dock changes.
             initial_visible: Initial visibility state for all docks in the group.
             context_menu: Custom context menu class for docks in this repeater.
+            titlebar_classes: Static list or expression for CSS classes on dock titlebars.
         """
         self._obs_list = observable_list
         self._item_type = item_type
@@ -110,6 +112,13 @@ class DockWidgetRepeater[T, W: QWidget]:
         self._updating_selection = False  # Prevent recursive updates
         self._group_visible = initial_visible  # Track group visibility
         self._context_menu = context_menu  # Custom context menu class
+        self._titlebar_classes_expr = titlebar_classes  # titleBarClasses parameter
+
+        # Create titlebar classes formatter for expression-based classes
+        if isinstance(titlebar_classes, str) and "{" in titlebar_classes:
+            self._titlebar_classes_formatter = create_item_formatter_with_context(titlebar_classes)
+        else:
+            self._titlebar_classes_formatter = None
 
         # Track: (dock, item_wrapper, index_holder)
         self._items: list[tuple[Dock[W], Observable[Any] | ObservableProxy[Any], list[int]]] = []
@@ -209,6 +218,142 @@ class DockWidgetRepeater[T, W: QWidget]:
                                 attr.on_change(lambda _val: update_title())  # pyright: ignore[reportUnknownLambdaType,reportUnknownMemberType]
                             elif isinstance(attr, (ObservableList, ObservableProxy)):
                                 attr.on_change(update_title)
+
+    def _resolve_titlebar_classes(self, item: T, widget: W | None = None) -> list[str]:
+        """Resolve titlebar classes expression for an item.
+
+        Returns:
+            List of CSS class names to apply to the dock widget.
+        """
+        if self._titlebar_classes_expr is None:
+            return []
+        if isinstance(self._titlebar_classes_expr, list):
+            return self._titlebar_classes_expr  # Static list
+        # Variable binding (string without braces) - handled externally by window/app
+        if "{" not in self._titlebar_classes_expr:
+            return []
+        if self._titlebar_classes_formatter is None:
+            return []
+
+        # Build context for expression evaluation
+        context: dict[str, Any] = {}
+        if widget is not None:
+            context["widget"] = widget
+
+        # Evaluate the expression - it should return a list
+        try:
+            result = self._titlebar_classes_formatter(item, context)
+            # The formatter returns a string, so we need to evaluate the actual expression
+            # to get the list. The formatter is designed for string results, so we need
+            # to use a different approach for list results.
+            # Actually, the formatter returns the string representation of the list.
+            # We need to parse it back or use a different approach.
+            # Let's use eval on the raw expression instead.
+            pass
+        except Exception:
+            pass
+
+        # For list-returning expressions, we need to evaluate directly
+        # Build the expression context and evaluate
+        expr = self._titlebar_classes_expr
+        if "{" in expr and "}" in expr:
+            # Strip the outer braces to get the expression
+            inner_expr = expr.strip()[1:-1] if expr.strip().startswith("{") and expr.strip().endswith("}") else expr
+
+            # Build evaluation context
+            eval_context: dict[str, Any] = {"__builtins__": __builtins__}
+
+            # Add item attributes
+            if hasattr(item, "__dict__"):
+                for attr_name in dir(item):
+                    if not attr_name.startswith("_"):
+                        try:
+                            attr_val = getattr(item, attr_name)
+                            if not callable(attr_val):
+                                # Unwrap Observable values
+                                if isinstance(attr_val, Observable):
+                                    attr_val = attr_val.get()  # pyright: ignore[reportUnknownVariableType]
+                                eval_context[attr_name] = attr_val
+                        except Exception:
+                            pass
+
+            # Handle #widget placeholders
+            if widget is not None:
+                inner_expr = inner_expr.replace("#widget", "widget_ref")
+                eval_context["widget_ref"] = widget
+
+            # Handle #self placeholder
+            inner_expr = inner_expr.replace("#self", "self_val")
+            eval_context["self_val"] = item
+
+            try:
+                result: Any = eval(inner_expr, eval_context)  # noqa: S307
+                if isinstance(result, list):
+                    return [str(c) for c in cast(list[Any], result)]
+                return []
+            except Exception:
+                return []
+
+        return []
+
+    def _subscribe_to_titlebar_class_changes(
+        self,
+        item: T,
+        wrapper: Observable[Any] | ObservableProxy[Any],
+        dock_widget: QDockWidget,
+        widget: W,
+    ) -> None:
+        """Subscribe to all observables referenced in titlebar classes and update reactively."""
+        if self._titlebar_classes_expr is None:
+            return
+        if isinstance(self._titlebar_classes_expr, list):
+            return  # Static list, no need to subscribe
+        # Variable binding (string without braces) - handled externally by window/app
+        if "{" not in self._titlebar_classes_expr:
+            return
+
+        from .styles import set_classes
+
+        def update_classes() -> None:
+            if isinstance(wrapper, Observable):
+                new_classes = self._resolve_titlebar_classes(wrapper.get(), widget)
+            else:
+                new_classes = self._resolve_titlebar_classes(wrapper.unwrap(), widget)
+            set_classes(dock_widget, new_classes)
+
+        # Subscribe to item wrapper changes
+        if isinstance(wrapper, Observable):
+            wrapper.on_change(lambda _: update_classes())
+        else:
+            wrapper.on_change(update_classes)
+
+        # Parse titlebar classes expression to find all referenced names
+        fields = _parse_format_fields(self._titlebar_classes_expr)
+        all_names: set[str] = set()
+        for field in fields:
+            # Normalize #widget to widget_ref for AST parsing
+            expr = field.expression.replace("#widget", "widget_ref").replace("#self", "self_ref")
+            all_names.update(_extract_ast_names(expr))
+
+        # Find observables on the widget (for #widget.* references)
+        if "widget_ref" in all_names:
+            for field in fields:
+                expr = field.expression
+                if "#widget" in expr:
+                    # Find all #widget.attr patterns
+                    for match in re.finditer(r"#widget\.(\w+)", expr):
+                        attr_name = match.group(1)
+                        if hasattr(widget, attr_name):
+                            attr = getattr(widget, attr_name)
+                            # Check for Variable (which wraps Observable)
+                            if hasattr(attr, "observable"):
+                                inner_obs = attr.observable  # pyright: ignore[reportUnknownMemberType]
+                                if isinstance(inner_obs, Observable):
+                                    inner_obs.on_change(lambda _val: update_classes())  # pyright: ignore[reportUnknownLambdaType,reportUnknownMemberType]
+                            elif isinstance(attr, Observable):
+                                attr.on_change(lambda _val: update_classes())  # pyright: ignore[reportUnknownLambdaType,reportUnknownMemberType]
+                            elif isinstance(attr, (ObservableList, ObservableProxy)):
+                                attr.on_change(update_classes)
 
     def _create_dock_features(self) -> QDockWidget.DockWidgetFeature:
         """Create dock widget features flags."""
@@ -363,6 +508,15 @@ class DockWidgetRepeater[T, W: QWidget]:
 
         # Subscribe to title property changes for reactive updates
         self._subscribe_to_title_changes(item, wrapper, dock_widget, widget)
+
+        # Apply initial titlebar classes and subscribe to changes
+        if self._titlebar_classes_expr is not None:
+            from .styles import set_classes
+
+            initial_classes = self._resolve_titlebar_classes(item, widget)
+            if initial_classes:
+                set_classes(dock_widget, initial_classes)
+            self._subscribe_to_titlebar_class_changes(item, wrapper, dock_widget, widget)
 
         # Add to window
         main_window: QMainWindow = self._window

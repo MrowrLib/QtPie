@@ -63,6 +63,8 @@ class MainWindow(Window[Workspace | None]):
         selectedItem="selected_request",
         visible="{workspace is not None}",
         width=0.75,
+        titleBarClasses=["invalid"],
+        # titleBarClasses="{['invalid'] if not is_valid else []}",
     )
 
     ### Widgets ###

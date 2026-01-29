@@ -5337,3 +5337,267 @@ class TestDockMaximizeFloatingOnDoubleClick:
 
         # Dock should not have been maximized (not floating, so event filter didn't handle it)
         assert dock_widget.isMaximized() is False
+
+
+# =============================================================================
+# Variable[list[T], Dock[W]] - titleBarClasses Support
+# =============================================================================
+
+
+@dataclass
+class ValidatableItem:
+    """Item with validity state for testing titleBarClasses."""
+
+    name: str = "Untitled"
+    is_valid: bool = True
+
+
+@widget
+class EditorWithDirtyFlag(Widget):
+    """Editor widget with modified flag for testing titleBarClasses."""
+
+    modified: Variable[bool] = new(False)
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestVariableListDockTitleBarClasses:
+    """Test titleBarClasses= parameter for Variable[list[T], Dock[W]]."""
+
+    def test_static_titlebar_classes_applied(self, base_class, decorator, qt: QtDriver) -> None:
+        """Static titleBarClasses=["foo", "bar"] applies classes to dock widget."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses=["highlight", "important"],
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        # Check classes are set on dock widget
+        dock_widget = instance._editors.widget[0].dock_widget
+        classes = dock_widget.property("class")
+        assert classes == ["highlight", "important"]
+
+    def test_reactive_titlebar_classes_initial_value(self, base_class, decorator, qt: QtDriver) -> None:
+        """Reactive titleBarClasses expression sets initial classes correctly."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ValidatableItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="{['invalid'] if not is_valid else []}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add a valid item
+        instance._items.append(ValidatableItem(name="Valid", is_valid=True))
+        qt.process_events()
+
+        # No classes should be set (item is valid)
+        dock_widget = instance._items.widget[0].dock_widget
+        classes = dock_widget.property("class")
+        assert classes == [] or classes is None
+
+        # Add an invalid item
+        instance._items.append(ValidatableItem(name="Invalid", is_valid=False))
+        qt.process_events()
+
+        # Second dock should have "invalid" class
+        dock_widget2 = instance._items.widget[1].dock_widget
+        classes2 = dock_widget2.property("class")
+        assert classes2 == ["invalid"]
+
+    def test_reactive_titlebar_classes_updates_on_list_replace(self, base_class, decorator, qt: QtDriver) -> None:
+        """Replacing a list item creates new dock with correct initial classes."""
+
+        @decorator
+        class TestClass(base_class):
+            _items: Variable[list[ValidatableItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="{['invalid'] if not is_valid else []}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add a valid item
+        instance._items.append(ValidatableItem(name="Item1", is_valid=True))
+        qt.process_events()
+
+        dock_widget = instance._items.widget[0].dock_widget
+        classes = dock_widget.property("class")
+        assert classes == [] or classes is None
+
+        # Replace with an invalid item - this recreates the dock
+        instance._items[0] = ValidatableItem(name="Item1", is_valid=False)
+        qt.process_events()
+
+        # Get the new dock widget (old one was replaced)
+        new_dock_widget = instance._items.widget[0].dock_widget
+        classes = new_dock_widget.property("class")
+        assert classes == ["invalid"]
+
+    def test_titlebar_classes_with_widget_reference(self, base_class, decorator, qt: QtDriver) -> None:
+        """titleBarClasses can reference #widget attributes."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWithDirtyFlag]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="{['modified'] if #widget.modified else []}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add an item
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        dock = instance._editors.widget[0]
+        dock_widget = dock.dock_widget
+
+        # Initially not modified - no classes
+        classes = dock_widget.property("class")
+        assert classes == [] or classes is None
+
+        # Set modified on the widget
+        dock.widget.modified.value = True
+        qt.process_events()
+
+        # Should now have "modified" class
+        classes = dock_widget.property("class")
+        assert classes == ["modified"]
+
+        # Clear modified
+        dock.widget.modified.value = False
+        qt.process_events()
+
+        # Should have no classes again
+        classes = dock_widget.property("class")
+        assert classes == [] or classes is None
+
+    def test_empty_titlebar_classes_no_property(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without titleBarClasses, no class property is set."""
+
+        @decorator
+        class TestClass(base_class):
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        dock_widget = instance._editors.widget[0].dock_widget
+        classes = dock_widget.property("class")
+        # No class property set at all, or empty
+        assert classes is None or classes == []
+
+    def test_titlebar_classes_variable_binding(self, base_class, decorator, qt: QtDriver) -> None:
+        """titleBarClasses can bind to a Variable on the window."""
+
+        @decorator
+        class TestClass(base_class):
+            classes: Variable[list[str]] = new([])
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="classes",  # Variable binding
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # Initially no classes
+        dock1 = instance._editors.widget[0].dock_widget
+        dock2 = instance._editors.widget[1].dock_widget
+        assert dock1.property("class") is None or dock1.property("class") == []
+
+        # Set classes on Variable - all docks should update
+        instance.classes.value = ["highlight", "important"]
+        qt.process_events()
+
+        assert dock1.property("class") == ["highlight", "important"]
+        assert dock2.property("class") == ["highlight", "important"]
+
+        # Clear classes
+        instance.classes.value = []
+        qt.process_events()
+
+        assert dock1.property("class") == []
+        assert dock2.property("class") == []
+
+    def test_titlebar_classes_variable_binding_new_docks(self, base_class, decorator, qt: QtDriver) -> None:
+        """New docks created after Variable is set also get the classes."""
+
+        @decorator
+        class TestClass(base_class):
+            classes: Variable[list[str]] = new([])
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="classes",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Set classes before adding any docks
+        instance.classes.value = ["active"]
+        qt.process_events()
+
+        # Add dock - should have the classes
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        dock1 = instance._editors.widget[0].dock_widget
+        assert dock1.property("class") == ["active"]
+
+        # Add another dock - should also have the classes
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        dock2 = instance._editors.widget[1].dock_widget
+        assert dock2.property("class") == ["active"]
