@@ -295,13 +295,20 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                     # Apply theme_icon if specified (resolves theme-specific icon variants)
                     if field.theme_icon is not None and hasattr(instance, "setIcon"):
-                        from .styles.icons import resolve_theme_icon
+                        from .styles.icons import register_theme_icon, resolve_theme_icon
                         from .utils.layouts import resolve_icon
 
                         resolved_path = resolve_theme_icon(field.theme_icon)
                         resolved_icon = resolve_icon(resolved_path)
                         if resolved_icon is not None:
                             instance.setIcon(resolved_icon)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+
+                        # Register for theme change updates (icon will re-resolve when set_theme() is called)
+                        register_theme_icon(
+                            instance,
+                            field.theme_icon,
+                            lambda icon, inst=instance: inst.setIcon(icon),  # pyright: ignore[reportUnknownMemberType, reportUnknownLambdaType, reportAttributeAccessIssue]
+                        )
 
                     # Apply widget props (windowTitle="X" → setWindowTitle("X")
                     # Also resolve Translatable markers in widget_props

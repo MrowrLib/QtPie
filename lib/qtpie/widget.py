@@ -1326,12 +1326,15 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     # - icon=other: use specified icon
     if config.theme_icon is not None:
         # Theme-aware icon - resolve to theme-specific variant
-        from .styles.icons import resolve_theme_icon
+        from .styles.icons import register_theme_icon, resolve_theme_icon
 
         resolved_path = resolve_theme_icon(config.theme_icon)
         resolved_icon = resolve_icon(resolved_path)
         if resolved_icon is not None:
             widget.setWindowIcon(resolved_icon)
+
+        # Register for theme change updates
+        register_theme_icon(widget, config.theme_icon, widget.setWindowIcon)
     elif config.icon is False:
         pass  # Explicit opt-out, no icon
     elif config.icon is not None:

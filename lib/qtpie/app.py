@@ -1155,7 +1155,7 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
     resolved_icon: QIcon | None = None
     theme_icon_path = config.theme_window_icon or config.theme_icon
     if theme_icon_path is not None:
-        from .styles.icons import resolve_theme_icon
+        from .styles.icons import register_theme_icon, resolve_theme_icon
 
         resolved_path = resolve_theme_icon(theme_icon_path)
         resolved_icon = resolve_icon(resolved_path)
@@ -1166,6 +1166,17 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
         # Set on QApplication so children can inherit via QApplication.instance()
         if qapp is not None:
             qapp.setWindowIcon(resolved_icon)
+
+    # Register for theme change updates if using theme_icon
+    if theme_icon_path is not None:
+        from .styles.icons import register_theme_icon
+
+        def _update_app_window_icon(icon: QIcon) -> None:
+            window.setWindowIcon(icon)
+            if qapp is not None:
+                qapp.setWindowIcon(icon)
+
+        register_theme_icon(window, theme_icon_path, _update_app_window_icon)
 
     # Apply initial size
     if config.size is not None:
@@ -1600,6 +1611,12 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
 
     # Create system tray icon (parent to QApplication if available, None otherwise)
     tray = QSystemTrayIcon(icon, qapp)
+
+    # Register tray icon for theme change updates
+    if theme_tray_path is not None:
+        from .styles.icons import register_theme_icon
+
+        register_theme_icon(tray, theme_tray_path, tray.setIcon)
 
     # Create or use the tray menu
     if tray_menu is None:

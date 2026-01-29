@@ -689,12 +689,15 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         # - icon=other: use specified icon
         if config.theme_icon is not None:
             # Theme-aware icon - resolve to theme-specific variant
-            from .styles.icons import resolve_theme_icon
+            from .styles.icons import register_theme_icon, resolve_theme_icon
 
             resolved_path = resolve_theme_icon(config.theme_icon)
             resolved_icon = resolve_icon(resolved_path)
             if resolved_icon is not None:
                 self.setWindowIcon(resolved_icon)
+
+            # Register for theme change updates
+            register_theme_icon(self, config.theme_icon, self.setWindowIcon)
         elif config.icon is False:
             pass  # Explicit opt-out, no icon
         elif config.icon is not None:

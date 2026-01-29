@@ -20,12 +20,64 @@ Example::
     #   - ":/icons/refresh.svg"
 """
 
+from collections.abc import Callable
 from pathlib import Path
+from weakref import WeakKeyDictionary
 
 from qtpy.QtCore import QFile
+from qtpy.QtGui import QIcon
 
 from qtpie.styles.color_scheme import is_dark_mode
 from qtpie.styles.theme_runtime import get_theme
+
+# Registry: widget → (base_path, setter_fn)
+# Uses WeakKeyDictionary so deleted widgets are automatically removed
+_theme_icon_registry: WeakKeyDictionary[object, tuple[str, Callable[[QIcon], None]]] = WeakKeyDictionary()
+
+
+def register_theme_icon(
+    widget: object,
+    base_path: str,
+    setter: Callable[[QIcon], None],
+) -> None:
+    """Register a widget for theme icon updates.
+
+    When set_theme() is called, the icon will be re-resolved and setter called.
+    Uses WeakKeyDictionary so deleted widgets are auto-removed.
+
+    Args:
+        widget: The widget to register (used as key for WeakKeyDictionary).
+        base_path: The base icon path (e.g., ":/icons/refresh.svg").
+        setter: Function to call with the resolved QIcon when theme changes.
+    """
+    _theme_icon_registry[widget] = (base_path, setter)
+
+
+def unregister_theme_icon(widget: object) -> None:
+    """Unregister a widget from theme icon updates.
+
+    Args:
+        widget: The widget to unregister.
+    """
+    _theme_icon_registry.pop(widget, None)
+
+
+def refresh_all_theme_icons() -> None:
+    """Re-resolve and update all registered theme icons.
+
+    Called by set_theme() after theme changes. For each registered widget,
+    re-resolves the theme icon path and calls the setter with the new icon.
+    """
+    from qtpie.utils.layouts import resolve_icon
+
+    for _widget, (base_path, setter) in list(_theme_icon_registry.items()):
+        try:
+            resolved_path = resolve_theme_icon(base_path)
+            icon = resolve_icon(resolved_path)
+            if icon is not None:
+                setter(icon)
+        except Exception:
+            pass  # Widget may be in invalid state during shutdown
 
 
 def resolve_theme_icon(base_path: str) -> str:

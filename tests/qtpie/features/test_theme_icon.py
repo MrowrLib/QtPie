@@ -233,3 +233,84 @@ class TestThemeIconWithNoTheme:
 
             instance = create_and_track(qt, TestWidget, Widget)
             assert not instance.btn.icon().isNull()
+
+
+class TestThemeIconReactivity:
+    """Verify icons update when set_theme() is called."""
+
+    def test_widget_icon_registered_for_updates(self, qt: QtDriver, tmp_path: Path) -> None:
+        """Widget with theme_icon is registered in the theme icon registry."""
+        from qtpie.styles.icons import _theme_icon_registry, unregister_theme_icon
+
+        icon_path = tmp_path / "icon.svg"
+        icon_path.write_text("<svg></svg>")
+
+        @widget
+        class TestWidget(Widget):
+            btn: QToolButton = new(theme_icon=str(icon_path))
+
+        instance = create_and_track(qt, TestWidget, Widget)
+
+        # Button should be registered in the registry
+        assert instance.btn in _theme_icon_registry
+
+        # Clean up
+        unregister_theme_icon(instance.btn)
+
+    def test_window_icon_registered_for_updates(self, qt: QtDriver, tmp_path: Path) -> None:
+        """Window with theme_icon is registered in the theme icon registry."""
+        from qtpie.styles.icons import _theme_icon_registry, unregister_theme_icon
+
+        icon_path = tmp_path / "icon.svg"
+        icon_path.write_text("<svg></svg>")
+
+        @window(theme_icon=str(icon_path))
+        class TestWindow(Window):
+            pass
+
+        instance = create_and_track(qt, TestWindow, Window)
+
+        # Window should be registered in the registry
+        assert instance in _theme_icon_registry
+
+        # Clean up
+        unregister_theme_icon(instance)
+
+    def test_refresh_updates_widget_icons(self, qt: QtDriver, tmp_path: Path) -> None:
+        """refresh_all_theme_icons updates registered widgets."""
+        from qtpie.styles.icons import refresh_all_theme_icons, unregister_theme_icon
+
+        # Create two variants
+        base_path = tmp_path / "icon.svg"
+        dark_path = tmp_path / "icon-dark.svg"
+        light_path = tmp_path / "icon-light.svg"
+        dark_path.write_text("<svg fill='black'></svg>")
+        light_path.write_text("<svg fill='white'></svg>")
+
+        # Create widget in dark mode
+        with (
+            patch("qtpie.styles.icons.get_theme", return_value=None),
+            patch("qtpie.styles.icons.is_dark_mode", return_value=True),
+        ):
+
+            @widget
+            class TestWidget(Widget):
+                btn: QToolButton = new(theme_icon=str(base_path))
+
+            instance = create_and_track(qt, TestWidget, Widget)
+
+            # Initial icon should be set
+            assert not instance.btn.icon().isNull()
+
+        # Now refresh in light mode
+        with (
+            patch("qtpie.styles.icons.get_theme", return_value=None),
+            patch("qtpie.styles.icons.is_dark_mode", return_value=False),
+        ):
+            refresh_all_theme_icons()
+
+        # Icon should still be set (not null)
+        assert not instance.btn.icon().isNull()
+
+        # Clean up
+        unregister_theme_icon(instance.btn)

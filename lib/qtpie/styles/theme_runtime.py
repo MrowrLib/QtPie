@@ -182,6 +182,11 @@ def set_theme(name: str) -> bool:
     else:
         _apply_current_theme()
 
+    # Refresh all theme icons to reflect the new theme
+    from qtpie.styles.icons import refresh_all_theme_icons
+
+    refresh_all_theme_icons()
+
     return True
 
 

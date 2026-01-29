@@ -24,7 +24,12 @@ from qtpie.styles.color_scheme import (
     set_color_scheme,
 )
 from qtpie.styles.compiler import compile_scss
-from qtpie.styles.icons import resolve_theme_icon
+from qtpie.styles.icons import (
+    refresh_all_theme_icons,
+    register_theme_icon,
+    resolve_theme_icon,
+    unregister_theme_icon,
+)
 from qtpie.styles.loader import load_stylesheet
 from qtpie.styles.theme_runtime import (
     get_theme,
@@ -78,7 +83,10 @@ __all__ = [
     # Compiler
     "compile_scss",
     # Icons
+    "refresh_all_theme_icons",
+    "register_theme_icon",
     "resolve_theme_icon",
+    "unregister_theme_icon",
     # Loader
     "load_stylesheet",
     # Themes

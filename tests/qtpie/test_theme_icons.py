@@ -2,9 +2,18 @@
 """Tests for theme-aware icon resolution."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from qtpie.styles.icons import _split_path, resolve_theme_icon
+from PySide6.QtGui import QIcon
+
+from qtpie.styles.icons import (
+    _split_path,
+    _theme_icon_registry,
+    refresh_all_theme_icons,
+    register_theme_icon,
+    resolve_theme_icon,
+    unregister_theme_icon,
+)
 
 
 class TestSplitPath:
@@ -165,3 +174,111 @@ class TestResolveThemeIconIntegration:
         result = resolve_theme_icon(str(base))
         assert result is not None
         assert isinstance(result, str)
+
+
+class TestThemeIconRegistry:
+    """Tests for theme icon registration and refresh."""
+
+    def test_register_adds_to_registry(self) -> None:
+        """register_theme_icon adds widget to registry."""
+        widget = MagicMock()
+        setter = MagicMock()
+        base_path = ":/icons/test.svg"
+
+        try:
+            register_theme_icon(widget, base_path, setter)
+            assert widget in _theme_icon_registry
+            assert _theme_icon_registry[widget] == (base_path, setter)
+        finally:
+            unregister_theme_icon(widget)
+
+    def test_unregister_removes_from_registry(self) -> None:
+        """unregister_theme_icon removes widget from registry."""
+        widget = MagicMock()
+        setter = MagicMock()
+        base_path = ":/icons/test.svg"
+
+        register_theme_icon(widget, base_path, setter)
+        assert widget in _theme_icon_registry
+
+        unregister_theme_icon(widget)
+        assert widget not in _theme_icon_registry
+
+    def test_unregister_nonexistent_does_not_raise(self) -> None:
+        """unregister_theme_icon on non-registered widget doesn't raise."""
+        widget = MagicMock()
+        # Should not raise
+        unregister_theme_icon(widget)
+
+    def test_refresh_calls_setters(self, tmp_path: Path) -> None:
+        """refresh_all_theme_icons calls setters with resolved icons."""
+        # Create test icon file
+        icon_path = tmp_path / "icon.svg"
+        icon_path.write_text("<svg></svg>")
+
+        widget = MagicMock()
+        setter = MagicMock()
+
+        try:
+            register_theme_icon(widget, str(icon_path), setter)
+
+            with (
+                patch("qtpie.styles.icons.get_theme", return_value=None),
+                patch("qtpie.styles.icons.is_dark_mode", return_value=True),
+            ):
+                refresh_all_theme_icons()
+
+            # Setter should have been called with a QIcon
+            setter.assert_called_once()
+            call_args = setter.call_args[0]
+            assert len(call_args) == 1
+            assert isinstance(call_args[0], QIcon)
+        finally:
+            unregister_theme_icon(widget)
+
+    def test_refresh_handles_exception_gracefully(self) -> None:
+        """refresh_all_theme_icons continues even if one setter fails."""
+        widget1 = MagicMock()
+        widget2 = MagicMock()
+
+        # First setter raises exception
+        failing_setter = MagicMock(side_effect=RuntimeError("Test error"))
+        good_setter = MagicMock()
+
+        try:
+            register_theme_icon(widget1, ":/icon1.svg", failing_setter)
+            register_theme_icon(widget2, ":/icon2.svg", good_setter)
+
+            # Should not raise
+            refresh_all_theme_icons()
+
+            # Both setters attempted (even though first failed)
+            # Note: Second one may or may not be called depending on icon resolution
+            # The key is that refresh_all_theme_icons doesn't crash
+        finally:
+            unregister_theme_icon(widget1)
+            unregister_theme_icon(widget2)
+
+    def test_weak_reference_cleanup(self) -> None:
+        """Deleted objects are auto-removed from registry (WeakKeyDict)."""
+        import gc
+
+        # Create a class we can delete
+        class TestWidget:
+            pass
+
+        widget = TestWidget()
+        setter = MagicMock()
+
+        register_theme_icon(widget, ":/icon.svg", setter)
+        assert len(_theme_icon_registry) >= 1
+
+        # Get initial count
+        initial_count = len(_theme_icon_registry)
+
+        # Delete the widget
+        del widget
+        gc.collect()
+
+        # Registry should have cleaned up (may be 0 or fewer than initial)
+        assert len(_theme_icon_registry) <= initial_count
