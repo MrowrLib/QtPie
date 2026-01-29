@@ -90,6 +90,8 @@ class WindowConfig:
     dock_menu_prepend_actions: bool = False  # Prepend built-in actions to custom menus
     # Window icon (resolved at runtime)
     icon: IconType = None
+    # Theme-aware window icon (resolved via resolve_theme_icon)
+    theme_icon: str | None = None
     # Window size
     size: tuple[int, int] | None = None  # Initial size (width, height)
     center: bool = False  # Center window on screen before showing
@@ -307,6 +309,7 @@ def window[W: Window[Any]](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    theme_icon: str | None = None,
     size: tuple[int, int] | None = None,
     center: bool = False,
     record: Any | None = None,
@@ -361,6 +364,7 @@ def window[W: Window[Any]](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    theme_icon: str | None = None,
     size: tuple[int, int] | None = None,
     center: bool = False,
     record: Any | None = None,
@@ -488,6 +492,7 @@ def window[W: Window[Any]](
         config.dock_menu_close_all = dockMenuCloseAll
         config.dock_menu_prepend_actions = dockMenuPrependActions
         config.icon = icon
+        config.theme_icon = theme_icon
         config.size = size
         config.center = center
         config.signal_connections = signal_connections
@@ -677,10 +682,20 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
         apply_widget_props(self, config.widget_props, skip_filter=skip_reactive_or_translatable)
 
         # Apply icon at runtime (when Qt resources are available)
-        # - None: inherit from active window or QApplication
-        # - False: explicitly no icon (opt-out)
-        # - other: use specified icon
-        if config.icon is False:
+        # Priority: theme_icon > icon > inherited
+        # - theme_icon: resolve via resolve_theme_icon() for theme-specific variants
+        # - icon=None: inherit from active window or QApplication
+        # - icon=False: explicitly no icon (opt-out)
+        # - icon=other: use specified icon
+        if config.theme_icon is not None:
+            # Theme-aware icon - resolve to theme-specific variant
+            from .styles.icons import resolve_theme_icon
+
+            resolved_path = resolve_theme_icon(config.theme_icon)
+            resolved_icon = resolve_icon(resolved_path)
+            if resolved_icon is not None:
+                self.setWindowIcon(resolved_icon)
+        elif config.icon is False:
             pass  # Explicit opt-out, no icon
         elif config.icon is not None:
             resolved_icon = resolve_icon(config.icon)

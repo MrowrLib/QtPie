@@ -293,6 +293,16 @@ def new_fields[T](cls: type[T]) -> type[T]:
 
                                 apply_validator(instance, field.validator)
 
+                    # Apply theme_icon if specified (resolves theme-specific icon variants)
+                    if field.theme_icon is not None and hasattr(instance, "setIcon"):
+                        from .styles.icons import resolve_theme_icon
+                        from .utils.layouts import resolve_icon
+
+                        resolved_path = resolve_theme_icon(field.theme_icon)
+                        resolved_icon = resolve_icon(resolved_path)
+                        if resolved_icon is not None:
+                            instance.setIcon(resolved_icon)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+
                     # Apply widget props (windowTitle="X" → setWindowTitle("X")
                     # Also resolve Translatable markers in widget_props
                     for prop_name, value in field.widget_props.items():
@@ -301,7 +311,11 @@ def new_fields[T](cls: type[T]) -> type[T]:
                             value = value.resolve()
 
                         # Special handling for icon= - convert str/QPixmap/StandardPixmap to QIcon
+                        # Note: theme_icon takes precedence if both are specified
                         if prop_name == "icon":
+                            if field.theme_icon is not None:
+                                # theme_icon already handled above, skip icon=
+                                continue
                             from .utils.layouts import resolve_icon
 
                             resolved_icon = resolve_icon(value)

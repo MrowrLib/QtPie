@@ -96,6 +96,10 @@ class AppConfig:
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Sets BOTH window_icon AND tray_icon (fallback)
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Window icon only (overrides icon=)
     tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None  # Tray icon only (overrides icon=)
+    # Theme-aware icon settings (resolved via resolve_theme_icon)
+    theme_icon: str | None = None  # Sets BOTH theme_window_icon AND theme_tray_icon (fallback)
+    theme_window_icon: str | None = None  # Theme-aware window icon only (overrides theme_icon=)
+    theme_tray_icon: str | None = None  # Theme-aware tray icon only (overrides theme_icon=)
 
     # Record type from App[T]
     record_type: type[Any] | None = None
@@ -613,6 +617,10 @@ def app[A: AppBase[Any]](
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    # Theme-aware icon settings
+    theme_icon: str | None = None,
+    theme_window_icon: str | None = None,
+    theme_tray_icon: str | None = None,
     # Standard settings
     auto_bind: bool = True,
     name: str | None = None,
@@ -678,6 +686,10 @@ def app[A: AppBase[Any]](
     icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     window_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
     tray_icon: str | QIcon | QPixmap | QStyle.StandardPixmap | None = None,
+    # Theme-aware icon settings
+    theme_icon: str | None = None,
+    theme_window_icon: str | None = None,
+    theme_tray_icon: str | None = None,
     # Standard settings
     auto_bind: bool = True,
     name: str | None = None,
@@ -796,6 +808,9 @@ def app[A: AppBase[Any]](
         config.icon = icon
         config.window_icon = window_icon
         config.tray_icon = tray_icon
+        config.theme_icon = theme_icon
+        config.theme_window_icon = theme_window_icon
+        config.theme_tray_icon = theme_tray_icon
         config.corners = corners
         config.docks_locked = docksLocked
         config.dock_nesting = dockNesting
@@ -1136,7 +1151,16 @@ def _create_auto_window(app: AppBase[Any], config: AppConfig, cls: type[AppBase[
         window.setWindowTitle(type(app).__name__)
 
     # Set window icon (also set on QApplication for inheritance by children)
-    resolved_icon = resolve_icon(config.window_icon) or resolve_icon(config.icon)
+    # Priority: theme_window_icon > theme_icon > window_icon > icon
+    resolved_icon: QIcon | None = None
+    theme_icon_path = config.theme_window_icon or config.theme_icon
+    if theme_icon_path is not None:
+        from .styles.icons import resolve_theme_icon
+
+        resolved_path = resolve_theme_icon(theme_icon_path)
+        resolved_icon = resolve_icon(resolved_path)
+    if resolved_icon is None:
+        resolved_icon = resolve_icon(config.window_icon) or resolve_icon(config.icon)
     if resolved_icon:
         window.setWindowIcon(resolved_icon)
         # Set on QApplication so children can inherit via QApplication.instance()
@@ -1553,7 +1577,16 @@ def _setup_system_tray(app: AppBase[Any], config: AppConfig) -> None:
             return
 
     # Resolve tray icon
-    icon = resolve_icon(config.tray_icon) or resolve_icon(config.icon)
+    # Priority: theme_tray_icon > theme_icon > tray_icon > icon
+    icon: QIcon | None = None
+    theme_tray_path = config.theme_tray_icon or config.theme_icon
+    if theme_tray_path is not None:
+        from .styles.icons import resolve_theme_icon
+
+        resolved_path = resolve_theme_icon(theme_tray_path)
+        icon = resolve_icon(resolved_path)
+    if icon is None:
+        icon = resolve_icon(config.tray_icon) or resolve_icon(config.icon)
     if icon is None:
         # Use application icon as fallback (only available for QApplication)
         if qapp is not None:

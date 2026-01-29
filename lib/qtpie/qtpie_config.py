@@ -28,6 +28,7 @@ class _QtPieConfig:
         "css_classes",
         "required_bindings",
         "icon",
+        "theme_icon",
         "size",
         "signal_connections",
         "event_new_fields",
@@ -57,6 +58,7 @@ class _QtPieConfig:
         self.css_classes: list[str] = []  # CSS classes for the widget
         self.required_bindings: set[str] = set()  # Bare Variable[T] fields that must be provided
         self.icon: IconType = None  # Window icon (resolved at runtime)
+        self.theme_icon: str | None = None  # Theme-aware window icon (resolved via resolve_theme_icon)
         self.size: tuple[int, int] | None = None  # Initial size (width, height)
         self.signal_connections: dict[str, str] = {}  # Signal connections from decorator
         self.event_new_fields: dict[str, NewField] = {}  # Event[T] fields with new(on=...)

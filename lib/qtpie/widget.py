@@ -376,6 +376,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    theme_icon: str | None = None,
     size: tuple[int, int] | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -409,6 +410,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
     classes: list[str] | None = None,
     title: str | None = None,
     icon: IconType = None,
+    theme_icon: str | None = None,
     size: tuple[int, int] | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -506,6 +508,7 @@ def widget[W: (Widget[Any] | WidgetBase[Any])](
         target._qtpie_config.object_name = name
         target._qtpie_config.css_classes = classes or []
         target._qtpie_config.icon = icon
+        target._qtpie_config.theme_icon = theme_icon
         target._qtpie_config.size = size
         target._qtpie_config.signal_connections = signal_connections
 
@@ -1316,10 +1319,20 @@ def _apply_widget_props(widget: Widget[Any], config: _QtPieConfig) -> None:
     )
 
     # Apply icon at runtime (when Qt resources are available)
-    # - None: inherit from active window
-    # - False: explicitly no icon (opt-out)
-    # - other: use specified icon
-    if config.icon is False:
+    # Priority: theme_icon > icon > inherited
+    # - theme_icon: resolve via resolve_theme_icon() for theme-specific variants
+    # - icon=None: inherit from active window
+    # - icon=False: explicitly no icon (opt-out)
+    # - icon=other: use specified icon
+    if config.theme_icon is not None:
+        # Theme-aware icon - resolve to theme-specific variant
+        from .styles.icons import resolve_theme_icon
+
+        resolved_path = resolve_theme_icon(config.theme_icon)
+        resolved_icon = resolve_icon(resolved_path)
+        if resolved_icon is not None:
+            widget.setWindowIcon(resolved_icon)
+    elif config.icon is False:
         pass  # Explicit opt-out, no icon
     elif config.icon is not None:
         resolved_icon = resolve_icon(config.icon)

@@ -272,6 +272,9 @@ class NewField:
         # - Callable[[str, int], QValidator.State]: Full control over validation state
         # - str (method name): Look up method on widget instance
         self.validator: str | Callable[..., Any] | None = None
+        # Theme-aware icon path - resolved via resolve_theme_icon() to find
+        # theme-specific variants (e.g., ":/refresh.svg" -> ":/refresh-dark.svg")
+        self.theme_icon: str | None = None
         # QPlainTextEdit/QTextEdit syntax highlighter support
         # highlighter= can be:
         # - type: Static highlighter class to instantiate
@@ -1210,6 +1213,9 @@ class NewField:
             # Extract width= and height= for initial size (applied via resize())
             self.initial_width = self.kwargs.pop("width", None)
             self.initial_height = self.kwargs.pop("height", None)
+
+            # Extract theme_icon= for theme-aware icon resolution
+            self.theme_icon = self.kwargs.pop("theme_icon", None)
 
             # Extract per-widget margin kwargs
             self._extract_margin_kwargs()
