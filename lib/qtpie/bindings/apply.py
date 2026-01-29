@@ -524,6 +524,25 @@ def apply_auto_bindings(
             # Unknown bind type (shouldn't happen in normal usage)
             continue
 
+        # NEW: Handle expression bindings for model widgets
+        # e.g., bind="{workspace?.items}" or bind="{items[0].children}"
+        # This creates a managed ObservableList that re-evaluates the expression
+        # when source observables change.
+        if is_format_string(bind_path) and _is_model_widget(widget_instance):
+            from qtpie.bindings.expression_model_binding import create_expression_model_binding
+
+            if create_expression_model_binding(
+                host,
+                widget_instance,
+                bind_path,
+                field_info,
+                is_table_view_fn=_is_table_view,
+                is_tree_view_fn=_is_tree_view,
+                resolve_or_create_variable_fn=_resolve_or_create_variable,
+            ):
+                continue
+            # Fall through if binding failed (expression didn't evaluate to collection)
+
         # Handle format strings
         # Also handle nested paths for NON-record widgets (paths like "parent_var.field")
         # because ObservableProxy creates new Observables for each path lookup.

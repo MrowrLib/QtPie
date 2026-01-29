@@ -1,6 +1,6 @@
-name: JSON Detailed
+name: JSON Detailed changed
 method: GET
 url: ${BASE_URL}/content/json/detailed
 headers:
-  - name: Accept
-    value: application/json
+- name: Accept
+  value: application/json

@@ -1,4 +1,4 @@
-from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
+from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QListView, QPushButton, QTableView, QToolButton, QTreeView
 
 from forc2.app.helpers import confirm_delete
 from forc2.domain.collection import Collection, TreeItem
@@ -74,6 +74,7 @@ class WorkspaceActionButtonsWidget(Widget[Workspace | None]):
 class CollectionsTreeWidgetRow(Widget[TreeItem]):
     ### Variables ###
     _is_editing: Var[bool] = new(False)
+    _original_name: Var[str] = new("")
 
     # ### Widgets ###
     _method_chip: QLabel = new(
@@ -89,19 +90,26 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
         # validator=filename_safe_validator,
         onBlur="_stop_editing",
         onEnterKey="_stop_editing",
+        onEscapeKey="_cancel_edit",
     )
 
     # ### Methods ###
     def start_editing(self) -> None:
         self._is_editing = True
+        self._original_name = self.record.name  # TODO: should we swap .record and .record_value? to like .record_variable(s) or something?
+        print("Starting edit, original name:", self._original_name())
         self._name_edit.setFocus()
 
     def _stop_editing(self) -> bool:
         self._name_edit.clearFocus()
         self._is_editing = False
-        # self.emit_event("on_rename", self.record_value, self._name_edit.text())
-        print("Is the TreeItem dirty?", self.is_dirty.get())
+        self.record.save()
         return True
+
+    def _cancel_edit(self) -> None:
+        self._is_editing = False
+        self._name_edit.clearFocus()
+        self.record.name = self._original_name()
 
 
 # (left, top, right, bottom)
@@ -123,16 +131,51 @@ class CollectionsTreeWidget(Widget[Collection | None]):
 
     ### Widgets ###
     _actions: CollectionsTreeActionsWidget
-    _items: QTreeView = new(
-        children="items",
-        widget=CollectionsTreeWidgetRow,
-        selectedWidget="_current_tree_row",
-        selectedItem="selected_sidebar_item",
-        filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
-        expand=True,
-        onEnterKey="{_current_tree_row.start_editing()}",
-        onDeleteKey="_on_delete",
-    )
+
+    # Someone remind me how the built-in editing works? without a custom widget?
+    #
+    # I wanna make sure ESCAPE blurs and cancels the edit.
+    #
+    # _items: QTreeView = new(
+    #     children="items",
+    #     # widget=CollectionsTreeWidgetRow,
+    #     # selectedWidget="_current_tree_row",
+    #     format="{name}",
+    #     selectedItem="selected_sidebar_item",
+    #     filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
+    #     expand=True,
+    #     # onEnterKey="{_current_tree_row.start_editing()}",
+    #     onDeleteKey="_on_delete",
+    # )
+
+    # _items: QTreeView = new(
+    #     children="items",
+    #     widget=CollectionsTreeWidgetRow,
+    #     selectedWidget="_current_tree_row",
+    #     selectedItem="selected_sidebar_item",
+    #     filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
+    #     expand=True,
+    #     onEnterKey="{_current_tree_row.start_editing()}",
+    #     onDeleteKey="_on_delete",
+    # )
+
+    # The old one:
+    #
+    #  treeview: QTreeView = new(
+    #         validator=filename_safe_validator,
+    #     )
+
+    _item_label: QLabel = new(bind="First Item Name: {items[0].name}")  # works
+
+    # # below do not work, they show nothing in the lists:
+
+    _item_list: QListView = new(bind="{items[0].items}", format="{name}")  # ... doesn't work, should it?!
+
+    _tree: QTreeView = new(bind="{items[0]}", children="items", format="{name}")  # WORKS!
+
+    _table: QTableView = new(bind="{items[0].items}")  # ... doesn't work, should it?!
+
+    _combo: QComboBox = new(bind="{items[0].items}", format="{name}")  # ... doesn't work, should it?!
 
     ### Methods ###
     def _on_delete(self) -> None:
@@ -140,12 +183,6 @@ class CollectionsTreeWidget(Widget[Collection | None]):
         if item is not None:
             if confirm_delete():
                 item.delete()
-
-    # The old one:
-    #
-    #  treeview: QTreeView = new(
-    #         validator=filename_safe_validator,
-    #     )
 
 
 @widget
