@@ -22,7 +22,7 @@ class Application(App):
 
     ### Variables ###
     workspace: Var[Workspace | None] = new(None)
-    current_request: Var[Request | None]
+    selected_request: Var[Request | None]
 
     ### Window ###
     main_window: MainWindow = new(bind="workspace")
@@ -39,8 +39,8 @@ class Application(App):
 
     ### Methods ###
     def _on_save(self) -> None:
-        print(self.current_request)
-        print(self.current_request.value)
+        print(self.selected_request)
+        print(self.selected_request.value)
         # if self.current_request.value is not None:
         #     print("Saving current request:", self.current_request.value.name)
         #     self.current_request.value.save()

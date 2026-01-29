@@ -513,6 +513,14 @@ class DockWidgetRepeater[T, W: QWidget]:
         )
         if count_before == 1 and has_bindings_or_callbacks:
             self._setup_selection_bindings()
+        elif count_before == 0 and has_bindings_or_callbacks:
+            # First dock added - automatically select it (no tab bar yet, but track selection)
+            dock, _, _ = self._items[0]
+            if self._selected_index_obs is not None:
+                self._selected_index_obs.set(0)
+            self._set_selected_item(0)
+            if self._selected_dock_obs is not None:
+                self._selected_dock_obs.set(dock)
 
     def _on_remove(self, index: int, item: T) -> None:
         """Handle item removal."""

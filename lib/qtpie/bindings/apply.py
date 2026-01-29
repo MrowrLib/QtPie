@@ -320,6 +320,18 @@ def _resolve_or_create_variable(
             found = _try_get_variable(logical_parent, attr_name)
             if found is not None:
                 return found
+            # Also check for bare Variable annotation on the logical parent
+            # If found, create the Variable there (not on host)
+            cls_attr = getattr(type(logical_parent), attr_name, None)  # pyright: ignore[reportUnknownArgumentType]
+            if isinstance(cls_attr, _RequiredBindingDescriptor):
+                parent_state = getattr(logical_parent, "_qtpie", None)
+                if parent_state is None:
+                    parent_state = QtPieState(logical_parent)  # type: ignore[arg-type]
+                    logical_parent._qtpie = parent_state  # type: ignore[attr-defined]
+                wrapper = Observable(None)
+                var: VarType[Any] = VarType(wrapper)
+                parent_state.register_variable(attr_name, var)  # pyright: ignore[reportUnknownMemberType]
+                return var
         # Move up the logical parent chain
         logical_current = logical_parent
         # Also update current for Qt parent traversal starting point

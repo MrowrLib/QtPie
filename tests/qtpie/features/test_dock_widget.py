@@ -21,7 +21,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import QDockWidget, QLabel, QLineEdit, QPushButton, QSpinBox, QTabBar, QTabWidget, QWidget
 
-from qtpie import Dock, Variable, Widget, new, widget
+from qtpie import AppBase, Dock, Variable, Widget, Window, app, new, widget, window
 from qtpie.testing import QtDriver
 
 from .conftest import WINDOW_CLASS_TYPES, create_and_track, get_main_window
@@ -2231,6 +2231,35 @@ class EditorWidget(QWidget):
     pass
 
 
+# =============================================================================
+# Module-level classes for cross-hierarchy tests
+# (defined here to avoid type hint resolution issues in test methods)
+# =============================================================================
+
+
+@window
+class _CrossHierarchyTestWindow(Window):
+    """Window with dock that references selectedItem from parent App."""
+
+    _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+        group="editors",
+        dock="right",
+        title="{name}",
+        selectedItem="current_item",  # References Variable on App
+    )
+
+
+@app
+class _CrossHierarchyTestApp(AppBase):
+    """App with bare Variable that Window's dock references."""
+
+    current_item: Variable[EditorItem | None]  # Bare annotation - should be auto-created
+    main_window: _CrossHierarchyTestWindow = new()
+
+
+# =============================================================================
+
+
 @pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
 class TestVariableListDock:
     """Test Variable[list[T], Dock[W]] for dynamic dock creation."""
@@ -2657,6 +2686,70 @@ class TestVariableListDockGroupSelectedIndex:
 
 
 # =============================================================================
+# Variable[list[T], Dock[W]] - First Item Auto-Selection
+# =============================================================================
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestFirstDockAutoSelection:
+    """Test that the first dock added is automatically selected (before tab bar exists)."""
+
+    def test_first_item_selected_immediately(self, base_class, decorator, qt: QtDriver) -> None:
+        """When the first dock is added, selectedItem should be set to that item."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_item: Variable[EditorItem | None]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                selectedItem="_selected_item",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Before adding any items, selected_item should be None
+        assert instance._selected_item.value is None
+
+        # Add FIRST item - there's no tab bar yet (only 1 dock)
+        item1 = EditorItem(name="File1")
+        instance._editors.append(item1)
+        qt.process_events()
+
+        # The first item should be automatically selected
+        assert instance._selected_item.value is item1, f"First item should be auto-selected, got {instance._selected_item.value}"
+
+    def test_first_item_selected_index_immediately(self, base_class, decorator, qt: QtDriver) -> None:
+        """When the first dock is added, selectedIndex should be set to 0."""
+
+        @decorator
+        class TestClass(base_class):
+            _selected_index: Variable[int]
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                groupSelectedIndex="_selected_index",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add FIRST item
+        instance._editors.append(EditorItem(name="File1"))
+        qt.process_events()
+
+        # Index should be 0 (first and only item)
+        assert instance._selected_index.value == 0
+
+
+# =============================================================================
 # Variable[list[T], Dock[W]] - Reactive Title Binding
 # =============================================================================
 
@@ -3008,6 +3101,82 @@ class TestSelectedDockBinding:
         assert instance._selected_index.value == 1
         assert instance._selected_item.value is item2
         assert instance._selected_dock.value is instance._editors.widget[1]
+
+
+# =============================================================================
+# Cross-Hierarchy Selection Bindings (Variable on App, Dock on Window)
+# =============================================================================
+
+
+class TestCrossHierarchySelectedItemBinding:
+    """Test selectedItem binding when Variable is on App but dock is on Window.
+
+    This tests the scenario where:
+    - App defines: current_item: Variable[EditorItem | None] (bare annotation)
+    - Window defines dock with: selectedItem="current_item"
+    - The Window should find and use the App's Variable
+
+    Uses module-level _CrossHierarchyTestApp and _CrossHierarchyTestWindow.
+    """
+
+    def test_bare_variable_on_app_found_by_window_dock(self, qt: QtDriver) -> None:
+        """Bare Variable on App is found by Window's dock selectedItem binding."""
+        app_instance = _CrossHierarchyTestApp()
+        # AppBase is not a QWidget, track the window instead
+        qt.track(app_instance.main_window)
+        app_instance.main_window.show()
+        qt.process_events()
+
+        # App should have current_item accessible (auto-created or resolved)
+        # This is the core assertion - the bare Variable should work
+        # The descriptor exists on the class, but accessing it may raise AttributeError
+        # if the Variable wasn't properly created/resolved
+        assert "current_item" in type(app_instance).__dict__, "current_item descriptor should exist on class"
+
+        # Accessing it should not raise AttributeError - this is the bug we're testing
+        try:
+            _ = app_instance.current_item
+        except AttributeError as e:
+            pytest.fail(f"Accessing app_instance.current_item raised AttributeError: {e}")
+
+        # Add items to the dock
+        item1 = EditorItem(name="File1")
+        item2 = EditorItem(name="File2")
+
+        app_instance.main_window._editors.append(item1)
+        qt.process_events()
+        app_instance.main_window._editors.append(item2)
+        qt.process_events()
+        qt.process_events()  # For QTimer.singleShot(0)
+
+        # Find tab bar
+        win = app_instance.main_window
+        tab_bars = win.findChildren(QTabBar)
+        editor_tab_bar = None
+        for tb in tab_bars:
+            for i in range(tb.count()):
+                if tb.tabText(i) == "File1":
+                    editor_tab_bar = tb
+                    break
+            if editor_tab_bar:
+                break
+        assert editor_tab_bar is not None, "Should find tab bar with File1 tab"
+
+        # Click first tab
+        editor_tab_bar.setCurrentIndex(0)
+        qt.process_events()
+        qt.process_events()
+
+        # App's current_item should reflect the selected item
+        assert app_instance.current_item.value is item1, "App's current_item should be item1"
+
+        # Click second tab
+        editor_tab_bar.setCurrentIndex(1)
+        qt.process_events()
+        qt.process_events()
+
+        # App's current_item should update
+        assert app_instance.current_item.value is item2, "App's current_item should be item2"
 
 
 # =============================================================================

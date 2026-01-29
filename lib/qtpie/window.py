@@ -627,6 +627,12 @@ def _wrap_init_for_window(cls: type[Window[Any]]) -> None:
 
             _apply_variable_bindings_direct(parent, self, bindings)
 
+            # Store logical parent for hierarchy lookups during binding setup
+            # (Qt parenting may not be set yet at this point, and App is not a QWidget)
+            state = getattr(self, "_qtpie", None)
+            if isinstance(state, QtPieState):
+                state._logical_parent = parent
+
         # Apply constructor variable kwargs
         if variable_kwargs:
             from .new_fields import apply_variable_kwargs
@@ -2533,10 +2539,9 @@ def _create_variable_list_dock_field(
     Each item in the list gets its own dock tab, with the widget's record bound
     to that list item.
     """
-    from observant import ObservableList
+    from observant import Observable, ObservableList, ObservableProxy
 
     from .dock_widget_repeater import DockWidgetRepeater
-    from .variable import _get_variable_observable
 
     widget_type = dock_info.get("list_dock_widget_type")
     if widget_type is None:
@@ -2566,7 +2571,9 @@ def _create_variable_list_dock_field(
     # Resolve selection bindings
     # For list dock repeaters, groupSelectedIndex and selectedIndex work the same way
     # (both bind to the tab bar index, which corresponds to list index)
-    from .variable import _get_variable
+    # Use _resolve_or_create_variable to find OR CREATE Variables for bare annotations
+    from .bindings.apply import _resolve_or_create_variable
+    from .variable import Variable
 
     selected_index_obs = None
     selected_item_obs = None
@@ -2574,12 +2581,30 @@ def _create_variable_list_dock_field(
     selected_dock_obs = None
     index_binding = dock_info.get("selected_index") or dock_info.get("dock_group_selected_index")
     if index_binding:
-        selected_index_obs = _get_variable_observable(window, index_binding)
+        resolved = _resolve_or_create_variable(window, index_binding)
+        if isinstance(resolved, Variable):
+            selected_index_obs = resolved.observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+            if isinstance(selected_index_obs, ObservableProxy):
+                selected_index_obs = selected_index_obs.reference_observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+        elif isinstance(resolved, Observable):
+            selected_index_obs = resolved  # pyright: ignore[reportUnknownVariableType]
     if dock_info.get("selected_item"):
-        selected_item_obs = _get_variable_observable(window, dock_info["selected_item"])
-        selected_item_var = _get_variable(window, dock_info["selected_item"])
+        resolved = _resolve_or_create_variable(window, dock_info["selected_item"])
+        if isinstance(resolved, Variable):
+            selected_item_var = resolved  # pyright: ignore[reportUnknownVariableType]
+            selected_item_obs = resolved.observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+            if isinstance(selected_item_obs, ObservableProxy):
+                selected_item_obs = selected_item_obs.reference_observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+        elif isinstance(resolved, Observable):
+            selected_item_obs = resolved  # pyright: ignore[reportUnknownVariableType]
     if dock_info.get("selected_dock"):
-        selected_dock_obs = _get_variable_observable(window, dock_info["selected_dock"])
+        resolved = _resolve_or_create_variable(window, dock_info["selected_dock"])
+        if isinstance(resolved, Variable):
+            selected_dock_obs = resolved.observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+            if isinstance(selected_dock_obs, ObservableProxy):
+                selected_dock_obs = selected_dock_obs.reference_observable  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
+        elif isinstance(resolved, Observable):
+            selected_dock_obs = resolved  # pyright: ignore[reportUnknownVariableType]
 
     # Resolve selection change callbacks
     selected_index_changed_cb = None
@@ -2611,10 +2636,10 @@ def _create_variable_list_dock_field(
         movable=movable_val if isinstance(movable_val, bool) else True,
         widget_args=dock_info.get("widget_args") or (),
         widget_kwargs=dock_info.get("widget_kwargs") or {},
-        selected_index_observable=selected_index_obs,
-        selected_item_observable=selected_item_obs,
-        selected_item_variable=selected_item_var,
-        selected_dock_observable=selected_dock_obs,
+        selected_index_observable=selected_index_obs,  # pyright: ignore[reportArgumentType]
+        selected_item_observable=selected_item_obs,  # pyright: ignore[reportArgumentType]
+        selected_item_variable=selected_item_var,  # pyright: ignore[reportUnknownArgumentType]
+        selected_dock_observable=selected_dock_obs,  # pyright: ignore[reportArgumentType]
         selected_index_changed_callback=selected_index_changed_cb,
         selected_item_changed_callback=selected_item_changed_cb,
         selected_dock_changed_callback=selected_dock_changed_cb,
