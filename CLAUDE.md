@@ -206,19 +206,21 @@ class HelloWorld(Widget):
     _button: QPushButton = new("Click Me")
 ```
 
-### Widget with Reactive State (Variable)
+### Widget with Reactive State (Var)
+
+> **Note:** `Var` is the preferred alias for `Variable`. Both work identically, but `Var` is shorter and recommended for cleaner code. All examples use `Var[T]`.
 
 ```python
 from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton
-from qtpie import Widget, Variable, new, widget
+from qtpie import Widget, Var, new, widget
 
 @widget
 class Counter(Widget):
-    # Variable[T] creates reactive state
-    _count: Variable[int] = new(0)
+    # Var[T] creates reactive state
+    _count: Var[int] = new(0)
 
-    # Variable[T, W] creates reactive state + auto-bound widget
-    _name: Variable[str, QLineEdit] = new("Enter name")
+    # Var[T, W] creates reactive state + auto-bound widget
+    _name: Var[str, QLineEdit] = new("Enter name")
 
     # Regular widgets
     _label: QLabel = new("Count: 0")
@@ -269,14 +271,14 @@ class PersonEditor2(Widget[Person]):
 
 ```python
 from PySide6.QtWidgets import QLabel
-from qtpie import Widget, Variable, new, widget
+from qtpie import Widget, Var, new, widget
 
 @widget
 class TodoList(Widget):
     # Source data
-    _items: Variable[list[str]] = new(["Buy milk", "Walk dog"])
+    _items: Var[list[str]] = new(["Buy milk", "Walk dog"])
 
-    # list[QWidget] bound to a Variable creates a WidgetRepeater
+    # list[QWidget] bound to a Var creates a WidgetRepeater
     # One QLabel per item, auto-synced when list changes
     _labels: list[QLabel] = new(bind="_items")
 
@@ -289,7 +291,7 @@ class TodoList(Widget):
 ```python
 @widget
 class NumberList(Widget):
-    _numbers: Variable[list[int]] = new([1, 2, 3])
+    _numbers: Var[list[int]] = new([1, 2, 3])
 
     # format= customizes how items are displayed
     _labels: list[QLabel] = new(
@@ -303,7 +305,7 @@ class NumberList(Widget):
 ```python
 @widget
 class ScoreBoard(Widget):
-    _scores: Variable[dict[str, int]] = new({"Alice": 100, "Bob": 85})
+    _scores: Var[dict[str, int]] = new({"Alice": 100, "Bob": 85})
 
     # Dict binding with key/value placeholders
     _labels: list[QLabel] = new(
@@ -312,14 +314,14 @@ class ScoreBoard(Widget):
     )
 ```
 
-### Variable with Widget Type (Inline)
+### Var with Widget Type (Inline)
 
 ```python
 @widget
 class InlineWidgets(Widget):
-    # Variable[T, W] - creates T observable + W widget, auto-bound
-    _username: Variable[str, QLineEdit] = new("")(placeholderText="Username")
-    _password: Variable[str, QLineEdit] = new("")(placeholderText="Password", echoMode=QLineEdit.EchoMode.Password)
+    # Var[T, W] - creates T observable + W widget, auto-bound
+    _username: Var[str, QLineEdit] = new("")(placeholderText="Username")
+    _password: Var[str, QLineEdit] = new("")(placeholderText="Password", echoMode=QLineEdit.EchoMode.Password)
 
     # Access the widget via .widget property
     def focus_username(self):
@@ -371,11 +373,11 @@ _field: QLineEdit = new(
     placeholderText="...",  # Qt: passed to constructor
 )
 
-# For Variable[T, W], chain calls:
-_name: Variable[str, QLineEdit] = new("default")(placeholderText="Name...")
+# For Var[T, W], chain calls:
+_name: Var[str, QLineEdit] = new("default")(placeholderText="Name...")
 #                                     ^          ^
 #                                     |          Widget kwargs
-#                                     Variable default value
+#                                     Var default value
 ```
 
 ### Layout Types
@@ -424,8 +426,8 @@ The `bind=` parameter supports complex Python expressions in format strings:
 ```python
 @widget
 class Example(Widget):
-    _name: Variable[str] = new("hello")
-    _count: Variable[int] = new(42)
+    _name: Var[str] = new("hello")
+    _count: Var[int] = new(42)
 
     # Function calls
     _len_label: QLabel = new(bind="Length: {len(_name)}")
@@ -434,16 +436,16 @@ class Example(Widget):
     _upper_label: QLabel = new(bind="Upper: {_name.upper()}")
 
     # Math expressions
-    _x: Variable[int] = new(10)
-    _y: Variable[int] = new(20)
+    _x: Var[int] = new(10)
+    _y: Var[int] = new(20)
     _math_label: QLabel = new(bind="Sum: {_x + _y}, Product: {_x * _y}")
 
     # Complex math with parentheses
-    _z: Variable[int] = new(5)
+    _z: Var[int] = new(5)
     _complex: QLabel = new(bind="Result: {(_x + _y) * _z}")
 
     # Format specs (Python format string syntax)
-    _price: Variable[float] = new(19.99)
+    _price: Var[float] = new(19.99)
     _price_label: QLabel = new(bind="Price: ${_price:.2f}")
 
     # Instance methods
@@ -463,34 +465,34 @@ class Example(Widget):
 
 | Placeholder | Description                                                      |
 | ----------- | ---------------------------------------------------------------- |
-| `{#self}`   | Variable's value (in `Variable[T,W]` context) or Widget instance |
-| `{#var}`    | Explicit reference to Variable's value                           |
+| `{#self}`   | Var's value (in `Var[T,W]` context) or Widget instance |
+| `{#var}`    | Explicit reference to Var's value                           |
 | `{#widget}` | Explicit reference to parent Widget instance                     |
 | `{#index}`  | Item index (in list/dict repeaters)                              |
 | `{#key}`    | Dict key (in dict repeaters)                                     |
 | `{#value}`  | Dict value (in dict repeaters)                                   |
 
-### Variable[T, W] with bind=
+### Var[T, W] with bind=
 
 ```python
 @widget
 class Example(Widget):
-    # #self refers to the Variable's value ("Hello"), not the widget
-    _name: Variable[str, QLabel] = new("Hello")(bind="Value: {#self}")
+    # #self refers to the Var's value ("Hello"), not the widget
+    _name: Var[str, QLabel] = new("Hello")(bind="Value: {#self}")
 
     # Use expressions on #self
-    _upper: Variable[str, QLabel] = new("hello")(bind="Upper: {#self.upper()}")
-    _len: Variable[str, QLabel] = new("hello")(bind="Length: {len(#self)}")
+    _upper: Var[str, QLabel] = new("hello")(bind="Upper: {#self.upper()}")
+    _len: Var[str, QLabel] = new("hello")(bind="Length: {len(#self)}")
 
-    # #var is explicit alias for Variable's value
-    _count: Variable[int, QLabel] = new(10)(bind="Double: {#var * 2}")
+    # #var is explicit alias for Var's value
+    _count: Var[int, QLabel] = new(10)(bind="Double: {#var * 2}")
 
     # #widget refers to parent widget (for accessing widget attributes)
     title: str = "MyWidget"
-    _with_title: Variable[str, QLabel] = new("x")(bind="Title: {#widget.title}")
+    _with_title: Var[str, QLabel] = new("x")(bind="Title: {#widget.title}")
 
     # Combine them all
-    _combo: Variable[int, QLabel] = new(5)(
+    _combo: Var[int, QLabel] = new(5)(
         bind="{#widget.title}: value={#self}, doubled={#var * 2}"
     )
 ```
@@ -500,13 +502,13 @@ class Example(Widget):
 ```python
 @widget
 class ListExample(Widget):
-    _numbers: Variable[list[int], QLabel] = new([1, 2, 3])(
+    _numbers: Var[list[int], QLabel] = new([1, 2, 3])(
         bind="Index {#index}: value is {#self}"
         # Output: "Index 0: value is 1", "Index 1: value is 2", etc.
     )
 
     # With complex objects
-    _dogs: Variable[list[Dog], QLabel] = new([Dog("Fido", 3)])(
+    _dogs: Var[list[Dog], QLabel] = new([Dog("Fido", 3)])(
         bind="{name} is {age} years old"  # Direct property access
     )
 ```
@@ -516,25 +518,25 @@ class ListExample(Widget):
 ```python
 @widget
 class DictExample(Widget):
-    _scores: Variable[dict[str, int], QLabel] = new({"Alice": 100})(
+    _scores: Var[dict[str, int], QLabel] = new({"Alice": 100})(
         bind="{#key} scored {#value} points"
     )
 
     # #self and #value are aliases for dict values
-    _dogs: Variable[dict[str, Dog], QLabel] = new({"Fido": Dog("Fido", 3)})(
+    _dogs: Var[dict[str, Dog], QLabel] = new({"Fido": Dog("Fido", 3)})(
         bind="{#key}: {#self.name} is {age} years old"
     )
 ```
 
 ### Reactivity
 
-All format bindings are reactive - when any referenced Variable changes, the expression is re-evaluated and the widget updates automatically:
+All format bindings are reactive - when any referenced Var changes, the expression is re-evaluated and the widget updates automatically:
 
 ```python
 @widget
 class ReactiveExample(Widget):
-    _x: Variable[int] = new(10)
-    _y: Variable[int] = new(20)
+    _x: Var[int] = new(10)
+    _y: Var[int] = new(20)
     _sum: QLabel = new(bind="Sum: {_x + _y}")  # Shows "Sum: 30"
 
     def update_x(self):
@@ -605,8 +607,8 @@ Control widget visibility and enabled state reactively:
 ```python
 @widget
 class ConditionalUI(Widget):
-    _show_advanced: Variable[bool] = new(False)
-    _has_input: Variable[bool] = new(False)
+    _show_advanced: Var[bool] = new(False)
+    _has_input: Var[bool] = new(False)
 
     # Simple variable binding
     advanced_panel: QWidget = new(visible="_show_advanced")
@@ -614,8 +616,8 @@ class ConditionalUI(Widget):
     # Expression binding
     submit_btn: QPushButton = new("Submit", enabled="{len(_name) > 0}")
 
-    # With Variable
-    _name: Variable[str] = new("")
+    # With Var
+    _name: Var[str] = new("")
     name_error: QLabel = new("Name required!", visible="{len(_name) == 0}")
 ```
 
@@ -628,8 +630,8 @@ Track whether fields have changed from their initial values:
 ```python
 @widget
 class DirtyExample(Widget):
-    _name: Variable[str] = new("")
-    _age: Variable[int] = new(0)
+    _name: Var[str] = new("")
+    _age: Var[int] = new(0)
 
     def check_dirty(self):
         # Check if any field changed
@@ -648,20 +650,20 @@ class DirtyExample(Widget):
 
 ## Reactive Decorator Properties
 
-Decorator kwargs can reference Variables for reactive properties:
+Decorator kwargs can reference Vars for reactive properties:
 
 ```python
 @widget(windowTitle="{_title}")  # Reactive!
 class DynamicTitle(Widget):
-    _title: Variable[str] = new("Initial Title")
+    _title: Var[str] = new("Initial Title")
 
     def update_title(self):
         self._title.value = "New Title"  # Window title updates automatically
 
 @window(title="{_app_name} - {_filename}")
 class EditorWindow(Window):
-    _app_name: Variable[str] = new("MyEditor")
-    _filename: Variable[str] = new("untitled.txt")
+    _app_name: Var[str] = new("MyEditor")
+    _filename: Var[str] = new("untitled.txt")
 ```
 
 ---
@@ -820,7 +822,7 @@ uv run qtpie tr list translations.yml
 ### Descriptor Pattern
 
 - `_RecordDescriptor` handles `self.record` access for `Widget[T]`/`Window[T]`
-- `_VariableDescriptor` handles `Variable[T]` field access
+- `_VarDescriptor` handles `Var[T]` field access
 - Both use lazy initialization
 
 ### The `new()` Factory
