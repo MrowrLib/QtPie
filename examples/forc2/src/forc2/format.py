@@ -252,13 +252,13 @@ def save_collection(collection: Collection, path: Path) -> None:
         if isinstance(item, Collection):
             # Save sub-collection in subdirectory
             # Use existing filename if set, else slugify the name
-            folder_name = item.filename.value or _slugify(item.name.value)
+            folder_name = item.filename.value or slugify(item.name.value)
             sub_path = path / folder_name
             save_collection(item, sub_path)
         elif isinstance(item, Request):
             # Save request as YAML file
             # Use existing filename if set, else slugify the name
-            file_stem = item.filename.value or _slugify(item.name.value)
+            file_stem = item.filename.value or slugify(item.name.value)
             req_path = path / f"{file_stem}.yaml"
             save_request(item, req_path)
 
@@ -313,7 +313,7 @@ def save_request(request: Request, path: Path) -> None:
     request.reset_dirty()
 
 
-def _slugify(name: str) -> str:
+def slugify(name: str) -> str:
     """Convert a name to a filesystem-safe slug."""
     import re
     import unicodedata

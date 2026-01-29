@@ -1,42 +1,45 @@
 // Dock widget styles
 
 QDockWidget {
-    background-color: $bg-primary;
-    color: $text-primary;
-    titlebar-close-icon: url(:/close-dark.svg);
-    titlebar-normal-icon: url(:/float-dark.svg);
+  background-color: $bg-primary;
+  color: $text-primary;
+  titlebar-close-icon: url(:/close-dark.svg);
+  titlebar-normal-icon: url(:/float-dark.svg);
 }
 
 QDockWidget::title {
-    background-color: $bg-secondary;
-    color: $text-primary;
-    padding: 0.46em 0.62em;
-    border-bottom: $border-width solid $border-default;
-    text-align: left;
+  background-color: $bg-secondary;
+  color: $text-primary;
+  padding: 0.46em 0.62em;
+  border-bottom: $border-width solid $border-default;
+  text-align: left;
+}
+
+QDockWidget[class~="invalid"]::title {
+  color: red;
 }
 
 QDockWidget::close-button,
 QDockWidget::float-button {
-    background: transparent;
-    border: none;
-    padding: 0;
-    border-radius: $radius-sm;
-    icon-size: 24px;
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
-    max-width: 24px;
-    max-height: 24px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: $radius-sm;
+  icon-size: 24px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  max-width: 24px;
+  max-height: 24px;
 }
 
 QDockWidget::close-button:hover,
 QDockWidget::float-button:hover {
-    background-color: $bg-hover;
+  background-color: $bg-hover;
 }
 
 QDockWidget::close-button:pressed,
 QDockWidget::float-button:pressed {
-    background-color: $bg-selected;
+  background-color: $bg-selected;
 }
-

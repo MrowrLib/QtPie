@@ -586,6 +586,213 @@ class TestRequestDelete:
         assert_that(list(coll.items.value)).is_empty()
 
 
+class TestRequestNameValidation:
+    """Tests for request name conflict validation."""
+
+    def test_name_invalid_if_conflicts_with_sibling(self, tmp_path: Path) -> None:
+        """Request name is invalid if slugified name conflicts with sibling."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "get-users.yaml").write_text("name: Get Users\nmethod: GET\nurl: /users\n")
+        (coll_dir / "other.yaml").write_text("name: Other\nmethod: GET\nurl: /other\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        other_request = ws.collection.value.items.value[1]
+        assert isinstance(other_request, Request)
+        assert_that(other_request.name.value).is_equal_to("Other")
+
+        # Try to rename "Other" to "Get Users" (would conflict with get-users.yaml)
+        other_request.name.value = "Get Users"
+
+        # Should be invalid
+        assert_that(other_request.is_valid.get()).is_false()
+
+    def test_name_valid_if_no_conflict(self, tmp_path: Path) -> None:
+        """Request name is valid if no conflict exists."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "test.yaml").write_text("name: Test\nmethod: GET\nurl: /test\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        request = ws.collection.value.items.value[0]
+        assert isinstance(request, Request)
+
+        # Rename to something unique
+        request.name.value = "New Unique Name"
+
+        # Should be valid
+        assert_that(request.is_valid.get()).is_true()
+
+    def test_save_blocked_when_name_invalid(self, tmp_path: Path) -> None:
+        """request.save() does nothing when name is invalid due to conflict."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "get-users.yaml").write_text("name: Get Users\nmethod: GET\nurl: /users\n")
+        (coll_dir / "other.yaml").write_text("name: Other\nmethod: GET\nurl: /other\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        other_request = ws.collection.value.items.value[1]
+        assert isinstance(other_request, Request)
+
+        # Try to rename to conflicting name
+        other_request.name.value = "Get Users"
+
+        # Try to save
+        other_request.save()
+
+        # Old file should still exist, new file should not
+        assert_that((coll_dir / "other.yaml").exists()).is_true()
+        assert_that((coll_dir / "get-users.yaml").read_text()).contains("Get Users")  # Original
+
+
+class TestCollectionNameValidation:
+    """Tests for collection name conflict validation."""
+
+    def test_name_invalid_if_conflicts_with_sibling(self, tmp_path: Path) -> None:
+        """Collection name is invalid if slugified name conflicts with sibling."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+
+        sub1 = coll_dir / "users"
+        sub1.mkdir()
+        (sub1 / "_collection.yaml").write_text("name: Users\n")
+
+        sub2 = coll_dir / "other"
+        sub2.mkdir()
+        (sub2 / "_collection.yaml").write_text("name: Other\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        other_coll = ws.collection.value.items.value[0]
+        assert isinstance(other_coll, Collection)
+        assert_that(other_coll.name.value).is_equal_to("Other")
+
+        # Try to rename "Other" to "Users" (would conflict)
+        other_coll.name.value = "Users"
+
+        # Should be invalid
+        assert_that(other_coll.is_valid.get()).is_false()
+
+
+class TestRequestRename:
+    """Tests for request renaming on save."""
+
+    def test_save_renames_file_when_name_changes(self, tmp_path: Path) -> None:
+        """request.save() renames file when name changes."""
+        # Create workspace structure
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "old-name.yaml").write_text("name: Old Name\nmethod: GET\nurl: /test\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        request = ws.collection.value.items.value[0]
+        assert isinstance(request, Request)
+        assert_that(request.filename.value).is_equal_to("old-name")
+
+        # Change name
+        request.name.value = "New Name"
+
+        # Save should rename the file
+        request.save()
+
+        # Old file should be gone, new file should exist
+        assert_that((coll_dir / "old-name.yaml").exists()).is_false()
+        assert_that((coll_dir / "new-name.yaml").exists()).is_true()
+
+        # filename should be updated
+        assert_that(request.filename.value).is_equal_to("new-name")
+
+    def test_save_updates_filename_to_match_name(self, tmp_path: Path) -> None:
+        """request.save() updates filename to slugified name."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+        (coll_dir / "test.yaml").write_text("name: Test\nmethod: GET\nurl: /test\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        request = ws.collection.value.items.value[0]
+        assert isinstance(request, Request)
+
+        # Change to name with spaces and caps
+        request.name.value = "Get All Users"
+        request.save()
+
+        # Should use slugified name
+        assert_that((coll_dir / "get-all-users.yaml").exists()).is_true()
+        assert_that(request.filename.value).is_equal_to("get-all-users")
+
+
+class TestCollectionRename:
+    """Tests for collection renaming on save."""
+
+    def test_save_renames_folder_when_name_changes(self, tmp_path: Path) -> None:
+        """collection.save() renames folder when name changes."""
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        coll_dir = workspace_dir / "collections"
+        coll_dir.mkdir()
+        (coll_dir / "_collection.yaml").write_text("name: API\n")
+
+        sub_dir = coll_dir / "old-folder"
+        sub_dir.mkdir()
+        (sub_dir / "_collection.yaml").write_text("name: Old Folder\n")
+
+        ws = Workspace.load(workspace_dir)
+
+        assert ws is not None
+        assert ws.collection.value is not None
+        sub_coll = ws.collection.value.items.value[0]
+        assert isinstance(sub_coll, Collection)
+        assert_that(sub_coll.filename.value).is_equal_to("old-folder")
+
+        # Change name
+        sub_coll.name.value = "New Folder"
+
+        # Save should rename the folder
+        sub_coll.save()
+
+        # Old folder should be gone, new folder should exist
+        assert_that((coll_dir / "old-folder").exists()).is_false()
+        assert_that((coll_dir / "new-folder").exists()).is_true()
+
+        # filename should be updated
+        assert_that(sub_coll.filename.value).is_equal_to("new-folder")
+
+
 class TestRequestSaveDirtyReset:
     """Tests for dirty flag reset after Request.save()."""
 

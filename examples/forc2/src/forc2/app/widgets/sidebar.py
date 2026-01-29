@@ -1,3 +1,5 @@
+from typing import override
+
 from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
 
 from forc2.app.helpers import confirm_delete, filename_safe_validator
@@ -5,6 +7,7 @@ from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.request import Request
 from forc2.domain.workspace import Workspace
 from qtpie import Dialog, DialogButton, Var, Widget, dialog, new, widget
+from qtpie.styles.classes import add_class, remove_class
 
 
 @dialog(layout="form", size=(400, 100), title="{kind}")
@@ -101,15 +104,29 @@ class CollectionsTreeWidgetRow(Widget[TreeItem]):
         self._name_edit.setFocus()
 
     def _stop_editing(self) -> bool:
+        if not self.record_value.name.is_valid:
+            print("Invalid name, reverting to original:", self._original_name())
+            self.record.name = self._original_name()
         self._name_edit.clearFocus()
         self._is_editing = False
-        self.record.save()
+        if self.record.name != self._original_name():
+            self.record.save()
         return True
 
     def _cancel_edit(self) -> None:
         self._is_editing = False
         self._name_edit.clearFocus()
         self.record.name = self._original_name()
+
+    @override
+    def on_valid_changed(self, is_valid: bool) -> None:
+        # return super().on_valid_changed(is_valid)
+        if not self.record_value.name.is_valid:
+            add_class(self._name_edit, "invalid")
+            print("Name is invalid:", self.record_value.name.value)
+        else:
+            remove_class(self._name_edit, "invalid")
+            print("Name is valid:", self.record_value.name.value)
 
 
 # (left, top, right, bottom)

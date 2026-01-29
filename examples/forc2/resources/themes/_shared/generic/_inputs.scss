@@ -11,6 +11,11 @@ QLineEdit {
   selection-color: white;
 }
 
+QLineEdit[class~="invalid"] {
+  color: red;
+  text-decoration: underline;
+}
+
 QLineEdit:hover {
   border-color: $border-strong;
 }

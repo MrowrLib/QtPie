@@ -58,7 +58,7 @@ class MainWindow(Window[Workspace | None]):
     editor_docked_tabs: Var[list[Request], Dock[RequestWidget]] = new(
         group="requests",
         dock="right",
-        title="{name} {'*' if #widget.is_dirty else ''}",
+        title="{name}{' *' if #widget.is_dirty else ''}{' x' if not #widget.is_valid else ''}",
         groupSelectedIndex="selected_request_index",
         selectedItem="selected_request",
         visible="{workspace is not None}",

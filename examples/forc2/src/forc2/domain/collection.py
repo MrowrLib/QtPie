@@ -17,9 +17,29 @@ type TreeItem = Request | Collection
 @state
 class Collection(State):
     ### Variables ###
-    name: Var[str] = new("")
+    name: Var[str] = new("", validate="_validate_name_unique")
     items: Var[list[TreeItem]] = new([])
     filename: Var[str | None] = new(None)
+
+    ### Validators ###
+    def _validate_name_unique(self, value: str) -> str | None:
+        """Validate that name doesn't conflict with siblings."""
+        from ..format import slugify
+
+        parent = self.state_parent
+        if not isinstance(parent, Collection):
+            return None  # No parent collection, no conflict possible
+
+        new_slug = slugify(value)
+
+        for item in parent.items.value:
+            if item is self:
+                continue  # Skip self
+            item_filename = item.filename.value
+            if item_filename == new_slug:
+                return f"Name conflicts with existing item '{item.name.value}'"
+
+        return None
 
     ### Methods ###
     def _get_full_path(self) -> Path | None:
@@ -43,13 +63,55 @@ class Collection(State):
         """Save this collection to disk.
 
         If path is not provided, walks the state_parent chain to determine it.
+        Automatically renames the folder if name has changed (except for root collection).
+        Does nothing if validation fails (e.g., name conflict).
         """
-        from ..format import save_collection
+        import shutil
 
-        if path is None:
-            path = self._get_full_path()
-        if path:
+        from ..format import save_collection, slugify
+        from .workspace import Workspace
+
+        # Don't save if validation fails
+        if not self.is_valid.get():
+            return
+
+        if path is not None:
+            # Explicit path provided - just save there
             save_collection(self, path)
+            return
+
+        # Root collection (parent is Workspace) keeps its folder name "collections"
+        is_root_collection = isinstance(self.state_parent, Workspace)
+
+        if is_root_collection:
+            # Don't rename root collection folder
+            path = self._get_full_path()
+            if path:
+                save_collection(self, path)
+            return
+
+        # Get old path (using current filename)
+        old_path = self._get_full_path()
+
+        # Compute new filename from name
+        new_filename = slugify(self.name.value)
+
+        # Update filename to new value
+        self.filename.value = new_filename
+
+        # Get new path (now using updated filename)
+        new_path = self._get_full_path()
+
+        if new_path is None:
+            return
+
+        # If old folder exists at different path, move it
+        if old_path and old_path != new_path and old_path.exists():
+            # Move contents to new location
+            shutil.move(str(old_path), str(new_path))
+            # save_collection will update the _collection.yaml metadata
+
+        save_collection(self, new_path)
 
     def add_request(self, name: str = "") -> Request:
         """Create and add a new Request to this collection."""

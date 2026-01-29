@@ -39,7 +39,7 @@ class RequestKeyValue:
 @state
 class Request(State):
     ### Variables ###
-    name: Var[str] = new("")
+    name: Var[str] = new("", validate="_validate_name_unique")
     method: Var[HttpMethod] = new(HttpMethod.GET)
     url: Var[str] = new("")
     headers: Var[list[RequestKeyValue]] = new([])
@@ -58,6 +58,27 @@ class Request(State):
         parent = self.state_parent
         if isinstance(parent, Collection):
             return parent
+        return None
+
+    ### Validators ###
+    def _validate_name_unique(self, value: str) -> str | None:
+        """Validate that name doesn't conflict with siblings."""
+        from ..format import slugify
+        from .collection import Collection
+
+        parent = self.state_parent
+        if not isinstance(parent, Collection):
+            return None  # No parent, no conflict possible
+
+        new_slug = slugify(value)
+
+        for item in parent.items.value:
+            if item is self:
+                continue  # Skip self
+            item_filename = item.filename.value
+            if item_filename == new_slug:
+                return f"Name conflicts with existing item '{item.name.value}'"
+
         return None
 
     ### Methods ###
@@ -85,13 +106,40 @@ class Request(State):
         """Save this request to disk.
 
         If path is not provided, walks the state_parent chain to determine it.
+        Automatically renames the file if name has changed.
+        Does nothing if validation fails (e.g., name conflict).
         """
-        from ..format import save_request
+        from ..format import save_request, slugify
 
-        if path is None:
-            path = self._get_full_path()
-        if path:
+        # Don't save if validation fails
+        if not self.is_valid.get():
+            return
+
+        if path is not None:
+            # Explicit path provided - just save there
             save_request(self, path)
+            return
+
+        # Get old path (using current filename)
+        old_path = self._get_full_path()
+
+        # Compute new filename from name
+        new_filename = slugify(self.name.value)
+
+        # Update filename to new value
+        self.filename.value = new_filename
+
+        # Get new path (now using updated filename)
+        new_path = self._get_full_path()
+
+        if new_path is None:
+            return
+
+        # If old file exists at different path, delete it
+        if old_path and old_path != new_path and old_path.exists():
+            old_path.unlink()
+
+        save_request(self, new_path)
 
     def delete(self) -> None:
         """Delete this request from disk and remove from parent collection."""
