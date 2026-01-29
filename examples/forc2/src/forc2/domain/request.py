@@ -92,3 +92,20 @@ class Request(State):
             path = self._get_full_path()
         if path:
             save_request(self, path)
+
+    def delete(self) -> None:
+        """Delete this request from disk and remove from parent collection."""
+        from .collection import Collection
+
+        # Delete from disk if path exists
+        path = self._get_full_path()
+        if path and path.exists():
+            path.unlink()
+
+        # Remove from parent collection
+        parent = self.state_parent
+        if isinstance(parent, Collection):
+            items = parent.items()
+            if self in items:
+                parent.items.remove(self)
+            self.state_parent = None

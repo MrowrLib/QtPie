@@ -99,16 +99,38 @@ class Workspace(State):
                 env_path = environments_path / f"{filename}.yaml"
                 save_environment(env, env_path)
 
+    def refresh(self) -> bool:
+        """Reload the workspace from disk, updating all Variables in-place.
+
+        Returns True if refresh succeeded, False if path doesn't exist.
+        """
+        if self.path() is None:
+            return False
+
+        folder = self.path()
+        assert folder is not None
+
+        if not folder.exists():
+            return False
+
+        _load_workspace_into(self, folder)
+        return True
+
 
 def load_workspace(folder: Path) -> Workspace | None:
     """Load a Workspace from a folder path. Returns None if folder doesn't exist."""
-    from ..format import load_collection, load_environment, load_workspace_config
-
     if not folder.exists():
         return None
 
     workspace = Workspace()
     workspace.path = folder
+    _load_workspace_into(workspace, folder)
+    return workspace
+
+
+def _load_workspace_into(workspace: Workspace, folder: Path) -> None:
+    """Load workspace data from folder into an existing Workspace instance."""
+    from ..format import load_collection, load_environment, load_workspace_config
 
     # Load collections from 'collections/' subfolder
     collections_path = folder / "collections"
@@ -116,6 +138,8 @@ def load_workspace(folder: Path) -> Workspace | None:
         collection = load_collection(collections_path)
         collection.state_parent = workspace
         workspace.collection = collection
+    else:
+        workspace.collection = None
 
     # Load environments from 'environments/' subfolder
     environments_path = folder / "environments"
@@ -127,8 +151,8 @@ def load_workspace(folder: Path) -> Workspace | None:
                 env.state_parent = workspace
                 envs.append(env)
         workspace.environments = envs
+    else:
+        workspace.environments = []
 
     # Load workspace config from forc.yaml
     load_workspace_config(workspace, folder)
-
-    return workspace

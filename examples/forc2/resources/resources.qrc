@@ -29,6 +29,10 @@
     <file alias="float-dark.svg">images/icons/float-dark.svg</file>
     <file alias="float-light.svg">images/icons/float-light.svg</file>
 
+    <!-- Refresh -->
+    <file alias="refresh-dark.svg">images/icons/refresh-dark.svg</file>
+    <file alias="refresh-light.svg">images/icons/refresh-light.svg</file>
+
     <!-- Splitter grip -->
     <file alias="splitter-grip-dark.svg">images/icons/splitter-grip-dark.svg</file>
     <file alias="splitter-grip-light.svg">images/icons/splitter-grip-light.svg</file>

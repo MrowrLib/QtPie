@@ -2244,6 +2244,38 @@ def _process_event_annotations_for_widget(cls: type[Widget[Any]]) -> None:
         setattr(cls, name, Signal(*args))
 
 
+def _extract_observable_list_from_source(source: Any) -> ObservableList[Any] | None:
+    """Extract ObservableList from a binding source.
+
+    Handles Variable, Observable, ObservableProxy wrapping ObservableList.
+
+    Args:
+        source: The binding source (Variable, Observable, etc.)
+
+    Returns:
+        The underlying ObservableList, or None if not extractable.
+    """
+    from typing import cast
+
+    from .variable import Variable as VarType
+
+    if isinstance(source, VarType):
+        wrapper = cast(Any, source.observable)  # pyright: ignore[reportUnknownMemberType]
+        if isinstance(wrapper, ObservableList):
+            return cast(ObservableList[Any], wrapper)
+        elif isinstance(wrapper, (Observable, ObservableProxy)):
+            val = cast(Any, wrapper.get() if isinstance(wrapper, Observable) else wrapper.unwrap())
+            if isinstance(val, ObservableList):
+                return cast(ObservableList[Any], val)
+    elif isinstance(source, ObservableList):
+        return cast(ObservableList[Any], source)
+    elif isinstance(source, Observable):
+        val = cast(Any, source.get())
+        if isinstance(val, ObservableList):
+            return cast(ObservableList[Any], val)
+    return None
+
+
 def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) -> None:
     """Apply bindings when record is set after initial widget creation.
 
@@ -2288,14 +2320,23 @@ def _apply_model_bindings_for_record(widget: Widget[Any], config: _QtPieConfig) 
 
         # Handle model widgets (QTableView, QListView, QTreeView, QComboBox)
         if isinstance(widget_instance, (QComboBox, QListView, QTableView, QTreeView)):
-            # Check if model is already set
-            existing_model = widget_instance.model() if hasattr(widget_instance, "model") else None
-            if existing_model is not None:
-                continue
-
             # Try to resolve the binding source
             source = resolve_binding_source(widget, field.bind)
             if source is None:
+                continue
+
+            # Check if model is already set
+            existing_model = widget_instance.model() if hasattr(widget_instance, "model") else None
+            if existing_model is not None:
+                # Model exists - try to replace source instead of recreating
+                if isinstance(widget_instance, QTreeView):
+                    from .models import ReactiveTreeModel
+
+                    if isinstance(existing_model, ReactiveTreeModel):
+                        # Extract new ObservableList from source
+                        new_obs_list = _extract_observable_list_from_source(source)
+                        if new_obs_list is not None:
+                            existing_model.replace_source(new_obs_list)
                 continue
 
             # Apply the model binding

@@ -68,3 +68,20 @@ class Collection(State):
         collection.state_parent = self
         self.items.append(collection)
         return collection
+
+    def delete(self) -> None:
+        """Delete this collection from disk and remove from parent collection."""
+        import shutil
+
+        # Delete from disk if path exists
+        path = self._get_full_path()
+        if path and path.exists():
+            shutil.rmtree(path)
+
+        # Remove from parent collection
+        parent = self.state_parent
+        if isinstance(parent, Collection):
+            items = parent.items()
+            if self in items:
+                parent.items.remove(self)
+            self.state_parent = None

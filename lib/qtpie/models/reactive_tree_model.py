@@ -475,6 +475,36 @@ class ReactiveTreeModel[T](QAbstractItemModel):
         self.beginResetModel()
         self.endResetModel()
 
+    def replace_source(self, new_source: ObservableList[T]) -> None:
+        """Replace the source ObservableList and re-sync the model.
+
+        Used when a binding path changes (e.g., workspace.collection changes after refresh).
+        This updates the internal source reference and rebuilds the model.
+
+        Args:
+            new_source: The new source ObservableList.
+        """
+        # Clear cached data
+        self._item_proxies.clear()
+        self._subscribed_children.clear()
+
+        # Update source reference
+        self._obs_list = new_source
+
+        # Reset the model FIRST so view queries new data
+        self.beginResetModel()
+        self.endResetModel()
+
+        # THEN subscribe to new source for future changes
+        new_source.on_insert(self._on_root_insert)
+        new_source.on_remove(self._on_root_remove)
+        new_source.on_replace(self._on_root_replace)
+        new_source.on_clear(self._on_root_clear)
+
+        # Subscribe to existing items' children lists
+        for item in new_source:
+            self._subscribe_to_children(item)
+
     def notify_item_changed(self, item: T) -> None:
         """Notify that an item's data has changed (e.g., a property was modified).
 

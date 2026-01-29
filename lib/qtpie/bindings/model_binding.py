@@ -121,6 +121,74 @@ def _apply_table_header_config(
         header.setStretchLastSection(stretch_last_column)
 
 
+def _setup_tree_record_watcher(
+    host: QWidget,
+    model: ReactiveTreeModel[Any],
+    bind_path: str,
+    children_attr: str,
+) -> None:
+    """Watch for host widget's record changes and update tree model source.
+
+    When the host Widget[T]'s record is replaced (e.g., after workspace.refresh()),
+    this detects the change and calls replace_source on the tree model so it
+    watches the new record's data.
+
+    Args:
+        host: The host Widget[T] containing the tree.
+        model: The ReactiveTreeModel to update.
+        bind_path: The binding path (e.g., "items") to resolve on the record.
+        children_attr: Attribute name for accessing children.
+    """
+    from qtpie.variable import RecordVariable
+
+    # Get host's record variable
+    record_var = getattr(host, "record", None)
+    if record_var is None or not isinstance(record_var, RecordVariable):
+        return
+
+    # Track the last record object id to detect actual replacements
+    last_record_id: list[int] = [id(record_var.value) if record_var.value is not None else 0]  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
+
+    def on_record_change() -> None:
+        """Called when host's record value changes."""
+        current_record = cast(Any, record_var.value)  # pyright: ignore[reportUnknownMemberType]
+        current_id = id(current_record) if current_record is not None else 0
+
+        # Only update if the record object itself changed (not just a property)
+        if current_id == last_record_id[0]:
+            return
+        last_record_id[0] = current_id
+
+        if current_record is None:
+            return
+
+        # Re-resolve the binding path on the new record
+        # bind_path is something like "items"
+        attr = cast(Any, getattr(current_record, bind_path, None))
+        if attr is None:
+            return
+
+        # Extract ObservableList from the attribute
+        new_obs_list: ObservableList[Any] | None = None
+        if hasattr(attr, "observable"):
+            # It's a Variable - get the underlying Observable
+            wrapper: Any = attr.observable
+            if isinstance(wrapper, ObservableList):
+                new_obs_list = cast(ObservableList[Any], wrapper)
+            elif hasattr(wrapper, "get"):
+                val: Any = wrapper.get()
+                if isinstance(val, ObservableList):
+                    new_obs_list = cast(ObservableList[Any], val)
+        elif isinstance(attr, ObservableList):
+            new_obs_list = cast(ObservableList[Any], attr)
+
+        if new_obs_list is not None:
+            model.replace_source(new_obs_list)
+
+    # Subscribe to record changes
+    record_var.observable.on_change(on_record_change)  # pyright: ignore[reportUnknownMemberType]
+
+
 def _setup_tree_proxy_watching(
     model: ReactiveTreeModel[Any],
     obs_list: ObservableList[Any],
@@ -679,6 +747,10 @@ def apply_model_binding(
             editable=field_info.tree_editable,
             on_edited=on_edited_callback,
         )
+
+        # Watch for host widget's record changes and update tree model source
+        # This handles cases where the record itself is replaced (e.g., workspace.refresh())
+        _setup_tree_record_watcher(host, model, bind_path, children_attr)
 
         # Set edit triggers if editable is enabled
         if field_info.tree_editable is not None and field_info.tree_editable is not False:

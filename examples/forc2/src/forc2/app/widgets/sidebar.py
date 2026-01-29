@@ -1,5 +1,6 @@
 from qtpy.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QPushButton, QToolButton, QTreeView
 
+from forc2.app.helpers import confirm_delete
 from forc2.domain.collection import Collection, TreeItem
 from forc2.domain.workspace import Workspace
 from qtpie import Dialog, DialogButton, Var, Widget, dialog, new, widget
@@ -109,6 +110,7 @@ class CollectionsTreeActionsWidget(Widget[Collection | None]):
     filter_text: Var[str, QLineEdit] = new("")(placeholderText="Filter...")
 
     # TODO: different buttons based on the theme, use a helper or something? but needs live dynamic too
+    _refresh_button: QToolButton = new(icon=":/refresh-dark.svg", clicked="{workspace.refresh() and items.expandAll()}", tooltip="Refresh")
     _expand_all_button: QToolButton = new(icon=":/expand-all-dark.svg", clicked="{items.expandAll()}", tooltip="Expand All")
     _collapse_all_button: QToolButton = new(icon=":/collapse-all-dark.svg", clicked="{items.collapseAll()}", tooltip="Collapse All")
 
@@ -117,6 +119,7 @@ class CollectionsTreeActionsWidget(Widget[Collection | None]):
 class CollectionsTreeWidget(Widget[Collection | None]):
     ### Variables ###
     _current_tree_row: Var[CollectionsTreeWidgetRow | None]
+    selected_sidebar_item: Var[TreeItem | None]
 
     ### Widgets ###
     _actions: CollectionsTreeActionsWidget
@@ -128,10 +131,15 @@ class CollectionsTreeWidget(Widget[Collection | None]):
         filter="{_actions.filter_text.lower()} in {(name or '').lower()}",
         expand=True,
         onEnterKey="{_current_tree_row.start_editing()}",
+        onDeleteKey="_on_delete",
     )
 
-    # def __setup__(self) -> None:
-    #     self._items.setAttribute(Qt.WA_StyledBackground, True)
+    ### Methods ###
+    def _on_delete(self) -> None:
+        if self.selected_sidebar_item.value is not None:
+            if confirm_delete():
+                print("Deleting sidebar item:", self.selected_sidebar_item.value.name)
+                self.selected_sidebar_item.value.delete()
 
     # The old one:
     #

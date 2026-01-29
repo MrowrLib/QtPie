@@ -11,22 +11,13 @@ import json
 import httpx
 import pytest
 from assertpy import assert_that
-from forc2.domain import (
-    ApiKeyAuth,
-    ApiKeyLocation,
-    BasicAuth,
-    BearerAuth,
-    BodyType,
-    HttpMethod,
-    Request,
-    RequestKeyValue,
-)
-from forc2.services import HttpClient
+from forc2.domain import ApiKeyAuth, ApiKeyLocation, BasicAuth, BearerAuth, BodyType, HttpClient, HttpMethod, Request, RequestKeyValue
 
 
 def make_http_client(handler: httpx.MockTransport) -> HttpClient:
     """Create an HttpClient with mock transport."""
     http = HttpClient()
+    http.active_environment = None  # type: ignore[assignment]
     http._httpx_client = httpx.AsyncClient(transport=handler)
     return http
 
