@@ -600,3 +600,72 @@ class TestTreeViewTypeAlias:
         # Check root widget
         root_widget = instance._tree.indexWidget(src_index)
         assert_that(root_widget._label.text()).is_equal_to("Item: src")
+
+
+@dataclass
+class Container:
+    """Container with items list for record replacement tests."""
+
+    name: str
+    items: list[TreeNode] = field(default_factory=list)
+
+
+@widget
+class ContainerTreeWidget(Widget[Container]):
+    """Widget with tree bound to container's items."""
+
+    _tree: QTreeView = new(bind="items", children="children", widget=NodeLabel)
+
+
+class TestTreeViewRecordReplacement:
+    """Tests for tree view updating when parent widget's record is replaced."""
+
+    def test_tree_updates_when_record_replaced(self, qt: QtDriver) -> None:
+        """Tree view updates when Widget[T] record is replaced with new object.
+
+        Regression test for workspace.refresh() scenario where the entire
+        record object is replaced and the tree should show the new data.
+        """
+        container1 = Container("First", items=[TreeNode("Item A"), TreeNode("Item B")])
+        container2 = Container("Second", items=[TreeNode("Item X"), TreeNode("Item Y"), TreeNode("Item Z")])
+
+        instance = create_and_track(qt, ContainerTreeWidget, Widget)
+        instance.record = container1
+        qt.process_events()
+
+        model = instance._tree.model()
+
+        # Initially shows container1's items
+        assert_that(model.rowCount()).is_equal_to(2)
+
+        # Replace the record with a new Container
+        instance.record = container2
+        qt.process_events()
+
+        # Tree should now show container2's items
+        assert_that(model.rowCount()).is_equal_to(3)
+
+    def test_tree_updates_when_record_items_differ(self, qt: QtDriver) -> None:
+        """Tree shows correct items after record replacement with different content."""
+        container1 = Container("First", items=[TreeNode("Only One")])
+        container2 = Container("Second", items=[])
+
+        instance = create_and_track(qt, ContainerTreeWidget, Widget)
+        instance.record = container1
+        qt.process_events()
+
+        model = instance._tree.model()
+        assert_that(model.rowCount()).is_equal_to(1)
+
+        # Replace with empty container
+        instance.record = container2
+        qt.process_events()
+
+        # Tree should now be empty
+        assert_that(model.rowCount()).is_equal_to(0)
+
+        # Replace back with items
+        instance.record = Container("Third", items=[TreeNode("New 1"), TreeNode("New 2")])
+        qt.process_events()
+
+        assert_that(model.rowCount()).is_equal_to(2)
