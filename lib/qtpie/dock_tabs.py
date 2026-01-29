@@ -7,6 +7,9 @@ This module provides window-level dock tab features:
 - dockTabsMovable: Allow reordering tabs by dragging
 - dockTabsHideTitleBar: Auto-hide title bar when dock is tabified
 - dockTabsDragToUndock: Drag tab outside tab bar to float dock
+- dockTabColorMap: Map class names to tab text colors
+- dockTabIconMap: Map class names to static tab icons
+- dockTabThemeIconMap: Map class names to theme-aware tab icons
 """
 
 import logging
@@ -15,11 +18,12 @@ from collections.abc import Callable
 from typing import Any, Protocol, cast, override
 
 from qtpy.QtCore import QEvent, QObject, QPoint, Qt, QTimer
-from qtpy.QtGui import QMouseEvent
+from qtpy.QtGui import QColor, QIcon, QMouseEvent
 from qtpy.QtWidgets import QDockWidget, QMainWindow, QMenu, QTabBar, QTabWidget, QWidget
 
 from .dock import resize_all_docks
 from .floating_dock_titlebar import FloatingDockTitleBar
+from .utils.layouts import IconType, resolve_icon
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,115 @@ def _debug(msg: str) -> None:
         handler.flush()
     sys.stderr.flush()
     sys.stdout.flush()
+
+
+def sync_dock_classes_to_tab(
+    window: QMainWindow,
+    dock: QDockWidget,
+    classes: list[str],
+    color_map: dict[str, str] | None = None,
+    icon_map: dict[str, IconType] | None = None,
+    theme_icon_map: dict[str, str] | None = None,
+) -> None:
+    """Sync a dock's titleBarClasses to its corresponding tab.
+
+    When a dock's CSS classes change (via titleBarClasses), this function
+    finds the corresponding tab in the tab bar and applies styling based
+    on the configured maps:
+
+    - color_map: Sets tab text color based on first matching class
+    - icon_map: Sets tab icon based on first matching class (static icons)
+    - theme_icon_map: Sets tab icon based on first matching class (theme-aware)
+
+    Args:
+        window: The QMainWindow containing the dock
+        dock: The dock widget whose classes changed
+        classes: The list of class names currently on the dock
+        color_map: class name → color hex string (e.g., {"modified": "#ff6b6b"})
+        icon_map: class name → IconType (static icons)
+        theme_icon_map: class name → base path (theme-aware icons, resolved via resolve_theme_icon)
+    """
+    dock_title = dock.windowTitle()
+
+    # Find the tab bar that contains this dock's tab
+    for tab_bar in window.findChildren(QTabBar):
+        # Only check direct children of the main window (dock tab bars)
+        if tab_bar.parent() is not window:
+            continue
+
+        for i in range(tab_bar.count()):
+            if tab_bar.tabText(i) != dock_title:
+                continue
+
+            # Found the tab - apply styling
+
+            # Apply color (first matching class wins)
+            if color_map is not None:
+                color = QColor()  # Invalid/default color
+                for class_name in classes:
+                    if class_name in color_map:
+                        color = QColor(color_map[class_name])
+                        break
+                tab_bar.setTabTextColor(i, color)
+
+            # Apply icon (theme icons take priority over static icons)
+            icon: QIcon | None = None
+            theme_base_path: str | None = None
+
+            # Try theme icon map first
+            if theme_icon_map is not None:
+                from .styles.icons import resolve_theme_icon
+
+                for class_name in classes:
+                    if class_name in theme_icon_map:
+                        theme_base_path = theme_icon_map[class_name]
+                        resolved_path = resolve_theme_icon(theme_base_path)
+                        icon = resolve_icon(resolved_path)
+                        break
+
+            # Fall back to static icon map
+            if icon is None and icon_map is not None:
+                for class_name in classes:
+                    if class_name in icon_map:
+                        icon = resolve_icon(icon_map[class_name])
+                        break
+
+            # Apply icon (or clear if no icon)
+            tab_bar.setTabIcon(i, icon if icon else QIcon())
+
+            # Register for theme updates if using theme icon
+            if theme_base_path:
+                _register_tab_theme_icon(tab_bar, i, theme_base_path)
+            else:
+                _unregister_tab_theme_icon(tab_bar, i)
+
+            return  # Found and processed the tab
+
+
+def _register_tab_theme_icon(tab_bar: QTabBar, index: int, base_path: str) -> None:
+    """Register a tab for theme icon updates.
+
+    When set_theme() is called, the icon will be re-resolved and updated.
+    """
+    from .styles.icons import register_theme_icon
+
+    def setter(icon: QIcon) -> None:
+        if index < tab_bar.count():
+            tab_bar.setTabIcon(index, icon)
+
+    # Register using the tab_bar as the widget key
+    # Note: This means all theme icons for a tab_bar share one registration
+    # A more sophisticated approach would track (tab_bar, index) tuples
+    register_theme_icon(tab_bar, base_path, setter)
+
+
+def _unregister_tab_theme_icon(tab_bar: QTabBar, index: int) -> None:
+    """Unregister a tab from theme icon updates.
+
+    Note: Currently a no-op as unregister_theme_icon uses widget as key.
+    Theme icons persist until tab_bar is deleted (which is fine).
+    """
+    pass
 
 
 class DockTabConfig(Protocol):

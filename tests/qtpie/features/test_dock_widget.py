@@ -8,6 +8,7 @@
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportCallIssue=false
 # pyright: reportArgumentType=false
+# pyright: reportRedeclaration=false
 # pyright: reportUntypedBaseClass=false
 """Tests for Dock[T] declarative dock widget support."""
 
@@ -5601,3 +5602,328 @@ class TestVariableListDockTitleBarClasses:
 
         dock2 = instance._editors.widget[1].dock_widget
         assert dock2.property("class") == ["active"]
+
+
+@pytest.mark.parametrize("base_class,decorator", WINDOW_CLASS_TYPES)
+class TestDockTabColorAndIconMaps:
+    """Test dockTabColorMap, dockTabIconMap, and dockTabThemeIconMap parameters."""
+
+    def test_no_tab_styling_without_maps(self, base_class, decorator, qt: QtDriver) -> None:
+        """Without maps configured, tabs have no special styling applied."""
+
+        @decorator
+        class TestClass(base_class):
+            classes: Variable[list[str]] = new(["modified"])
+            _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                group="editors",
+                dock="right",
+                title="{name}",
+                titleBarClasses="classes",
+            )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items to create tabs
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # Find tab bar for docks
+        from qtpy.QtWidgets import QTabBar
+
+        tab_bar: QTabBar | None = None
+        for tb in win.findChildren(QTabBar):
+            if tb.parent() is win:
+                tab_bar = tb
+                break
+
+        assert tab_bar is not None
+
+        # Without maps, no icon should be set
+        for i in range(tab_bar.count()):
+            icon = tab_bar.tabIcon(i)
+            # Icon should be null/empty
+            assert icon.isNull()
+
+    def test_color_map_applies_to_tabs(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabColorMap changes tab text color based on dock classes."""
+        from qtpy.QtGui import QColor
+
+        color_map = {"modified": "#ff6b6b", "error": "#ff4444"}
+
+        # Build decorator with dockTabColorMap
+        if decorator.__name__ == "window":
+            from qtpie import window as window_decorator
+
+            @window_decorator(dockTabColorMap=color_map)
+            class TestClass(base_class):
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+        else:
+            from qtpie import app as app_decorator
+
+            @app_decorator(dockTabColorMap=color_map)
+            class TestClass(base_class):  # type: ignore[no-redef]
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # Find tab bar
+        from qtpy.QtWidgets import QTabBar
+
+        tab_bar: QTabBar | None = None
+        for tb in win.findChildren(QTabBar):
+            if tb.parent() is win:
+                tab_bar = tb
+                break
+
+        assert tab_bar is not None
+
+        # Set "modified" class - tabs should turn red
+        instance.classes.value = ["modified"]
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            text_color = tab_bar.tabTextColor(i)
+            assert text_color == QColor("#ff6b6b")
+
+        # Change to "error" class
+        instance.classes.value = ["error"]
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            text_color = tab_bar.tabTextColor(i)
+            assert text_color == QColor("#ff4444")
+
+        # Clear classes - color should reset
+        instance.classes.value = []
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            text_color = tab_bar.tabTextColor(i)
+            # Color should be invalid/default when cleared
+            assert not text_color.isValid()
+
+    def test_icon_map_applies_to_tabs(self, base_class, decorator, qt: QtDriver) -> None:
+        """dockTabIconMap sets tab icons based on dock classes."""
+        from qtpy.QtWidgets import QStyle
+
+        # Use a standard icon that definitely exists
+        icon_map = {"modified": QStyle.StandardPixmap.SP_DialogSaveButton}
+
+        # Build decorator with dockTabIconMap
+        if decorator.__name__ == "window":
+            from qtpie import window as window_decorator
+
+            @window_decorator(dockTabIconMap=icon_map)
+            class TestClass(base_class):
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+        else:
+            from qtpie import app as app_decorator
+
+            @app_decorator(dockTabIconMap=icon_map)
+            class TestClass(base_class):  # type: ignore[no-redef]
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add two items
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # Find tab bar
+        from qtpy.QtWidgets import QTabBar
+
+        tab_bar: QTabBar | None = None
+        for tb in win.findChildren(QTabBar):
+            if tb.parent() is win:
+                tab_bar = tb
+                break
+
+        assert tab_bar is not None
+
+        # Initially no icon
+        for i in range(tab_bar.count()):
+            assert tab_bar.tabIcon(i).isNull()
+
+        # Set "modified" class - tabs should get icon
+        instance.classes.value = ["modified"]
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            icon = tab_bar.tabIcon(i)
+            assert not icon.isNull()
+
+        # Clear classes - icon should be cleared
+        instance.classes.value = []
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            assert tab_bar.tabIcon(i).isNull()
+
+    def test_color_and_icon_maps_combined(self, base_class, decorator, qt: QtDriver) -> None:
+        """Color and icon maps work together."""
+        from qtpy.QtGui import QColor
+        from qtpy.QtWidgets import QStyle
+
+        color_map = {"modified": "#ff6b6b"}
+        icon_map = {"modified": QStyle.StandardPixmap.SP_DialogSaveButton}
+
+        if decorator.__name__ == "window":
+            from qtpie import window as window_decorator
+
+            @window_decorator(dockTabColorMap=color_map, dockTabIconMap=icon_map)
+            class TestClass(base_class):
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+        else:
+            from qtpie import app as app_decorator
+
+            @app_decorator(dockTabColorMap=color_map, dockTabIconMap=icon_map)
+            class TestClass(base_class):  # type: ignore[no-redef]
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        # Add items
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        # Find tab bar
+        from qtpy.QtWidgets import QTabBar
+
+        tab_bar: QTabBar | None = None
+        for tb in win.findChildren(QTabBar):
+            if tb.parent() is win:
+                tab_bar = tb
+                break
+
+        assert tab_bar is not None
+
+        # Set "modified" class
+        instance.classes.value = ["modified"]
+        qt.process_events()
+
+        # Both color AND icon should be applied
+        for i in range(tab_bar.count()):
+            assert tab_bar.tabTextColor(i) == QColor("#ff6b6b")
+            assert not tab_bar.tabIcon(i).isNull()
+
+    def test_first_matching_class_wins(self, base_class, decorator, qt: QtDriver) -> None:
+        """When multiple classes match, first one in the list wins."""
+        from qtpy.QtGui import QColor
+
+        color_map = {"error": "#ff4444", "warning": "#ffaa00", "modified": "#ff6b6b"}
+
+        if decorator.__name__ == "window":
+            from qtpie import window as window_decorator
+
+            @window_decorator(dockTabColorMap=color_map)
+            class TestClass(base_class):
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+        else:
+            from qtpie import app as app_decorator
+
+            @app_decorator(dockTabColorMap=color_map)
+            class TestClass(base_class):  # type: ignore[no-redef]
+                classes: Variable[list[str]] = new([])
+                _editors: Variable[list[EditorItem], Dock[EditorWidget]] = new(
+                    group="editors",
+                    dock="right",
+                    title="{name}",
+                    titleBarClasses="classes",
+                )
+
+        instance = create_and_track(qt, TestClass, base_class)
+        win = get_main_window(instance, base_class)
+        win.show()
+        qt.process_events()
+
+        instance._editors.append(EditorItem(name="File1"))
+        instance._editors.append(EditorItem(name="File2"))
+        qt.process_events()
+
+        from qtpy.QtWidgets import QTabBar
+
+        tab_bar: QTabBar | None = None
+        for tb in win.findChildren(QTabBar):
+            if tb.parent() is win:
+                tab_bar = tb
+                break
+
+        assert tab_bar is not None
+
+        # Multiple classes - first match in the classes list wins
+        instance.classes.value = ["modified", "error"]  # modified comes first
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            # "modified" is first in classes list, so its color should be used
+            assert tab_bar.tabTextColor(i) == QColor("#ff6b6b")
+
+        # Reverse order
+        instance.classes.value = ["error", "modified"]  # error comes first
+        qt.process_events()
+
+        for i in range(tab_bar.count()):
+            # "error" is first in classes list, so its color should be used
+            assert tab_bar.tabTextColor(i) == QColor("#ff4444")

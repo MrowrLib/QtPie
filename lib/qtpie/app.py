@@ -72,6 +72,10 @@ class AppConfig:
     dock_menu_close_left: bool = True  # Show "Close to the Left" action
     dock_menu_close_all: bool = True  # Show "Close All" action
     dock_menu_prepend_actions: bool = False  # Prepend built-in actions to custom menus
+    # Dock tab styling maps (for syncing titleBarClasses to tab appearance)
+    dock_tab_color_map: dict[str, str] | None = None  # class name → color hex
+    dock_tab_icon_map: dict[str, Any] | None = None  # class name → IconType (static)
+    dock_tab_theme_icon_map: dict[str, str] | None = None  # class name → base path (theme-aware)
 
     # Layout configuration for auto-Window's central widget
     layout: LayoutType = "vertical"
@@ -651,6 +655,10 @@ def app[A: AppBase[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Dock tab styling maps (for syncing titleBarClasses to tab appearance)
+    dockTabColorMap: dict[str, str] | None = None,
+    dockTabIconMap: dict[str, Any] | None = None,
+    dockTabThemeIconMap: dict[str, str] | None = None,
     # Layout configuration
     spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
@@ -721,6 +729,10 @@ def app[A: AppBase[Any]](
     dockMenuCloseLeft: bool = True,
     dockMenuCloseAll: bool = True,
     dockMenuPrependActions: bool = False,
+    # Dock tab styling maps (for syncing titleBarClasses to tab appearance)
+    dockTabColorMap: dict[str, str] | None = None,
+    dockTabIconMap: dict[str, Any] | None = None,
+    dockTabThemeIconMap: dict[str, str] | None = None,
     # Layout configuration
     spacing: int = 0,
     size_constraint: SizeConstraint | None = None,
@@ -830,6 +842,9 @@ def app[A: AppBase[Any]](
         config.dock_menu_close_left = dockMenuCloseLeft
         config.dock_menu_close_all = dockMenuCloseAll
         config.dock_menu_prepend_actions = dockMenuPrependActions
+        config.dock_tab_color_map = dockTabColorMap
+        config.dock_tab_icon_map = dockTabIconMap
+        config.dock_tab_theme_icon_map = dockTabThemeIconMap
         config.size = size
         config.center = center
         config.signal_connections = signal_connections
@@ -2425,9 +2440,11 @@ def _setup_dock_repeater_titlebar_classes_binding_for_app(
 
     For simple Variable bindings (e.g., "classes"), applies the Variable's
     list[str] value as CSS classes to ALL docks in the repeater.
+    Also syncs classes to tab styling (color/icon) if configured.
     """
     from observant import Observable, ObservableList
 
+    from qtpie.dock_tabs import sync_dock_classes_to_tab
     from qtpie.styles import set_classes
     from qtpie.variable import _get_variable
 
@@ -2435,11 +2452,25 @@ def _setup_dock_repeater_titlebar_classes_binding_for_app(
     if var is None:
         return
 
+    # Get styling maps from app config
+    config = getattr(type(app), "_qtpie_config", None)
+    color_map = getattr(config, "dock_tab_color_map", None) if config else None
+    icon_map = getattr(config, "dock_tab_icon_map", None) if config else None
+    theme_icon_map = getattr(config, "dock_tab_theme_icon_map", None) if config else None
+
+    # Get the window from the repeater (it stores the reference)
+    def get_main_window() -> Any:
+        return repeater._window
+
     def update_all_dock_classes() -> None:
         raw_value: list[Any] | Any = var.value
         class_list: list[str] = [str(c) for c in cast(list[Any], raw_value)] if isinstance(raw_value, list) else []
+        main_window = get_main_window()
         for dock in repeater.docks:
             set_classes(dock.dock_widget, class_list)
+            # Sync to tab styling (color/icon)
+            if main_window is not None:
+                sync_dock_classes_to_tab(main_window, dock.dock_widget, class_list, color_map, icon_map, theme_icon_map)
 
     # Subscribe to Variable changes based on wrapper type
     wrapper = var.observable
